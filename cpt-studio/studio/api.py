@@ -192,6 +192,18 @@ def encounter_detail(request, encounter_id):
     return JsonResponse(serializers.encounter_detail(encounter, membership))
 
 
+@require_GET
+@api_view
+def trace(request, encounter_id):
+    """The administrative trace of the current revision (HARNESS.md 7): each participant's runs and full readings, the
+    retrieval traces and the reconciliation table. A workspace owner's alone: 403 for a reviewer or a viewer (404, as
+    everywhere, outside the caller's workspaces)."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    if not serializers.is_owner(membership):
+        raise PermissionDenied('Only a workspace owner can open the administrative trace.')
+    return JsonResponse(serializers.trace_json(encounter))
+
+
 @require_POST
 @api_view
 def decisions(request, encounter_id):

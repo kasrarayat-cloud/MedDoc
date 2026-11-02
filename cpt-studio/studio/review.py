@@ -10,15 +10,22 @@ Only the current assessment of the current revision can be decided on.
 """
 from __future__ import annotations
 
+import importlib
+import json
+import logging
+from decimal import Decimal
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit
+from . import audit, participants
 from .gi.context import charge_date_problem
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, Job, Proposal,
                      ProviderRun, SourceRevision)
 from .types import sha256_json, to_jsonable
+
+log = logging.getLogger(__name__)
 
 
 class AttestationRefused(ValidationError):
@@ -363,11 +370,15 @@ def _check_result(result, text):
                              'revision; it was not recorded.')
 
 
-def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None):
+def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None, participants=None,
+                     retrieval=None):
+    """``participants`` and ``retrieval`` (HARNESS.md 6) are recorded beside the result, outside its sha256: an
+    assessment that read other participant runs or retrieved other passages is another assessment."""
     return (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
             and previous.provider_run_id == (provider_run.pk if provider_run else None)
-            and previous.second_run_id == (second_run.pk if second_run else None))
+            and previous.second_run_id == (second_run.pk if second_run else None)
+            and previous.participants == (participants or []) and previous.retrieval == (retrieval or []))
 
 
 def _clarification(encounter, assessment, spec, proposal):
@@ -551,22 +562,27 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     return carried, len(ordered) - carried
 
 
-def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None):
+def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None,
+                       participants=(), retrieval=()):
     """Record an AssessmentResult as the encounter's current assessment, in one transaction.
 
     Creates the immutable Assessment and Proposal rows and the Clarification
     rows, withdraws earlier open clarifications that were not raised again,
     then carries or invalidates the previous assessment's current decisions.
     Re-persisting an identical result on identical inputs returns the current
-    assessment unchanged.
+    assessment unchanged. ``participants`` (one entry per harness participant,
+    its state and run) and ``retrieval`` (the reference retrieval traces) are
+    recorded beside the result, outside its sha256 (HARNESS.md 6, I1).
     """
     digest = sha256_json(result)
+    participants, retrieval = to_jsonable(list(participants)), to_jsonable(list(retrieval))
     with transaction.atomic():
         locked = _lock(encounter)
         revision = SourceRevision.objects.get(pk=revision.pk)
         _check_inputs(locked, revision, context, routing_run, provider_run)
         previous = locked.current_assessment
-        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run):
+        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run, participants,
+                            retrieval):
             encounter.state = refresh_state(locked)
             return previous
         _check_result(result, revision.text)
@@ -576,7 +592,8 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
             reference_sources=to_jsonable(result.reference_sources),
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
             summary=to_jsonable(result.summary), services=to_jsonable(result.services),
-            completeness=to_jsonable(result.completeness), sha256=digest)
+            completeness=to_jsonable(result.completeness), participants=participants, retrieval=retrieval,
+            sha256=digest)
         # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
         rows = Proposal.objects.bulk_create([
             Proposal(
@@ -859,6 +876,11 @@ def _failed_stage_state(encounter, revision, job):
     provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
         return 'extraction_failed', None
+    if job.kind in Job.PARTICIPANT_KINDS:
+        # A harness participant's stage never makes the encounter provider_failed, which is Corti's state: its own
+        # failures are runs of its own, and the chain goes on (I10). One its worker left mid-send is the encounter-wide
+        # unknown outcome every further send waits on (HARNESS.md 2); any other failure is the stage's.
+        return ('provider_unknown' if job.state == Job.UNKNOWN else 'processing_failed'), None
     if job.kind not in (Job.PREDICT, Job.REVIEW2):
         return 'processing_failed', None
     if job.state == Job.UNKNOWN:
@@ -1003,3 +1025,207 @@ def refresh_state(encounter):
             Encounter.objects.filter(pk=locked.pk).update(state=state, updated_at=timezone.now())
     encounter.state = state
     return state
+
+
+# --- the harness record, as the screen and the reports state it (HARNESS.md 5-7) --------------------------------------
+#
+# Read-only, from the rows. Three kinds of status are never conflated (I4): who PROPOSED a code (proposed_by), what the
+# CMS reference checks found (reference_check), and a member's decision (current_decisions). None of them decides
+# another: agreement between participants and passing checks approve nothing (I3).
+
+CORTI = 'corti'
+# (name, label, vendor, model requested), in harness order: the models are HARNESS.md 1's code constants (Corti's API
+# takes no model identifier); the adapters own them, and a run records what it actually requested and got back.
+HARNESS_PARTICIPANTS = ((CORTI, 'Corti', 'Corti', ''),
+                        ('astra', participants.LABELS['astra'], participants.VENDORS['astra'], 'gpt-6-astra'),
+                        ('fable', participants.LABELS['fable'], participants.VENDORS['fable'], 'claude-fable-5-1'))
+CORTI_PROVIDERS = ('corti', 'replay')  # Corti's runs, live or replayed from its recordings
+CMS_CHECKS = ('pfs.presence', 'mue.units', 'pfs.endoscopic_base')
+CHECK_WORDS = {'pass': 'passed', 'warn': 'needs attention', 'fail': 'failed', 'not_verified': 'not verified',
+               'info': 'noted', 'not_applicable': 'not applicable'}
+PTP_NOT_CONNECTED = ('NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not '
+                     'verified.')
+# What is not connected, stated on every proposal and the encounter (HARNESS.md 5).
+NOT_CONNECTED = ('NCCI procedure-to-procedure edits (AMA licence agreement not accepted)',
+                 'AMA CPT descriptors and guidelines (no licence)', 'Payer policies')
+COST_BASIS = 'estimated from published rates, not reconciled to an invoice'
+PRICING_MODULE = 'studio.participants.pricing'
+# A participant's state in Assessment.participants (types.PARTICIPANT_STATES), in words.
+RECORD_WORDS = {
+    'read': 'answered; the reading was used',
+    'refused': 'answered; the reading was not used',
+    'failed': 'the request failed',
+    'unknown': 'the outcome is unknown: no complete response was recorded',
+    'not_sent': 'nothing was sent',
+    'blocked': 'nothing was sent: a previous request has an unknown outcome',
+    'not_configured': 'not configured on this installation',
+    'not_run': 'no request was made for this revision',
+}
+
+
+def participant_of(run):
+    """The harness participant a provider run belongs to: Corti for its live or replayed runs, else its provider."""
+    return CORTI if run.provider in CORTI_PROVIDERS else run.provider
+
+
+def run_mode(run):
+    """'replay' for a recorded response, which never presents as live output: Corti's replay provider, or a harness
+    participant whose adapter ran in replay mode (its run's scope records the mode); 'live' otherwise."""
+    if run.provider == 'replay':
+        return 'replay'
+    if run.purpose == ProviderRun.INDEPENDENT and (run.scope or {}).get('mode') == 'replay':
+        return 'replay'
+    return 'live'
+
+
+# The participant states whose recorded reason can say more than the state does (a refusal reason, an error, why
+# nothing was sent or no request was made).
+REASONED_STATES = ('refused', 'failed', 'not_sent', 'unknown', 'not_run')
+
+
+def record_reason(record):
+    """The reason a participant's Assessment.participants entry recorded, where it says more than its state's words
+    (RECORD_WORDS); '' otherwise."""
+    state = record.get('state')
+    reason = str(record.get('reason') or '').strip()
+    words = RECORD_WORDS.get(state, '')
+    if state not in REASONED_STATES or reason.rstrip('.').lower() == words.lower():
+        return ''
+    return reason
+
+
+def record_words(record):
+    """A participant's Assessment.participants entry in one plain clause, with the reason it recorded where that says
+    more than the state (a refusal reason, an error, why nothing was sent)."""
+    state = record.get('state')
+    words = RECORD_WORDS.get(state, str(state or 'unknown state'))
+    reason = record_reason(record).rstrip('.')
+    if not reason:
+        return words
+    if state in ('not_sent', 'not_run') and reason.lower().startswith('nothing was sent'):
+        return 'n' + reason[1:]  # the reason already says so: "Nothing was sent: ..."
+    return f'{words}: {reason}'
+
+
+def proposed_by(proposal):
+    """Who proposed the code, in harness order (I4: a proposal, never an approval): Corti for its own proposals and
+    alternatives (origin primary or second_review), and each participant the engine named in support['proposed_by'] -
+    the proposers of a participant's own proposal (origin participant), or a participant that also proposed Corti's."""
+    support = proposal.support or {}
+    named = {name for name in support.get('proposed_by') or [] if isinstance(name, str)}
+    corti = (support.get('origin') or 'primary') in ('primary', 'second_review') or CORTI in named
+    return ([CORTI] if corti else []) + [name for name in participants.PARTICIPANTS if name in named]
+
+
+def participant_positions(proposal, records):
+    """{name: {position, detail, quote}} for each harness participant the assessment had configured
+    (Assessment.participants; {} when none was): from a reading that was used, 'proposed' (with its first located
+    quote), 'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. Positions are kept
+    beside the proposal and decide nothing (I2, I3)."""
+    out = {}
+    for record in records or []:
+        name = record.get('name') if isinstance(record, dict) else None
+        if name not in participants.PARTICIPANTS or record.get('state') == 'not_configured':
+            continue
+        label = participants.LABELS[name]
+        if record.get('state') != 'read':
+            out[name] = {'position': 'not_run', 'detail': f'{label}: {record_words(record)}.', 'quote': ''}
+            continue
+        proposed = {item.get('code'): item.get('quote') or '' for item in record.get('codes') or []}
+        advised = {item.get('code'): item for item in record.get('not_coded') or []}
+        if proposal.code in proposed:
+            quote = proposed[proposal.code]
+            located = (' with evidence located in the document' if quote else
+                       '; none of its quotes was found in the document')
+            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{located}.', 'quote': quote}
+        elif proposal.code in advised:
+            item = advised[proposal.code]
+            out[name] = {'position': 'advised_not_to_code', 'quote': item.get('quote') or '',
+                         'detail': f'{label} advised not to code it: {_human(item.get("reason") or "other")}.'}
+        else:
+            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code.', 'quote': ''}
+    return out
+
+
+def reference_check(proposal):
+    """The proposal's CMS reference check (I4: apart from who proposed it and from any decision), from its pfs.presence,
+    mue.units and pfs.endoscopic_base checks: 'attention' when one warns or fails, 'not_verified' when none ran or one
+    could not be verified, else 'passed'. Its detail always says that PTP edits are not connected."""
+    checks = [check for check in proposal.checks or [] if check.get('id') in CMS_CHECKS]
+    statuses = {check.get('status') for check in checks}
+    if statuses & {'warn', 'fail'}:
+        state = 'attention'
+    elif not checks or 'not_verified' in statuses:
+        state = 'not_verified'
+    else:
+        state = 'passed'
+    ran = '; '.join(f'{check.get("label") or check.get("id")}: '
+                    f'{CHECK_WORDS.get(check.get("status"), str(check.get("status")))}' for check in checks)
+    return {'state': state, 'detail': (f'{ran}. ' if ran else 'No CMS reference check ran for this code. ')
+            + PTP_NOT_CONNECTED}
+
+
+def _shown(value):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return '' if value is None else str(value)
+
+
+def retrieved(entry, field):
+    """An Assessment.retrieval entry's facts or passages: the dict items of that list, [] for anything else (the entries
+    come from the passages package; a malformed one shows nothing rather than failing the page or the report)."""
+    items = entry.get(field) if isinstance(entry, dict) else None
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def proposal_retrieval(proposal, retrieval):
+    """The retrieval trace of the proposal's code (Assessment.retrieval) as one list: each fact the checks' lookup read,
+    then each CMS passage retrieved for it, with its source key, release and page or section."""
+    out = []
+    for entry in retrieval or []:
+        if not isinstance(entry, dict) or entry.get('code') != proposal.code:
+            continue
+        for fact in retrieved(entry, 'facts'):
+            out.append({'kind': 'fact', 'source_key': _shown(fact.get('source_key')),
+                        'release': _shown(fact.get('release')), 'label': _shown(fact.get('field')),
+                        'value': _shown(fact.get('value')), 'page': '', 'section': '', 'text': ''})
+        for passage in retrieved(entry, 'passages'):
+            topic = _shown(passage.get('topic')) + (f' {_shown(passage.get("topic_value"))}'
+                                                    if passage.get('topic_value') else '')
+            out.append({'kind': 'passage', 'source_key': _shown(passage.get('source_key')),
+                        'release': _shown(passage.get('release')), 'label': topic, 'value': '',
+                        'page': _shown(passage.get('page')), 'section': _shown(passage.get('section')),
+                        'text': _shown(passage.get('text'))})
+    return out
+
+
+def _usd(value):
+    """An estimate as USD text with four decimals; None for no estimate."""
+    if isinstance(value, dict):
+        value = value.get('usd')
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (Decimal, int, float)):
+        return f'{Decimal(str(value)):.4f}'
+    return str(value)
+
+
+def estimated_cost(run):
+    """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
+    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). None for Corti (its usage is in
+    credits, not USD), for a run that reported no usage (a reuse, a request not sent), where the pricing module is not
+    installed, and where it cannot price the usage: an estimate is informational, so it never fails the page or a
+    report (its error is logged)."""
+    if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
+        return None
+    try:
+        pricing = importlib.import_module(PRICING_MODULE)
+    except ModuleNotFoundError as exc:
+        if exc.name != PRICING_MODULE:
+            raise
+        return None
+    try:
+        return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+    except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
+        log.exception('the usage of run %s could not be priced', run.pk)
+        return None

@@ -22,7 +22,7 @@ from django.utils import timezone
 from . import audit, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
-from .models import Clarification, Decision, Encounter, Membership, Proposal, ReportArtifact
+from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
 from .types import CONTEXT_FACTS, sha256_json
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
@@ -58,7 +58,10 @@ CSV_COLUMNS = ('report_kind', 'encounter_id', 'revision_number', 'source_sha256'
                'proposal_id', 'item_list', 'code', 'code_kind', 'family', 'family_label', 'status', 'decision', 'reviewer',
                'reviewer_kind', 'decided_at', 'decision_carried_from', 'decision_carried_at', 'units', 'evidence',
                'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic',
-               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin')
+               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin',
+               # the harness (HARNESS.md 5, I4): who proposed the code and what the CMS reference checks found - both
+               # apart from 'decision', a member's
+               'proposed_by', 'reference_check')
 # Rows that are not proposals: what the documented-service reconciliation found (format @4).
 ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')
 # A line break inside stored text always continues at least this deep: deeper than any structural line of
@@ -204,6 +207,8 @@ def _item(proposal, decision, kind, text):
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
         'support': _support(proposal.support or {}, text),
+        # who proposed it and what the CMS reference checks found, never the decision above (I4)
+        'proposed_by': review.proposed_by(proposal), 'reference_check': review.reference_check(proposal),
     }
 
 
@@ -338,18 +343,89 @@ def _reference_sources(assessment):
             'not_connected': standing + list(recorded.values())}
 
 
+def _records(assessment):
+    """The assessment's harness participant entries (Assessment.participants), by participant name."""
+    return {record.get('name'): record for record in assessment.participants or [] if isinstance(record, dict)}
+
+
 def _provider_runs(encounter, assessment):
+    # a harness participant's run is read by this assessment when its Assessment.participants entry names it, and its
+    # response was not used when that entry says refused
+    read = {record.get('run'): record.get('state') for record in _records(assessment).values() if record.get('run')}
     return [{
         'id': str(run.pk), 'revision_number': run.revision.number, 'provider': run.provider,
-        'mode': 'replay' if run.provider == 'replay' else 'live', 'state': run.state, 'sent': run.sent,
+        'mode': review.run_mode(run), 'state': run.state, 'sent': run.sent,
         'http_status': run.http_status, 'usage': run.usage or {}, 'usage_basis': run.usage_basis,
         'request_sha256': run.request_sha256, 'response_sha256': run.response_sha256,
         'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
         'reconciled': run.reconciled_at is not None, 'created_at': _ts(run.created_at),
-        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id),
+        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id) or str(run.pk) in read,
         'purpose': run.purpose,
         'held': (run.scope or {}).get('held', ''),
+        'refused': read.get(str(run.pk)) == 'refused',
     } for run in encounter.provider_runs.select_related('revision').order_by('created_at', 'pk')]
+
+
+CORTI_STATES = {ProviderRun.SUCCEEDED: 'answered; its codes were checked', ProviderRun.FAILED: 'the request failed',
+                ProviderRun.UNKNOWN: 'the outcome is unknown: no complete response was recorded',
+                ProviderRun.NOT_SENT: 'nothing was sent', ProviderRun.CANCELLED: 'nothing was sent'}
+
+
+def _participant_entry(name, label, vendor, run, state, reason='', unverified=0, refused=False):
+    return {'name': name, 'label': label, 'vendor': vendor, 'state': state, 'reason': str(reason or ''),
+            'refused': refused,
+            'run': str(run.pk) if run is not None else None, 'mode': review.run_mode(run) if run is not None else '',
+            'endpoint': run.endpoint if run is not None else '',
+            'requested_model': run.requested_model if run is not None else '',
+            'returned_model': run.returned_model if run is not None else '',
+            'request_id': run.provider_request_id if run is not None else '',
+            'response_id': run.response_id if run is not None else '',
+            'reused': bool(run is not None and run.reused_from_id),
+            'usage': (run.usage or {}) if run is not None else {},
+            'usage_basis': run.usage_basis if run is not None else '',
+            'estimated_cost_usd': review.estimated_cost(run), 'unverified_quotes': int(unverified or 0)}
+
+
+def _participants(assessment):
+    """The review participants as this assessment read them (HARNESS.md 6): Corti's run, and each harness participant's
+    Assessment.participants entry with the run it names. An assessment recorded before the harness has no entry."""
+    records = _records(assessment)
+    runs = {str(run.pk): run for run in ProviderRun.objects.filter(
+        pk__in=[record['run'] for record in records.values() if record.get('run')])}
+    out = []
+    for name, label, vendor, _ in review.HARNESS_PARTICIPANTS:
+        if name == review.CORTI:
+            run = assessment.provider_run
+            if run is None:
+                out.append(_participant_entry(name, label, vendor, None, 'the provider was not run'))
+                continue
+            refused = review._refused_run(assessment) == run
+            held = (run.state == ProviderRun.NOT_SENT
+                    and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT)
+            state = ('answered; the response was not used' if refused else
+                     'nothing was sent: the service date entered as encounter metadata conflicts with the document'
+                     if held else CORTI_STATES.get(run.state, run.state))
+            # a refused response's reason is its own provider check's (provider.status), as the encounter view says it
+            reason = (next((check.get('detail') or '' for check in assessment.encounter_checks or []
+                            if check.get('id') == 'provider.status'), '') if refused else
+                      run.error if run.state in (ProviderRun.FAILED, ProviderRun.NOT_SENT) and not held else '')
+            out.append(_participant_entry(name, label, vendor, run, state, reason, refused=refused))
+            continue
+        record = records.get(name)
+        if record is None:
+            out.append(_participant_entry(name, label, vendor, None, 'not recorded: this assessment predates the '
+                                                                     'review participants'))
+            continue
+        state = record.get('state')
+        out.append(_participant_entry(
+            name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
+            review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused'))
+    return out
+
+
+def _retrieval(assessment):
+    """The reference retrieval traces the assessment recorded (Assessment.retrieval), as stored."""
+    return [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
 
 
 def _history(encounter, assessment):
@@ -420,6 +496,10 @@ def snapshot(encounter, kind):
         'provider_runs': _provider_runs(encounter, assessment),
         'reference_sources': _reference_sources(assessment),
         'decision_history': _history(encounter, assessment),
+        'participants': _participants(assessment),
+        'retrieval': _retrieval(assessment),
+        # an assessment recorded before the harness has no participant entry and no retrieval
+        'harness': bool(assessment.participants),
     }
 
 
@@ -503,7 +583,22 @@ def _item_block(number, item, kind):
         lines.append(f'{pad}Rationale: {_indent(item["rationale"], pad + "  ")}')
     if item['modifier_considerations']:
         lines.append(f'{pad}Modifier considerations (none assigned): ' + '; '.join(item['modifier_considerations']))
-    return lines
+    return lines + _harness_lines(item)
+
+
+def _proposers(item):
+    """Who proposed the code, by label ('Corti, Astra'); 'not recorded' for a proposal that names none."""
+    labels = {name: label for name, label, _, _ in review.HARNESS_PARTICIPANTS}
+    return ', '.join(labels.get(name, name) for name in item.get('proposed_by') or []) or 'not recorded'
+
+
+def _harness_lines(item, pad='     '):
+    """Who proposed the code and what the CMS reference checks found: two statuses kept apart from each other and from
+    the decision lines (I4). The check results are named by label, never by detail, so no other code is quoted here."""
+    check = item.get('reference_check') or {}
+    return [f'{pad}Proposed by: {_proposers(item)}',
+            f'{pad}Reference check: {_human(check.get("state", "not_verified"))} — '
+            f'{_indent(check.get("detail", ""), pad + "  ")}']
 
 
 def _source_section(snap):
@@ -558,7 +653,8 @@ def _rejected_section(snap):
     lines = []
     for item in snap['proposals']:
         if item['list'] == 'rejected':
-            lines.append(f'{_short_line(item)} — {_decision_words(item["decision"])}')
+            # who proposed it closes the item's own line: the list keeps one line per rejection, then origin and note
+            lines.append(f'{_short_line(item)} — {_decision_words(item["decision"])} · proposed by {_proposers(item)}')
             if (item.get('support') or {}).get('origin') == 'second_review':
                 lines.append(f'     {ORIGIN_LINE}')  # as the numbered lists say it (_item_block)
             if item['decision']['note']:
@@ -587,18 +683,31 @@ def _excluded_section(snap):
                          f'{item["exclusion_reason"] or "no reason recorded"}{hint}')
             if decision is not None and decision['note']:
                 lines.append(f'     Note: {_indent(decision["note"], "       ")}')
+            lines.append(f'     Proposed by: {_proposers(item)}')
     return lines or ['  None.']
+
+
+def _alternative_words(item):
+    """How an informational code came to be listed: a code the bounded second review listed, one a harness participant
+    proposed that CPT Studio did not add as a proposal (origin participant), or a provider alternative."""
+    origin = (item.get('support') or {}).get('origin')
+    if origin == 'second_review':
+        return 'second-review alternative'
+    if origin == 'participant':
+        return f'proposed by {_proposers(item)}, not added as a proposal'
+    return 'provider alternative'
 
 
 def _alternatives_section(snap):
     """Every informational code, never selectable. A code the bounded second review listed says so: one it SELECTED
     and CPT Studio did not add is worded as selected (its stored reason), never as a candidate the provider did not
-    select (refutation r1, report lens)."""
-    lines = [f'{_short_line(item)} — '
-             + ('second-review alternative' if (item.get('support') or {}).get('origin') == 'second_review'
-                else 'provider alternative') + ', never selectable'
-             + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else '')
-             for item in snap['proposals'] if item['list'] == 'alternative']
+    select (refutation r1, report lens); so does one a harness participant proposed (HARNESS.md 5)."""
+    lines = []
+    for item in snap['proposals']:
+        if item['list'] == 'alternative':
+            lines.append(f'{_short_line(item)} — {_alternative_words(item)}, never selectable'
+                         + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else ''))
+            lines.append(f'     Proposed by: {_proposers(item)}')
     return lines or ['  None.']
 
 
@@ -664,9 +773,14 @@ def _provider_section(snap):
         mode = 'REPLAY (recorded response, not live output)' if run['mode'] == 'replay' else run['mode']
         status = f' · HTTP {run["http_status"]}' if run['http_status'] else ''
         second = run.get('purpose') == 'second_review'
+        # a harness participant's own review of the revision (HARNESS.md 2); its Assessment.participants entry says
+        # whether this assessment read it and whether its response was used (_provider_runs)
+        independent = run.get('purpose') == 'independent'
+        kind = ' · bounded second review' if second else ' · independent review' if independent else ''
         used = ''
         if run['used_by_assessment']:
-            refused = ('provider.second_review' if second else 'provider.status') in failed
+            refused = (run.get('refused') if independent else
+                       ('provider.second_review' if second else 'provider.status') in failed)
             # "Used" only of a response this assessment read and did not refuse: a failed request returned none it
             # could use and an unknown outcome none at all (refutation r1, report-7: both read "used by this
             # assessment" beside a failed or unknown provider check).
@@ -681,12 +795,14 @@ def _provider_section(snap):
             # nothing was requested, so nothing was used and no request time is given (refutation r1, report-7: a held
             # run read "requested ... used"; a run a Stop cancelled before sending read "requested")
             used = (' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
-                    if run.get('held') == 'member_date_conflict' else ' · nothing was sent')
+                    if run.get('held') == 'member_date_conflict' else
+                    ' · nothing was sent: a previous request had an unknown outcome'
+                    if run.get('held') == 'unknown_outcome' else ' · nothing was sent')
             lines.append(f'  - {run["provider"]} · {mode} · {run["state"]} · revision {run["revision_number"]}'
-                         + (' · bounded second review' if second else '') + f' · recorded {run["created_at"]}{used}')
+                         + kind + f' · recorded {run["created_at"]}{used}')
         else:
             lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
-                         + (' · bounded second review' if second else '') + f' · requested {run["created_at"]}{used}')
+                         + kind + f' · requested {run["created_at"]}{used}')
         usage = json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({run["usage_basis"]})' if run['usage_basis'] else ''))
         lines.append(f'    Request sha256: {run["request_sha256"] or "none"} · '
@@ -712,6 +828,94 @@ def _reference_section(snap):
         lines.append('    None.')
     lines.append('  Not connected:')
     lines += [f'    - {entry}' for entry in snap['reference_sources']['not_connected']]
+    return lines
+
+
+def _participants_section(snap):
+    """Each review participant as this assessment read it (HARNESS.md 6-7): vendor, endpoint, the models requested and
+    returned, its state, the vendor's request id and response id, usage, the estimated cost, and why it was not used or
+    not run. A participant's state is never a decision (I4)."""
+    lines = []
+    for entry in snap.get('participants') or []:
+        lines.append(f'  - {entry["label"]} · {entry["vendor"]} · {entry["state"]}')
+        if entry['run'] is None:
+            if entry['reason']:
+                lines.append(f'    Reason: {_indent(entry["reason"], "      ")}')
+            continue
+        replay = ' · REPLAY (recorded response, not live output)' if entry['mode'] == 'replay' else ''
+        lines.append(f'    Run: {entry["run"]}{replay}' + (' · a retained answer reused; no new request was sent'
+                                                         if entry['reused'] else ''))
+        lines.append(f'    Endpoint: {entry["endpoint"] or "not recorded"}')
+        if entry['name'] == review.CORTI:
+            lines.append('    Models: none requested (the Corti API takes no model identifier)')
+        else:
+            lines.append(f'    Models: requested {entry["requested_model"] or "not recorded"} · returned '
+                         f'{entry["returned_model"] or "none"}')
+        lines.append(f'    Request id: {entry["request_id"] or "none"} · response id: {entry["response_id"] or "none"}')
+        usage = json.dumps(entry['usage'], sort_keys=True, ensure_ascii=False) if entry['usage'] else 'none reported'
+        lines.append(f'    Usage: {usage}' + (f' ({entry["usage_basis"]})' if entry['usage_basis'] else ''))
+        if entry['name'] == review.CORTI:
+            lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
+        elif entry['estimated_cost_usd'] is not None:
+            lines.append(f'    Estimated cost: USD {entry["estimated_cost_usd"]} ({review.COST_BASIS})')
+        elif entry['usage']:
+            lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
+        else:
+            lines.append('    Estimated cost: none (no usage reported for this run)')
+        if entry['unverified_quotes']:
+            lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
+                         'as evidence)')
+        if entry['reason']:
+            label = 'Refusal reason' if entry.get('refused') else 'Reason'
+            lines.append(f'    {label}: {_indent(entry["reason"], "      ")}')
+    if not snap.get('harness'):
+        lines.append('  This assessment was recorded before the review participants existed: only Corti was run.')
+    return lines
+
+
+def _strings(entry, field):
+    """A retrieval entry's lookups or notes: the strings of that list, [] for anything else."""
+    items = entry.get(field)
+    return [item for item in items if isinstance(item, str)] if isinstance(items, list) else []
+
+
+def _source_words(item):
+    return f'{item.get("source_key") or "unknown source"}, release {item.get("release") or "not stated"}'
+
+
+def _fact_line(fact):
+    effective = fact.get('effective')
+    window = (f', effective {effective[0]} to {effective[1]}'
+              if isinstance(effective, list) and len(effective) == 2 else '')
+    value = fact.get('value')
+    shown = (json.dumps(value, sort_keys=True, ensure_ascii=False) if isinstance(value, (dict, list))
+             else '' if value is None else value)
+    return f'    Fact: {fact.get("field") or "value"} = {shown} · {_source_words(fact)}{window}'
+
+
+def _passage_lines(passage):
+    """A retrieved passage: where it is (source, release, section, page), the rule it states, then its verbatim text."""
+    where = [f'section {passage["section"]}' if passage.get('section') else '',
+             f'page {passage["page"]}' if passage.get('page') else '',
+             ' '.join(filter(None, (str(passage.get('topic') or ''), str(passage.get('topic_value') or ''))))]
+    return [' · '.join(filter(None, [f'    Passage: {_source_words(passage)}', *where])) + ':',
+            f'        "{_indent(passage.get("text") or "", "        ")}"']
+
+
+def _retrieval_section(snap):
+    """The reference retrieval traces (HARNESS.md 5): per code, the CMS facts the checks' lookup read and the verbatim
+    CMS passages retrieved for them, with source key, release and page or section; then what is not connected."""
+    lines = []
+    for entry in snap.get('retrieval') or []:
+        lines.append(f'  - {entry.get("code", "")} · service date {entry.get("service_date") or "unknown"}')
+        lines += [_fact_line(fact) for fact in review.retrieved(entry, 'facts')]
+        lines += [line for passage in review.retrieved(entry, 'passages') for line in _passage_lines(passage)]
+        lines += [f'    Lookup: {_indent(lookup, "      ")}' for lookup in _strings(entry, 'lookups')]
+        lines += [f'    Note: {_indent(note, "      ")}' for note in _strings(entry, 'notes')]
+    if not lines:
+        lines.append('  - none retrieved' + ('' if snap.get('harness') else
+                                            ': this assessment was recorded before reference retrieval existed'))
+    lines.append('  Not connected: ' + '; '.join(review.NOT_CONNECTED) + '.')
     return lines
 
 
@@ -923,8 +1127,10 @@ def render_txt(snap) -> bytes:
                  ('CHECKS', _checks_section(snap)),
                  ('OPEN CLARIFICATIONS', _clarifications_section(snap)),
                  ('NOT VERIFIED', _not_verified_section(snap)),
+                 ('REVIEW PARTICIPANTS', _participants_section(snap)),
                  ('PROVIDER USAGE', _provider_section(snap)),
                  ('REFERENCE SOURCES', _reference_section(snap)),
+                 ('REFERENCE RETRIEVAL', _retrieval_section(snap)),
                  ('AUDIT — DECISION HISTORY', _audit_section(snap))]
     for title, body in sections:
         lines += ['', title, *body]
@@ -970,7 +1176,9 @@ def _csv_row(snap, item):
            'source_passages': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]'
                                          for s in (item.get('support') or {}).get('source') or []),
            'documented_service': (item.get('support') or {}).get('service', ''),
-           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else '')}
+           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else ''),
+           'proposed_by': ';'.join(item.get('proposed_by') or []),
+           'reference_check': (item.get('reference_check') or {}).get('state', '')}
     return [row[column] for column in CSV_COLUMNS]
 
 

@@ -1,10 +1,11 @@
 """Persisted rows -> the JSON shapes in API.md. Read-only; no business rules."""
 from django.conf import settings
 
-from . import models, review
+from . import models, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
 from .providers.base import ProviderUnavailable
+from .types import to_jsonable
 
 
 def _iso(value):
@@ -286,6 +287,12 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'reinstated_by': _reinstated_by(proposal, decision),
         'allowed_actions': review.allowed_actions(proposal, assessment, membership),
         'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current),
+        # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
+        # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
+        'proposed_by': review.proposed_by(proposal),
+        'participant_positions': review.participant_positions(proposal, assessment.participants),
+        'reference_check': review.reference_check(proposal),
+        'retrieval': review.proposal_retrieval(proposal, assessment.retrieval),
     }
 
 
@@ -323,7 +330,8 @@ def _clarification_json(clarification):
 
 
 def _provider_run_json(run):
-    return {'id': str(run.pk), 'provider': run.provider, 'mode': 'replay' if run.provider == 'replay' else 'live',
+    # a harness participant's replayed run reads 'replay' too: its run records the mode it ran in (review.run_mode)
+    return {'id': str(run.pk), 'provider': run.provider, 'mode': review.run_mode(run),
             'state': run.state, 'http_status': run.http_status, 'latency_ms': run.latency_ms, 'usage': run.usage,
             'usage_basis': run.usage_basis, 'request_sha256': run.request_sha256,
             'response_sha256': run.response_sha256,
@@ -358,18 +366,27 @@ ACTIVITY_SUMMARIES = {
 FINISHED_SUMMARIES = {'succeeded': 'Provider response recorded', 'failed': 'Provider request failed',
                       'unknown': 'Provider outcome unknown: no complete response was recorded',
                       'not_sent': 'Provider request not sent'}
+# A harness participant's attempt is named by its participant ("Astra request started", "Fable response recorded"): its
+# audit rows record the provider (jobs._send, stage_participant). Corti's rows read as before.
+PARTICIPANT_EVENTS = {'provider.sending': '{label} request started',
+                      'provider.reused': 'Retained {label} result reused (no new request)',
+                      'provider.reconciled': 'Unknown {label} outcome reconciled'}
 
 
 def _activity_summary(event):
     summary = ACTIVITY_SUMMARIES.get(event.event, event.event)
     data = event.data if isinstance(event.data, dict) else {}
     state = data.get('state')
+    label = participants.LABELS.get(data.get('provider')) if isinstance(data.get('provider'), str) else None
+    if label and event.event in PARTICIPANT_EVENTS:
+        return PARTICIPANT_EVENTS[event.event].format(label=label)
     if event.event != 'provider.finished' or not isinstance(state, str) or state not in FINISHED_SUMMARIES:
         return summary
+    finished = FINISHED_SUMMARIES[state] if label is None else FINISHED_SUMMARIES[state].replace('Provider', label, 1)
     status = data.get('http_status')
     if state == 'failed' and isinstance(status, int) and not isinstance(status, bool):
-        return f'{FINISHED_SUMMARIES[state]} (HTTP {status})'
-    return FINISHED_SUMMARIES[state]
+        return f'{finished} (HTTP {status})'
+    return finished
 
 
 def _activity_json(event):
@@ -379,6 +396,223 @@ def _activity_json(event):
             'data': {k: v for k, v in event.data.items() if k in {'status', 'method', 'state', 'action', 'code',
                                                                   'kind', 'fmt', 'usage', 'http_status', 'pages',
                                                                   'ocr_pages', 'proposals', 'fields', 'stage'}}}
+
+
+def is_owner(membership):
+    return membership.active and membership.role == models.Membership.OWNER
+
+
+# --- the harness block (HARNESS.md 7): one row per participant, reference validation, clarification, final status -----
+
+STAGE_ORDER = (models.Job.EXTRACT, models.Job.ANALYZE, models.Job.PREDICT, models.Job.ASTRA, models.Job.FABLE,
+               models.Job.ASSESS)
+HARNESS_STAGES = {review.CORTI: models.Job.PREDICT, 'astra': models.Job.ASTRA, 'fable': models.Job.FABLE}
+# Assessment.participants states (types.PARTICIPANT_STATES) -> the row's state
+RECORD_STATES = {'read': 'done', 'refused': 'refused', 'failed': 'failed', 'unknown': 'unknown', 'not_sent': 'not_sent',
+                 'blocked': 'blocked', 'not_configured': 'not_configured', 'not_run': 'not_sent'}
+RUN_STATES = {models.ProviderRun.SUCCEEDED: 'done', models.ProviderRun.FAILED: 'failed',
+              models.ProviderRun.UNKNOWN: 'unknown', models.ProviderRun.NOT_SENT: 'not_sent',
+              models.ProviderRun.CANCELLED: 'stopped'}
+WAITING_DETAIL = 'Waiting for the earlier stages to finish.'
+RUNNING_DETAIL = 'Running now.'
+STOPPED_DETAIL = 'Processing stopped before this stage finished; Resume runs it.'
+RECONCILE_FIRST = ' Reconcile it before anything else is sent for this document.'
+BLOCKED_DETAIL = 'Nothing was sent: a previous request has an unknown outcome.' + RECONCILE_FIRST
+REUSED_WORDS = ' (a retained answer to the identical request was reused; nothing was sent)'
+
+
+def _stage_progress(jobs, kind):
+    """(the stage's latest job, whether the current chain has yet to reach it): a job of an earlier stage newer than the
+    stage's own latest - or one while it has none - means the chain has not got there. ``jobs``: the current revision's,
+    oldest first."""
+    earlier = [job for job in jobs if job.kind in STAGE_ORDER[:STAGE_ORDER.index(kind)]]
+    own = [job for job in jobs if job.kind == kind]
+    latest = own[-1] if own else None
+    return latest, bool(earlier) and (latest is None or earlier[-1].created_at > latest.created_at)
+
+
+def _progress(jobs, kind, configured):
+    """'running', 'waiting' or 'stopped' while the current chain has not finished the stage; None once its outcome
+    stands (or nothing will run it)."""
+    latest, ahead = _stage_progress(jobs, kind)
+    if latest is not None and latest.state in (models.Job.QUEUED, models.Job.RUNNING):
+        return 'running' if latest.state == models.Job.RUNNING else 'waiting'
+    active = any(job.state in (models.Job.QUEUED, models.Job.RUNNING) for job in jobs)
+    stopped = bool(jobs) and jobs[-1].state == models.Job.CANCELLED
+    if ahead and configured and active:
+        return 'waiting'
+    if (ahead and configured and stopped) or (stopped and latest is not None and latest.pk == jobs[-1].pk):
+        return 'stopped'
+    return None
+
+
+def _run_detail(run):
+    """The outcome of ``run`` in one plain sentence (the row's detail where no assessment has read it yet)."""
+    if run.state == models.ProviderRun.SUCCEEDED:
+        return f'Answered{REUSED_WORDS if run.reused_from_id else ""}; the checks have not read the answer yet.'
+    if run.state == models.ProviderRun.FAILED:
+        status = f' (HTTP {run.http_status})' if run.http_status else ''
+        return f'The request failed{status}; an identical request is never sent again. {run.error}'.strip()
+    if run.state == models.ProviderRun.UNKNOWN:
+        return 'The outcome is unknown: no complete response was recorded.' + RECONCILE_FIRST
+    if run.state == models.ProviderRun.NOT_SENT and (run.scope or {}).get('held') == 'unknown_outcome':
+        return BLOCKED_DETAIL
+    return run.error or 'Nothing was sent.'
+
+
+def _record_detail(record, run):
+    """A participant's Assessment.participants entry as the row's detail sentence."""
+    words = review.record_words(record)
+    state = record.get('state')
+    if state == 'failed' and run is not None and run.http_status:
+        words = words.replace('the request failed', f'the request failed (HTTP {run.http_status})', 1)
+    detail = words[:1].upper() + words[1:] + '.'
+    if state == 'read' and run is not None and run.reused_from_id:
+        detail = f'Answered{REUSED_WORDS}; the reading was used.'
+    if state == 'read' and record.get('unverified_quotes'):
+        count = int(record['unverified_quotes'])
+        detail += (f' {count} of its quotes {"was" if count == 1 else "were"} not found in the document, so '
+                   f'{"it is" if count == 1 else "they are"} never used as evidence.')
+    if state in ('unknown', 'blocked'):
+        detail += RECONCILE_FIRST
+    return detail
+
+
+def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0):
+    return {'name': name, 'label': label, 'vendor': vendor, 'model': model, 'state': state, 'detail': detail,
+            'run_id': str(run.pk) if run is not None else None,
+            'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes),
+            'unverified_quotes': unverified, 'usage': dict(run.usage or {}) if run is not None else {},
+            'usage_basis': run.usage_basis if run is not None else '', 'estimated_cost_usd': review.estimated_cost(run),
+            'returned_model': run.returned_model if run is not None else ''}
+
+
+def _corti_row(encounter, assessment, jobs):
+    from .jobs import _run_in_use  # local import: jobs imports this module's peers
+
+    name, label, vendor, model = review.HARNESS_PARTICIPANTS[0]
+    configured = settings.PROVIDER_MODE != 'disabled'
+    progress = _progress(jobs, models.Job.PREDICT, configured)
+    if progress is not None:
+        detail = {'running': RUNNING_DETAIL, 'waiting': WAITING_DETAIL, 'stopped': STOPPED_DETAIL}[progress]
+        return _row(name, label, vendor, model, progress, detail, None)
+    current = assessment is not None and assessment.context_id == encounter.current_context_id
+    revision = encounter.current_revision
+    run = assessment.provider_run if current else (_run_in_use(revision) if revision is not None else None)
+    latest, _ = _stage_progress(jobs, models.Job.PREDICT)
+    if (latest is not None and 'blocked' in (latest.result or {})
+            and (run is None or latest.created_at > run.created_at)):
+        return _row(name, label, vendor, model, 'blocked', BLOCKED_DETAIL, None)
+    if run is None:
+        if not configured:
+            return _row(name, label, vendor, model, 'not_configured', 'Not configured on this installation.', None)
+        return _row(name, label, vendor, model, 'not_sent', 'No request was made for this revision.', None)
+    codes = sorted({p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE
+                    and (p.support or {}).get('origin', 'primary') in ('primary', 'second_review')}) if current else []
+    if run.state == models.ProviderRun.SUCCEEDED and current and review._refused_run(assessment) == run:
+        check = next((c for c in assessment.encounter_checks or [] if c.get('id') == 'provider.status'), {})
+        return _row(name, label, vendor, model, 'refused',
+                    f'Answered; the response was not used: {check.get("detail") or "it was refused whole"}', run)
+    if run.state == models.ProviderRun.NOT_SENT and (run.scope or {}).get('held'):
+        return _row(name, label, vendor, model, 'not_sent', run.error or 'Nothing was sent.', run)
+    state = RUN_STATES.get(run.state, 'unknown')
+    if run.state == models.ProviderRun.SUCCEEDED:
+        detail = ('Answered; its codes were checked.' if current else _run_detail(run))
+        if run.reused_from_id:
+            detail = 'Reused the retained answer to the identical request; nothing was sent. ' + detail
+        return _row(name, label, vendor, model, state, detail, run, codes)
+    return _row(name, label, vendor, model, state, _run_detail(run), run)
+
+
+def _participant_row(encounter, assessment, jobs, name, configured):
+    from .jobs import _participant_run, _unreconciled_unknown  # local import: jobs imports this module's peers
+
+    _, label, vendor, model = next(entry for entry in review.HARNESS_PARTICIPANTS if entry[0] == name)
+    progress = _progress(jobs, HARNESS_STAGES[name], name in configured)
+    if progress is not None:
+        detail = {'running': RUNNING_DETAIL, 'waiting': WAITING_DETAIL, 'stopped': STOPPED_DETAIL}[progress]
+        return _row(name, label, vendor, model, progress, detail, None)
+    revision = encounter.current_revision
+    records = {r.get('name'): r for r in (assessment.participants or []) if isinstance(r, dict)} if assessment else {}
+    record = records.get(name)
+    if name not in configured and (record is None or record.get('state') == 'not_configured'):
+        # disabled here, and no assessment read it: a run recorded while it was configured will not be read again
+        return _row(name, label, vendor, model, 'not_configured', 'Not configured on this installation.', None)
+    newest = _participant_run(revision, name) if revision is not None else None
+    if record is not None and record.get('run') == (str(newest.pk) if newest is not None else None):
+        # the assessment read this participant's newest run (or recorded why it had none)
+        run = newest
+        detail = _record_detail(record, run)
+        if record.get('state') == 'not_configured' and name in configured:
+            detail = f'{label} was not configured when these checks ran.'
+        return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
+                    [item.get('code') for item in record.get('codes') or []], int(record.get('unverified_quotes') or 0))
+    if newest is not None:
+        held = newest.state == models.ProviderRun.NOT_SENT and (newest.scope or {}).get('held')
+        return _row(name, label, vendor, model, 'blocked' if held else RUN_STATES.get(newest.state, 'unknown'),
+                    _run_detail(newest), newest)
+    if name not in configured:
+        return _row(name, label, vendor, model, 'not_configured', 'Not configured on this installation.', None)
+    if _unreconciled_unknown(encounter):
+        return _row(name, label, vendor, model, 'blocked', BLOCKED_DETAIL, None)
+    return _row(name, label, vendor, model, 'not_sent', 'No request was made for this revision.', None)
+
+
+def _reference_sources(keys):
+    """{key: (title, effective_start, effective_end)} of the installed sources (facts) and passage sources named."""
+    found = {}
+    for row in models.ReferenceSource.objects.filter(key__in=keys):
+        found[row.key] = (row.title, row.effective_start.isoformat(), row.effective_end.isoformat())
+    for row in models.PassageSource.objects.filter(key__in=keys):
+        found.setdefault(row.key, (row.title, row.effective_start.isoformat(), row.effective_end.isoformat()))
+    return found
+
+
+def _reference_validation(assessment, active):
+    """'waiting' while processing; 'done' when retrieval ran for the assessment and its traces cover every code a
+    proposal can be decided on (selected or excluded); 'not_run' when there is no assessment, it predates the harness,
+    or no retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is
+    what an absent passages module records too)."""
+    out = {'state': 'not_run', 'codes_checked': 0, 'passages': 0, 'sources': [],
+           'not_connected': list(review.NOT_CONNECTED)}
+    if active:
+        out['state'] = 'waiting'
+    if assessment is None:
+        return out
+    retrieval = [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
+    traced = {entry.get('code') for entry in retrieval}
+    decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
+    if not active and assessment.participants and traced and decidable <= traced:
+        out['state'] = 'done'
+    sources = {}
+    for entry in retrieval:
+        for item in review.retrieved(entry, 'facts') + review.retrieved(entry, 'passages'):
+            key = str(item.get('source_key') or '')
+            if key:
+                sources.setdefault(key, str(item.get('release') or ''))
+    known = _reference_sources(sorted(sources))
+    out.update(codes_checked=len(traced), passages=sum(len(review.retrieved(entry, 'passages')) for entry in retrieval),
+               sources=[{'key': key, 'title': known.get(key, ('', '', ''))[0], 'release': release,
+                         'effective_start': known.get(key, ('', '', ''))[1],
+                         'effective_end': known.get(key, ('', '', ''))[2]} for key, release in sorted(sources.items())])
+    return out
+
+
+def harness_json(encounter, jobs):
+    """The harness block of the encounter view (HARNESS.md 7): Corti, Astra and Fable, always in that order, each saying
+    plainly whether it ran, is waiting, is not configured, failed, has an unknown outcome or was refused; then reference
+    validation, clarification and the final status. ``jobs``: the current revision's, oldest first."""
+    assessment = review.live_assessment(encounter)
+    configured = participants.configured()
+    active = any(job.state in (models.Job.QUEUED, models.Job.RUNNING) for job in jobs)
+    return {
+        'participants': [_corti_row(encounter, assessment, jobs)]
+        + [_participant_row(encounter, assessment, jobs, name, configured) for name in participants.PARTICIPANTS],
+        'reference_validation': _reference_validation(assessment, active),
+        'clarification': {'open': assessment.clarifications.filter(state=models.Clarification.OPEN).count()
+                          if assessment is not None else 0},
+        'final': {'state': encounter.state, 'label': review.encounter_state_label(encounter)},
+    }
 
 
 def encounter_detail(encounter, membership):
@@ -391,7 +625,8 @@ def encounter_detail(encounter, membership):
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
-        'permissions': {'can_review': membership.can_review},
+        'permissions': {'can_review': membership.can_review, 'is_owner': is_owner(membership)},
+        'harness': harness_json(encounter, jobs),
         'revision': _revision_json(revision),
         'context': {'facts': _context_facts(encounter.current_context),
                     'user_values': encounter.user_values or {}},
@@ -415,4 +650,70 @@ def encounter_detail(encounter, membership):
         'coding': review.coding_completeness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
         'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],
+    }
+
+
+# --- the administrative trace (HARNESS.md 7; owner only, api.trace) ---------------------------------------------------
+
+def _trace_reading(run):
+    """A participant run's full normalized reading - the quotes CPT Studio could not locate included - read as the
+    adapter version that recorded it; None for Corti's runs and for a run with no answer."""
+    from .jobs import participant_reading  # local import: jobs imports this module's peers
+
+    if run.provider not in participants.PARTICIPANTS or run.state != models.ProviderRun.SUCCEEDED:
+        return None
+    reading, problem = participant_reading(run)
+    if reading is None:
+        return {'refused': True, 'problems': [problem], 'unverified_quotes': 0, 'date_of_service': {},
+                'services': [], 'codes': [], 'not_coded': [], 'questions': [], 'extraction_issues': []}
+    data = to_jsonable(reading)
+    return {'refused': data['refused'], 'problems': data['problems'], 'unverified_quotes': data['unverified_quotes'],
+            'date_of_service': {'value': data['date_of_service'], 'evidence': data['date_evidence']},
+            'services': data['services'], 'codes': data['codes'], 'not_coded': data['not_coded'],
+            'questions': data['questions'], 'extraction_issues': data['extraction_issues']}
+
+
+def _trace_run(run):
+    """One run as HARNESS.md 6 records it: what was called and what answered, its identities (the run identity is the
+    client request id a participant's vendor was given), usage and cost, the hashes, and who asked for it."""
+    return {'id': str(run.pk), 'state': run.state, 'sent': run.sent, 'mode': review.run_mode(run),
+            'purpose': run.purpose, 'run_identity': str(run.run_identity), 'authorization_ref': run.authorization_ref,
+            'requested_by': run.requested_by.label() if run.requested_by_id else None,
+            'adapter_version': run.adapter_version, 'endpoint': run.endpoint, 'requested_model': run.requested_model,
+            'returned_model': run.returned_model, 'request_id': run.provider_request_id, 'response_id': run.response_id,
+            'http_status': run.http_status, 'latency_ms': run.latency_ms, 'usage': run.usage or {},
+            'usage_basis': run.usage_basis, 'estimated_cost_usd': review.estimated_cost(run),
+            'request_sha256': run.request_sha256, 'response_sha256': run.response_sha256,
+            'response_bytes': len(bytes(run.response_bytes or b'')), 'created_at': _iso(run.created_at),
+            'finished_at': _iso(run.finished_at), 'error': run.error,
+            'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
+            'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run)}
+
+
+def trace_json(encounter):
+    """The owner-only trace of the current revision (HARNESS.md 7): each participant's runs - request identity,
+    endpoint, models, usage, cost, raw-response hash and its full normalized reading - then the retrieval traces and the
+    reconciliation table, which keeps proposed, reference-checked and approved apart (I4)."""
+    revision = encounter.current_revision
+    runs = (list(encounter.provider_runs.filter(revision=revision).select_related('requested_by')
+                 .order_by('created_at', 'pk')) if revision else [])
+    assessment = review.live_assessment(encounter)
+    current = review.current_decisions(assessment) if assessment is not None else {}
+    rows = []
+    for proposal in assessment.proposals.all() if assessment is not None else ():
+        decision = current.get(proposal.pk)
+        rows.append({'code': proposal.code, 'family': proposal.family, 'bucket': proposal.bucket,
+                     'status': proposal.status, 'proposed_by': review.proposed_by(proposal),
+                     'positions': review.participant_positions(proposal, assessment.participants),
+                     'reference_check': review.reference_check(proposal),
+                     'approved': decision is not None and decision.action == models.Decision.APPROVE})
+    return {
+        'encounter': {'id': str(encounter.pk), 'title': encounter.title},
+        'revision': {'id': str(revision.pk), 'number': revision.number, 'text_sha256': revision.text_sha256}
+        if revision is not None else None,
+        'participants': [{'name': name, 'label': label, 'vendor': vendor, 'model': model,
+                          'runs': [_trace_run(run) for run in runs if review.participant_of(run) == name]}
+                         for name, label, vendor, model in review.HARNESS_PARTICIPANTS],
+        'retrieval': assessment.retrieval if assessment is not None else [],
+        'reconciliation': rows,
     }

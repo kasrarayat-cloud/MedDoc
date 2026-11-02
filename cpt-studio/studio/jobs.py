@@ -1,4 +1,5 @@
-"""Pipeline jobs: extract -> analyze -> predict -> assess [-> review2 -> assess] (ARCHITECTURE section 5).
+"""Pipeline jobs: extract -> analyze -> predict [-> astra -> fable] -> assess [-> review2 -> assess] (ARCHITECTURE
+section 5; the harness participants' stages, HARNESS.md 2, run only when configured).
 
 One worker claims queued jobs with SELECT ... FOR UPDATE SKIP LOCKED. Every
 stage is idempotent (unique idempotency key), must start before its deadline,
@@ -10,6 +11,7 @@ for the encounter until a member reconciles it.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
 import sys
 import time
@@ -20,7 +22,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 
-from . import audit, bounded, models, review
+from . import audit, bounded, models, participants, review
 from .gi import context as gi_context
 from .gi import detect as gi_detect
 from .ingest import Limits, extract_document, extract_paste
@@ -29,9 +31,9 @@ from .providers.corti import CortiProvider, build_coding_request
 from .providers.replay import ReplayProvider
 from .providers.base import ProviderUnavailable
 from .reference.store import prefetched_lookup, selected_codes
-from .storage import read_original
-from .types import (EvidenceSpan, Fact, NormalizedResponse, PageSpan, ProviderCode, ProviderRequest, RoutingResult,
-                    from_jsonable, sha256_json, to_jsonable)
+from .storage import ALLOWED_SUFFIXES, OriginalCorrupted, read_original
+from .types import (EvidenceSpan, Fact, NormalizedResponse, PageSpan, ParticipantInput, ProviderCode, ProviderRequest,
+                    RawExchange, RoutingResult, from_jsonable, sha256_json, to_jsonable)
 from .validation.engine import assess as run_assessment
 
 log = logging.getLogger(__name__)
@@ -119,8 +121,103 @@ def _queue_predict(encounter, revision, context, *, key, requested_by):
                        requested_by=requested_by)
     provider = get_provider()
     run = _member_date_hold(encounter, revision, provider, requested_by) if provider is not None else None
+    # Nothing is built, reused or sent while the hold stands - a harness participant's request included: the assess
+    # reads the participants' answers as they are, and settling the date makes the request, and the participants' turn.
     return enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
-                   key=f'assess:{context.pk}:{run.pk}' if run else f'{key}:no-provider', requested_by=requested_by)
+                   key=_assess_key(f'assess:{context.pk}:{run.pk}' if run else f'{key}:no-provider', revision),
+                   requested_by=requested_by)
+
+
+# --- the harness participants' chain (HARNESS.md 2) ------------------------------------------------------------------
+#
+# predict -> astra -> fable -> assess, each participant's stage only when it is configured. Every stage of a chain
+# carries the Corti run as Job.provider_run. A participant stage's key is '<name>:<chain>', where <chain> is a digest of
+# what started the chain (the assess key that predict would have queued, and the predict job - or the member's context
+# save, change_context), so two chains for one context never share a stage's key, and the stale sweep, settling a stage
+# whose worker died, queues the next stage under the key the stage itself would have used. The assess the chain ends
+# with is keyed by _assess_key.
+
+UPGRADE_MARK = ':after-upgrade'  # a chain the upgrade's predict started: its stages stop where they would send
+
+
+def _participant_key(name, chain, upgrade=False):
+    return f'{name}:{chain}' + (UPGRADE_MARK if upgrade else '')
+
+
+def _chain_of(job):
+    """The chain digest a participant stage's key carries ('<name>:<chain>', then a Resume's suffix or the mark)."""
+    return job.idempotency_key.split(':')[1]
+
+
+def _assess_key(base, revision):
+    """The key of an assess: ``base`` - exactly today's key - when no participant is configured (I1); otherwise ``base``
+    plus ':p:' and 12 hex of the sha256 of the participant runs it reads (_participant_run, '-' for none), so an assess
+    reading other participant runs is never taken for one already queued. 200 characters hold the longest base (a second
+    review's, 125) with this suffix and a Resume's."""
+    names = participants.configured()
+    if not names:
+        return base
+    runs = [_participant_run(revision, name) for name in names]
+    ids = ','.join(str(run.pk) if run is not None else '-' for run in runs)
+    return f'{base}:p:{hashlib.sha256(ids.encode()).hexdigest()[:12]}'
+
+
+def _after_predict(encounter, revision, context, run, *, key, origin, requested_by, upgrade=False):
+    """What follows the predict outcome ``run`` (None: the provider is disabled): the assess under ``key``, exactly as
+    before, when no harness participant is configured (I1); otherwise the first configured participant's stage, carrying
+    ``run`` (HARNESS.md 2). ``origin`` names what started the chain - the predict job that recorded ``run``, or a
+    member's context save that re-checks with it (change_context) - so no two chains share a stage's key, and
+    ``upgrade`` marks a chain the upgrade's predict started (_upgrade_predict_key). A member date conflict's hold never
+    starts a chain: nothing is sent while it stands (_queue_predict, stage_predict)."""
+    names = participants.configured()
+    if not names:
+        return enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run, key=key,
+                       requested_by=requested_by)
+    chain = hashlib.sha256(f'{key}|{origin}'.encode()).hexdigest()[:32]
+    return enqueue(names[0], encounter=encounter, revision=revision, context=context, provider_run=run,
+                   key=_participant_key(names[0], chain, upgrade), requested_by=requested_by)
+
+
+def _queue_after_participant(job):
+    """The stage after participant ``job.kind``'s: the next configured participant's, in HARNESS.md 2's order, or the
+    assess, keyed by the predict's assess key and the participant runs it reads. A chain the upgrade's predict started
+    keeps its mark, so each of its participants stops where it would send until a member's Resume
+    (stage_participant)."""
+    names = participants.configured()
+    order = participants.PARTICIPANTS
+    later = [name for name in order[order.index(job.kind) + 1:] if name in names]
+    if later:
+        return enqueue(later[0], encounter=job.encounter, revision=job.revision, context=job.context,
+                       provider_run=job.provider_run, requested_by=job.requested_by,
+                       key=_participant_key(later[0], _chain_of(job), job.idempotency_key.endswith(UPGRADE_MARK)))
+    base = f'assess:{job.context_id}:{job.provider_run_id or "no-provider"}'
+    return enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
+                   provider_run=job.provider_run, key=_assess_key(base, job.revision), requested_by=job.requested_by)
+
+
+def _participant_run(revision, name):
+    """The run of participant ``name`` the assess reads for ``revision`` (HARNESS.md 2): its newest finished
+    'independent' run - succeeded, failed, unknown or not sent - leaving out, as _run_in_use does, an unknown outcome a
+    member reconciled (released for one new attempt) and a reservation the stale sweep settled unsent (it never reached
+    the send). None when there is none."""
+    from django.db.models import Q
+
+    finished = (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.NOT_SENT,
+                models.ProviderRun.UNKNOWN)
+    reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
+                           & ~Q(request_sha256=''))
+    reconciled = Q(state=models.ProviderRun.UNKNOWN) & Q(reconciled_at__isnull=False)
+    return (revision.provider_runs.filter(provider=name, purpose=models.ProviderRun.INDEPENDENT, state__in=finished)
+            .exclude(reserved_then_swept).exclude(reconciled).order_by('-created_at', '-pk').first())
+
+
+def _participants_owed(revision, context):
+    """The configured participants with no recorded outcome for ``revision`` (_participant_run finds none): their stage
+    was stopped, expired or swept before it recorded one, or the participant was configured since. () while ``context``
+    holds a member date conflict, while which nothing is sent - and so () when none is configured (I1)."""
+    if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
+        return ()
+    return tuple(name for name in participants.configured() if _participant_run(revision, name) is None)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -235,16 +332,19 @@ def _route_child(text, service_date):
 
 
 def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
-                  extraction_messages, second=None, second_scope=None):
+                  extraction_messages, second=None, second_scope=None, participant_inputs=()):
     """The routing for ``service_date`` and the validation assessment that reads it, in one child: validation's span
     readings reuse the routing analysis the child already made. The documented-service inventory is read here too
-    (engine @4), under the same deadline and memory limit."""
+    (engine @4), under the same deadline and memory limit. ``participant_inputs``: the configured harness participants'
+    readings (HARNESS.md 5), passed to the engine only when there is one, so with none it is called exactly as before
+    (I1)."""
     data = to_jsonable(gi_detect.route(text, service_date))
+    harness = {'participants': participant_inputs} if participant_inputs else {}
     result = run_assessment(
         text=text, pages=pages, context=context, routing=from_jsonable(RoutingResult, data), normalized=normalized,
         reference=reference, service_date=service_date, provider_status=provider_status,
         extraction_status=extraction_status, extraction_messages=extraction_messages, second=second,
-        second_scope=second_scope)
+        second_scope=second_scope, **harness)
     return data, result
 
 
@@ -313,20 +413,21 @@ def _failed_before(encounter, provider, request):
         .order_by('-created_at').first())
 
 
-def _not_resent_run(job, encounter, revision, provider, request, service_date, failed):
+def _not_resent_run(job, encounter, revision, provider, request, service_date, failed, **recorded):
     """The run a predict records where the send door met ``request`` already sent for this encounter that FAILED
     (``failed``): nothing is sent, and the run says so and gives that failure's error. It carries the request, so it
     answers it as the run in use - this revision's, and the installed revision's after a rollback: both read the
     revision's newest finished run, so neither sends that request behind a later save. Its start is recorded, as a
     reused run's is: it went through the send door, so no revision reads it as a reservation the stale sweep settled
-    unsent, which still owes its attempt (round 7c8 skeptic, sk:2 and sk:3)."""
+    unsent, which still owes its attempt (round 7c8 skeptic, sk:2 and sk:3). ``recorded``: a harness participant's
+    purpose, scope and identity columns (stage_participant); none for Corti's, whose row is as before."""
     now = timezone.now()
     error = FAILED_BEFORE_MESSAGE + (FAILED_BEFORE_ERROR.format(error=failed.error) if failed.error else '')
     return models.ProviderRun.objects.create(
         encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
         state=models.ProviderRun.NOT_SENT, sent=False, error=error, authorization_ref=settings.AUTHORIZATION_REF,
-        requested_by=job.requested_by, service_date=service_date, started_at=now, finished_at=now)
+        requested_by=job.requested_by, service_date=service_date, started_at=now, finished_at=now, **recorded)
 
 
 def _retained_second_review(encounter, provider, request):
@@ -421,6 +522,12 @@ def _finish_run(run, exchange):
     run.usage_basis = exchange.usage_basis
     run.provider_request_id = exchange.provider_request_id[:120]
     run.error = exchange.error
+    # What was called and what answered (HARNESS.md 6): the adapter's record, or what the reservation named when the
+    # exchange names none (a request that never left); the models are '' for Corti, whose API names none.
+    run.endpoint = (exchange.endpoint or run.endpoint)[:200]
+    run.requested_model = (exchange.requested_model or run.requested_model)[:100]
+    run.returned_model = exchange.returned_model[:100]
+    run.response_id = exchange.response_id[:140]
     run.finished_at = timezone.now()
     run.save()
 
@@ -447,7 +554,7 @@ def _remade_context(job):
     remade = f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'
     if _run_answers(last_run, revision, fresh):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
-                key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
+                key=_assess_key(f'assess:{fresh.pk}:{last_run.pk}', revision), requested_by=job.requested_by)
     elif (job.kind == Job.PREDICT and job.idempotency_key != _upgrade_predict_key(context)
           or gi_context.is_member_conflict((fresh.facts or {}).get('service_date'))):
         # the request a member's action queued (an upload, a date change, a Resume, a reconciliation), or the hold. An
@@ -512,8 +619,10 @@ def stage_predict(job):
     assess_key = f'assess:{context.pk}'
 
     def next_assess(run):
-        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
-                key=f'{assess_key}:{run.pk if run else "no-provider"}', requested_by=job.requested_by)
+        # the assess, or with a harness participant configured its chain (HARNESS.md 2), which goes on to the assess
+        _after_predict(encounter, revision, context, run, key=f'{assess_key}:{run.pk if run else "no-provider"}',
+                       origin=str(job.pk), requested_by=job.requested_by,
+                       upgrade=job.idempotency_key == _upgrade_predict_key(context))
 
     if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _recorded_in_use(revision):
         # gi3 (STATE2-1; the narrow release's refutation, STATE-N1 and STATE-N2): with sending disabled, the predict an
@@ -532,9 +641,11 @@ def stage_predict(job):
         # both sides kept (interpretation 11), so the request has no date it can carry. Nothing is built, reused or
         # sent while it stands - a dateless request would be paid for and discarded once the date is settled - and the
         # encounter asks the date question. Correcting or clearing the metadata starts the request for its date. Every
-        # path that queues a predict records this hold itself (_queue_predict); this holds one queued any other way.
+        # path that queues a predict records this hold itself (_queue_predict); this holds one queued any other way. No
+        # harness participant is sent to while it stands either: the assess follows the hold directly.
         run = _member_date_hold(encounter, revision, provider, job.requested_by)
-        next_assess(run)
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
+                key=_assess_key(f'{assess_key}:{run.pk}', revision), requested_by=job.requested_by)
         return {'provider': 'not_sent', 'reason': 'member-entered service date conflicts with the document'}
     if not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists():
         # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): after a date change the
@@ -599,11 +710,18 @@ def stage_predict(job):
     return {'provider': run.state, 'run': str(run.pk)}
 
 
-def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None):
+def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None, original_bytes=None):
     """One provider attempt under the send discipline (ARCHITECTURE 5.4): single-flight by advisory lock, the run
     written 'reserved' before any network I/O, a Stop observed before sending, no automatic retry, and the outcome -
-    including an unknown one - recorded with the raw bytes and usage."""
+    including an unknown one - recorded with the raw bytes and usage.
+
+    A harness participant's attempt (purpose 'independent', HARNESS.md 2-3) is the same send through the participant's
+    own contract: its reservation names the endpoint and model it calls, the vendor is given the run's identity as the
+    client request id, and ``original_bytes`` - a PDF upload's original, read back through studio.storage against its
+    sha256 - is handed over to be re-verified against the request and expanded at send time. Corti's path is
+    unchanged."""
     encounter, revision = job.encounter, job.revision
+    independent = purpose == models.ProviderRun.INDEPENDENT
     with connection.cursor() as cursor:
         cursor.execute('SELECT pg_try_advisory_lock(%s)', [PROVIDER_LOCK_KEY])
         if not cursor.fetchone()[0]:
@@ -613,7 +731,8 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
-            requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {})
+            requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {},
+            **(_participant_identity(provider) if independent else {}))
         job.refresh_from_db(fields=['stop_requested_at'])
         if job.stop_requested_at or is_stopped(encounter.pk):
             run.state = models.ProviderRun.CANCELLED
@@ -627,11 +746,24 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
                      run_identity=str(run.run_identity), purpose=purpose)
-        exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
+        if independent:
+            try:
+                exchange = provider.send(request, deadline_s=settings.PARTICIPANT_SEND_DEADLINE_SECONDS,
+                                         client_request_id=str(run.run_identity), original_bytes=original_bytes)
+            except Exception as exc:  # noqa: BLE001 - logged; the run records why, never the internals
+                # An adapter answers every attempt with a RawExchange. One that raised instead may have sent the
+                # request, so its outcome is unknown and blocks every further send until a member reconciles it -
+                # never a run left 'sending' that nothing blocks on and no member can reconcile (I8).
+                log.exception('participant %s raised while sending run %s', provider.name, run.pk)
+                exchange = RawExchange(outcome='unknown', sent=True, error=PARTICIPANT_RAISED_MESSAGE.format(
+                    label=participants.LABELS.get(provider.name, provider.name), error=type(exc).__name__))
+        else:
+            exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
         _finish_run(run, exchange)
+        # a participant's row names its provider, so the Activity tab words it ("Astra response recorded")
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
-                     purpose=purpose)
+                     purpose=purpose, **({'provider': provider.name} if independent else {}))
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
@@ -652,6 +784,279 @@ def _live_gate(job, provider, revision, encounter):
 
 class StageCancelled(Exception):
     """The stage observed a Stop request and ended without side effects."""
+
+
+# --- the harness participants' stages (HARNESS.md 2-3) ----------------------------------------------------------------
+
+PARTICIPANT_BLOCKED_MESSAGE = ('Nothing was sent: a previous request has an unknown outcome; reconcile it before '
+                               'sending again.')
+PARTICIPANT_ORIGINAL_MESSAGE = ('Nothing was sent: the original file could not be read back unchanged from the store, '
+                                'so the request that names it was not made.')
+PARTICIPANT_UPGRADE_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current '
+                               'rules, and no {label} answer is recorded for the request it makes. Resume to send it.')
+PARTICIPANT_NOT_RUN = 'No request was made for this revision.'
+PARTICIPANT_HELD_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata conflicts with the '
+                            'document, and nothing is sent while that question is open. Settling it gives {label} its '
+                            'turn.')
+PARTICIPANT_NOT_CONFIGURED = '{label} is not configured on this installation.'
+PARTICIPANT_RAISED_MESSAGE = ('The {label} request may have been sent: its adapter stopped with an unexpected error '
+                              '({error}, logged) before it recorded an outcome. The outcome is unknown; reconcile it '
+                              'before any new attempt.')
+PARTICIPANT_UNREADABLE_MESSAGE = ('The stored answer could not be read: the reader stopped with an unexpected error '
+                                  '({error}, logged), so nothing from it was used.')
+# scope['held'] of a participant's run that the unknown-outcome block stopped: nothing was sent, on purpose
+UNKNOWN_OUTCOME_HELD = 'unknown_outcome'
+PDF_MEDIA_TYPE, DOCX_MEDIA_TYPE = ALLOWED_SUFFIXES['.pdf'], ALLOWED_SUFFIXES['.docx']
+
+
+def _participant_document(revision):
+    """(kind, original, source file) of what a participant is given (HARNESS.md 3): 'pdf' - with the original, named by
+    sha256 and size in the request, its bytes read back only at send time - only for an upload whose media type is PDF;
+    'addendum' for an addendum revision, whose text no original matches; 'docx', 'txt' or 'paste' otherwise."""
+    if revision.kind == models.SourceRevision.ADDENDUM:
+        return 'addendum', None, None
+    if revision.kind == models.SourceRevision.PASTE:
+        return 'paste', None, None
+    source = revision.source_file
+    if source is not None and source.media_type == PDF_MEDIA_TYPE:
+        return 'pdf', {'sha256': source.sha256, 'bytes': source.size}, source
+    return ('docx' if source is not None and source.media_type == DOCX_MEDIA_TYPE else 'txt'), None, None
+
+
+def _participant_pages(revision):
+    """The revision's pages as a participant's framing needs them (prompt.framed_document: the spans tile the whole
+    text): each page runs on to the next page's start - the separator extraction puts between two pages is read with the
+    page before it - and the last page to the end of the text, so the addendum an addendum revision appends after its
+    parent's pages is read with the last page. Each [Page N] line still stands where that page begins; every quote is
+    located in the text itself, so no offset moves."""
+    spans = sorted((PageSpan(**p) for p in revision.pages), key=lambda span: span.start)
+    tiled = []
+    for index, span in enumerate(spans):
+        end = spans[index + 1].start if index + 1 < len(spans) else len(revision.text)
+        tiled.append(PageSpan(page=span.page, start=tiled[-1].end if tiled else 0, end=end))
+    return tuple(tiled)
+
+
+def _participant_identity(adapter):
+    """What a participant's run records of what it calls (HARNESS.md 6): the adapter's constant endpoint and model."""
+    return {'endpoint': adapter.endpoint[:200], 'requested_model': adapter.requested_model[:100]}
+
+
+def _participant_not_sent(job, name, adapter, request, error, *, mode, held='', started=True):
+    """A participant's run that sent nothing, with why: the participant is shown as not run, and the chain goes on
+    (I10). It carries ``request`` when one was built. ``started``: it went through the stage's send doors, as a reused
+    or not resent run does, so no reader takes it for a reservation the stale sweep settled unsent; one whose request
+    could not be built carries none and records no start, as Corti's does."""
+    now = timezone.now()
+    return models.ProviderRun.objects.create(
+        encounter=job.encounter, revision=job.revision, provider=name,
+        adapter_version=adapter.adapter_version if adapter is not None else '',
+        request_sha256=request.canonical_sha256 if request is not None else '',
+        request_body=request.body if request is not None else {},
+        contexts=list(request.contexts) if request is not None else [], state=models.ProviderRun.NOT_SENT,
+        sent=False, error=error, authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by,
+        service_date=None, purpose=models.ProviderRun.INDEPENDENT,
+        scope={'mode': mode, **({'held': held} if held else {})}, started_at=now if started else None,
+        finished_at=now, **(_participant_identity(adapter) if adapter is not None else {}))
+
+
+def _participant_done(job, run, outcome=None):
+    """The participant stage's result once ``run`` records its outcome; the chain goes on (_queue_after_participant)."""
+    _queue_after_participant(job)
+    return {'participant': job.kind, 'state': outcome or run.state, 'run': str(run.pk)}
+
+
+def stage_participant(job):
+    """One harness participant's own review of the current revision (HARNESS.md 2-3; job kinds 'astra' and 'fable', in
+    that order after predict, each carrying the Corti run as Job.provider_run).
+
+    The participant is given the revision alone - its text with [Page N] lines, and a PDF upload's original - so its
+    request depends on no context: a context change reuses its answer. Its send doors are predict's, in predict's order:
+    a request that cannot be built is recorded not sent; a retained answer to the identical request is reused; an
+    unknown outcome blocks every send; a request that failed is never sent again; the live gate; then one attempt under
+    _send's discipline. Every outcome is a run of its own, and the chain goes on to the next configured participant or
+    the assess: a participant that is unavailable, refused by the live gate or failing blocks only itself (I10)."""
+    name, revision, encounter, context = job.kind, job.revision, job.encounter, job.context
+    encounter.refresh_from_db()
+    if encounter.current_revision_id != revision.pk:
+        return {'skipped': 'a newer revision exists; nothing was sent'}
+    if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
+        return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+    try:
+        participant = participants.get_participant(name)
+    except ProviderUnavailable as exc:
+        return _participant_done(job, _participant_not_sent(job, name, None, None, str(exc), started=False,
+                                                            mode=participants.participant_mode(name)))
+    if participant is None:  # disabled since the chain was queued: it records nothing, as one never configured
+        _queue_after_participant(job)
+        return {'participant': name, 'state': 'disabled'}
+    kind, original, source = _participant_document(revision)
+    try:
+        request = participant.build_request(revision.text, _participant_pages(revision), kind, original)
+    except ProviderUnavailable as exc:
+        return _participant_done(job, _participant_not_sent(job, name, participant, None, str(exc), started=False,
+                                                            mode=participant.mode))
+
+    # Reuse a retained answer to the identical request instead of paying twice - one recorded in the same mode only, so
+    # a replayed answer never stands in for a live one (a replayed run never presents as live output).
+    prior = models.ProviderRun.objects.filter(
+        encounter__workspace=encounter.workspace, provider=participant.name,
+        adapter_version=participant.adapter_version, request_sha256=request.canonical_sha256,
+        state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True, purpose=models.ProviderRun.INDEPENDENT,
+        scope__mode=participant.mode).order_by('created_at').first()
+    if prior is not None:
+        now = timezone.now()
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=prior.provider, adapter_version=prior.adapter_version,
+            request_sha256=prior.request_sha256, request_body=prior.request_body, contexts=prior.contexts,
+            state=models.ProviderRun.SUCCEEDED, sent=False, http_status=prior.http_status,
+            provider_request_id=prior.provider_request_id, response_sha256=prior.response_sha256,
+            response_bytes=bytes(prior.response_bytes), usage={}, usage_basis='reused_retained_result_no_new_usage',
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, reused_from=prior,
+            service_date=None, purpose=models.ProviderRun.INDEPENDENT,
+            scope={'mode': (prior.scope or {}).get('mode', '')}, endpoint=prior.endpoint,
+            requested_model=prior.requested_model, returned_model=prior.returned_model, response_id=prior.response_id,
+            started_at=now, finished_at=now)
+        audit.record(encounter.workspace, 'provider.reused', encounter=encounter, run=str(run.pk),
+                     reused_from=str(prior.pk), provider=name, purpose=models.ProviderRun.INDEPENDENT)
+        return _participant_done(job, run, 'reused')
+
+    if _unreconciled_unknown(encounter):
+        held = _participant_not_sent(job, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
+                                     mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
+        return _participant_done(job, held, 'blocked')
+    failed = _failed_before(encounter, participant, request)
+    if failed is not None:
+        run = _not_resent_run(job, encounter, revision, participant, request, None, failed,
+                              purpose=models.ProviderRun.INDEPENDENT, scope={'mode': participant.mode},
+                              **_participant_identity(participant))
+        return _participant_done(job, run, 'not_resent')
+    try:
+        _live_gate(job, participant, revision, encounter)
+    except StageFailure as exc:
+        return _participant_done(job, _participant_not_sent(job, name, participant, request, f'Nothing was sent: {exc}',
+                                                            mode=participant.mode))
+    if job.idempotency_key.endswith(UPGRADE_MARK):
+        # a chain the upgrade's predict started stops where it would send, as that predict does, until a member's
+        # Resume (refutation r1, migrate-5): an upgrade never sends a request nobody asked for
+        raise StageCancelled(PARTICIPANT_UPGRADE_MESSAGE.format(label=participants.LABELS.get(name, name)))
+    original_bytes = None
+    if source is not None:
+        try:
+            original_bytes = read_original(source)  # re-verified against the recorded sha256
+        except (OriginalCorrupted, OSError):
+            return _participant_done(job, _participant_not_sent(job, name, participant, request,
+                                                                PARTICIPANT_ORIGINAL_MESSAGE, mode=participant.mode))
+    run = _send(job, participant, request, service_date=None, purpose=models.ProviderRun.INDEPENDENT,
+                scope={'mode': participant.mode}, original_bytes=original_bytes)
+    return _participant_done(job, run)
+
+
+def _first_located(quotes):
+    """The first located occurrence among ``quotes`` (LocatedQuote): an exact slice of the revision text (I7); '' when
+    none was located - an unlocated quote is never shown as evidence."""
+    for quote in quotes:
+        for span in quote.spans:
+            return span.text
+    return ''
+
+
+def _participant_record(name, state, run, reading, reason):
+    """One Assessment.participants entry (HARNESS.md 6): the state, the run and adapter version it was read from, the
+    models requested and returned, the unverified-quote count and why it was not read or not used; and, from a reading
+    that was used, the codes it proposed and those it advised not to code, each with its first located quote, so the
+    screen and the reports state its positions without re-reading the run."""
+    used = reading if state == 'read' else None
+    proposed, advised = {}, {}
+    for item in used.codes if used is not None else ():
+        proposed[item.code] = proposed.get(item.code) or _first_located(item.evidence)
+    for item in used.not_coded if used is not None else ():
+        if item.code and item.code not in advised:
+            advised[item.code] = {'code': item.code, 'reason': item.reason, 'quote': _first_located(item.evidence)}
+    return {'name': name, 'state': state, 'run': str(run.pk) if run is not None else None,
+            'adapter_version': run.adapter_version if run is not None else '',
+            'requested_model': run.requested_model if run is not None else '',
+            'returned_model': run.returned_model if run is not None else '',
+            'unverified_quotes': reading.unverified_quotes if reading is not None else 0, 'reason': reason,
+            'codes': [{'code': code, 'quote': quote} for code, quote in proposed.items()],
+            'not_coded': list(advised.values())}
+
+
+def not_configured_record(name):
+    """The Assessment.participants entry of a participant not configured on this installation (I1: 'not configured')."""
+    return {'name': name, 'state': 'not_configured', 'run': None, 'adapter_version': '', 'requested_model': '',
+            'returned_model': '', 'unverified_quotes': 0,
+            'reason': PARTICIPANT_NOT_CONFIGURED.format(label=participants.LABELS.get(name, name)), 'codes': [],
+            'not_coded': []}
+
+
+def participant_reading(run):
+    """(reading, problem): participant run ``run``'s stored answer read as the adapter version that recorded it, after
+    its bytes are checked against their recorded sha256; (None, why) when it cannot be read. Needs no credentials."""
+    data = bytes(run.response_bytes)
+    if hashlib.sha256(data).hexdigest() != run.response_sha256:
+        return None, 'The stored response no longer matches its recorded hash; it was not read.'
+    request = ProviderRequest(provider=run.provider, adapter_version=run.adapter_version, body=run.request_body,
+                              canonical_sha256=run.request_sha256, contexts=tuple(run.contexts))
+    try:
+        reader = participants.reader_for(run.provider, run.adapter_version)
+    except ProviderUnavailable as exc:
+        return None, str(exc)
+    try:
+        return reader(request, data), ''
+    except Exception as exc:  # noqa: BLE001 - logged; one participant's unreadable answer blocks only itself (I10)
+        log.exception('the stored answer of participant run %s could not be read', run.pk)
+        return None, PARTICIPANT_UNREADABLE_MESSAGE.format(error=type(exc).__name__)
+
+
+def _participant_input(encounter, revision, name, *, held=False):
+    """(ParticipantInput, its Assessment.participants record) of configured participant ``name`` (HARNESS.md 5), read
+    from its newest finished run for ``revision`` (_participant_run): 'read' with the reading; 'refused' when the
+    reading - or the stored answer itself - was not used; 'blocked' for a run the unknown-outcome block stopped;
+    otherwise the run's own state; 'not_run' when there is none ('blocked' while an unknown outcome stands; ``held``:
+    the assess reads Corti's member date hold, while which nothing is sent, and the reason says so). A participant's own
+    failure is its state, never the stage's (I10)."""
+    run = _participant_run(revision, name)
+    reading = None
+    if run is None and _unreconciled_unknown(encounter):
+        state, reason = 'blocked', PARTICIPANT_BLOCKED_MESSAGE
+    elif run is None:
+        state, reason = 'not_run', (PARTICIPANT_HELD_MESSAGE.format(label=participants.LABELS.get(name, name)) if held
+                                    else PARTICIPANT_NOT_RUN)
+    elif run.state == models.ProviderRun.SUCCEEDED:
+        reading, problem = participant_reading(run)
+        if reading is None:
+            state, reason = 'refused', problem
+        elif reading.refused:
+            state, reason = 'refused', '; '.join(reading.problems) or 'The reading was not used.'
+        else:
+            state, reason = 'read', ''
+    elif run.state == models.ProviderRun.NOT_SENT and (run.scope or {}).get('held') == UNKNOWN_OUTCOME_HELD:
+        state, reason = 'blocked', run.error
+    else:
+        state, reason = run.state, run.error
+    return (ParticipantInput(provider=name, state=state, reading=reading if state == 'read' else None, reason=reason),
+            _participant_record(name, state, run, reading, reason))
+
+
+PASSAGES_MODULE = 'studio.reference.passages'
+
+
+def _retrieval(result, service_date, reference, prefetched):
+    """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that the
+    checks' own lookup holds - every code a proposal can be decided on; a provider's informational alternatives were
+    never looked up - from that same lookup, with the CMS passages that govern its facts, read here in the parent, which
+    has the database. [] where studio.reference.passages is not installed."""
+    try:
+        passages = importlib.import_module(PASSAGES_MODULE)
+    except ModuleNotFoundError as exc:
+        if exc.name != PASSAGES_MODULE:
+            raise
+        return []
+    codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
+    if not codes:
+        return []
+    return to_jsonable(list(passages.retrieve(codes, service_date, reference, passages.load_passages())))
 
 
 def _provider_inputs(run):
@@ -684,18 +1089,29 @@ def stage_assess(job):
     provider_status, normalized = _provider_inputs(run)
     second = _second_run_for(revision, run)
     second_normalized = _second_inputs(second) if second is not None else None
-    reference = prefetched_lookup(tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized)))))
+    # Each configured harness participant's reading of this revision (HARNESS.md 5). None is passed when none is
+    # configured, so the engine's input, its result and the lookups are exactly as before (I1).
+    held = (run is not None and run.state == models.ProviderRun.NOT_SENT
+            and (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT)
+    read = [_participant_input(encounter, revision, name, held=held) for name in participants.configured()]
+    inputs = tuple(item for item, _ in read)
+    proposed = {code.code for item in inputs if item.reading is not None for code in item.reading.codes}
+    prefetched = tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized)) | proposed))
+    reference = prefetched_lookup(prefetched)
     service_date = context_service_date(context)
     data, result = _bounded(
         _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
-        tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None,
+        tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
         seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
+    retrieval = _retrieval(result, service_date, reference, prefetched)
+    records = {record['name']: record for _, record in read}
     try:
-        assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,
-                                               routing_run=routing_run, provider_run=run, result=result,
-                                               second_run=second)
+        assessment = review.persist_assessment(
+            encounter=encounter, revision=revision, context=context, routing_run=routing_run, provider_run=run,
+            result=result, second_run=second, retrieval=retrieval,
+            participants=[records.get(name) or not_configured_record(name) for name in participants.PARTICIPANTS])
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
     # The bounded second review is never queued here: a workspace owner or reviewer asks for it
@@ -971,7 +1387,8 @@ def stage_review2(job):
 
     def next_assess(run):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=primary,
-                key=f'assess:{context.pk}:{primary.pk}:review2:{run.pk}', requested_by=job.requested_by)
+                key=_assess_key(f'assess:{context.pk}:{primary.pk}:review2:{run.pk}', revision),
+                requested_by=job.requested_by)
 
     try:
         request = provider.build_request(revision.text[start:end], service_date)
@@ -1020,7 +1437,10 @@ def stage_review2(job):
 
 
 STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess,
-          Job.REVIEW2: stage_review2}
+          Job.REVIEW2: stage_review2, Job.ASTRA: stage_participant, Job.FABLE: stage_participant}
+# The stages that send, and the purpose of the runs they record (the stale sweep settles them by those runs).
+SENDING_PURPOSES = {Job.PREDICT: models.ProviderRun.PRIMARY, Job.REVIEW2: models.ProviderRun.SECOND_REVIEW,
+                    **{kind: models.ProviderRun.INDEPENDENT for kind in Job.PARTICIPANT_KINDS}}
 
 
 # --- worker ------------------------------------------------------------------
@@ -1086,14 +1506,15 @@ def mark_stale():
             # yet queued) is settled by that run, exactly as the stage would have settled it, so a Resume can
             # never re-send an identical request that already failed. Read before reserved runs are settled below.
             finished = None
-            sends = job.kind in (Job.PREDICT, Job.REVIEW2)
+            sends = job.kind in SENDING_PURPOSES  # a harness participant's stage sends too (HARNESS.md 2)
             if sends and job.context_id:
-                purpose = models.ProviderRun.PRIMARY if job.kind == Job.PREDICT else models.ProviderRun.SECOND_REVIEW
-                finished = (models.ProviderRun.objects
-                            .filter(revision=job.revision, created_at__gte=job.started_at, purpose=purpose,
-                                    state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED,
-                                               models.ProviderRun.UNKNOWN, models.ProviderRun.NOT_SENT))
-                            .order_by('-created_at').first())
+                runs = models.ProviderRun.objects.filter(
+                    revision=job.revision, created_at__gte=job.started_at, purpose=SENDING_PURPOSES[job.kind],
+                    state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.UNKNOWN,
+                               models.ProviderRun.NOT_SENT))
+                if job.kind in Job.PARTICIPANT_KINDS:
+                    runs = runs.filter(provider=job.kind)  # its own run: both participants' runs are 'independent'
+                finished = runs.order_by('-created_at').first()
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
             unknown = sends and sending.exists()
@@ -1107,14 +1528,29 @@ def mark_stale():
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
             if finished is not None and not unknown:
-                primary = finished if job.kind == Job.PREDICT else job.provider_run
-                enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
-                        provider_run=primary, key=f'assess:{job.context_id}:{primary.pk}'
-                        + ('' if job.kind == Job.PREDICT else f':review2:{finished.pk}'),
-                        requested_by=job.requested_by)
+                # the stage the settled one would have queued, under the key it would have used
+                if job.kind == Job.PREDICT and (finished.scope or {}).get('held'):
+                    # a member date conflict's hold: no participant chain, as stage_predict queues none
+                    key = _assess_key(f'assess:{job.context_id}:{finished.pk}', job.revision)
+                    enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
+                            provider_run=finished, key=key, requested_by=job.requested_by)
+                elif job.kind == Job.PREDICT:
+                    _after_predict(job.encounter, job.revision, job.context, finished,
+                                   key=f'assess:{job.context_id}:{finished.pk}', origin=str(job.pk),
+                                   requested_by=job.requested_by,
+                                   upgrade=job.idempotency_key == _upgrade_predict_key(job.context))
+                elif job.kind == Job.REVIEW2:
+                    primary = job.provider_run
+                    key = f'assess:{job.context_id}:{primary.pk}:review2:{finished.pk}'
+                    enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
+                            provider_run=primary, key=_assess_key(key, job.revision), requested_by=job.requested_by)
+                else:
+                    _queue_after_participant(job)
                 job.state, job.error = Job.SUCCEEDED, ''
-                job.result = {'provider': finished.state, 'run': str(finished.pk),
-                              'settled': 'the worker stopped after the provider outcome was recorded'}
+                settled = 'the worker stopped after the provider outcome was recorded'
+                job.result = ({'participant': job.kind, 'state': finished.state, 'run': str(finished.pk),
+                               'settled': settled} if job.kind in Job.PARTICIPANT_KINDS else
+                              {'provider': finished.state, 'run': str(finished.pk), 'settled': settled})
             else:
                 # A send in flight is unknown (reconcile it); any other stage recorded nothing it would not redo,
                 # so it is cancelled and can be resumed rather than stranding the encounter.
@@ -1243,7 +1679,9 @@ def reconcile(encounter, run, user, note):
         if context is not None and revision is not None and context.revision_id == revision.pk:
             _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
                            requested_by=user)
-        audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk))
+        # a participant's row names its provider, so the Activity tab words it ("Unknown Astra outcome reconciled")
+        audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk),
+                     **({'provider': run.provider} if run.purpose == models.ProviderRun.INDEPENDENT else {}))
         review.refresh_state(encounter)
     return True
 
@@ -1418,8 +1856,16 @@ def change_context(encounter, user, values):
         # the failed-request door, single flight).
         owed = _settles_member_conflict(previous, context) and _attempt_owed(encounter, last_run)
         if _run_answers(last_run, revision, context) and not owed:
-            enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
-                    key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
+            if _participants_owed(revision, context):
+                # A configured participant has no outcome for this revision - its stage was stopped, expired or swept
+                # before it recorded one, or it was configured since: the chain runs before the assess, under every
+                # send door, so it gets its turn and each participant that answered reuses its answer (HARNESS.md 2).
+                _after_predict(encounter, revision, context, last_run, key=f'assess:{context.pk}:{last_run.pk}',
+                               origin=f'context:{context.pk}', requested_by=user)
+            else:
+                # the participants' requests carry no context (HARNESS.md 2): the assess reads their answers as they are
+                enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
+                        key=_assess_key(f'assess:{context.pk}:{last_run.pk}', revision), requested_by=user)
         else:
             _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
         review.refresh_state(encounter)
