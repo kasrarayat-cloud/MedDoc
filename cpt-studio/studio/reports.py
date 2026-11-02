@@ -580,8 +580,8 @@ def _peer_items(assessment, peer_review, text, index, name='', record=None):
         # no value (refutation round 5, the session's D10, as D8 for the page): a participant's value is its own free
         # text, which only the owner's trace serves, and CPT Studio's reading of it (candidates.canonical_value, an
         # inference no release-default path makes) printed 'Cannulation of the bile duct was not successful.' as
-        # "successful"; an answer is the participant's claim, whether the document settles the question, with the
-        # passages it located
+        # "successful"; an answer is printed only by whether it is read as settling the question, with the passages
+        # it located
         answers.append({'question_id': str(answer.question_id) if question is not None else '',
                         'question': question.question if question is not None else '', 'fact': fact,
                         'family': family, 'settled': bool(answer.settled),
@@ -1219,10 +1219,9 @@ def _peer_evidence(spans):
 
 
 def _peer_section(snap):
-    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions - each only as the
-    participant's claim, that the document settles the question, or its answer read as not settling it, never a value
-    (refutation round 5, the session's D10) - its positions on codes and the codes it proposed after peer review, each
-    with its located passages."""
+    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions - each only by
+    whether it is read as settling the question, never a value (refutation round 5, the session's D10) - its positions
+    on codes and the codes it proposed after peer review, each with its located passages."""
     data = snap.get('peer_review') or {}
     if data.get('predates'):
         return ['  - none: this assessment was recorded before peer review existed']
@@ -1672,9 +1671,9 @@ def _harness2_rows(snap):
     participant (for a confirmed finding, the participants that located its passage) and ``proposal_origin`` its phase.
     The other columns they fill: a confirmed finding's fact (``status``), value (``exclusion_reason``), passages
     (``evidence``), reviewer, kind and time (``reviewer``, ``reviewer_kind``, ``decided_at``), attestation
-    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``: the participant's
-    claim; no value is printed, refutation round 5, the session's D10), passages and question (``checks``); a position's
-    code, position and passages; an additional code's code, units and passages; a reference's ref
+    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``: whether its answer
+    is read as settling the question; no value is printed, refutation round 5, D10), passages and question (``checks``);
+    a position's code, position and passages; an additional code's code, units and passages; a reference's ref
     (``exclusion_reason``), retrieved, used or cited_not_retrieved (``status``), source (``documented_service``) and
     kind, release and window (``evidence_support``)."""
     base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}

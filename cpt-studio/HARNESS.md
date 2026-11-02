@@ -1227,8 +1227,8 @@ is moot. A participant's own answers to the open questions stay in its peer revi
 own words, and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the
 session's D10, d8-2 - that value was CPT Studio's own reading of the participant's words, `candidates.canonical_value`,
 and it printed 'Cannulation of the bile duct was not successful.' as "successful"; the reports now list each answer only
-as the participant's claim, that the document settles the question or that its answer is read as not settling it, with
-the passages it located, and print no value). The bullets above (candidates
+by whether it is read as settling the question ("Astra says the document settles it", "Astra's answer is read as not
+settling it"), with the passages it located, and print no value). The bullets above (candidates
 served unchecked, their fixed why, the page's located passages and its note) are superseded, kept so the change can be
 seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4-CONF` block of
 `tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`

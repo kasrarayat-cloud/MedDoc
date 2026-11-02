@@ -431,8 +431,8 @@ true); no `why` "CPT Studio does not check what a participant's passage states, 
 participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its own words,
 and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the session's D10 -
 that value was CPT Studio's own reading of the participant's words, which printed 'Cannulation of the bile duct was not
-successful.' as "successful"; each answer is now listed only as the participant's claim, that the document settles the
-question or that its answer is read as not settling it, with the passages it located, and no value is printed).
+successful.' as "successful"; each answer is now listed only by whether it is read as settling the question, with the
+passages it located, and no value is printed).
 
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
@@ -773,8 +773,9 @@ who confirmed it and when, the confirmation and question ids, its passage with o
 located it, the attestation, and what became of it - the service date through the encounter context, any other fact
 read by the assessment or not, with why), and after REVIEW PARTICIPANTS a PEER REVIEW section (each participant's peer
 review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions "with the value in CPT
-Studio's own words" (superseded, round 5, D10: each only as the participant's claim, "Astra says the document settles
-it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the codes it proposed
+Studio's own words" (superseded, round 5, D10: each only by whether it is read as settling the question, "Astra says
+the document settles it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the
+codes it proposed
 "after peer review, never independent", each with
 its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
 no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
