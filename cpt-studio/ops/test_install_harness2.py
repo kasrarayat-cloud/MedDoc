@@ -115,7 +115,7 @@ class LicenseNoteArgumentTests(unittest.TestCase):
 
 def counts_answer(**overrides):
     answer = {'rows': 3, 'before': {'old': 2, 'new': 0, 'other': 1}, 'after': {'old': 0, 'new': 2, 'other': 1},
-              'updated': 2, 'updated_keys': ['cms-mue-practitioner-2026-q4', 'cms-pfs-rvu26d'],
+              'updated': 2, 'updated_keys': ['cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d'],
               'other_keys': ['cms-pfs-synthetic'], 'assessments_with_old_note': 5}
     answer.update(overrides)
     return answer
@@ -163,7 +163,7 @@ class LicenseNotePhaseTests(TemporaryDirectoryTest):
         self.assertEqual(details['new_note_sha256'], hashlib.sha256(NEW_NOTE.encode()).hexdigest())
         self.assertEqual(details['image_id'], IMAGE)
         self.assertEqual(details['summary'], 'licence note corrected on 2 reference source(s): '
-                                             'cms-mue-practitioner-2026-q4, cms-pfs-rvu26d')
+                                             'cms-mue-practitioner-2026q4, cms-pfs-rvu26d')
 
     def test_with_no_old_note_left_it_changes_nothing_and_says_so(self):
         self.answer = counts_answer(before={'old': 0, 'new': 2, 'other': 1}, updated=0, updated_keys=[])
@@ -610,7 +610,7 @@ class LicenseNoteOnTheDatabaseTests(DatabaseTest):
     def test_exactly_the_old_note_is_replaced_and_a_second_run_changes_nothing(self):
         from studio import models
         self.source('cms-pfs-rvu26d', OLD_NOTE)
-        self.source('cms-mue-practitioner-2026-q4', OLD_NOTE, kind='cms-mue-practitioner')
+        self.source('cms-mue-practitioner-2026q4', OLD_NOTE, kind='cms-mue-practitioner')
         self.source('cms-pfs-already', NEW_NOTE, release='SYN2')
         self.source('cms-pfs-spaced', OLD_NOTE + ' ', release='SYN3')  # differs by one space: another note
         self.source('cms-pfs-other', 'Recorded licence wording.', release='SYN4')
@@ -623,11 +623,11 @@ class LicenseNoteOnTheDatabaseTests(DatabaseTest):
         answer = self.fix()
         self.assertEqual(answer, {
             'rows': 5, 'before': {'old': 2, 'new': 1, 'other': 2}, 'after': {'old': 0, 'new': 3, 'other': 2},
-            'updated': 2, 'updated_keys': ['cms-mue-practitioner-2026-q4', 'cms-pfs-rvu26d'],
+            'updated': 2, 'updated_keys': ['cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d'],
             'other_keys': ['cms-pfs-other', 'cms-pfs-spaced'], 'assessments_with_old_note': 0})
         self.assertEqual(install.license_note_problem(answer), '')
         after = self.rows()
-        corrected = {'cms-mue-practitioner-2026-q4', 'cms-pfs-rvu26d'}
+        corrected = {'cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d'}
         self.assertEqual(after, [dict(row, license_note=NEW_NOTE) if row['key'] in corrected else row
                                  for row in before])  # every other column of every row, and every other row, as it was
         self.assertEqual(models.PassageSource.objects.get(pk=passage.pk).license_note, OLD_NOTE)  # never touched
