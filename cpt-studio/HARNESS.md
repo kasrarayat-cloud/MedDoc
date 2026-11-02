@@ -882,8 +882,9 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
     that met an ended database session let Django open another one (`transaction.atomic` closes a connection whose
     rollback fails, then reconnects), which never took the installation-wide lock, and the loop sent its next exchange
     while any other session could take the lock and send (the installer's access check, a second worker). The check the
-    loop asks before it goes on after an exchange (`loop._halt`) now first asks whether this database session holds the
-    lock (`jobs._holds_provider_lock`, from PostgreSQL's `pg_locks`). When it does not, nothing more is sent: the run is
+    loop asks before it goes on after an exchange (`loop._halt`) now also asks, after the member's Stop and last, so
+    nothing touches the database between it and the next send, whether this database session holds the lock
+    (`jobs._holds_provider_lock`, from PostgreSQL's `pg_locks`). When it does not, nothing more is sent: the run is
     recorded failed and sent with the exchanges sent so far and CPT Studio's own sentence
     (`jobs.LOOP_LOCK_LOST_MESSAGE`), never as a member's Stop, and the stage ends as a failed participant's does (I10;
     the next stage takes the lock afresh). A check that fails on the ended session itself stops the loop as before, and
