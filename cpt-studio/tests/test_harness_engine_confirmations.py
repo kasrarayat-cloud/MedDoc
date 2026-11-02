@@ -14,6 +14,7 @@ usual; keys and fingerprints are deterministic. Synthetic data only; nothing is 
 """
 from dataclasses import replace
 from datetime import date
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -749,6 +750,69 @@ class BindingTests(SimpleTestCase):
             after = run(STATUS_ONLY, STATUS_CODES, [c], participants=CONFIGURED, bind=False)
             self.assertEqual(without_confirmations(after), before, c)
             self.assertIn(engine.UNBOUND, encounter_check(after, 'confirmations.ignored').detail, c)
+
+    # Refutation round 2, FG2-1: the identity is the sha256 of the proposal's code, family, profile version, cited
+    # passages, units and the context values its decision depends on (HARNESS.md 12.5, engine._identity). Each case
+    # keeps the code and the passages and changes one of the rest: the confirmation made for the proposal as it was is
+    # not read for it as it is now - it is listed as moved - so dropping any of them from the identity fails here.
+    def assertMoved(self, made, result, key):
+        item = proposal(result, key)
+        self.assertEqual(item.status, 'needs_clarification')
+        self.assertNotIn('confirmed', item.support)
+        self.assertEqual(result.completeness['confirmations'], {'applied': [], 'ignored': [{'id': 'conf-1',
+                                                                                           'why': engine.MOVED}]})
+
+    def extent_made(self, text, codes, **kwargs):
+        """The confirmation of sel:0's extent, bound to sel:0 as these inputs make it."""
+        made = bound(confirm(text, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum'), text,
+                     codes, **kwargs)
+        self.assertEqual(proposal(run(text, codes, [made], bind=False, participants=CONFIGURED, **kwargs),
+                                  'sel:0').status, 'ready')  # the control: it answers that proposal
+        return made
+
+    def test_another_service_date_is_another_proposal(self):
+        made = self.extent_made(TWO_EXTENTS, COLON_CODES)
+        later = TWO_EXTENTS.replace('Date of service: 2026-10-14', 'Date of service: 2026-10-21')
+        self.assertEqual(len(later), len(TWO_EXTENTS))  # the passages stay where they were
+        result = assess(text=later, pages=(), context=gi_context.extract_context(later),
+                        routing=detect.route(later, date(2026, 10, 21)),
+                        normalized=NormalizedResponse('corti', 'test@1', tuple(
+                            ProviderCode('selected', 'cpt', v, 'UNVERIFIED PROVIDER WORDING', (span(later, q),))
+                            for v, q in COLON_CODES)),
+                        reference=REFERENCE, service_date=date(2026, 10, 21), provider_status='succeeded',
+                        participants=CONFIGURED, confirmed=[made])
+        self.assertEqual(proposal(result, 'sel:0').code, '45385')
+        self.assertMoved(made, result, 'sel:0')
+
+    def test_another_billing_or_setting_of_a_visit_is_another_proposal(self):
+        codes = (('99213', SEEN),)
+        for name, value in (('billing_context', 'professional'), ('setting', 'hospital_outpatient')):
+            with self.subTest(name):
+                made = bound(confirm(VISIT, TIME, fact='em_basis', family='gi.office_em', key='sel:0', value='time'),
+                             VISIT, codes)
+                context = {**gi_context.extract_context(VISIT), name: Fact(name, value, 'document')}
+                self.assertNotEqual(context[name], gi_context.extract_context(VISIT).get(name))
+                result = assess(text=VISIT, pages=(), context=context, routing=detect.route(VISIT, DAY),
+                                normalized=NormalizedResponse('corti', 'test@1', (ProviderCode(
+                                    'selected', 'cpt', '99213', 'UNVERIFIED PROVIDER WORDING', (span(VISIT, SEEN),)),)),
+                                reference=REFERENCE, service_date=DAY, provider_status='succeeded',
+                                participants=CONFIGURED, confirmed=[made])
+                self.assertMoved(made, result, 'sel:0')
+
+    def test_other_units_are_another_proposal(self):
+        made = self.extent_made(TWO_EXTENTS, COLON_CODES)
+        twice = (('45385', SNARE), ('45385', SNARE), ('45380', BIOPSY))  # the same code selected twice: two units
+        result = run(TWO_EXTENTS, twice, [made], bind=False, participants=CONFIGURED)
+        self.assertEqual((proposal(result, 'sel:0').code, proposal(result, 'sel:0').units), ('45385', 2))
+        self.assertMoved(made, result, 'sel:0')
+
+    def test_another_profile_version_is_another_proposal(self):
+        made = self.extent_made(TWO_EXTENTS, COLON_CODES)
+        from studio.gi.profiles import PROFILES
+        revised = replace(PROFILES['gi.colonoscopy'], version=PROFILES['gi.colonoscopy'].version + '-revised')
+        with mock.patch.dict(engine.PROFILES, {'gi.colonoscopy': revised}):
+            result = run(TWO_EXTENTS, COLON_CODES, [made], bind=False, participants=CONFIGURED)
+        self.assertMoved(made, result, 'sel:0')
 
     def test_the_identity_is_recorded_only_with_a_participant_and_never_moves_with_checks_or_confirmations(self):
         plain = run(STATUS_STATED, STATUS_CODES)

@@ -15,6 +15,8 @@
   endpoint refuses first, saying why, and so does the re-assessment.
 - truth-7 (the shared wording): the first sentence of a participant's own proposal never says Corti did not propose a
   code Corti listed only as a candidate, or selected with no exact passage.
+- FG2-1 (tests only): a confirmation is bound to its proposal's identity, context included - a member's new service
+  date makes the next chain list it as moved.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -23,14 +25,14 @@ their tool calls over a synthetic reference store.
 import json
 from datetime import date
 
-from django.test import SimpleTestCase
+from django.test import Client, SimpleTestCase
 
 from studio import jobs, models, review
 from studio.gi import context as gi_context
 from studio.gi import detect
 from studio.gi import services as gi_services
 from studio.types import ConfirmedFinding, EvidenceSpan, NormalizedResponse, ProviderCode
-from studio.validation import reconcile
+from studio.validation import engine, reconcile
 from studio.validation.engine import assess
 from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, Harness2Case, answered,
                                           open_questions, peer_answer, reading)
@@ -644,3 +646,64 @@ class CortiLeadTests(SimpleTestCase):
         rationale, _ = self.lead((('selected', '45385', SNARE_QUOTE),))
         self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti did not propose this '
                                              'code.'), rationale)
+
+
+# --- FG2-1: a confirmation's identity binds its context too (HARNESS.md 12.5, 12.7) ----------------------------------
+
+DATE_LINE = 'Date of service: 2026-10-14\n'
+
+
+class ConfirmationAcrossChangesCase(ColonCase):
+    """The pipeline suite's colon case: Corti selects 45385 and 45380, both held on the extent, and Astra's peer review
+    answers 45385's with the landmark passage, which a reviewer confirms through the endpoint."""
+
+    def detail(self, encounter_id):
+        return self.client.get(f'/api/encounters/{encounter_id}').json()
+
+    def confirm_extent(self, encounter_id, user=None):
+        detail = self.detail(encounter_id)
+        snare = next(p['id'] for p in detail['assessment']['proposals'] if p['key'] == 'sel:0')
+        question = next(c for c in detail['clarifications'] if c['proposal_id'] == snare and c['fact'] == 'extent')
+        candidate = next(c for c in question['candidates'] if c['verified'])
+        client = self.client
+        if user is not None:
+            client = Client()
+            client.force_login(user)
+        response = client.post(f'/api/encounters/{encounter_id}/clarifications/{question["id"]}/confirm',
+                               data=json.dumps({'candidate_id': candidate['id'],
+                                                'attestation': candidate['attestation']}),
+                               content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        return models.FindingConfirmation.objects.get(clarification_id=question['id']), response.json()
+
+    def snare(self, assessment):
+        return [(p.key, p.status, (p.support or {}).get('confirmed')) for p in
+                assessment.proposals.filter(code='45385').order_by('position')]
+
+
+class IdentityContextTests(ConfirmationAcrossChangesCase):
+    def test_a_confirmation_made_under_one_member_date_is_not_read_under_another(self):
+        """FG2-1 (a): the identity includes the service date (12.7), so the confirmation made under 2026-10-14 is not
+        read once the member saves 2026-10-21, and each later assessment says why; 45385 is asked its extent again."""
+        self.assertEqual(TWO_EXTENTS.count(DATE_LINE), 1)
+        encounter_id = self.create(TWO_EXTENTS.replace(DATE_LINE, ''), service_date='2026-10-14')
+        drain()
+        confirmation, _ = self.confirm_extent(encounter_id)
+        self.assertEqual(self.snare(self.encounter(encounter_id).current_assessment),
+                         [('sel:0', 'ready', [str(confirmation.pk)])])
+        before = len(self.assessments(encounter_id))
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-21'}).status_code, 201)
+        drain()
+        later = self.assessments(encounter_id)[before:]
+        self.assertEqual([jobs.assessment_phase(a) for a in later], [1, 2])
+        for assessment in later:
+            self.assertEqual(assessment.context.user_values.get('service_date'), '2026-10-21')
+            self.assertEqual(self.snare(assessment), [('sel:0', 'needs_clarification', None)])
+            self.assertEqual(assessment.completeness['confirmations'],
+                             {'applied': [], 'ignored': [{'id': str(confirmation.pk), 'why': engine.MOVED}]})
+            # each raises 45385's extent question again (assess #1's is withdrawn once assess #2 asks it)
+            self.assertTrue(assessment.clarifications.filter(proposal__key='sel:0', fact='extent').exists())
+        self.assertTrue(later[-1].clarifications.filter(proposal__key='sel:0', fact='extent',
+                                                        state=models.Clarification.OPEN).exists())
