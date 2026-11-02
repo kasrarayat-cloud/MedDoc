@@ -11,6 +11,8 @@
 - EV2-2, truth-1 and EV2-3 (the plan's D2): every fact's passage gets the section rule, an extent or a structure the
   readers find not reached, not seen or qualified never verifies, and a date of birth or a history date is never
   offered as the date of service - each through the same pipeline and endpoint, ending with nothing confirmed.
+- truth-10 (the plan's D3): an assessment of an earlier context is offered no candidate and takes no confirmation; the
+  endpoint refuses first, saying why, and so does the re-assessment.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -28,7 +30,8 @@ from studio.gi import services as gi_services
 from studio.types import ConfirmedFinding, EvidenceSpan, NormalizedResponse, ProviderCode
 from studio.validation import reconcile
 from studio.validation.engine import assess
-from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, Harness2Case, answered, open_questions, peer_answer, reading
+from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, Harness2Case, answered,
+                                          open_questions, peer_answer, reading)
 from tests.test_harness_engine_confirmations import CONFIGURED, REFERENCE, REVIEWER, binding, encounter_check, proposal
 from tests.test_participants_support import code as code_item, empty_reading, service as service_item
 from tests.test_pipeline_api import drain
@@ -523,3 +526,74 @@ class DateEvidenceTests(EvidenceCase):
     def test_a_history_date_is_never_the_date_of_service(self):
         self.date_case(PRIOR_DATE, '2025-03-14', 'Prior colonoscopy on 2025-03-14 showed two adenomas.',
                        'The passage is in a history section, which never documents a service at this encounter.')
+
+
+# --- truth-10 (the plan's D3): no candidate, no control and no confirmation for an assessment of an earlier context ---
+
+PAGE_NODE = r"""
+const app = require(process.argv[1]);
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => {
+  const doc = JSON.parse(input);
+  process.stdout.write(JSON.stringify({codes: app.reviewView(doc, app.documentLayout(doc), 'codes', true)}));
+});
+"""
+
+
+def page(detail):
+    """The Suggestions tab as the shipped app.js renders the served detail (node runs the file)."""
+    import shutil
+    import subprocess
+    from django.conf import settings
+
+    node = shutil.which('node')
+    if node is None:
+        raise AssertionError('node is not installed; the page checks need it')
+    app = f'{settings.BASE_DIR}/studio/static/studio/app.js'
+    done = subprocess.run([node, '-e', PAGE_NODE, app], input=json.dumps(detail), capture_output=True, text=True,
+                          timeout=60, check=False)
+    if done.returncode:
+        raise AssertionError(done.stderr[-3000:])
+    return json.loads(done.stdout)['codes']
+
+
+class ContextChangedTests(ColonCase):
+    """truth-10 (s5): the colon chain to phase 2, then a member's context change, then Stop. The live assessment is the
+    earlier context's, which no re-assessment would read: the page offers no candidate and no control, and the endpoint
+    refuses at once, saying why."""
+
+    def test_no_candidate_is_offered_and_the_confirmation_is_refused_with_why(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        question = final.clarifications.get(proposal__key='sel:0', fact='extent', state=models.Clarification.OPEN)
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        served = next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
+        candidate = next(c for c in served if c['verified'])  # the control: offered while the context is current
+        self.assertIn('data-action="confirm-finding"', page(detail))
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'billing_context': 'professional'}).status_code, 201)
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        encounter = self.encounter(encounter_id)
+        self.assertEqual((encounter.current_assessment, encounter.state), (final, 'stopped'))
+        self.assertNotEqual(final.context_id, encounter.current_context_id)
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        self.assertEqual((detail['pipeline']['busy'], detail['permissions']['can_confirm']), (False, True))
+        self.assertEqual([c['candidates'] for c in detail['clarifications']], [[] for _ in detail['clarifications']])
+        self.assertNotIn('data-action="confirm-finding"', page(detail))
+        self.assertEqual(review.assessment_candidates(final), {})
+        response = self.post(f'/api/encounters/{encounter_id}/clarifications/{question.pk}/confirm',
+                             {'candidate_id': candidate['id'], 'attestation': candidate['attestation']})
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()['error'], review.CONTEXT_CHANGED)
+        self.assertEqual(review.CONTEXT_CHANGED, 'The encounter context changed after this assessment; resume '
+                                                 'processing and confirm on its new assessment.')
+        self.assertFalse(models.FindingConfirmation.objects.exists())
+        self.assertFalse(models.AuditEvent.objects.filter(event='finding.confirmed').exists())
+        # the re-assessment's own refusal says the same, never that there is no assessment
+        with self.assertRaisesMessage(jobs.Refused, jobs.REASSESS_CONTEXT):
+            jobs.reassess_after_confirmation(encounter, self.reviewer)
+        self.assertNotEqual(jobs.REASSESS_CONTEXT, jobs.REASSESS_NONE)
+        self.assertEqual(jobs.REASSESS_NONE, 'The current revision has no final assessment to make again.')

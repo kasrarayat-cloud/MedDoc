@@ -2707,7 +2707,10 @@ def change_context(encounter, user, values, *, confirmation=None):
 
 
 REASSESS_BUSY = 'Wait for processing to finish (or stop it) before the encounter is assessed again.'
-REASSESS_NONE = 'There is no current assessment to make again.'
+# Refutation round 2, truth-10: each refusal says what is so - no final assessment of the current revision at all, or
+# one made on an earlier context, which no re-assessment of the current context reads (review.CONTEXT_CHANGED).
+REASSESS_NONE = 'The current revision has no final assessment to make again.'
+REASSESS_CONTEXT = review.CONTEXT_CHANGED
 REASSESS_UNFINISHED = ('The current assessment has no finished assessment stage to make it again from; resume '
                        'processing first.')
 
@@ -2715,8 +2718,9 @@ REASSESS_UNFINISHED = ('The current assessment has no finished assessment stage 
 def reassess_after_confirmation(encounter, user):
     """One assess after a reviewer's confirmation (HARNESS.md 12.1, 12.5): it reads exactly what the final assessment
     read, plus every confirmation of the revision (stage_assess, AGAIN), sends nothing and queues no peer review.
-    Refused (Refused: the API's 409) while the encounter is busy, and when the current revision and context have no
-    final assessment, or none a finished assess stage made.
+    Refused (Refused: the API's 409) while the encounter is busy, when the current revision has no final assessment
+    (REASSESS_NONE), when the final assessment was made on an earlier context (REASSESS_CONTEXT), and when no finished
+    assess stage made it.
 
     Its key is the key of the stage that made the final assessment, ':c:' and 12 hex of the sha256 of the sorted ids of
     every confirmation of the revision, so the same confirmations queue one assess. An earlier re-assessment's ':c:'
@@ -2728,9 +2732,10 @@ def reassess_after_confirmation(encounter, user):
         if busy(encounter):
             raise Refused(REASSESS_BUSY)
         revision, context, final = encounter.current_revision, encounter.current_context, encounter.current_assessment
-        if (revision is None or context is None or final is None or final.revision_id != revision.pk
-                or final.context_id != context.pk):
+        if revision is None or context is None or final is None or final.revision_id != revision.pk:
             raise Refused(REASSESS_NONE)
+        if final.context_id != context.pk:
+            raise Refused(REASSESS_CONTEXT)
         made = (Job.objects.filter(encounter=encounter, revision=revision, kind=Job.ASSESS, state=Job.SUCCEEDED,
                                    result__assessment=str(final.pk)).order_by('-created_at', '-pk').first())
         if made is None:

@@ -697,6 +697,13 @@ negation, an attempt or a doubt).".
   `assess(confirmed=...)` and labels it "confirmed from <participant>'s located passage by <reviewer>";
 - nothing is approved; a new revision invalidates every confirmation (the assess stage reads only the current
   revision's).
+- **Amended after refutation round 2 (truth-10, design decision D3):** candidates are offered, and a confirmation is
+  accepted, only while the final assessment's revision AND context are the encounter's current ones - the condition
+  `jobs.reassess_after_confirmation` enforces (`review.on_current_context`). Otherwise no candidate is served, so the
+  page shows no Confirm, and the endpoint refuses first (409) with "The encounter context changed after this
+  assessment; resume processing and confirm on its new assessment." (`review.CONTEXT_CHANGED`; while processing runs,
+  the wait is what it says); nothing is recorded. The re-assessment's own refusals say which it is: no final assessment
+  of the current revision (`jobs.REASSESS_NONE`), or one of an earlier context (`jobs.REASSESS_CONTEXT`).
 
 ### 12.6 API additions (encounter detail and trace)
 
