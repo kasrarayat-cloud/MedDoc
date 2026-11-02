@@ -289,6 +289,21 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
   The only additions are new records outside that result: the run columns that record what was called (endpoint,
   models, response id) and the assessment's `participants` and `retrieval` fields. The `participants` record says
   "not configured". Proved by H1/H2/H4 against the round-4 head and by a parity test.
+
+  **Amended after refutation round 2 (parity-r2-2; the round-2 repair plan's D6).** The round-4 head is `80f2f2dc8`
+  (the integrated round 4, `443e67032`, merged into the harness branch).
+  - **What is recorded beside the result never makes an identical re-assessment another assessment.** Re-persisting
+    an identical result on identical inputs returns the current assessment unchanged (`review.persist_assessment`,
+    `review._same_assessment`). With no model participant configured (every entry "not configured", or none, as a
+    round-4 row holds), the inputs compared are exactly the round-4 head's: the result's sha256, the revision, the
+    context, the routing run, the Corti run and the second-review run. With one configured, they are those and the
+    participant runs each entry names: its name, state and run and, on assess #2 and its re-assessments, its peer state
+    and peer run. The retrieval traces are never compared, so an encounter assessed before the CMS passages were
+    imported (the installer's `passages` phase runs after `app`; a later release can add a passage file) keeps the
+    retrieval it recorded until one of those inputs changes. The harness had compared both records: such an identical
+    re-assessment recorded a second assessment with the same sha256, carried the decisions onto it and asked its
+    questions again (a second review whose Corti request failed; a Resume after the stale sweep). A record that is not a
+    list of entries is never taken for one, so it differs.
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with

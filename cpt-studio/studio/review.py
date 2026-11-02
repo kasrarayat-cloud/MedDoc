@@ -404,13 +404,32 @@ def _check_result(result, text):
 
 def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None, participants=None,
                      retrieval=None):
-    """``participants`` and ``retrieval`` (HARNESS.md 6) are recorded beside the result, outside its sha256: an
-    assessment that read other participant runs or retrieved other passages is another assessment."""
-    return (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
+    """Whether ``previous`` already is this assessment: the same result (its sha256) on the same inputs - the revision,
+    the context, the routing run, the Corti run and the second-review run, exactly what the round-4 head compared (I1) -
+    and, while a model participant is configured, the same participant runs: each entry's name, state and run and, on an
+    assess #2 or its re-assessments, its peer state and peer run (HARNESS.md 12.3).
+
+    Nothing else recorded beside the result decides it (refutation round 2, parity-r2-2; the round-2 plan's D6). Never
+    the retrieval traces (``retrieval`` is not read): they read the CMS passages installed at the time, so an identical
+    re-assessment made after the passages were imported is the same assessment and keeps the retrieval it recorded. And
+    with no model participant configured on either side - every entry 'not configured', or none, as a round-4 row
+    holds (migration 0007) - not the participants record either. A record that is not a list of entries is never taken
+    for one: it is compared, and differs."""
+    if not (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
             and previous.provider_run_id == (provider_run.pk if provider_run else None)
-            and previous.second_run_id == (second_run.pk if second_run else None)
-            and previous.participants == (participants or []) and previous.retrieval == (retrieval or []))
+            and previous.second_run_id == (second_run.pk if second_run else None)):
+        return False
+
+    def runs(record):
+        if not isinstance(record, list) or not all(isinstance(entry, dict) for entry in record):
+            return None
+        return [{key: entry[key] for key in ('name', 'state', 'run', 'peer_state', 'peer_run') if key in entry}
+                for entry in record]
+    new, old = runs(participants or []), runs(previous.participants)
+    if new is not None and old is not None and all(entry.get('state') == 'not_configured' for entry in new + old):
+        return True
+    return new is not None and new == old
 
 
 def _clarification(encounter, assessment, spec, proposal):
