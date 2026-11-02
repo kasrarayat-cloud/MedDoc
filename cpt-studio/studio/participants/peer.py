@@ -14,9 +14,9 @@ answer is the peer-review schema (prompt.PEER_SCHEMA), and the tools are the sam
 
 What a peer is shown of another model's frozen reading (shown_reading; HARNESS.md 12.4 as amended after refutation round
 2, IR2-3) carries none of that model's own wording to the other vendor: its codes, modifiers and ids only as short
-tokens (shown_token), the quotes CPT Studio located in the revision text, a reference by its ref only when that model's
-own tool results returned it, and its enumerated values, units, pages and date; every other text it wrote only by its
-length.
+tokens (shown_token), the quotes CPT Studio located in the revision text, a reference's ref as given when that model's
+own tool results returned it (any other ref as a token), and its enumerated values, units, pages and date; every other
+text it wrote only by its length.
 
 The answer (read) is checked as a reading is (reading.py): strict JSON, CPT Studio's own schema validation, bounds that
 refuse it whole (more than 64 question answers, 128 code positions, 64 additional codes or 64 references used, more than

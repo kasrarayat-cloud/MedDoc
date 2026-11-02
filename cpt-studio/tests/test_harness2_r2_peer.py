@@ -41,7 +41,7 @@ from django.utils import timezone
 
 from studio import jobs, models
 from studio.participants import http as participants_http
-from studio.participants import openai_astra, peer, prompt
+from studio.participants import loop, openai_astra, peer, prompt
 from studio.participants.openai_astra import AstraParticipant
 from studio.types import (EvidenceSpan, ExtractionIssue, LocatedQuote, ParticipantCode, ParticipantLesion,
                           ParticipantNotCoded, ParticipantQuestion, ParticipantReading, ParticipantService,
@@ -51,7 +51,10 @@ from tests.test_harness2_pipeline import (ASTRA_READING, BIOPSY, CPT_STUDIO, EMP
                                           SNARE, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
                                           document_sections, facts_call, peer_document, reading)
 from tests.test_harness_pipeline import _WorkerDied
-from tests.test_participants_support import NOTE, PAGES, code, empty_reading, openai_env, service, write_file
+from tests.test_participants_support import (CLIENT_REQUEST_ID, FACTS_ARGUMENTS, NOTE, PAGES, PASSAGES_ARGUMENTS,
+                                             FakeExecutor, FakeResponse, FakeSession, OfflineTestCase,
+                                             astra_tool_call, code, empty_reading, fixture_bytes, openai_env, service,
+                                             write_file)
 from tests.test_pipeline_api import drain
 
 # --- FG2-3: Corti's units and CPT Studio's excluded codes, as a peer request shows them -------------------------------
@@ -436,6 +439,58 @@ class RecordedAsItEndsTests(Harness2Case):
         run = self.runs_of(encounter_id, 'astra', 'independent')[0]
         self.assertEqual((run.state, run.sent, [e.turn for e in run.exchanges.all()]), ('succeeded', True, [1, 2]))
         self.assertEqual(calls, [[1], [2], [1]])
+
+
+class LoopRecordingTests(OfflineTestCase):
+    """loop.recording, the hook the pipeline records each exchange through: every loop run hands the callback each
+    exchange as it ends - its answer read and its tool calls answered - before the next exchange is sent, and a callback
+    that raises changes nothing in the loop (offline: the real Astra adapter and loop over a fake session)."""
+
+    def setUp(self):
+        super().setUp()
+        self.credentials = write_file(self.tmp / 'openai.env', openai_env())
+
+    def run_loop(self):
+        session = FakeSession(
+            FakeResponse(200, astra_tool_call(('call_r1', 'cms_code_facts', FACTS_ARGUMENTS), number=1)),
+            FakeResponse(200, astra_tool_call(('call_r2', 'cms_policy_passages', PASSAGES_ARGUMENTS), number=2)),
+            FakeResponse(200, fixture_bytes('astra-colonoscopy.response.json')))
+        self.session = session  # what was posted so far, as a callback sees it
+        adapter = AstraParticipant(self.credentials, session_factory=lambda: session)
+        request = adapter.build_request(NOTE, PAGES, 'paste', None)
+        outcome = adapter.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID, original_bytes=None,
+                                    execute_tool=FakeExecutor())
+        return outcome, session
+
+    def test_each_exchange_is_handed_over_as_it_ends_before_the_next_is_sent(self):
+        handed = []
+
+        def on_exchange(record):
+            handed.append((record.turn, record.outcome, [call.call_id for call in record.tool_calls],
+                           len(self.session.calls)))
+        with loop.recording(on_exchange):
+            outcome, _ = self.run_loop()
+        self.assertEqual(outcome.final.outcome, 'succeeded')
+        # exchange N is handed over once its tool calls are answered, while only N requests have been posted
+        self.assertEqual(handed, [(1, 'succeeded', ['call_r1'], 1), (2, 'succeeded', ['call_r2'], 2),
+                                  (3, 'succeeded', [], 3)])
+        handed.clear()
+        self.run_loop()  # outside the block, nothing is handed over
+        self.assertEqual(handed, [])
+
+    def test_a_callback_that_raises_changes_nothing_in_the_loop(self):
+        def shape(outcome):
+            return (outcome.final.outcome, outcome.final.error,
+                    [(record.turn, record.outcome, record.response_bytes,
+                      [(call.call_id, call.result) for call in record.tool_calls]) for record in outcome.exchanges])
+        plain, _ = self.run_loop()
+
+        def broken(record):
+            raise RuntimeError('synthetic')
+        with loop.recording(broken):
+            raised, session = self.run_loop()
+        self.assertEqual(shape(raised), shape(plain))
+        self.assertEqual(len(session.calls), 3)
 
 
 # --- D4: what a peer request carries (IR2-1, IR2-2, IR2-3) ------------------------------------------------------------

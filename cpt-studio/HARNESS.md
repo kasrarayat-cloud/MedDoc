@@ -586,10 +586,11 @@ model participant configured the record is today's ("not configured") and there 
     verbatim: the reading schema's shape, with its codes, modifiers and ids as given only when each is a short token
     (`participants.reading._token`: at most 20 characters, no whitespace), otherwise "a value of N characters (not
     shown)" (`serializers._token`'s words); the quotes CPT Studio located in the revision text, as the model quoted them
-    (the document's own text); a reference by its ref only when that model's own tool results returned it; its
-    enumerated values, units, pages and date of service as recorded; and every other text it wrote - a basis, a
-    description, the anatomy, extent and technique, a lesion's fields, the provider role, a question and why it is
-    asked, an extraction issue, a reference's use, a quote not located - only by its length, in the same words. Its
+    (the document's own text); a reference's ref as given when that model's own tool results returned it (CPT Studio's
+    own identifier), any other ref as a token; its enumerated values, units, pages and date of service as recorded;
+    and every other text it wrote - a basis, a description, the anatomy, extent and technique, a lesion's fields, the
+    provider role, a question and why it is asked, an extraction issue, a reference's use, a quote not located - only
+    by its length, in the same words. Its
     entry in `frozen` still names its frozen reading as assess #1 recorded it (`reading_sha256`), from which what is
     shown is made - never a sha256 of the shown form. The participant's own frozen reading is still shown to it as
     `reading_answer`.
