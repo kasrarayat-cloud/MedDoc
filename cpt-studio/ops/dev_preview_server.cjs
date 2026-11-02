@@ -9,8 +9,14 @@
 //
 // Request headers understood by the mock: "X-Preview-Session: agent" serves the
 // agent session; "X-Preview-Encounters: empty" serves an empty document list.
-// POST /__preview__/reset restarts the processing fixture, which turns into the
-// ready fixture after two polls.
+// POST /__preview__/reset restarts the processing fixtures: the harness@1 one turns
+// into the ready fixture after two polls, and harness@2's (peer reviews running)
+// into its final fixture (after both peer reviews). The owner's trace is served
+// from trace-*.json where the fixture's permissions name the owner (403 otherwise),
+// and POST .../clarifications/<id>/confirm is mocked as API.md describes it: the
+// candidate must be one of the question's verified candidates and the attestation
+// exactly its served one; the confirmation is then shown on the question (the real
+// server also re-assesses, which the mock does not).
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -31,6 +37,7 @@ const STATIC_TYPES = { 'styles.css': 'text/css; charset=utf-8', 'app.js': 'text/
 const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const ACTIONS = new Set(['approve', 'reject', 'reinstate', 'revoke']);
+const CANDIDATE_ID = /^[0-9a-f]{16}$/;
 
 const readJson = name => JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
 const fixtures = {
@@ -38,15 +45,23 @@ const fixtures = {
   agent: readJson('session-agent.json'),
   encounters: readJson('encounters.json'),
   empty: readJson('encounters-empty.json'),
-  byId: new Map(fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name)).map(name => {
+  byId: new Map(fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name)).sort().map(name => {
     const doc = readJson(name);
     return [doc.id, doc];
   })),
+  traces: new Map(fs.readdirSync(FIXTURES).filter(name => /^trace-.+\.json$/.test(name)).sort().map(name => {
+    const trace = readJson(name);
+    return [trace.encounter.id, trace];
+  })),
 };
 const ready = [...fixtures.byId.values()].find(doc => doc.title === 'Bidirectional endoscopy report');
-const processing = [...fixtures.byId.values()].find(doc => doc.state === 'processing');
+// Named by file, never by which processing fixture a directory listing happens to give first.
+const processing = readJson('encounter-processing.json');
+// Each processing fixture and the fixture it turns into after PROCESSING_POLLS polls (keeping its own id and title).
+const becomes = new Map([[processing.id, ready], [readJson('encounter-harness2-peer.json').id, readJson('encounter-harness2-final.json')]]);
 const polls = new Map();
 const reports = new Map();
+const confirmations = new Map();  // '<encounter id> <question id>' -> the confirmation recorded by the mock
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[ch]));
@@ -101,13 +116,24 @@ function parseJson(buffer) {
   }
 }
 
-function encounterFor(id) {
-  if (id === processing.id) {
-    const seen = (polls.get(id) || 0) + 1;
+// ``poll``: a GET of the encounter counts toward its processing fixture turning into the one it becomes; a confirmation
+// reads the encounter as last served.
+function encounterFor(id, poll = true) {
+  const doc = fixtures.byId.get(id) || null;
+  if (doc && becomes.has(id)) {
+    const seen = (polls.get(id) || 0) + (poll ? 1 : 0);
     polls.set(id, seen);
-    if (seen > PROCESSING_POLLS) return { ...ready, id, title: processing.title };
+    if (seen > PROCESSING_POLLS) return withConfirmations({ ...becomes.get(id), id, title: doc.title });
   }
-  return fixtures.byId.get(id) || null;
+  return doc && withConfirmations(doc);
+}
+
+// The encounter with the confirmations the mock recorded for it: on its question, and in its confirmations list.
+function withConfirmations(doc) {
+  const made = (doc.clarifications || []).map(item => confirmations.get(`${doc.id} ${item.id}`)).filter(Boolean);
+  if (!made.length) return doc;
+  return { ...doc, clarifications: doc.clarifications.map(item => ({ ...item, confirmation: confirmations.get(`${doc.id} ${item.id}`) || item.confirmation || null })),
+    confirmations: [...(doc.confirmations || []), ...made] };
 }
 
 async function handleApi(req, res, url) {
@@ -135,6 +161,21 @@ async function handleApi(req, res, url) {
     const doc = encounterFor(match[1]);
     return doc ? json(res, 200, doc) : apiError(res, 404, 'Not found.');
   }
+  match = new RegExp(`^/api/encounters/(${UUID})/trace$`).exec(route);
+  if (match && method === 'GET') {
+    const doc = fixtures.byId.get(match[1]);
+    if (!doc) return apiError(res, 404, 'Not found.');
+    if (doc.permissions?.is_owner !== true) return apiError(res, 403, 'Only the workspace owner can open the trace.');
+    const trace = fixtures.traces.get(match[1]);
+    return trace ? json(res, 200, trace) : apiError(res, 404, 'No trace fixture for this preview document.');
+  }
+  match = new RegExp(`^/api/encounters/(${UUID})/clarifications/(${UUID})/confirm$`).exec(route);
+  if (match) {
+    if (method !== 'POST') return apiError(res, 405, 'Method not allowed.');
+    const body = parseJson(await readBody(req));
+    if (!body) return apiError(res, 400, 'Send a JSON object.');
+    return confirmFinding(req, res, match[1], match[2], body);
+  }
   match = new RegExp(`^/api/encounters/(${UUID})/(decisions|context|addenda|stop|reconcile|reports|original)$`).exec(route);
   if (match) {
     const doc = fixtures.byId.get(match[1]);
@@ -158,6 +199,36 @@ async function handleApi(req, res, url) {
     return send(res, 200, report.content, { 'Content-Type': report.type, 'Content-Disposition': `attachment; filename="${report.filename}"` });
   }
   return apiError(res, 404, 'Not found.');
+}
+
+// POST /api/encounters/<id>/clarifications/<question id>/confirm, as API.md describes it (HARNESS.md 12.5): a member
+// the fixture allows (permissions.can_confirm), an open question of the document not confirmed yet, one of its VERIFIED
+// candidates, and the attestation exactly the candidate's served one. The confirmation is then shown on the question;
+// nothing is approved.
+function confirmFinding(req, res, id, questionId, body) {
+  const doc = encounterFor(id, false);
+  if (!doc) return apiError(res, 404, 'Not found.');
+  const question = (doc.clarifications || []).find(item => item.id === questionId);
+  if (!question) return apiError(res, 404, 'That question is not part of this document.');
+  if (doc.permissions?.can_confirm !== true) return apiError(res, 403, 'Your role in this workspace cannot confirm findings.');
+  if (typeof body.candidate_id !== 'string' || !CANDIDATE_ID.test(body.candidate_id)) return apiError(res, 400, "Choose one of the question's candidates (candidate_id).");
+  if (typeof body.attestation !== 'string') return apiError(res, 400, 'The attestation must be text.');
+  if (doc.pipeline?.busy) return apiError(res, 409, 'Wait for processing to finish (or stop it) before confirming a finding.');
+  if (question.state !== 'open') return apiError(res, 409, 'That question is not open.');
+  if (question.confirmation) return apiError(res, 409, 'That question was confirmed already; a question takes one confirmation.');
+  const candidate = (question.candidates || []).find(item => item.id === body.candidate_id);
+  if (!candidate) return apiError(res, 409, "That candidate is not one of this question's candidates; reload the page.");
+  if (candidate.verified !== true) return apiError(res, 409, `That candidate is not verified, so it cannot be confirmed: ${candidate.why}`);
+  if (body.attestation !== candidate.attestation) return apiError(res, 400, `The attestation must read exactly: ${candidate.attestation}`);
+  const user = (req.headers['x-preview-session'] === 'agent' ? fixtures.agent : fixtures.session).user;
+  const confirmation = {
+    id: crypto.randomUUID(), clarification_id: question.id, scope: question.scope, fact: question.fact, family: question.family,
+    proposal_key: '', value: candidate.value, spans: candidate.spans, located_by: candidate.located_by, runs: candidate.runs,
+    confirmed_by: user.label, confirmed_by_kind: user.actor_kind, attestation: body.attestation, created_at: new Date().toISOString(),
+    revision_number: doc.revision?.number ?? 1,
+  };
+  confirmations.set(`${doc.id} ${question.id}`, confirmation);
+  return json(res, 201, { ...confirmation, effect: question.fact === 'service_date' ? 'context' : 'reassessment' });
 }
 
 function handleMutation(res, doc, action, body) {
@@ -201,6 +272,7 @@ async function handle(req, res) {
   if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);
   if (req.method === 'POST' && url.pathname === '/__preview__/reset') {
     polls.clear();
+    confirmations.clear();
     return send(res, 204, '');
   }
   if (req.method === 'GET' && url.pathname === '/') {

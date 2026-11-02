@@ -214,12 +214,15 @@ test('fact values never invent a value for missing or conflicting facts', () => 
   assert.equal(app.metaFact({ value: 'x', origin: 'conflict' }, {}, 'Setting'), 'Setting conflict');
 });
 
-// gi2 'present': a payload that carries no queue_reasons (served before the field existed, as the fixtures are) keeps
-// the queue of the three states that always waited on a member.
+// gi2 'present': a payload that carries no queue_reasons (served before the field existed, as the older fixtures are)
+// keeps the queue of the three states that always waited on a member. The harness@2 rows are the serializer's own
+// (tests/test_frontend.py) and carry queue_reasons, so they are left out here.
 test('without queue_reasons the queue lists the clarification, review and reconciliation states', () => {
   assert.deepEqual([...app.QUEUE_STATES].sort(), ['needs_clarification', 'provider_unknown', 'ready_for_review']);
-  const { encounters } = fixture('encounters.json');
-  assert.ok(encounters.every(item => !('queue_reasons' in item)));
+  const all = fixture('encounters.json').encounters;
+  const encounters = all.filter(item => !('queue_reasons' in item));
+  assert.deepEqual(all.filter(item => 'queue_reasons' in item).map(item => item.id.slice(0, 3)), ['e2c', 'e2b', 'e2a']);
+  assert.equal(encounters.length, 10);
   const body = app.listBody('queue', encounters);
   const expected = encounters.filter(item => app.QUEUE_STATES.has(item.state)).length;
   assert.equal(count(body, 'class="document-row"'), expected);
@@ -1445,4 +1448,497 @@ test('a participant\'s requests are named in the Activity tab with the tokens it
   const codes = render(degraded);
   assert.ok(codes.includes('<strong>Unreconciled request</strong><br>Fable (Anthropic Claude Fable 5.1) · 30 Oct 2026, 09:12 UTC · Read timed out after the request was sent.'));
   assert.ok(codes.includes(`id="reconcileForm" data-run="${degraded.provider_runs[2].id}"`));
+});
+
+// --- harness@2 (HARNESS.md 11-12): peer reviews, candidates and confirmations, references kept apart, the trace ------
+//
+// The harness@2 fixtures are the serializer's own output (tests/test_frontend.py generates them from the rows harness@2
+// records): peer reviews running, after both peer reviews, and a confirmed finding read by a re-assessment.
+
+const H2_PEER = 'encounter-harness2-peer.json';
+const H2_FINAL = 'encounter-harness2-final.json';
+const H2_CONFIRMED = 'encounter-harness2-confirmed.json';
+const H2_TRACE = 'trace-harness2-final.json';
+// HARNESS.md 11.3 and 12.5's attestation, written out here so a page that rebuilt or altered it cannot pass.
+const ATTESTATION = value => `I read this passage in the source document; it documents ${value} for this encounter.`;
+
+// One peer-review row of the Review participants card: the check-item whose data-peer is name.
+function peerRowOf(html, name) {
+  const card = participantsCard(html);
+  const start = card.indexOf(`data-peer="${name}"`);
+  assert.ok(start >= 0, `no peer-review row for ${name}`);
+  const from = card.lastIndexOf('<div class="check-item', start);
+  const next = card.indexOf('<div class="check-item', start);
+  return card.slice(from, next > 0 ? next : card.length);
+}
+
+// One open question's candidate answers and confirmation, by the question's id.
+function questionOf(html, id) {
+  const start = html.indexOf(`<div class="candidate-answers" data-question="${id}"`);
+  assert.ok(start >= 0, `no candidate answers for question ${id}`);
+  const end = html.indexOf('<p class="harness-note">A candidate answers nothing', start);
+  return html.slice(start, end);
+}
+
+const clarificationOf = (doc, fact) => doc.clarifications.find(item => item.fact === fact);
+
+function withPeer(doc, name, peer, fields = {}) {
+  return withParticipant(doc, name, { peer, ...fields });
+}
+
+test('the progress card shows each peer review and the second assessment after the first, from the current chain\'s jobs', () => {
+  const html = render(fixture(H2_PEER));
+  const labels = ['Read the original document', 'Identify documented services and context', 'Corti: request CPT proposals',
+    'Independent review: Astra (OpenAI GPT-6 Astra)', 'Independent review: Fable (Anthropic Claude Fable 5.1)',
+    'First assessment: check the frozen first readings against references', 'Peer review: Astra (OpenAI GPT-6 Astra)',
+    'Peer review: Fable (Anthropic Claude Fable 5.1)', 'Second assessment: reconcile both phases (final)'];
+  const card = html.slice(html.indexOf('class="check-list-card progress-card"'), html.indexOf('<div class="progress-actions">'));
+  assert.deepEqual([...card.matchAll(/<strong>([^<]*)<\/strong><p>([^<]*)<\/p>/g)].map(match => [match[1], match[2]]),
+    [...labels.slice(0, 6).map(label => [label, 'Done']), [labels[6], 'In progress'], [labels[7], 'Not started'], [labels[8], 'Not started']]);
+  // which assess is which: a peer stage follows the first; the second follows the peer stages; a re-assessment after it
+  const job = (kind, state = 'succeeded') => ({ kind, state, error: '', finished_at: null });
+  const first = [job('extract'), job('analyze'), job('predict'), job('astra'), job('fable'), job('assess')];
+  const final = [...first, job('astra_peer'), job('fable_peer'), job('assess', 'running')];
+  assert.deepEqual(app.phasedJobs(final), { assess: final[5], assess2: final[8], astra_peer: final[6], fable_peer: final[7] });
+  const again = [...final.slice(0, 8), job('assess'), job('assess', 'queued')];
+  assert.equal(app.phasedJobs(again).assess2, again[9], 'a confirmation\'s re-assessment reads as the second');
+  // a new chain: its first assessment's peer stages, never the earlier chain's, and no second assessment yet
+  const context = [...final.slice(0, 8), job('assess'), job('assess'), job('astra_peer', 'queued')];
+  assert.deepEqual(app.phasedJobs(context), { assess: context[9], assess2: null, astra_peer: context[10], fable_peer: null });
+  const repredict = [...final.slice(0, 9), job('predict'), job('astra', 'running')];
+  assert.deepEqual(app.phasedJobs(repredict), { assess: repredict[5], assess2: repredict[8], astra_peer: repredict[6], fable_peer: repredict[7] });
+  assert.deepEqual(app.phasedJobs([]), { assess: null, assess2: null, astra_peer: null, fable_peer: null });
+  // a participant not configured says so in its peer row too, never "Not started"
+  const peer = fixture(H2_PEER);
+  const off = withPeer({ ...peer, pipeline: { ...peer.pipeline, stages: peer.pipeline.stages.filter(stage => stage.kind !== 'fable') } }, 'fable', {}, { state: 'not_configured' });
+  assert.ok(render(off).includes('<strong>Peer review: Fable (Anthropic Claude Fable 5.1)</strong><p>Not configured on this installation</p>'));
+  // a Corti-only payload (phase 0) and one served before harness@2 have no such rows
+  const corti = { ...peer, harness: { ...peer.harness, phase: 0, participants: peer.harness.participants.map(row => ({ ...row, peer: {} })) },
+    pipeline: { ...peer.pipeline, stages: peer.pipeline.stages.filter(stage => stage.kind !== 'astra_peer') } };
+  for (const doc of [corti, fixture('encounter-processing.json')]) {
+    const page = render(doc);
+    assert.equal(page.includes('Peer review:') || page.includes('Second assessment'), false, doc.id);
+    assert.ok(page.includes('<strong>Check proposals against references and reconcile</strong>'), doc.id);
+  }
+});
+
+test('the Review participants card shows each participant\'s first reading, then its peer review, in the state the API serves', () => {
+  const peer = fixture(H2_PEER);
+  const card = participantsCard(render(peer));
+  assert.deepEqual([...card.matchAll(/data-(participant|peer)="([^"]+)" data-(?:peer-)?state="([^"]*)"/g)].map(match => [match[1], match[2], match[3]]),
+    [['participant', 'corti', 'done'], ['participant', 'astra', 'done'], ['participant', 'fable', 'done'], ['peer', 'astra', 'running'],
+      ['peer', 'fable', 'waiting'], ['participant', 'reference_validation', 'waiting'], ['participant', 'clarification', 'open'],
+      ['participant', 'final', 'processing']]);
+  assert.ok(peerRowOf(render(peer), 'astra').includes('<strong>Peer review: Astra (OpenAI GPT-6 Astra)</strong><span class="status amber">In progress</span>'));
+  assert.ok(harnessRow(render(peer), 'astra').includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'));
+  const final = render(fixture(H2_FINAL));
+  const astra = peerRowOf(final, 'astra');
+  assert.ok(astra.includes('<span class="status green">Done</span>') && astra.includes('<p>Answered in peer review, after its first reading was frozen; the review was used.</p>'));
+  assert.ok(astra.includes('Codes it proposed after peer review, never independent: 45381.'));
+  assert.ok(astra.includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'), 'its peer-review run\'s, not its first reading\'s');
+  assert.ok(peerRowOf(final, 'fable').includes('Codes it proposed after peer review, never independent: 45380.'));
+  assert.ok(harnessRow(final, 'final').includes('Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.'));
+  // every served state has its label and plain sentence; the API's own sentence is kept, after the plain one only where
+  // it does not say it
+  const ready = fixture(H2_FINAL);
+  assert.deepEqual(Object.keys(app.PEER_STATES).sort(), ['blocked', 'done', 'failed', 'not_configured', 'not_run', 'not_sent', 'refused', 'running', 'stopped', 'unknown', 'waiting']);
+  for (const [name, [[tone], label, plain, required]] of Object.entries(app.PEER_STATES).filter(([name]) => name !== 'not_run')) {
+    const row = detail => peerRowOf(render(withPeer(ready, 'astra', { state: name, detail, run_id: null, codes_added: [], unverified_quotes: 0 })), 'astra');
+    const bare = row('');
+    assert.ok(bare.includes(`data-peer="astra" data-peer-state="${name}"`), name);
+    assert.ok(bare.includes(`>${app.escapeHtml(label)}</span>`) && bare.includes(`<p>${app.escapeHtml(plain)}</p>`), name);
+    assert.ok(bare.startsWith(`<div class="check-item${tone ? ` ${tone}` : ''}"`), `${name}: tone`);
+    assert.equal(row('Peer review: a sentence of the API\'s own.').includes(`<p>${app.escapeHtml(plain)}</p>`), Boolean(required), name);
+  }
+  const refused = peerRowOf(render(withPeer(ready, 'fable', { state: 'refused', detail: 'Peer review: answered; the review was not used: The peer review was not used: it was cut off.', run_id: null, codes_added: [], unverified_quotes: 0 })), 'fable');
+  assert.ok(refused.includes('<span class="status amber">Review not used</span></span><p>Peer review: answered; the review was not used: The peer review was not used: it was cut off.</p>'), refused);
+  // where the API serves none: not configured, waiting while processing reaches it, or not run with why
+  const none = (fields, doc = ready) => peerRowOf(render(withPeer(doc, 'astra', {}, fields)), 'astra');
+  assert.ok(none({ state: 'not_configured' }).includes('data-peer-state=""') && none({ state: 'not_configured' }).includes('<p>Not configured on this installation.</p>'));
+  for (const first of ['refused', 'failed', 'unknown', 'not_sent', 'blocked', 'stopped']) {
+    const row = none({ state: first });
+    assert.ok(row.includes('<span class="status gray">Not run</span>') && row.includes(`<p>${app.escapeHtml(app.PEER_NOT_RUN)}</p>`), first);
+  }
+  assert.ok(none({ state: 'done' }, { ...ready, pipeline: { ...ready.pipeline, busy: true } }).includes('<span class="status gray">Waiting</span>'));
+  const failedStage = { ...ready, harness: { ...ready.harness, phase: 1 }, pipeline: { ...ready.pipeline, stages: [...ready.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'failed', error: 'HTTP 529 (synthetic).', finished_at: null }] } };
+  assert.ok(none({ state: 'done' }, failedStage).includes('<p>No peer review is recorded for this revision. Its peer-review stage: Failed — HTTP 529 (synthetic).</p>'));
+  // a state the page does not know is never drawn as one it knows
+  const odd = peerRowOf(render(withPeer(ready, 'astra', { state: 'exploded', detail: '' })), 'astra');
+  assert.ok(odd.includes('State not recorded') && odd.includes('data-peer-state="exploded"'));
+  // a Corti-only payload draws no peer row; nor does one served before harness@2
+  const corti = { ...ready, harness: { ...ready.harness, phase: 0, participants: ready.harness.participants.map(row => ({ ...row, peer: {} })) } };
+  for (const doc of [corti, fixture(HARNESS_READY), fixture(HARNESS_DEGRADED)]) assert.equal(render(doc).includes('data-peer='), false, doc.id);
+});
+
+test('each open question lists its candidate answers: the value, the passage quoted, who located it in which phase, verified or why not', () => {
+  const doc = fixture(H2_FINAL);
+  const html = render(doc);
+  const extent = clarificationOf(doc, 'extent');
+  const block = questionOf(html, extent.id);
+  assert.deepEqual([...block.matchAll(/data-candidate="([0-9a-f]+)" data-verified="(true|false)"/g)].map(match => [match[1], match[2]]),
+    extent.candidates.map(candidate => [candidate.id, String(candidate.verified)]));
+  assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
+  const [verified, unverified] = extent.candidates;
+  assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1)</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
+  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document and it names that landmark. It is still only a candidate: read the passage before confirming it.</small>'));
+  assert.ok(block.includes('<span class="status amber">Not verified</span>'));
+  assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
+  assert.equal(count(block, 'data-action="confirm-finding"'), 1, 'only the verified candidate can be confirmed');
+  assert.ok(block.includes(`data-confirm="${verified.id}"`) && !block.includes(`data-confirm="${unverified.id}"`));
+  // a passage keeps its line breaks and page; one located after peer review says so
+  const status = questionOf(html, clarificationOf(doc, 'performed_status').id);
+  assert.ok(status.includes('<p class="candidate-quote">“A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.” (page 2)</p>'));
+  assert.ok(status.includes('<small class="check-source">Located by Astra in peer review.</small>'));
+  // what a status check established, and what it did not: the passage need not name this code's own act
+  assert.equal(count(status, 'it lies in no history, plan or indication section (the check does not read whether it names this code&#x27;s own act)'), 3);
+  // the date question is the encounter's own card; the others sit with their codes
+  assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
+  assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
+  // the clarification row says a verified candidate can answer a question; the first assessment's questions have none
+  assert.ok(harnessRow(html, 'clarification').includes('each is answered with an addendum, or by a reviewer confirming a verified candidate answer.'));
+  const peer = render(fixture(H2_PEER));
+  assert.equal(peer.includes('candidate-answers') || peer.includes('confirm-finding'), false);
+  // a passage that is not at its position in the current revision is flagged, never passed off as found or confirmable
+  const moved = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: [{ ...verified, spans: [{ ...verified.spans[0], start: verified.spans[0].start + 1 }] }] } : item)) };
+  const flagged = questionOf(render(moved), extent.id);
+  assert.ok(flagged.includes('” (page 1) — not found at this position in the current revision</p>') && !flagged.includes('confirm-finding'));
+  // an unverified candidate whose value CPT Studio cannot state, with no passage, still says so plainly
+  const empty = app.candidateAnswers({ id: 'q', candidates: [{ id: 'c', value: '', verified: false, why: 'The value names no landmark CPT Studio reads.', spans: [], located_by: ['fable'], phases: { fable: 'peer_review' } }] }, doc);
+  assert.ok(empty.includes('<strong>No value CPT Studio can state</strong>') && empty.includes('<p class="candidate-quote">No passage is cited.</p>'));
+  assert.ok(empty.includes('Located by Fable in peer review.') && empty.includes('The value names no landmark CPT Studio reads.'));
+  assert.equal(app.candidateAnswers({ id: 'q', candidates: [], confirmation: null }, doc), '');
+  assert.equal(app.candidateAnswers({ id: 'q' }, doc), '', 'a question served before harness@2');
+});
+
+test('a verified candidate\'s Confirm action shows its served attestation exactly, and only a member the API allows sees it', () => {
+  const doc = fixture(H2_FINAL);
+  const html = render(doc);
+  for (const clarification of doc.clarifications) {
+    for (const candidate of clarification.candidates.filter(item => item.verified)) {
+      assert.equal(candidate.attestation, ATTESTATION(candidate.value), 'the fixture serves 12.5\'s sentence');
+      const control = `<details class="confirm-finding"><summary>Confirm this answer</summary><label class="check-label"><input type="checkbox" data-attest><span>${app.escapeHtml(candidate.attestation)}</span></label><p class="form-error" role="alert" hidden></p><button type="button" class="button primary" data-action="confirm-finding" data-clarification="${clarification.id}" data-confirm="${candidate.id}" disabled>Record my confirmation`;
+      assert.ok(html.includes(control), `${clarification.fact} ${candidate.id}`);
+    }
+  }
+  assert.equal(count(html, 'data-action="confirm-finding"'), 5);
+  // the served sentence is shown as served, never rebuilt from the value
+  const extent = clarificationOf(doc, 'extent');
+  const served = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: [{ ...item.candidates[0], attestation: 'A sentence the server serves.' }] } : item)) };
+  assert.ok(questionOf(render(served), extent.id).includes('<span>A sentence the server serves.</span>'));
+  // hidden without can_confirm, while processing, once confirmed, and for a verified candidate served without one
+  const variants = {
+    viewer: { ...doc, permissions: { ...doc.permissions, can_confirm: false } },
+    older: { ...doc, permissions: { can_review: true, is_owner: true } },
+    truthy: { ...doc, permissions: { ...doc.permissions, can_confirm: 'yes' } },
+    busy: { ...doc, pipeline: { ...doc.pipeline, busy: true } },
+    unattested: { ...doc, clarifications: doc.clarifications.map(item => ({ ...item, candidates: item.candidates.map(candidate => ({ ...candidate, attestation: '' })) })) },
+  };
+  for (const [name, variant] of Object.entries(variants)) {
+    const page = render(variant);
+    assert.equal(page.includes('confirm-finding'), false, name);
+    assert.equal(count(page, 'data-candidate='), 6, `${name}: the candidates are still listed`);
+  }
+});
+
+test('confirming posts the candidate id and its served attestation once ticked, and shows the result', async () => {
+  const doc = fixture(H2_FINAL);
+  const extent = clarificationOf(doc, 'extent');
+  const [candidate] = extent.candidates;
+  const confirmation = fixture(H2_CONFIRMED).confirmations[0];
+  const saved = { document: global.document, fetch: global.fetch };
+  const toastEl = { textContent: '', classList: { add() {}, remove() {} } };
+  const elements = new Map([['#toast', toastEl]]);  // any other element the page's session refresh writes to
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { textContent: '', hidden: false, options: [{ textContent: '' }] });
+    return elements.get(selector);
+  };
+  const error = { textContent: '', hidden: true };
+  const checkbox = { checked: false };
+  const box = { querySelector: selector => ({ '.form-error': error, 'input[data-attest]': checkbox }[selector] || null) };
+  const attributes = new Set();
+  const button = { dataset: { clarification: extent.id, confirm: candidate.id }, disabled: true, closest: () => box,
+    toggleAttribute: (name, on) => (on ? attributes.add(name) : attributes.delete(name)), hasAttribute: name => attributes.has(name) };
+  const asked = [];
+  let answer = { status: 201, body: { ...confirmation, effect: 'reassessment' } };
+  try {
+    global.document = { querySelector: element, cookie: 'cptstudio_csrf=token123' };
+    global.fetch = async (url, init) => {
+      asked.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : null, csrf: init.headers['X-CSRFToken'] });
+      const reply = url === '/api/session' ? { status: 200, body: fixture('session.json') } : answer;
+      return { status: reply.status, ok: reply.status < 300, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply.body };
+    };
+    app.state.doc = doc;
+    app.state.route = null;  // nothing is redrawn here: the page's refresh is the route's
+    // the checkbox enables the action; nothing is sent until the attestation is ticked
+    app.onChange({ target: { checked: true, matches: selector => selector === 'input[data-attest]', closest: () => ({ querySelector: () => button }) } });
+    assert.equal(button.disabled, false);
+    await app.confirmFinding(button);
+    assert.deepEqual(asked, []);
+    assert.equal(error.hidden, false);
+    assert.equal(error.textContent, 'Tick the attestation first: confirm that you read this passage in the source document.');
+    checkbox.checked = true;
+    await app.confirmFinding(button);
+    assert.deepEqual(asked[0], { url: `/api/encounters/${doc.id}/clarifications/${extent.id}/confirm`, method: 'POST',
+      body: { candidate_id: candidate.id, attestation: ATTESTATION('cecum') }, csrf: 'token123' });
+    assert.equal(toastEl.textContent, 'Confirmed: extent reached cecum. The codes are being re-checked with the confirmed finding; nothing was approved.');
+    assert.equal(error.hidden, true);
+    // what is sent is the sentence the API served, never one rebuilt from the value
+    app.state.doc = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: item.candidates.map(c => ({ ...c, attestation: `A sentence the server serves for ${c.value}.` })) } : item)) };
+    asked.length = 0;
+    await app.confirmFinding(button);
+    assert.deepEqual(asked.filter(item => item.method === 'POST').map(item => item.body), [{ candidate_id: candidate.id, attestation: 'A sentence the server serves for cecum.' }]);
+    app.state.doc = doc;
+    // a refusal is shown where the member confirmed, and the action can be tried again
+    answer = { status: 409, body: { error: 'That question was confirmed already; a question takes one confirmation.' } };
+    asked.length = 0;
+    await app.confirmFinding(button);
+    assert.equal(asked.length, 1);
+    assert.equal(error.textContent, 'That question was confirmed already; a question takes one confirmation.');
+    assert.equal(button.disabled, false);
+    // a candidate the page no longer serves as verified, or a member who may not confirm, sends nothing
+    asked.length = 0;
+    app.state.doc = { ...doc, permissions: { ...doc.permissions, can_confirm: false } };
+    await app.confirmFinding(button);
+    app.state.doc = { ...doc, clarifications: doc.clarifications.map(item => ({ ...item, candidates: item.candidates.map(c => ({ ...c, verified: false })) })) };
+    await app.confirmFinding(button);
+    assert.deepEqual(asked, []);
+    assert.equal(error.textContent, 'This answer can no longer be confirmed here. Reload the page.');
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.doc = null;
+    app.state.session = null;
+  }
+  // the result says what happened, in both shapes the endpoint is described with
+  assert.equal(app.confirmedMessage({ fact: 'service_date', value: '2026-10-21', effect: 'context' }),
+    'Confirmed: date of service 2026-10-21 entered as your date, and the codes are being re-checked. Nothing was approved.');
+  assert.equal(app.confirmedMessage({ confirmation: { fact: 'extent', value: 'cecum' }, effect: 'reassessment' }),
+    'Confirmed: extent reached cecum. The codes are being re-checked with the confirmed finding; nothing was approved.');
+  assert.equal(app.confirmedMessage({}), 'Confirmation recorded. Nothing was approved.');
+});
+
+test('a confirmed question names whose located passage and which reviewer; agreement is never shown as confirmation', () => {
+  const doc = fixture(H2_FINAL);
+  const confirmation = fixture(H2_CONFIRMED).confirmations[0];
+  const extent = clarificationOf(doc, 'extent');
+  // agreement: both participants located the cecum passage, and nothing reads as confirmed
+  assert.equal(render(doc).includes('Confirmed from') || render(doc).includes('confirmed-answer'), false);
+  const confirmed = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, confirmation: { ...confirmation, clarification_id: extent.id } } : item)) };
+  const block = questionOf(render(confirmed), extent.id);
+  assert.ok(block.startsWith(`<div class="candidate-answers" data-question="${extent.id}" data-confirmation="${confirmation.id}">`), block.slice(0, 200));
+  assert.ok(block.includes('<strong>Confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer: cecum</strong>'));
+  assert.ok(block.includes('<p>“The colonoscope was advanced to the cecum.” (page 1)</p>'));
+  assert.ok(block.includes(`<p>Attestation recorded: ${app.escapeHtml(ATTESTATION('cecum'))}</p>`));
+  assert.ok(block.includes('1 Nov 2026, 09:00 UTC · A confirmed finding is not a decision: each code still needs its own.'));
+  assert.equal(block.includes('confirm-finding'), false, 'a question takes one confirmation');
+  assert.equal(count(block, 'data-candidate='), 2, 'its candidates are still listed');
+  // as the engine words it, whoever located it
+  assert.equal(app.confirmedFrom({ located_by: ['fable'], confirmed_by: 'Reviewer One' }), 'Confirmed from Fable\'s located passage by Reviewer One');
+  assert.equal(app.confirmedFrom({ located_by: ['fable', 'astra'], confirmed_by: '' }), 'Confirmed from Astra\'s and Fable\'s located passage by a reviewer whose name was not recorded');
+  const agent = questionOf(render({ ...confirmed, clarifications: confirmed.clarifications.map(item => (item.id === extent.id ? { ...item, confirmation: { ...item.confirmation, confirmed_by_kind: 'agent' } } : item)) }), extent.id);
+  assert.ok(agent.includes('agent-executed synthetic review — not clinical approval'));
+});
+
+test('a code card says who proposed it in which phase, 11.4\'s sentence, the confirmed finding, and three separate reference lists', () => {
+  const final = fixture(H2_FINAL);
+  const html = render(final);
+  const biopsy = codeCardOf(html, '45380');
+  assert.ok(biopsy.includes('<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review); Corti did not propose this code.</li>'), biopsy);
+  assert.ok(codeCardOf(html, '45385').includes('<li><b>Proposed by:</b> Corti, Astra (independent reading), Fable (independent reading)</li>'));
+  assert.equal(html.includes('<span class="small-badge">Proposed after peer review</span>'), false, 'no selected code was first proposed after peer review');
+  // a code first proposed after peer review says so and is never called independent; 11.4 holds without phases too
+  const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
+  const later = codeCardOf(render(peerOnly), '45380');
+  assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
+  assert.ok(app.codeStatusLines({ proposed_by: ['fable'], reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
+  assert.ok(html.includes('<strong>45381 · Colonoscopy · proposed after peer review</strong>'), 'the alternative a peer review proposed');
+  // the first readings' positions are named as such
+  assert.ok(biopsy.includes('<div class="evidence-label">What the participants said in their first readings</div>'));
+  // the three kinds of references, apart, in this order
+  const at = ['References the participants retrieved (their own tool calls)', 'References the participants say they used', 'CMS reference facts and passages retrieved by the reconciliation']
+    .map(label => codeCardOf(html, '45385').indexOf(`<div class="evidence-label">${label}</div>`));
+  assert.ok(at.every(index => index > 0) && at[0] < at[1] && at[1] < at[2], JSON.stringify(at));
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>Astra · first reading:</b> fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">cms_code_facts · cms-pfs-rvu26d · RVU26D · effective 1 Oct 2026 – 31 Dec 2026</small></li>'));
+  assert.ok(snare.includes('<li><b>Astra · first reading:</b> ncci-2026-ch6-c-1 — cited, not retrieved: its own tool calls in this run never returned it<small class="check-source">Its use: “A rule this run never retrieved.”</small></li>'));
+  assert.ok(snare.includes('<li><b>Astra · peer review:</b> fact:cms-pfs-rvu26d:45385:mult_proc — cited, not retrieved: its own tool calls in this run never returned it'), 'one phase\'s retrieval never counts for another\'s');
+  assert.ok(snare.includes('<li><b>Astra · peer review:</b> ncci-2026-ch6-c-1 — retrieved by its own tool calls in this run'));
+  // a fact names its code: 45385's fact is not on 45380's card; a policy passage names none
+  assert.equal(biopsy.includes('fact:cms-pfs-rvu26d:45385'), false);
+  assert.ok(biopsy.includes('ncci-2026-ch6-c-1 (a policy passage, not tied to one code)'));
+  const bare = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => ({ ...row, references: { retrieved: [], used: [] }, peer_references: { retrieved: [], used: [] } })) } };
+  const nothing = codeCardOf(render(bare), '45380');
+  assert.ok(nothing.includes('No participant retrieved a reference for this code.') && nothing.includes('No participant cites a reference for this code.'));
+  assert.equal(count(nothing, '<details class="reference-passage">'), 1, 'the reconciliation\'s passage stays listed');
+  // the confirmed finding the re-assessment read: a fact, never a decision
+  const confirmedDoc = fixture(H2_CONFIRMED);
+  const confirmedCard = codeCardOf(render(confirmedDoc), '45385');
+  assert.ok(confirmedCard.includes('<div class="confirmed-fact">') && confirmedCard.includes('<strong>Confirmed finding, not a decision</strong><br>Extent reached: cecum — confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · “The colonoscope was advanced to the cecum.” (page 1)</span>'), confirmedCard);
+  assert.ok(confirmedCard.includes('<li><b>Reviewer decision:</b> not decided yet</li>') && confirmedCard.includes('data-decision="approve"'));
+  const unknown = { ...confirmedDoc, confirmations: [] };
+  assert.ok(codeCardOf(render(unknown), '45385').includes(`A confirmed finding that is not listed for this revision (${confirmedDoc.confirmations[0].id}).`));
+  // a Corti-only payload (phase 0) keeps its cards as harness@1 drew them
+  const corti = { ...final, harness: { ...final.harness, phase: 0, participants: final.harness.participants.map(row => ({ ...row, peer: {} })) } };
+  const plain = render(corti);
+  assert.equal(plain.includes('reference-lists') || plain.includes('in their first readings') || plain.includes('retrieved by the reconciliation'), false);
+});
+
+test('the confirmed findings list every confirmation of the revision, after its question has gone, and none is a decision', () => {
+  const doc = fixture(H2_CONFIRMED);
+  const html = render(doc);
+  const section = html.slice(html.indexOf('<h2>Confirmed findings (not decisions)</h2>'), html.indexOf('<h2>Documented services</h2>'));
+  assert.ok(section.includes('<strong>Extent reached: cecum</strong><p>Confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · 1 Nov 2026, 09:00 UTC · revision 1</p>'), section);
+  assert.ok(section.includes(`<p>Attestation recorded: ${app.escapeHtml(ATTESTATION('cecum'))}</p>`));
+  assert.ok(section.includes('<p>The assessment reads it as documented by this passage; it decides no code.</p>'));
+  assert.equal(html.includes(`data-question="${doc.confirmations[0].clarification_id}"`), false, 'its question was answered and is gone');
+  const date = app.confirmedFindings({ ...doc, confirmations: [{ ...doc.confirmations[0], fact: 'service_date', value: '2026-10-21', spans: [] }] });
+  assert.ok(date.includes('<strong>Date of service: 2026-10-21</strong>') && date.includes('It entered as the member&#x27;s date of service, through the encounter context.'));
+  assert.equal(app.confirmedFindings(fixture(H2_FINAL)), '');
+  assert.equal(app.confirmedFindings(fixture(HARNESS_READY)), '');
+});
+
+test('the trace shows each run\'s exchanges and tool calls, each peer review in full, and every assessment\'s frozen list', () => {
+  const trace = fixture(H2_TRACE);
+  const html = app.traceView(trace, trace.encounter.id);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first, peer] = astra.runs;
+  assert.ok(html.includes('<div class="evidence-label">Peer review · Succeeded</div>') && html.includes('<dt>Purpose</dt><dd>Peer review</dd>'));
+  assert.ok(html.includes(`<dt>Run identity (client request id)</dt><dd>${first.run_identity}</dd>`) && html.includes('<dt>Mode</dt><dd>REPLAY — recorded response, not live output</dd>'));
+  assert.equal(count(html, '<div class="evidence-label">Exchanges · 2</div>'), 2);
+  assert.ok(html.includes('<div class="evidence-label">Exchanges · 1</div>'));
+  const call = first.exchanges[0].tool_calls[0];
+  assert.ok(html.includes(`<li><b>cms_code_facts (call_1_1)</b><br>Arguments: {&quot;codes&quot;:[&quot;45385&quot;],&quot;date_of_service&quot;:&quot;&quot;}<br>Refs returned: fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">result sha256 ${call.result_sha256} · executed 1 Nov 2026, 09:00 UTC</small></li>`));
+  assert.ok(html.includes(`<dt>Response sha256</dt><dd>${first.exchanges[1].response_sha256}</dd>`) && html.includes('<dt>Vendor request id</dt><dd>req_astra_2</dd>'));
+  assert.ok(html.includes('<p class="harness-note">No tool call in this exchange.</p>'));
+  // the peer review: the frozen inputs it was shown, its answers by question id, positions, codes after peer review
+  for (const [name, digest] of peer.review.frozen_inputs) assert.ok(html.includes(`<dt>${name}</dt><dd>${digest}</dd>`), name);
+  assert.ok(html.includes(`<li><b>Question ${peer.review.answers[0].question_id}</b><br>Answer: cecum<ul class="trace-quotes"><li>“The colonoscope was advanced to the cecum.” — found in the document (1 place)</li></ul></li>`));
+  assert.ok(html.includes('<li><b>45380 · supports it</b><br>Why: Participant wording.'));
+  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b>'));
+  assert.ok(html.includes('<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — cited, not retrieved</b><br>Its use: Retrieved only by its first reading.</li>'));
+  assert.ok(html.includes('<li><b>Question ' + trace.participants[2].runs[1].review.answers[0].question_id + '</b><br>Answer: Cecum, appendiceal orifice seen'), 'the participant\'s own words, in the trace');
+  // a first reading's references used, checked against its own run
+  assert.ok(html.includes('<li><b>ncci-2026-ch6-c-1 — cited, not retrieved</b><br>Its use: A rule this run never retrieved.</li>'));
+  // each assessment of the revision with the frozen phase-1 outputs it recorded
+  const assessments = html.slice(html.indexOf('<h2>Assessments of this revision</h2>'), html.indexOf('<h2>Reference retrieval</h2>'));
+  assert.ok(assessments.includes('<div class="evidence-label">Phase 1: the frozen first readings · not final</div>'));
+  assert.ok(assessments.includes('<div class="evidence-label">Phase 2: after peer review · final · current</div>'));
+  for (const [name, digest] of trace.assessments[1].frozen) assert.ok(assessments.includes(`<dt>${name}</dt><dd>${digest}</dd>`), name);
+  assert.ok(app.traceView({ ...trace, assessments: [] }, trace.encounter.id).includes('No assessment is recorded for this revision.'));
+  // a peer run without its review, a refused review, and a Corti run (no exchanges) say what they are
+  const runOf = (fields, base = peer) => app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...base, ...fields }] }], assessments: undefined }, trace.encounter.id);
+  assert.ok(runOf({ review: null }).includes('No peer review is recorded for this request.'));
+  assert.ok(runOf({ review: { refused: true, problems: ['The stored response no longer matches its recorded hash; it was not read.'] } }).includes('<dt>Peer review</dt><dd>Refused whole: none of it was read or used</dd>'));
+  assert.equal(runOf({}, trace.participants[0].runs[0]).includes('Exchanges ·'), false);
+  assert.equal(runOf({ review: null }).includes('Assessments of this revision'), false, 'a trace served without assessments has no such section');
+  // a model's free text in a review that reads like a CPT descriptor is withheld
+  const hostile = runOf({ review: { ...peer.review, answers: [{ question_id: 'q', settled: true, value: DESCRIPTOR, evidence: [] }],
+    positions: [{ code: '45380', position: 'disputes', reason: DESCRIPTOR, evidence: [] }], additional_codes: [{ code: '45381', basis: DESCRIPTOR, evidence: [{ quote: DESCRIPTOR, spans: [], reason: 'not found' }] }],
+    references_used: [{ ref: 'x', use: DESCRIPTOR, retrieved: false }] }, exchanges: [{ ...peer.exchanges[0], tool_calls: [{ ...peer.exchanges[0].tool_calls[0], arguments: { topic: DESCRIPTOR } }] }] });
+  assert.equal(hostile.includes('lesion(s)'), false);
+  assert.ok(count(hostile, app.escapeHtml(app.DESCRIPTOR_WITHHELD)) >= 5, hostile);
+});
+
+test('every participant- or document-written harness@2 value the page draws is escaped', () => {
+  const doc = fixture(H2_CONFIRMED);
+  const final = fixture(H2_FINAL);
+  const span = { start: 0, end: 5, text: XSS, page: XSS };
+  const exact = { ...final.clarifications[0].candidates[0].spans[0], page: XSS };  // a verified candidate is offered for confirmation
+  const candidate = { id: XSS, clarification_id: XSS, fact: XSS, value: XSS, located_by: [XSS, 'astra'], phase: XSS, phases: { [XSS]: XSS, astra: XSS },
+    runs: [XSS], spans: [exact], verified: true, why: XSS, attestation: XSS };
+  const unverified = { ...candidate, spans: [span], verified: false };
+  const confirmation = { ...doc.confirmations[0], id: XSS, fact: XSS, value: XSS, spans: [span], located_by: [XSS], confirmed_by: XSS, attestation: XSS, created_at: XSS, revision_number: XSS };
+  const references = { retrieved: [{ ref: XSS, kind: XSS, source_key: XSS, release: XSS, effective_start: XSS, effective_end: XSS, tool: XSS }], used: [{ ref: XSS, use: XSS, retrieved: XSS }] };
+  const harness = { ...final.harness, participants: final.harness.participants.map(row => ({ ...row, references, peer_references: references,
+    peer: row.name === 'corti' ? {} : { state: XSS, detail: XSS, run_id: XSS, codes_added: [XSS], unverified_quotes: 3 } })) };
+  const clarifications = final.clarifications.map(item => ({ ...item, id: XSS, candidates: [candidate, unverified], confirmation: null }));
+  const proposals = final.assessment.proposals.map(p => ({ ...p, proposed_by: [XSS, 'astra'], phases: { [XSS]: XSS, astra: XSS }, confirmed: [XSS] }));
+  const hostile = { ...final, id: XSS, harness, clarifications, confirmations: [confirmation], assessment: { ...final.assessment, proposals } };
+  const confirmed = { ...hostile, clarifications: clarifications.map(item => ({ ...item, confirmation })) };
+  const trace = fixture(H2_TRACE);
+  const run = trace.participants[1].runs[1];
+  const exchange = { turn: XSS, state: XSS, http_status: XSS, latency_ms: XSS, usage: { [XSS]: XSS }, request_sha256: XSS, response_sha256: XSS, provider_request_id: XSS,
+    response_id: XSS, error: XSS, tool_calls: [{ call_id: XSS, tool: XSS, arguments: { [XSS]: XSS }, refs: [XSS], result_sha256: XSS, executed_at: XSS }] };
+  const review = { ...run.review, review_version: XSS, frozen_inputs: [[XSS, XSS]], problems: [XSS], answers: [{ question_id: XSS, settled: true, value: XSS, evidence: [XSS] }],
+    positions: [{ code: XSS, position: XSS, reason: XSS, evidence: [{ quote: XSS, spans: [], reason: XSS }] }], additional_codes: [{ code: XSS, basis: XSS, modifiers: [XSS], service_ids: [XSS], confidence: XSS, evidence: [] }],
+    references_used: [{ ref: XSS, use: XSS, retrieved: true }] };
+  const pages = [render(hostile, 'codes'), render(confirmed, 'codes'), render({ ...hostile, pipeline: { ...hostile.pipeline, busy: true, stages: [{ kind: XSS, state: XSS, error: XSS }] } }),
+    app.traceView({ ...trace, participants: [{ ...trace.participants[1], runs: [{ ...run, mode: XSS, run_identity: XSS, requested_by: XSS, authorization_ref: XSS, exchanges: [exchange], review }] }],
+      assessments: [{ id: XSS, created_at: XSS, phase: XSS, final: XSS, current: XSS, frozen: [[XSS, XSS]] }] }, XSS)].join('\n');
+  assert.equal(pages.includes('<img'), false);
+  assert.ok(count(pages, XSS_ESCAPED) > 60, String(count(pages, XSS_ESCAPED)));
+  // the action names its candidate and question escaped, and sends what the API served
+  assert.ok(pages.includes(`data-clarification="${XSS_ESCAPED}" data-confirm="${XSS_ESCAPED}"`));
+});
+
+test('older payloads draw exactly as they did before harness@2: every review tab and the harness@1 trace', () => {
+  // sha256 of what the app.js of harness@2 part A drew (the base this package builds on) for each payload served before
+  // harness@2. A deliberate change to an older payload's page updates its digest here, with the reason in the commit.
+  const crypto = require('node:crypto');
+  const sha = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+  const BASE = {
+    'encounter-adversarial.json': ['c1c6968adb5e69c275a469e4ba16e17259d0b46a2d011d2bbf40a7e267e3cad8', '4d23591a4ed51cb05f5cbf3a51c71c72f196c08c5d4b218220491cbf95cff20f', '8054c9b72f4eac6939be2bdb1154d0b43109533de080493537b110631d86d7ca'],
+    'encounter-clarification.json': ['d26a56230607d07bea0abbc08f940a8ed17dcf882e76924bbe88492fc4b8936e', '550b184b8e67c4129f6bc5be16802d02d89bdf806e10d85a816c5a91a233607f', '786ca5d90bf962a397091523e34cb6ee8bc831a486c7a883ee05f1dc59ed97f7'],
+    'encounter-extraction-failed.json': ['dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3'],
+    'encounter-harness-degraded.json': ['6f31d8b0c1de0dc67235cb3605d517368032548b926022d85551c4b52e9cf79f', 'ebe5e7a4ef1ffdf16e134a10868996da2bd2aa4687deadd8dc683ab93923b2bb', '193c71f5bb476cec76e30ebc57b7b4609555f17efcaff9bf04e091085ccfe48b'],
+    'encounter-harness-ready.json': ['2365f76677a896e042b0f938c1b4a27c2c333d771d8fc1d5c300f7b90b3513a7', '2690efc65889389b8cf26b91fd85e9d8e9f381a647b4aa1a019fbd1eb549fdf9', 'c105f3237d5c889dfbc0ecbffadd6786dc5f267df09b1cc4a04bea4c6cca4df9'],
+    'encounter-processing.json': ['f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666'],
+    'encounter-provider-unknown.json': ['b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8'],
+    'encounter-ready.json': ['fa983aa9544d162a3697d8ad6aab958828787a922ef9ceefd5bce4ac278f39f1', '0f4fde31a4556cb5863f9d2ff873a578e3f99ba03ebe3edd217853af49f3fdae', '71120acb2819c38cbfbe9dd8c1cca32eea38d43d2ed67b7b083d736bda27a995'],
+    'encounter-reviewed.json': ['dbd38e960eb1702f26e3a403d9443174deeb581416a93efe2cac4307c635cd88', '8b5da0ab20b901454ad99fa22bff335af621a1565b9ec77c5e0f4f77fadf0072', 'aa78da5dcb8954782068517d14e240fe20a322edf80d7a469cfd0b70cd4fac5f'],
+    'encounter-stopped.json': ['5f814f885ab54b2d71b289dd46e99ba2d6923003e968dda87fcc612ee9cbe1c1', '5f814f885ab54b2d71b289dd46e99ba2d6923003e968dda87fcc612ee9cbe1c1', '5f814f885ab54b2d71b289dd46e99ba2d6923003e968dda87fcc612ee9cbe1c1'],
+  };
+  const older = fs.readdirSync(FIXTURES).filter(name => /^encounter-.+\.json$/.test(name) && !name.startsWith('encounter-harness2-')).sort();
+  assert.deepEqual(older, Object.keys(BASE).sort(), 'every older payload is checked');
+  for (const name of older) {
+    const doc = fixture(name);
+    assert.deepEqual(['codes', 'checks', 'timeline'].map(tab => sha(render(doc, tab))), BASE[name], name);
+  }
+  const trace = fixture(HARNESS_TRACE);
+  assert.equal(sha(app.traceView(trace, trace.encounter.id)), '40ec4c58e45d6275e9714bb44ec02ebb83e28611d68b7d8671a04bdefbb2f5de');
+});
+
+test('a Corti-only encounter served with harness@2\'s empty fields draws exactly as the same payload without them (I1)', () => {
+  // the additions the API serves when no model participant is configured (API.md: phase 0, {} and [] everywhere)
+  for (const name of [HARNESS_READY, HARNESS_DEGRADED, 'encounter-processing.json', 'encounter-ready.json']) {
+    const doc = fixture(name);
+    const empty = { retrieved: [], used: [] };
+    const served = { ...doc, permissions: { ...doc.permissions, can_confirm: doc.permissions?.can_review === true },
+      ...(doc.harness ? { harness: { ...doc.harness, phase: 0, participants: doc.harness.participants.map(row => ({ ...row, peer: {}, references: empty, peer_references: empty })) } } : {}),
+      clarifications: (doc.clarifications || []).map(item => ({ ...item, candidates: [], confirmation: null })), confirmations: [],
+      assessment: doc.assessment && { ...doc.assessment, proposals: doc.assessment.proposals.map(p => ({ ...p, phases: {}, confirmed: [] })) } };
+    for (const tab of ['codes', 'checks', 'timeline']) assert.equal(render(served, tab), render(doc, tab), `${name} ${tab}`);
+  }
+});
+
+test('a reference or a tool a participant names itself is withheld where it reads like a CPT descriptor', () => {
+  const final = fixture(H2_FINAL);
+  const cited = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: DESCRIPTOR, use: 'Its reason.', retrieved: false }] } } : row)) } };
+  const card = codeCardOf(render(cited), '45385');
+  assert.equal(card.includes('lesion(s)'), false);
+  assert.ok(card.includes(`<li><b>Astra · first reading:</b> ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved`), card);
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants[1];
+  const [first] = astra.runs;
+  const named = { ...first, reading: { ...first.reading, references_used: [{ ref: DESCRIPTOR, use: '', retrieved: false }] },
+    exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...first.exchanges[0].tool_calls[0], tool: DESCRIPTOR }] }] };
+  const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [named] }] }, trace.encounter.id);
+  assert.equal(html.includes('lesion(s)'), false);
+  assert.ok(html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
+});
+
+test('a peer-review run is named as one in the Activity tab, on the reconciliation card and when it stopped processing', () => {
+  const final = fixture(H2_FINAL);
+  const timeline = render(final, 'timeline');
+  assert.equal(count(timeline, '<strong>Astra · REPLAY — recorded response, not live output · Peer review · Succeeded</strong>'), 1);
+  assert.equal(count(timeline, '<strong>Astra · REPLAY — recorded response, not live output · Independent review · Succeeded</strong>'), 1);
+  // an unknown outcome of a peer review blocks every send, and the card says whose and which
+  const peerRun = final.provider_runs.find(run => run.purpose === 'peer_review' && run.provider === 'fable');
+  const unknown = { ...final, state: 'provider_unknown', provider_runs: final.provider_runs.map(run => (run.id === peerRun.id ? { ...run, state: 'unknown', error: 'Read timed out (synthetic).' } : run)) };
+  assert.ok(render(unknown).includes('<strong>Unreconciled request</strong><br>Fable (Anthropic Claude Fable 5.1) · Peer review · 1 Nov 2026, 09:00 UTC · Read timed out (synthetic).'));
+  // a peer stage the system cancelled is named when processing did not finish
+  const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'cancelled', error: 'The worker stopped before this stage finished (synthetic).', finished_at: null }];
+  const stopped = { ...final, state: 'stopped', pipeline: { ...final.pipeline, stopped_by_member: false, can_resume: true, stages } };
+  assert.ok(render(stopped).includes('<p>Peer review: Astra (OpenAI GPT-6 Astra): The worker stopped before this stage finished (synthetic).</p>'));
 });

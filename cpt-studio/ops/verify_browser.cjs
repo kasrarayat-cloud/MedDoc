@@ -88,6 +88,10 @@
  * check the evidence marks in the DOM, and that the Review participants card shows each
  * participant and reference validation in the state the API's harness reports (where it
  * serves one; the evidence summary records which participants ran, with which models);
+ * harness@2: that its peer-review rows show the state the API serves for each participant's peer
+ * review, and that each open question shows exactly the API's candidate answers (ids, verified
+ * flags) and its confirmation, with a Confirm action only where the API allows one - each skipped
+ * where the API serves none. The walk never confirms a finding: a confirmation is a member's act;
  * approve every ready selected proposal except the
  * manifest's designated rejection; reload and check that the decisions and the revision
  * persisted (JSON and DOM); download the draft TXT + CSV, and the reviewed TXT + CSV when
@@ -1298,7 +1302,12 @@ function summarize(enc) {
     context: Object.fromEntries(Object.entries(enc.context?.facts || {}).map(([k, f]) => [k, { value: f.value, origin: f.origin }])),
     families: (enc.routing?.families || []).map(f => ({ family: f.family, status: f.status, supported: f.supported, missing: f.missing, facts: (f.facts || []).map(x => ({ name: x.name, value: x.value, origin: x.origin })), mention_statuses: (f.mentions || []).map(m => m.status) })),
     proposals: proposalsOf(enc).map(p => ({ id: p.id, code: p.code, bucket: p.bucket, family: p.family, status: p.status, decision_state: p.decision_state, evidence: (p.evidence || []).length, exact_evidence: exactSpans(p, points).length, allowed_actions: p.allowed_actions })),
-    clarifications: (enc.clarifications || []).map(c => ({ fact: c.fact, scope: c.scope, family: c.family, state: c.state })),
+    clarifications: (enc.clarifications || []).map(c => ({ fact: c.fact, scope: c.scope, family: c.family, state: c.state,
+      // harness@2: the candidates (their values are CPT Studio's own words, never a passage) and the confirmation's id
+      ...(Array.isArray(c.candidates) ? { candidates: c.candidates.map(x => ({ id: x?.id, value: x?.value, verified: x?.verified, located_by: x?.located_by, phase: x?.phase })),
+        confirmation: c.confirmation && typeof c.confirmation === 'object' ? c.confirmation.id : null } : {}) })),
+    ...(Array.isArray(enc.confirmations) ? { confirmations: enc.confirmations.map(c => ({ id: c?.id, fact: c?.fact, value: c?.value, located_by: c?.located_by,
+      confirmed_by: c?.confirmed_by, confirmed_by_kind: c?.confirmed_by_kind, created_at: c?.created_at })) } : {}),
     provider_runs: (enc.provider_runs || []).map(r => ({ provider: r.provider, mode: r.mode, state: r.state, http_status: r.http_status, usage: r.usage, usage_basis: r.usage_basis, reused_from: r.reused_from, latency_ms: r.latency_ms, purpose: r.purpose, scope_items: r.scope_items, request_sha256: r.request_sha256, member_date_hold: isMemberDateHold(r) })),
     user_values: enc.context?.user_values || {},
     readiness: enc.readiness,
@@ -1307,12 +1316,22 @@ function summarize(enc) {
     harness: enc.harness && Array.isArray(enc.harness.participants) ? {
       participants: enc.harness.participants.map(p => ({ name: p?.name, state: p?.state, model: p?.model, returned_model: p?.returned_model,
         run_id: p?.run_id, reused: p?.reused, codes: p?.codes, unverified_quotes: p?.unverified_quotes, usage_basis: p?.usage_basis,
-        estimated_cost_usd: p?.estimated_cost_usd })),
+        estimated_cost_usd: p?.estimated_cost_usd,
+        // harness@2: its peer review and its references by phase, counted - never a sentence or a reference's use
+        ...('peer' in (p || {}) ? { peer: { state: p.peer?.state, run_id: p.peer?.run_id, codes_added: p.peer?.codes_added, unverified_quotes: p.peer?.unverified_quotes },
+          references: referenceCounts(p.references), peer_references: referenceCounts(p.peer_references) } : {}) })),
+      ...('phase' in enc.harness ? { phase: enc.harness.phase } : {}),
       reference_validation: { state: enc.harness.reference_validation?.state, codes_checked: enc.harness.reference_validation?.codes_checked,
         passages: enc.harness.reference_validation?.passages, sources: (enc.harness.reference_validation?.sources || []).map(s => s?.key) },
       final: enc.harness.final?.state,
     } : null,
   };
+}
+
+// What one participant run retrieved with its own tools and what it says it used (HARNESS.md 11.2), counted.
+function referenceCounts(references) {
+  const list = name => (references && Array.isArray(references[name]) ? references[name].filter(item => item && typeof item === 'object') : []);
+  return { retrieved: list('retrieved').length, used: list('used').length, cited_not_retrieved: list('used').filter(item => item.retrieved !== true).length };
 }
 
 function documentResult(record) {
@@ -1597,7 +1616,15 @@ async function readDom(page) {
   const participants = await page.$$eval('.participants-card [data-participant]', els => els.map(el => ({
     key: el.dataset.participant, state: el.dataset.state,
   })));
-  return { marks, cards, candidates, participants };
+  // harness@2 (HARNESS.md 11.1, 12.5): each peer-review row with the state the API served it, and each open question's
+  // candidate answers (id, verified) and confirmation as the page drew them, with how many Confirm actions it offers.
+  const peers = await page.$$eval('.participants-card [data-peer]', els => els.map(el => ({ key: el.dataset.peer, state: el.dataset.peerState })));
+  const questions = await page.$$eval('[data-question]', els => els.map(el => ({
+    id: el.dataset.question, confirmation: el.dataset.confirmation || '',
+    candidates: [...el.querySelectorAll('[data-candidate]')].map(item => ({ id: item.dataset.candidate, verified: item.dataset.verified === 'true' })),
+    confirmable: el.querySelectorAll('[data-action="confirm-finding"]').length,
+  })));
+  return { marks, cards, candidates, participants, peers, questions };
 }
 
 // The Review participants card shows what the API's harness reports: a row for each participant in its state, reference
@@ -1616,6 +1643,67 @@ function checkParticipantsCard(enc, rows) {
   return [check('dom.participants', 'hard', missing.length === 0, missing.length
     ? `the card does not show ${missing.map(([key, state]) => `${key}:${state}`).join(', ')}; it shows ${shown.map(([key, state]) => `${key}:${state}`).join(', ') || 'no row'}`
     : `${shown.length} row(s) as the API reports them: ${shown.map(([key, state]) => `${key}:${state}`).join(', ')}`)];
+}
+
+// The page writes a value as app.js's textValue does: a string as it is, a number or boolean as text, anything else ''.
+function shownText(value) {
+  return typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
+}
+
+// harness@2's peer-review rows (HARNESS.md 11.1, 12.6) show what the API serves: one row for Astra and one for Fable,
+// each with data-peer-state the state of the peer review the API serves for it ('' where it serves none). Skipped where
+// the API serves no phase-2 data: a release before harness@2, or a Corti-only encounter (phase 0), draws no such row.
+function checkPeerRows(enc, rows) {
+  const harness = enc?.harness;
+  const models = harness && Array.isArray(harness.participants)
+    ? harness.participants.filter(item => item && typeof item === 'object' && (item.name === 'astra' || item.name === 'fable')) : [];
+  const peerOf = item => (item.peer && typeof item.peer === 'object' && !Array.isArray(item.peer) ? item.peer : {});
+  const phased = harness?.phase === 1 || harness?.phase === 2 || models.some(item => Object.keys(peerOf(item)).length > 0);
+  if (!phased || !models.length) return [skip('dom.peer_reviews', 'the API serves no peer review for this encounter')];
+  const shown = (rows || []).map(row => [row.key, row.state || '']);
+  const wanted = models.map(item => [item.name, shownText(peerOf(item).state)]);
+  const missing = wanted.filter(([key, state]) => !shown.some(([k, s]) => k === key && s === state));
+  const extra = shown.filter(([key]) => !wanted.some(([k]) => k === key));
+  const words = list => list.map(([key, state]) => `${key}:${state || '(none served)'}`).join(', ');
+  return [check('dom.peer_reviews', 'hard', !missing.length && !extra.length && shown.length === wanted.length,
+    missing.length || extra.length || shown.length !== wanted.length
+      ? `the card shows ${words(shown) || 'no peer-review row'}; the API serves ${words(wanted)}`
+      : `${shown.length} peer-review row(s) as the API serves them: ${words(shown)}`)];
+}
+
+// Each open question shows exactly the API's candidate answers and confirmation (HARNESS.md 12.5, 12.6): the same
+// candidates in order with the same verified flags, the confirmation's id, and a Confirm action only for a verified
+// candidate of an unconfirmed question, for a member the API allows (permissions.can_confirm); a question the API
+// serves none for shows none. Skipped where the API serves no candidate and no confirmation. Read only: the walk never
+// confirms.
+function checkCandidates(enc, questions) {
+  const open = (Array.isArray(enc?.clarifications) ? enc.clarifications : []).filter(item => item && typeof item === 'object' && item.state === 'open');
+  const served = open.filter(item => (Array.isArray(item.candidates) && item.candidates.length > 0) || (item.confirmation && typeof item.confirmation === 'object'));
+  if (!served.length) return [skip('dom.candidates', 'the API serves no candidate answer or confirmation for this encounter')];
+  const drawn = new Map((questions || []).map(question => [question.id, question]));
+  const flags = list => (Array.isArray(list) ? list : []).filter(item => item && typeof item === 'object').map(item => `${shownText(item.id)}:${item.verified === true}`);
+  const problems = [];
+  for (const item of served) {
+    const page = drawn.get(item.id);
+    if (!page) {
+      problems.push(`question ${item.id} shows no candidate answers`);
+      continue;
+    }
+    const wanted = flags(item.candidates);
+    const shown = flags(page.candidates);
+    if (wanted.join(',') !== shown.join(',')) problems.push(`question ${item.id} shows ${shown.join(', ') || 'no candidate'}; the API serves ${wanted.join(', ') || 'none'}`);
+    const confirmation = item.confirmation && typeof item.confirmation === 'object' ? shownText(item.confirmation.id) : '';
+    if ((page.confirmation || '') !== confirmation) problems.push(`question ${item.id} shows confirmation ${page.confirmation || 'none'}; the API serves ${confirmation || 'none'}`);
+    const verified = wanted.filter(flag => flag.endsWith(':true')).length;
+    if (page.confirmable && (confirmation || enc.permissions?.can_confirm !== true || page.confirmable > verified)) {
+      problems.push(`question ${item.id} offers ${page.confirmable} confirmation(s) where the API allows ${confirmation || enc.permissions?.can_confirm !== true ? 'none' : verified}`);
+    }
+  }
+  for (const question of questions || []) {
+    if (!served.some(item => item.id === question.id)) problems.push(`question ${question.id} shows candidate answers the API does not serve`);
+  }
+  return [check('dom.candidates', 'hard', problems.length === 0, problems.length ? problems.join('; ')
+    : `${served.length} question(s) show the API's candidate answers and confirmations: ${served.map(item => `${item.id} (${flags(item.candidates).length} candidate(s)${item.confirmation ? ', confirmed' : ''})`).join(', ')}`)];
 }
 
 async function decide(page, encounterId, decision) {
@@ -1880,6 +1968,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     const before = await readDom(page);
     add(checkEvidenceMarks(enc, before.marks, before.cards));
     add(checkParticipantsCard(enc, before.participants));
+    add(checkPeerRows(enc, before.peers));
+    add(checkCandidates(enc, before.questions));
 
     let current = enc;
     if (editPlan && !editing) {  // nothing is saved, so nothing is sent, on a precondition the walk did not see hold
@@ -2125,7 +2215,8 @@ function stopRequested(outDir) {
 module.exports = {
   stopRequested, parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
   checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
-  checkPersistence, checkEvidenceMarks, checkDecisionDom, checkParticipantsCard, expectedDownloads, checkDownloads, checkListing, summarize,
+  checkPersistence, checkEvidenceMarks, checkDecisionDom, checkParticipantsCard, checkPeerRows, checkCandidates, expectedDownloads,
+  checkDownloads, checkListing, summarize,
   documentResult, readDom, secondReviewPlan, checkSecondReview, attachedProblems, sentRun,
   contextEditPlan, isMemberDateHold, contextRequestDate, primaryRequestSha256, checkUploadDate, checkContextEdit, contextEditPreconditions,
   checkDecisionLabels, planProblems, MEMBER_DATE_HOLD_MESSAGE, PROVIDER_SYSTEMS,
