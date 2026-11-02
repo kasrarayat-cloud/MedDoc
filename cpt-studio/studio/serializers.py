@@ -342,13 +342,18 @@ def _confirmed_ids(support):
     return [str(item) for item in confirmed if isinstance(item, str)] if isinstance(confirmed, list) else []
 
 
-def _clarification_json(clarification, candidates=(), confirmation=None):
-    """An open question with, harness@2 (HARNESS.md 12.5, 12.6), the candidate answers the participants' located
-    passages offer for it (only an open question of the final assessment has any) and its confirmation, or null."""
+def _clarification_json(clarification):
     return {'id': str(clarification.pk), 'scope': clarification.scope,
             'proposal_id': str(clarification.proposal_id) if clarification.proposal_id else None,
             'family': clarification.family, 'fact': clarification.fact, 'question': clarification.question,
-            'reason': clarification.reason, 'state': clarification.state, 'candidates': list(candidates),
+            'reason': clarification.reason, 'state': clarification.state}
+
+
+def _question_json(clarification, candidates=(), confirmation=None):
+    """A clarification as _clarification_json serves it (ops/verification/test_verify_browser.cjs pins that text) with,
+    harness@2 (HARNESS.md 12.5, 12.6), the candidate answers the participants' located passages offer for it (only an
+    open question of the final assessment has any) and its confirmation, or null."""
+    return {**_clarification_json(clarification), 'candidates': list(candidates),
             'confirmation': confirmation_json(confirmation) if confirmation is not None else None}
 
 
@@ -769,7 +774,7 @@ def encounter_detail(encounter, membership):
         'second_review': {**second_review_status(encounter),
                           'can_request': membership.can_review},
         'assessment': assessment,
-        'clarifications': [_clarification_json(c, offered.get(str(c.pk), ()), confirmed.get(c.pk))
+        'clarifications': [_question_json(c, offered.get(str(c.pk), ()), confirmed.get(c.pk))
                            for c in clarifications],
         'confirmations': [confirmation_json(c) for c in review.revision_confirmations(revision)],
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(
