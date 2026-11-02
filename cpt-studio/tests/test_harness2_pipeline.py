@@ -8,6 +8,7 @@ code) whose tool loop is the real loop (studio.participants.loop) with the live 
 by a script instead of a recording, so a test decides what each turn asks for. Their tool calls are answered by CPT
 Studio's real CMS tool executor (studio.reference.tools) over a synthetic reference store and the bundled passages.
 """
+import dataclasses
 import hashlib
 import json
 import tempfile
@@ -840,6 +841,63 @@ class PeerSendDoorTests(Harness2Case):
         self.assertEqual((record['astra']['peer_state'], record['astra']['peer_reason'], record['fable']['peer_state']),
                          ('failed', 'Overloaded (synthetic).', 'read'))
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_a_peer_request_that_cannot_be_built_is_recorded_not_sent_and_blocks_only_itself(self):
+        with mock.patch.object(self.adapters['astra'], 'build_peer_request', side_effect=ValueError('synthetic')), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            encounter_id = self.create()
+            drain()
+        (astra,) = self.runs_of(encounter_id, 'astra', 'peer_review')
+        self.assertEqual((astra.state, astra.sent, astra.request_sha256, astra.started_at),
+                         ('not_sent', False, '', None))
+        self.assertEqual(astra.error, jobs.PEER_UNBUILT.format(error='ValueError'))
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
+        record = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((record['astra']['peer_state'], record['fable']['peer_state']), ('not_sent', 'read'))
+
+    def test_a_frozen_reading_that_no_longer_reads_back_is_never_shown(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        real = jobs.participant_reading
+
+        def changed(run):
+            reading, problem = real(run)
+            if run.provider == 'astra' and reading is not None:
+                return dataclasses.replace(reading, unverified_quotes=reading.unverified_quotes + 1), problem
+            return reading, problem
+        with mock.patch('studio.jobs.participant_reading', side_effect=changed):
+            jobs.run_job(job)
+            drain()
+        # Astra's own request and Fable's, which shows Astra's reading, would no longer show what was frozen
+        runs = {name: self.runs_of(encounter_id, name, 'peer_review') for name in ('astra', 'fable')}
+        self.assertEqual({name: [(r.state, r.error) for r in found] for name, found in runs.items()},
+                         {name: [('not_sent', jobs.PEER_FROZEN_CHANGED)] for name in runs})
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 0))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+
+    def test_a_participant_disabled_since_its_peer_stage_was_queued_records_nothing(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        with override_settings(ASTRA_MODE='disabled'):
+            jobs.run_job(job)
+            job.refresh_from_db()
+            self.assertEqual(job.result, {'peer': 'astra_peer', 'state': 'disabled', 'run': None})
+            drain()
+        self.assertEqual((self.runs_of(encounter_id, 'astra', 'peer_review'), self.sent('fable', 'peer')), ([], 1))
+        self.assertEqual(self.kinds(encounter_id)[-2:], ['fable_peer', 'assess'])
+
+    def test_the_live_gate_refuses_a_live_peer_review_and_only_it(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        self.adapters['astra'].mode = 'live'
+        with override_settings(AUTHORIZATION_REF=''):
+            jobs.run_job(job)
+        (astra,) = self.runs_of(encounter_id, 'astra', 'peer_review')
+        self.assertEqual((astra.state, astra.sent, astra.scope['mode']), ('not_sent', False, 'live'))
+        self.assertEqual(astra.error, 'Nothing was sent: Live provider calls are not authorized on this installation.')
+        self.adapters['astra'].mode = 'replay'
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
 
     def test_a_peer_review_another_model_answered_is_refused_and_never_read(self):
         envelope = json.loads(answered('fable', EMPTY_PEER, number=2))
