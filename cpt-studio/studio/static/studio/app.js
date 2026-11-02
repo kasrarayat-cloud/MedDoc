@@ -35,6 +35,15 @@ const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify
 // Astra's and Fable's own stages (HARNESS.md 2): a row once the stage exists or the API's harness lists the participant.
 const PARTICIPANT_STAGES = new Set(['astra', 'fable']);
 const SECOND_REVIEW_STAGE = ['review2', 'Second provider review (asked for by a reviewer)'];
+// harness@2 (HARNESS.md 11.1, 12.1): once every first reading is frozen and the first assessment made, each participant's
+// peer review, then the second (final) assessment. Their rows appear once the API reports a participant phase.
+const PEER_STAGES = [['astra_peer', 'Peer review: Astra (OpenAI GPT-6 Astra)'], ['fable_peer', 'Peer review: Fable (Anthropic Claude Fable 5.1)']];
+const PEER_KINDS = new Set(PEER_STAGES.map(([kind]) => kind));
+const FIRST_ASSESS_LABEL = 'First assessment: check the frozen first readings against references';
+const SECOND_ASSESS_STAGE = ['assess2', 'Second assessment: reconcile both phases (final)'];
+// The stages that start a chain or read the document afresh: an assess after one of them, with no peer stage between,
+// is a first assessment (phasedJobs).
+const CHAIN_KINDS = new Set(['extract', 'analyze', 'predict', 'astra', 'fable']);
 const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
 const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
 // The harness participants (HARNESS.md 1), keyed as the API names them in harness.participants, proposed_by,
@@ -56,6 +65,24 @@ const PARTICIPANT_STATES = {
   blocked: [['pending', 'clock'], 'Blocked', 'Not sent: an unknown outcome must be reconciled before anything is sent again.', 'reconcile'],
   stopped: [STAGE_LOOKS.cancelled, 'Stopped', 'Stopped; nothing was sent for it.'],
 };
+// A participant's peer review (harness.participants[].peer, HARNESS.md 11.1, 12.6), as PARTICIPANT_STATES words a first
+// reading: the row's look, its label, the plain sentence and the words the API's own sentence must contain for the plain
+// one to be left out. not_run is the page's own, where the API serves no peer review and none will be made.
+const PEER_STATES = {
+  waiting: [STAGE_LOOKS.queued, 'Waiting', 'Waiting: the peer reviews start once every first reading is frozen and the first assessment is made.'],
+  running: [STAGE_LOOKS.running, 'In progress', 'Reviewing its peers\' frozen conclusions now.'],
+  stopped: [STAGE_LOOKS.cancelled, 'Stopped', 'Stopped before its peer review finished; Resume runs it.', 'stopped'],
+  done: [STAGE_LOOKS.succeeded, 'Done', 'Answered in peer review, after its first reading was frozen; the review was used.'],
+  refused: [STAGE_LOOKS.unknown, 'Review not used', 'Answered in peer review; the review was not used.', 'not used'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'The peer-review request failed and is not sent again for this revision.', 'failed'],
+  unknown: [STAGE_LOOKS.unknown, 'Outcome unknown', 'Outcome unknown — reconcile before anything is sent again.', 'reconcile'],
+  not_sent: [['muted', 'info'], 'Not run', 'No peer review was sent.'],
+  blocked: [['pending', 'clock'], 'Blocked', 'Not sent: an unknown outcome must be reconciled before anything is sent again.', 'reconcile'],
+  not_configured: [['muted', 'info'], 'Not configured', 'Not configured on this installation.', 'not configured'],
+  not_run: [['muted', 'info'], 'Not run', 'No peer review is recorded for this revision.'],
+};
+// Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
+const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
@@ -67,7 +94,17 @@ const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose
 const DECISION_WORDS = { approved: 'approved{by}', rejected: 'rejected{by}', reinstated: 'reinstated for review{by}; not approved', exclusion_confirmed: 'exclusion confirmed{by}', undecided: 'not decided yet' };
 const NOT_CODED_WORDS = { not_performed_at_this_encounter: 'not performed at this encounter', included_in_another_code: 'included in another code', insufficient_documentation: 'insufficient documentation', outside_gi_scope: 'outside the GI scope', other: 'another reason' };
 const RUN_PROVIDERS = { corti: 'Corti', replay: 'Replay', astra: 'Astra', fable: 'Fable' };
-const RUN_PURPOSES = { primary: 'Primary request', second_review: 'Second review', independent: 'Independent review' };
+const RUN_PURPOSES = { primary: 'Primary request', second_review: 'Second review', independent: 'Independent review', peer_review: 'Peer review' };
+// The runs the Activity tab names by purpose; a primary request reads as before.
+const NAMED_PURPOSES = new Set(['second_review', 'independent', 'peer_review']);
+// harness@2's words (HARNESS.md 11.1-11.4, 12.5): the phase a participant proposed a code or located a passage in, a
+// peer-review position, an assessment's phase, and the facts a reviewer confirms - the engine's own labels.
+const PROPOSED_PHASES = { independent: 'independent reading', peer_review: 'after peer review' };
+const LOCATED_PHASES = { independent: 'in its independent first reading', peer_review: 'in peer review' };
+const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', cannot_tell: 'cannot tell' };
+const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
+const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
+const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
 // Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
 // the AMA's plural marks ("polyp(s)"), "; with", "single or multiple", "when performed", "(separate procedure)", "list
 // separately" - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a model can write one.
@@ -322,6 +359,99 @@ function excerpt(text, limit = EXCERPT_POINTS) {
 function participantText(value) {
   const text = typeof value === 'string' ? value.trim() : '';
   return DESCRIPTOR_LIKE.test(text) ? DESCRIPTOR_WITHHELD : text;
+}
+
+// 'A', 'A and B', 'A, B and C', as the engine joins names.
+function joinWords(items) {
+  return items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+// Participant names in harness order (Corti, Astra, Fable), any other after them as served.
+function inHarnessOrder(names) {
+  const rank = name => (Object.hasOwn(PARTICIPANT_LABELS, name) ? Object.keys(PARTICIPANT_LABELS).indexOf(name) : 99);
+  return [...names].sort((a, b) => rank(a) - rank(b));
+}
+
+// Whether the payload is harness@2's with a model participant in play (HARNESS.md 12.6): harness.phase is 1 or 2, or a
+// participant row carries a peer review. A payload served before harness@2, and a Corti-only one (phase 0, I1), draw
+// none of its rows and the page reads as before.
+function harness2(doc) {
+  const harness = doc?.harness;
+  if (!harness || typeof harness !== 'object') return false;
+  if (harness.phase === 1 || harness.phase === 2) return true;
+  return objects(harness.participants).some(row => row.peer && typeof row.peer === 'object' && !Array.isArray(row.peer) && Object.keys(row.peer).length > 0);
+}
+
+// The phase each participant first proposed a code in (proposal.phases, HARNESS.md 11.1); {} when none is served.
+function proposalPhases(proposal) {
+  const phases = proposal?.phases;
+  return phases && typeof phases === 'object' && !Array.isArray(phases) ? phases : {};
+}
+
+// A code no participant proposed in its independent reading and Corti did not propose: first proposed after peer review,
+// never shown as independent (HARNESS.md 11.1).
+function peerPhaseOnly(proposal) {
+  const proposers = strings(proposal?.proposed_by);
+  const phases = proposalPhases(proposal);
+  return proposers.length > 0 && !proposers.includes('corti') && proposers.every(name => phases[name] === 'peer_review');
+}
+
+// The assess and peer-review jobs of the current revision by phase (HARNESS.md 12.1): an assess a peer stage follows
+// before any other assess is a first assessment; one after a peer stage is the second (final) assessment or a
+// re-assessment of it. A peer row and the second assessment's row show only jobs after the latest first assessment, so
+// an earlier chain's outcome is never shown as the current one's. An assess queued just after the final one (a context
+// change's, or a confirmation's re-assessment) reads as the second until a peer stage follows it: the stages say no more.
+function phasedJobs(stages) {
+  let firstAt = -1;
+  let secondAt = -1;
+  let peered = false;
+  stages.forEach((stage, index) => {
+    const kind = stage?.kind;
+    if (PEER_KINDS.has(kind)) {
+      peered = true;
+    } else if (CHAIN_KINDS.has(kind)) {
+      peered = false;
+    } else if (kind === 'assess') {
+      const next = stages.slice(index + 1).find(item => PEER_KINDS.has(item?.kind) || CHAIN_KINDS.has(item?.kind) || item?.kind === 'assess');
+      if (PEER_KINDS.has(next?.kind) || !peered) firstAt = index;
+      else secondAt = index;
+    }
+  });
+  const after = kind => stages.slice(firstAt + 1).filter(stage => stage?.kind === kind).pop() || null;
+  return { assess: firstAt >= 0 ? stages[firstAt] : null, assess2: secondAt > firstAt ? stages[secondAt] : null, astra_peer: after('astra_peer'), fable_peer: after('fable_peer') };
+}
+
+// "Confirmed from Fable's located passage by <reviewer>" (HARNESS.md 11.3), as the engine words a confirmation.
+function confirmedFrom(confirmation) {
+  const owners = inHarnessOrder(strings(confirmation?.located_by)).map(name => `${lookup(PARTICIPANT_LABELS, name, name)}'s`);
+  const reviewer = textValue(confirmation?.confirmed_by) || 'a reviewer whose name was not recorded';
+  return `Confirmed from ${owners.length ? joinWords(owners) : 'a participant\'s'} located passage by ${reviewer}`;
+}
+
+// Who located a candidate's passage, and in which phase each did (candidate.phases; its phase where none is served):
+// "Located by Astra and Fable in their independent first readings", "..., and by Fable in peer review".
+function locatedBy(candidate) {
+  const phases = candidate?.phases && typeof candidate.phases === 'object' && !Array.isArray(candidate.phases) ? candidate.phases : {};
+  const groups = new Map();
+  for (const name of inHarnessOrder(strings(candidate?.located_by))) {
+    const phase = Object.hasOwn(phases, name) ? phases[name] : candidate.phase;
+    const key = Object.hasOwn(LOCATED_PHASES, phase) ? phase : '';
+    groups.set(key, [...(groups.get(key) || []), lookup(PARTICIPANT_LABELS, name, name)]);
+  }
+  const said = [...groups].map(([phase, names]) => {
+    const where = !phase ? 'in a phase that was not recorded' : names.length === 1 ? LOCATED_PHASES[phase] : LOCATED_PHASES[phase].replace(' its ', ' their ').replace(/reading$/, 'readings');
+    return `${joinWords(names)} ${where}`;
+  });
+  return said.length ? `Located by ${said.join(', and by ')}.` : 'Who located this passage was not recorded.';
+}
+
+// Whether a participant's reference concerns ``code``: a fact ref names its code (fact:<source>:<code>:<field>); a policy
+// passage names none, so it concerns every code.
+function refConcerns(ref, code) {
+  const text = textValue(ref);
+  if (!text.startsWith('fact:')) return Boolean(text);
+  const parts = text.split(':');
+  return parts.length >= 4 && parts[parts.length - 2] === code;
 }
 
 // The documented text the reader kept as the evidence of a service date it could not use (an unread date form, another
@@ -678,8 +808,63 @@ function clarificationParts(clarification) {
 
 function clarificationQuestion(clarification, doc) {
   const { lead, details } = clarificationParts(clarification);
-  const answer = canEdit(doc) ? `${details ? '' : '<br>'}<button type="button" class="button secondary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum</button>` : '';
-  return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(lead)}${details}${answer}</div>`;
+  const candidates = candidateAnswers(clarification, doc);
+  const answer = canEdit(doc) ? `${details || candidates ? '' : '<br>'}<button type="button" class="button secondary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum</button>` : '';
+  return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(lead)}${details}${candidates}${answer}</div>`;
+}
+
+// Quoted passages of the document (a candidate's or a confirmation's spans), each with its page; one not at its position
+// in the current revision is flagged, never passed off as found.
+function quotedSpans(spans, exact) {
+  return objects(spans).map(span => {
+    const page = Number.isInteger(span.page) ? ` (page ${span.page})` : '';
+    return `“${textValue(span.text)}”${page}${exact(span) ? '' : ' — not found at this position in the current revision'}`;
+  });
+}
+
+// A reviewer's confirmation of a question (clarification.confirmation, HARNESS.md 11.3): who located the passage and who
+// confirmed it, the value and passage, the attestation recorded and when. A confirmed fact, never a decision on a code.
+function confirmedAnswer(confirmation, exact) {
+  const value = textValue(confirmation.value);
+  const when = [formatTimestamp(confirmation.created_at), confirmation.confirmed_by_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : ''].filter(Boolean).join(' · ');
+  const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`,
+    [when, 'A confirmed finding is not a decision: each code still needs its own.'].filter(Boolean).join(' · ')];
+  return `<div class="confirmed-answer">${icon('shield')}<div><strong>${escapeHtml(`${confirmedFrom(confirmation)}: ${value || 'no value recorded'}`)}</strong>${lines.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div></div>`;
+}
+
+// The Confirm action of a verified candidate (HARNESS.md 11.3, 12.5): the exact attestation the candidate is served with,
+// which the reviewer ticks before the confirmation is recorded; that same served sentence is what is sent.
+function confirmControl(candidate, clarificationId) {
+  return `<details class="confirm-finding"><summary>Confirm this answer</summary><label class="check-label"><input type="checkbox" data-attest><span>${escapeHtml(textValue(candidate.attestation))}</span></label><p class="form-error" role="alert" hidden></p><button type="button" class="button primary" data-action="confirm-finding" data-clarification="${escapeHtml(clarificationId)}" data-confirm="${escapeHtml(textValue(candidate.id))}" disabled>Record my confirmation ${icon('check')}</button><small class="check-source">Your confirmation is recorded with your name and the time, and it answers only this question. It is not an approval: each code still needs its own decision.</small></details>`;
+}
+
+// One candidate answer (HARNESS.md 12.5): its value in CPT Studio's own words, the passage quoted from the document, who
+// located it and in which phase, whether it is verified (and why not). Only a verified candidate whose passages are at
+// their positions can be confirmed, and only by a member the API allows (permissions.can_confirm).
+function candidateAnswer(candidate, clarificationId, confirmable, exact) {
+  const verified = candidate.verified === true;
+  const spans = objects(candidate.spans);
+  const quotes = quotedSpans(spans, exact);
+  const value = textValue(candidate.value).trim();
+  const why = verified ? 'Verified: its passage is an exact slice of the document and passes the consistency check for this fact. It is still only a candidate.'
+    : `Not verified, so it cannot be confirmed: ${textValue(candidate.why).trim() || 'no reason was recorded.'}`;
+  const action = confirmable && verified && spans.length > 0 && spans.every(exact) && textValue(candidate.attestation) ? confirmControl(candidate, clarificationId) : '';
+  return `<li class="candidate-answer" data-candidate="${escapeHtml(textValue(candidate.id))}" data-verified="${verified}"><span class="participant-head"><strong>${escapeHtml(value || 'No value CPT Studio can state')}</strong>${verified ? badge('green', 'Verified') : badge('amber', 'Not verified')}</span>${(quotes.length ? quotes : ['No passage is cited.']).map(quote => `<p class="candidate-quote">${escapeHtml(quote)}</p>`).join('')}<small class="check-source">${escapeHtml(locatedBy(candidate))}</small><small class="check-source">${escapeHtml(why)}</small>${action}</li>`;
+}
+
+// An open question's candidate answers from the participants' located passages and its confirmation (HARNESS.md 11.3,
+// 12.5, 12.6); '' for a question served with neither (a payload before harness@2, a Corti-only encounter, an assess #1).
+// Agreement is never shown as confirmation: a candidate several participants located is one candidate naming them all.
+function candidateAnswers(clarification, doc) {
+  const candidates = objects(clarification.candidates);
+  const confirmation = clarification.confirmation && typeof clarification.confirmation === 'object' ? clarification.confirmation : null;
+  if (!candidates.length && !confirmation) return '';
+  const exact = exactIn(doc.revision?.text);
+  const id = textValue(clarification.id);
+  const confirmable = !confirmation && doc.permissions?.can_confirm === true && !doc.pipeline?.busy;
+  const items = candidates.map(candidate => candidateAnswer(candidate, id, confirmable, exact)).join('');
+  const list = candidates.length ? `${groupLabel(`Candidate answers from the participants' located passages · ${candidates.length}`)}<ul class="candidate-list">${items}</ul>` : '';
+  return `<div class="candidate-answers" data-question="${escapeHtml(id)}"${confirmation ? ` data-confirmation="${escapeHtml(textValue(confirmation.id))}"` : ''}>${confirmation ? confirmedAnswer(confirmation, exact) : ''}${list}<p class="harness-note">${escapeHtml(CANDIDATE_NOTE)}</p></div>`;
 }
 
 function referenceCheckText(check) {
@@ -704,11 +889,40 @@ function codeStatusLines(proposal) {
   const check = proposal.reference_check && typeof proposal.reference_check === 'object' ? proposal.reference_check : null;
   if (!proposers && !check) return '';
   const lines = [
-    ['Proposed by', proposers?.length ? proposers.map(name => lookup(PARTICIPANT_LABELS, name, name)).join(', ') : 'not recorded'],
+    ['Proposed by', proposers?.length ? proposerText(proposal, proposers) : 'not recorded'],
     ['CMS reference checks', referenceCheckText(check)],
     ['Reviewer decision', decisionWords(proposal)],
   ];
   return `<ul class="code-status-lines" aria-label="Status of this code">${lines.map(([name, value]) => `<li><b>${escapeHtml(name)}:</b> ${escapeHtml(value)}</li>`).join('')}</ul>`;
+}
+
+// Who proposed a code, each participant with the phase it first proposed it in where the API serves one (HARNESS.md
+// 11.1: after peer review is never called independent); a code Corti did not propose says so (11.4).
+function proposerText(proposal, proposers) {
+  const phases = proposalPhases(proposal);
+  const named = proposers.map(name => {
+    const phase = Object.hasOwn(phases, name) ? lookup(PROPOSED_PHASES, phases[name], '') : '';
+    return `${lookup(PARTICIPANT_LABELS, name, name)}${phase ? ` (${phase})` : ''}`;
+  }).join(', ');
+  return proposers.includes('corti') ? named : `${named}; Corti did not propose this code.`;
+}
+
+// The reviewer-confirmed findings this code's checks read (proposal.confirmed, HARNESS.md 11.3): each a fact a reviewer
+// confirmed from a participant's located passage - never the reader's own reading and never a decision on the code,
+// whose own decision line says that apart. '' for a proposal that read none.
+function confirmedFacts(proposal, doc) {
+  const ids = strings(proposal.confirmed);
+  if (!ids.length) return '';
+  const exact = exactIn(doc.revision?.text);
+  const known = [...objects(doc.confirmations), ...objects(doc.clarifications).map(item => item.confirmation).filter(item => item && typeof item === 'object')];
+  const lines = ids.map(id => {
+    const confirmation = known.find(item => item.id === id);
+    if (!confirmation) return `A confirmed finding that is not listed for this revision (${id}).`;
+    const fact = lookup(FINDING_FACTS, confirmation.fact, textValue(confirmation.fact).replace(/_/g, ' ') || 'Fact');
+    const quotes = quotedSpans(confirmation.spans, exact);
+    return `${fact}: ${textValue(confirmation.value) || 'no value recorded'} — ${confirmedFrom(confirmation).replace(/^C/, 'c')}${quotes.length ? ` · ${quotes.join('; ')}` : ''}`;
+  });
+  return `<div class="confirmed-fact">${icon('shield')}<span><strong>Confirmed finding, not a decision</strong>${lines.map(line => `<br>${escapeHtml(line)}`).join('')}</span></div>`;
 }
 
 function positionText(name, position) {
@@ -722,13 +936,43 @@ function positionText(name, position) {
 // What Astra and Fable each said about this code (participant_positions; {} when none is configured): proposed it, did
 // not, advised not to code it (with its reason and the passage it quoted), or gave no reading. A position never decides
 // the code's status (I2), agreement never promotes it (I3), and a contradiction is shown, never voted on.
-function participantPositions(proposal) {
+// harness@2 (heading): the positions are those of the frozen first readings, whatever followed in peer review.
+function participantPositions(proposal, heading = 'What the participants said') {
   const positions = proposal.participant_positions;
   if (!positions || typeof positions !== 'object' || Array.isArray(positions)) return '';
   const rank = name => (Object.hasOwn(PARTICIPANT_LABELS, name) ? Object.keys(PARTICIPANT_LABELS).indexOf(name) : 99);
   const names = Object.keys(positions).filter(name => positions[name] && typeof positions[name] === 'object').sort((a, b) => rank(a) - rank(b));
   if (!names.length) return '';
-  return `<div class="evidence-section participant-positions">${groupLabel('What the participants said')}${names.map(name => `<p class="harness-note">${escapeHtml(positionText(name, positions[name]))}</p>`).join('')}</div>`;
+  return `<div class="evidence-section participant-positions">${groupLabel(heading)}${names.map(name => `<p class="harness-note">${escapeHtml(positionText(name, positions[name]))}</p>`).join('')}</div>`;
+}
+
+// The references the participants retrieved with their own tool calls and those they say they used, for this code
+// (harness.participants[].references and .peer_references, HARNESS.md 11.2): each by participant and phase, a used one
+// marked retrieved or "cited, not retrieved" by CPT Studio's check against that same run. A fact names its code, so only
+// this code's are listed; a policy passage names none, so it is listed on every card. Kept apart from each other and
+// from the reconciliation's retrieval (retrievalSection), never merged. '' for a payload without harness@2.
+function referenceLists(proposal, doc) {
+  if (!harness2(doc)) return '';
+  const retrieved = [];
+  const used = [];
+  for (const row of objects(doc.harness.participants)) {
+    for (const [field, phase] of [['references', 'first reading'], ['peer_references', 'peer review']]) {
+      const refs = row[field] && typeof row[field] === 'object' ? row[field] : {};
+      const who = `${lookup(PARTICIPANT_LABELS, row.name, textValue(row.name) || 'Participant')} · ${phase}`;
+      for (const item of objects(refs.retrieved).filter(entry => refConcerns(entry.ref, proposal.code))) {
+        const window = textValue(item.effective_start) && textValue(item.effective_end) ? `effective ${formatDate(item.effective_start) || item.effective_start} – ${formatDate(item.effective_end) || item.effective_end}` : '';
+        const passage = textValue(item.ref).startsWith('fact:') ? '' : ' (a policy passage, not tied to one code)';
+        retrieved.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)}${passage}`)}<small class="check-source">${escapeHtml([textValue(item.tool), textValue(item.source_key), textValue(item.release), window].filter(Boolean).join(' · '))}</small></li>`);
+      }
+      for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code))) {
+        const checked = item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it';
+        const use = participantText(item.use);
+        used.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)} — ${checked}`)}${use ? `<small class="check-source">${escapeHtml(`Its use: “${use}”`)}</small>` : ''}</li>`);
+      }
+    }
+  }
+  const list = (items, empty) => (items.length ? `<ul class="reference-facts">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`);
+  return `<div class="evidence-section reference-lists">${groupLabel('References the participants retrieved (their own tool calls)')}${list(retrieved, 'No participant retrieved a reference for this code.')}${groupLabel('References the participants say they used')}${list(used, 'No participant cites a reference for this code.')}</div>`;
 }
 
 function textValue(value) {
@@ -745,12 +989,13 @@ function retrievedFrom(item) {
 // The CMS reference facts and passages retrieved for this code (proposal.retrieval, HARNESS.md 5): each fact with its
 // source and release, and each passage - verbatim CMS text - behind its own disclosure. '' for a proposal served before
 // the harness existed.
-function retrievalSection(proposal) {
+// harness@2 (reconciliation): named as the reconciliation's own retrieval beside the participants' (HARNESS.md 11.2).
+function retrievalSection(proposal, reconciliation = false) {
   if (!Array.isArray(proposal.retrieval)) return '';
   const items = proposal.retrieval.filter(item => item && typeof item === 'object');
   const facts = items.filter(item => item.kind === 'fact');
   const passages = items.filter(item => item.kind === 'passage');
-  const heading = groupLabel('CMS reference facts and passages');
+  const heading = groupLabel(reconciliation ? 'CMS reference facts and passages retrieved by the reconciliation' : 'CMS reference facts and passages');
   if (!facts.length && !passages.length) return `<div class="evidence-section reference-retrieval">${heading}<p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p></div>`;
   const factList = facts.length ? `<ul class="reference-facts">${facts.map(fact => `<li><b>${escapeHtml(textValue(fact.label) || textValue(fact.field) || 'Fact')}:</b> ${escapeHtml(textValue(fact.value) || 'not recorded')}<small class="check-source">${escapeHtml(retrievedFrom(fact))}</small></li>`).join('')}</ul>` : '';
   const passageList = passages.map(passage => {
@@ -765,14 +1010,19 @@ function codeCard(proposal, doc, layout) {
   const count = (proposal.evidence || []).length;
   const units = Number.isInteger(proposal.units) && proposal.units > 1 ? `Units: ${proposal.units} · ` : '';
   const second = proposal.support?.origin === 'second_review' ? `<span class="small-badge">Second review</span>` : '';
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${codeStatusLines(proposal)}${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${participantPositions(proposal)}${retrievalSection(proposal)}${decisionLine(proposal)}${cardActions(proposal)}</article>`;
+  // harness@2: a code first proposed in peer review says so (HARNESS.md 11.1); the first readings' positions are named
+  // as such, and the three kinds of references are kept apart (11.2)
+  const peer = peerPhaseOnly(proposal) ? '<span class="small-badge">Proposed after peer review</span>' : '';
+  const phased = harness2(doc);
+  const positions = phased ? participantPositions(proposal, 'What the participants said in their first readings') : participantPositions(proposal);
+  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${peer}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${codeStatusLines(proposal)}${confirmedFacts(proposal, doc)}${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${positions}${referenceLists(proposal, doc)}${retrievalSection(proposal, phased)}${decisionLine(proposal)}${cardActions(proposal)}</article>`;
 }
 
 function clarificationCard(clarification, doc) {
   const family = clarification.family ? familyLabel(doc, clarification.family) : '';
   const answer = canEdit(doc) ? `<button type="button" class="button primary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum ${icon('arrow')}</button>` : '';
   const { lead, details } = clarificationParts(clarification);
-  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><span class="clarification-eyebrow">${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</span><h3 class="clarification-lead">${escapeHtml(lead)}</h3>${details}${answer}</div>`;
+  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><span class="clarification-eyebrow">${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</span><h3 class="clarification-lead">${escapeHtml(lead)}</h3>${details}${candidateAnswers(clarification, doc)}${answer}</div>`;
 }
 
 // What a reviewer did with an excluded candidate, or that a documentation check's exclusion still needs a decision.
@@ -808,7 +1058,7 @@ function candidateItem(proposal, fallback, doc, extra = '') {
   const actions = decisions.concat(addendum).join(' ');
   // A code the bounded second review listed says so here, as the code card's badge, the TXT ("second-review
   // alternative") and the CSV (proposal_origin) do (eus2 F4: its alternatives were drawn like the primary's).
-  const origin = proposal.support?.origin === 'second_review' ? ' · from the second review' : '';
+  const origin = proposal.support?.origin === 'second_review' ? ' · from the second review' : peerPhaseOnly(proposal) ? ' · proposed after peer review' : '';
   return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}${origin}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions + extra);
 }
 
@@ -1045,13 +1295,30 @@ function emptySelectionCopy(assessment, doc) {
   return 'No CPT codes were proposed for this document.';
 }
 
+// Every reviewer-confirmed finding of the current revision (doc.confirmations, HARNESS.md 11.3), after its question has
+// gone too: the fact and value, the passage, who located it and who confirmed it, the attestation and when. A date of
+// service enters as the member's date through the encounter context. None is a decision: '' when none is served.
+function confirmedFindings(doc) {
+  const confirmations = objects(doc.confirmations);
+  if (!confirmations.length) return '';
+  const exact = exactIn(doc.revision?.text);
+  const items = confirmations.map(confirmation => {
+    const fact = lookup(FINDING_FACTS, confirmation.fact, textValue(confirmation.fact).replace(/_/g, ' ') || 'Fact');
+    const when = [formatTimestamp(confirmation.created_at), Number.isInteger(confirmation.revision_number) ? `revision ${confirmation.revision_number}` : '', confirmation.confirmed_by_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : ''].filter(Boolean).join(' · ');
+    const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`,
+      confirmation.fact === 'service_date' ? 'It entered as the member\'s date of service, through the encounter context.' : 'The assessment reads it as documented by this passage; it decides no code.'];
+    return checkItem('', 'shield', `${fact}: ${textValue(confirmation.value) || 'no value recorded'}`, [confirmedFrom(confirmation), when].filter(Boolean).join(' · '), lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
+  }).join('');
+  return `${sectionHeading('Confirmed findings (not decisions)', confirmations.length)}<div class="check-list-card confirmed-findings">${items}</div>`;
+}
+
 function suggestionsPanel(doc, layout) {
   const assessment = doc.assessment;
   const selected = proposalsIn(assessment, 'selected');
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment, doc))}</p></div>`];
-  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${alternativesSection(doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${confirmedFindings(doc)}${documentedServices(doc)}${unsupportedSection(assessment)}${alternativesSection(doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -1111,7 +1378,7 @@ function activityPanel(doc) {
   // the primary request and the second review read as two identical rows).
   // An independent participant's run (Astra, Fable) is named as one, with the model it asked for and the one that answered.
   const runEntries = runs.map(run => timelineEntry(
-    [lookup(RUN_PROVIDERS, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' || run.purpose === 'independent' ? RUN_PURPOSES[run.purpose] : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
+    [lookup(RUN_PROVIDERS, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), NAMED_PURPOSES.has(run.purpose) ? RUN_PURPOSES[run.purpose] : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
     [[run.http_status ? `HTTP ${run.http_status}` : 'No HTTP response recorded', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : '', usageText(run)].filter(Boolean).join(' · '),
       typeof run.requested_model === 'string' && run.requested_model ? `Model requested: ${run.requested_model}${typeof run.returned_model === 'string' && run.returned_model ? `; answered by ${run.returned_model}` : ''}.` : '',
       run.purpose === 'second_review' && Array.isArray(run.scope_items) && run.scope_items.length ? `Asked about: ${run.scope_items.join('; ')}.` : '',
@@ -1131,14 +1398,17 @@ function harnessParticipant(doc, name) {
 // Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
 // first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
 // Astra's and Fable's rows appear once their stage exists or the API's harness lists them; one not configured on this
-// installation says so, never "Not started".
+// installation says so, never "Not started". harness@2 adds each participant's peer review and the second assessment
+// after the first one (phasedJobs reads which assess is which).
 function progressCard(doc) {
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
   const listed = kind => !PARTICIPANT_STAGES.has(kind) || stages.some(item => item?.kind === kind) || Boolean(harnessParticipant(doc, kind));
-  const rows = (stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES).filter(([kind]) => listed(kind));
+  const phased = harness2(doc) || stages.some(item => PEER_KINDS.has(item?.kind)) ? phasedJobs(stages) : null;
+  const base = phased ? [...STAGES.map(([kind, label]) => [kind, kind === 'assess' ? FIRST_ASSESS_LABEL : label]), ...PEER_STAGES, SECOND_ASSESS_STAGE] : STAGES;
+  const rows = (stages.some(item => item?.kind === 'review2') ? [...base, SECOND_REVIEW_STAGE] : base).filter(([kind]) => listed(kind));
   const items = rows.map(([kind, label]) => {
-    const stage = [...stages].reverse().find(item => item?.kind === kind);
-    const participant = harnessParticipant(doc, kind === 'predict' ? 'corti' : kind);
+    const stage = phased && Object.hasOwn(phased, kind) ? phased[kind] : [...stages].reverse().find(item => item?.kind === kind);
+    const participant = harnessParticipant(doc, kind === 'predict' ? 'corti' : PEER_KINDS.has(kind) ? kind.slice(0, -'_peer'.length) : kind);
     if (!stage && participant?.state === 'not_configured') return checkItem('muted', 'info', label, 'Not configured on this installation');
     if (!stage) return checkItem('muted', 'clock', label, 'Not started');
     const [tone, iconName] = lookup(STAGE_LOOKS, stage.state, ['pending', 'info']);
@@ -1151,12 +1421,25 @@ function progressCard(doc) {
 // One row of the Review participants card: what it reports and its short state label, then plain sentences and small
 // notes. The row names what it reports (data-participant) and the state the API gave (data-state), so the browser walk
 // can hold the page to the API.
-function harnessRow(key, rowState, [look, label, labelTone], title, lines, notes = []) {
+// A peer-review row names its participant and the state the API served instead (data-peer, data-peer-state).
+function harnessRow(key, rowState, [look, label, labelTone], title, lines, notes = [], data = '') {
   const [tone, iconName] = look;
   const status = badge(labelTone || (tone === '' ? 'green' : tone.startsWith('pending') ? 'amber' : 'gray'), label);
   const said = lines.filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('');
   const small = notes.filter(Boolean).map(note => `<small class="check-source">${escapeHtml(note)}</small>`).join('');
-  return `<div class="check-item${tone ? ` ${tone}` : ''}" data-participant="${escapeHtml(key)}" data-state="${escapeHtml(rowState)}">${icon(iconName)}<div><span class="participant-head"><strong>${escapeHtml(title)}</strong>${status}</span>${said}${small}</div></div>`;
+  const named = data || `data-participant="${escapeHtml(key)}" data-state="${escapeHtml(rowState)}"`;
+  return `<div class="check-item${tone ? ` ${tone}` : ''}" ${named}>${icon(iconName)}<div><span class="participant-head"><strong>${escapeHtml(title)}</strong>${status}</span>${said}${small}</div></div>`;
+}
+
+// What one participant run's own tool calls retrieved and what its answer says it used (harness.participants[].references
+// or .peer_references, HARNESS.md 11.2), counted; '' when the API serves none or the run has neither.
+function referencesNote(references) {
+  if (!references || typeof references !== 'object') return '';
+  const retrieved = objects(references.retrieved).length;
+  const used = objects(references.used);
+  const cited = used.filter(item => item.retrieved !== true).length;
+  if (!retrieved && !used.length) return '';
+  return `Its own tool calls retrieved ${plural(retrieved, 'reference', 'references')}; it says it used ${used.length}${cited ? `, ${cited} of them cited, not retrieved` : ''}.`;
 }
 
 // A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
@@ -1177,9 +1460,45 @@ function participantRow(participant) {
     unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
     participant.reused === true ? 'Reused the stored answer to an identical request; nothing new was sent.' : '',
     model && returned ? `Model requested: ${model}; answered by ${returned}.` : model ? `Model: ${model}.` : '',
+    referencesNote(participant.references),
   ];
   const title = lookup(PARTICIPANT_TITLES, name, [textValue(participant.label), textValue(participant.vendor)].filter(Boolean).join(' · ') || 'Participant');
   return harnessRow(name || 'participant', textValue(participant.state), [look, label], title, lines, notes);
+}
+
+// The state a participant's peer-review row shows where the API serves no peer review for it ({}), with why: not
+// configured; waiting while processing reaches it; not run when its own first reading was not used (HARNESS.md 11.1);
+// otherwise none recorded, with its stage's outcome where one ran.
+function peerFallback(doc, participant) {
+  const first = textValue(participant.state);
+  if (first === 'not_configured') return ['not_configured', ''];
+  if (!['done', 'waiting', 'running'].includes(first)) return ['not_run', PEER_NOT_RUN];
+  if (doc.pipeline?.busy) return ['waiting', ''];
+  const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
+  const stage = stages.filter(item => item?.kind === `${textValue(participant.name)}_peer`).pop();
+  const outcome = stage ? `Its peer-review stage: ${lookup(STAGE_STATES, stage.state, textValue(stage.state) || 'state not recorded')}${textValue(stage.error) ? ` — ${stage.error}` : ''}.` : '';
+  return ['not_run', [PEER_STATES.not_run[2], outcome].filter(Boolean).join(' ')];
+}
+
+// A model participant's peer review (HARNESS.md 11.1, 12.6): its state as the API serves it (peer.state, with its
+// sentence), or the page's own reading where it serves none; the codes it proposed after peer review, never independent;
+// its unfound quotes; and what that run's own tool calls retrieved and what it says it used.
+function peerRow(doc, participant) {
+  const name = textValue(participant.name);
+  const peer = participant.peer && typeof participant.peer === 'object' && !Array.isArray(participant.peer) ? participant.peer : {};
+  const served = textValue(peer.state);
+  const [shown, why] = served ? [served, textValue(peer.detail).trim()] : peerFallback(doc, participant);
+  const [look, label, plain, required] = lookup(PEER_STATES, shown, [['pending', 'info'], 'State not recorded', 'The state of this peer review was not recorded.', 'not recorded']);
+  const lines = !why ? [plain] : required && !why.toLowerCase().includes(required) ? [plain, why] : [why];
+  const codes = strings(peer.codes_added);
+  const unverified = Number.isInteger(peer.unverified_quotes) && peer.unverified_quotes > 0 ? peer.unverified_quotes : 0;
+  const notes = [
+    codes.length ? `Codes it proposed after peer review, never independent: ${codes.join(', ')}.` : shown === 'done' ? 'It proposed no code after peer review.' : '',
+    unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
+    referencesNote(participant.peer_references),
+  ];
+  const title = `Peer review: ${lookup(PARTICIPANT_TITLES, name, textValue(participant.label) || 'Participant')}`;
+  return harnessRow(name, served, [look, label], title, lines, notes, `data-peer="${escapeHtml(name)}" data-peer-state="${escapeHtml(served)}"`);
 }
 
 function referenceRow(reference) {
@@ -1205,7 +1524,9 @@ function clarificationRow(doc) {
   // stopped, the outcome is unknown), and nothing asks a question until one is.
   if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked: a question is asked only where the documentation leaves open something that changes the coding.']);
   if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
-  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum.`], [note]);
+  // harness@2: a question with a verified candidate can also be answered by a reviewer's confirmation (HARNESS.md 11.3)
+  const confirmable = openClarifications(doc).some(item => objects(item.candidates).some(candidate => candidate.verified === true));
+  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum${confirmable ? ', or by a reviewer confirming a verified candidate answer' : ''}.`], [note]);
   return harnessRow('clarification', 'none', [STAGE_LOOKS.succeeded, 'None open'], 'Clarification', ['No question is open for this revision.'], [note]);
 }
 
@@ -1220,7 +1541,14 @@ function finalRow(doc) {
   const said = doc.readiness?.reviewed === true
     ? `Every selected code has a reviewer's decision.${hasAgentDecision(doc) ? ' Includes agent-executed synthetic review — not clinical approval.' : ''}`
     : 'A code is approved only by a workspace member\'s decision; agreement between participants approves nothing.';
-  return harnessRow('final', stateName, [look, incomplete ? `${label} · coding incomplete` : label, tone], 'Final status', [said]);
+  return harnessRow('final', stateName, [look, incomplete ? `${label} · coding incomplete` : label, tone], 'Final status', [said], [phaseNote(doc)]);
+}
+
+// Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only.
+function phaseNote(doc) {
+  if (!harness2(doc)) return '';
+  if (doc.harness.phase === 2) return 'Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.';
+  return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review is recorded for this revision.';
 }
 
 // The Review participants card (HARNESS.md 7) heads the review column in every state, processing included: Corti, Astra,
@@ -1230,6 +1558,8 @@ function participantsCard(doc) {
   const harness = doc?.harness;
   if (!harness || typeof harness !== 'object' || !Array.isArray(harness.participants)) return '';
   const rows = harness.participants.filter(item => item && typeof item === 'object').map(participantRow);
+  // harness@2: each model participant's peer review after every first reading (HARNESS.md 11.1)
+  if (harness2(doc)) rows.push(...objects(harness.participants).filter(item => item.name === 'astra' || item.name === 'fable').map(item => peerRow(doc, item)));
   rows.push(referenceRow(harness.reference_validation), clarificationRow(doc), finalRow(doc));
   const trace = doc.permissions?.is_owner === true ? `<div class="progress-actions"><a class="button secondary" href="#/encounters/${escapeHtml(encodeURIComponent(doc.id))}/trace">${icon('file')}Open the trace</a><p>Owner only: every request with its endpoint, models, usage and estimated cost, each reading in full, the retrieved references and the reconciliation.</p></div>` : '';
   return `<div class="check-list-card participants-card"><div class="panel-heading">${icon('shield')}<h2>Review participants</h2><span class="small-badge">Approval stays with a reviewer</span></div>${rows.join('')}${trace}</div>`;
@@ -1244,7 +1574,7 @@ function reconcileCard(doc) {
   const canReview = doc.permissions?.can_review;
   // An independent participant's request is named: its unknown outcome blocks every send for the encounter too.
   const participant = PARTICIPANT_STAGES.has(run?.provider) ? PARTICIPANT_TITLES[run.provider] : '';
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([participant, run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
+  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([participant, run.purpose === 'second_review' || run.purpose === 'peer_review' ? RUN_PURPOSES[run.purpose] : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
   const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
   const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
@@ -1286,7 +1616,7 @@ function stateCards(doc) {
     // say what was recorded instead of telling the member they stopped it.
     const cause = [...stages].reverse().find(stage => stage.state === 'cancelled' && stage.error);
     if (doc.pipeline?.stopped_by_member === false && cause) {
-      const label = lookup(Object.fromEntries(STAGES), cause.kind, 'A processing stage');
+      const label = lookup(Object.fromEntries([...STAGES, ...PEER_STAGES]), cause.kind, 'A processing stage');
       cards.push(infoCard('Processing did<br>not finish.', [`${label}: ${cause.error}`, 'Nothing was resent automatically.'], resume));
     } else {
       cards.push(infoCard('Processing was<br>stopped.', ['Queued stages were cancelled, and no unsent provider request is made unless processing is resumed.'], resume));
@@ -1382,16 +1712,95 @@ function traceReading(reading) {
     const lesions = objects(service.lesions).map(lesion => `Lesion: ${['site', 'size', 'morphology', 'action', 'specimen'].map(key => (participantText(lesion[key]) ? `${key} ${participantText(lesion[key])}` : '')).filter(Boolean).join(', ') || 'nothing recorded'}`);
     return `<li><b>${escapeHtml(head || 'Service')}</b>${[...lines, ...lesions].filter(Boolean).map(line => `<br>${escapeHtml(line)}`).join('')}${traceQuotes(service.evidence)}</li>`;
   });
-  const codes = objects(reading.codes).map(code => {
-    const head = [`${textValue(code.code) || 'No code'}${ids(code.modifiers) ? ` (modifiers ${ids(code.modifiers)})` : ''}`, Number.isInteger(code.units) ? `units ${code.units}` : '', textValue(code.confidence) ? `confidence ${code.confidence}` : '', ids(code.service_ids) ? `services ${ids(code.service_ids)}` : ''].filter(Boolean).join(' · ');
-    const basis = participantText(code.basis);
-    return `<li><b>${escapeHtml(head)}</b>${basis ? `<br>${escapeHtml(`Basis: ${basis}`)}` : ''}${traceQuotes(code.evidence)}</li>`;
-  });
+  const codes = objects(reading.codes).map(code => traceCode(code));
   const notCoded = objects(reading.not_coded).map(item => `<li><b>${escapeHtml([textValue(item.code) || 'No code named', lookup(NOT_CODED_WORDS, item.reason, textValue(item.reason) || 'reason not recorded'), ids(item.service_ids) ? `services ${ids(item.service_ids)}` : ''].filter(Boolean).join(' · '))}</b>${traceQuotes(item.evidence)}</li>`);
   const questions = objects(reading.questions).map(item => `<li><b>${escapeHtml(participantText(item.question) || 'Question not recorded')}</b>${participantText(item.why) ? `<br>${escapeHtml(`Why: ${participantText(item.why)}`)}` : ''}${ids(item.service_ids) ? `<br>${escapeHtml(`Services: ${ids(item.service_ids)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
   const issues = objects(reading.extraction_issues).map(item => `<li>${escapeHtml(`Page ${textValue(item.page) || 'not given'}: ${participantText(item.issue) || 'no issue recorded'}`)}</li>`);
   const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
-  return `<div class="trace-reading">${fields}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Services', services, 'No service listed.')}${group('Codes proposed', codes, 'No code proposed.')}${group('Considered and not coded', notCoded, 'Nothing listed.')}${group('Questions (notes; they never hold the report)', questions, 'No question.')}${group('Extraction issues', issues, 'None reported.')}</div>`;
+  // harness@2: the references it says it used, each checked against this run's own tool calls (HARNESS.md 11.2)
+  const used = Array.isArray(reading.references_used) ? group('References it says it used', traceReferencesUsed(reading.references_used), 'None cited.') : '';
+  return `<div class="trace-reading">${fields}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Services', services, 'No service listed.')}${group('Codes proposed', codes, 'No code proposed.')}${group('Considered and not coded', notCoded, 'Nothing listed.')}${group('Questions (notes; they never hold the report)', questions, 'No question.')}${group('Extraction issues', issues, 'None reported.')}${used}</div>`;
+}
+
+// One code a participant proposed, with what it stated and the quotes it gave; ``after``: said of a code first proposed
+// in peer review (HARNESS.md 11.1).
+function traceCode(code, after = '') {
+  const ids = value => strings(value).join(', ');
+  const head = [`${textValue(code.code) || 'No code'}${ids(code.modifiers) ? ` (modifiers ${ids(code.modifiers)})` : ''}`, Number.isInteger(code.units) ? `units ${code.units}` : '', textValue(code.confidence) ? `confidence ${code.confidence}` : '', ids(code.service_ids) ? `services ${ids(code.service_ids)}` : '', after].filter(Boolean).join(' · ');
+  const basis = participantText(code.basis);
+  return `<li><b>${escapeHtml(head)}</b>${basis ? `<br>${escapeHtml(`Basis: ${basis}`)}` : ''}${traceQuotes(code.evidence)}</li>`;
+}
+
+// The references a participant's answer says it used (references_used), each with CPT Studio's check against that run's
+// own tool calls: one it cited and never retrieved is marked so, never shown as retrieved (HARNESS.md 11.2).
+function traceReferencesUsed(items) {
+  return objects(items).map(item => {
+    const use = participantText(item.use);
+    return `<li><b>${escapeHtml(`${textValue(item.ref) || 'Reference not named'} — ${item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved'}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
+  });
+}
+
+// A peer review in full (HARNESS.md 11.1; the PeerReview the trace serves as ``review``): refused whole or read, the frozen
+// inputs it was shown with their sha256, its answers to CPT Studio's open questions (by question id), its positions on
+// codes, the codes it proposed after peer review (never independent), the references it says it used and its problems.
+// Its free text is a model's, so anything that reads like a CPT descriptor is withheld.
+function traceReview(review) {
+  if (!review || typeof review !== 'object') return '<div class="trace-reading"><p class="harness-note">No peer review is recorded for this request.</p></div>';
+  const fields = traceFields([
+    ['Peer review', review.refused === true ? 'Refused whole: none of it was read or used' : 'Read'],
+    ['Unverified quotes', `${Number.isInteger(review.unverified_quotes) ? review.unverified_quotes : 0} (never used as evidence)`],
+    ['Review version', shownOr(review.review_version)],
+  ]);
+  const frozen = (Array.isArray(review.frozen_inputs) ? review.frozen_inputs : []).filter(Array.isArray).map(([name, digest]) => [textValue(name) || 'input', textValue(digest) || 'not recorded']);
+  const problems = strings(review.problems).map(problem => `<li>${escapeHtml(problem)}</li>`);
+  const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'It says the document does not settle it.')}${traceQuotes(answer.evidence)}</li>`);
+  const positions = objects(review.positions).map(item => `<li><b>${escapeHtml(`${textValue(item.code) || 'No code'} · ${lookup(PEER_POSITIONS, item.position, textValue(item.position) || 'position not recorded')}`)}</b>${participantText(item.reason) ? `<br>${escapeHtml(`Why: ${participantText(item.reason)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
+  const added = objects(review.additional_codes).map(code => traceCode(code, 'proposed after peer review, never independent'));
+  const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
+  return `<div class="trace-reading">${fields}${groupLabel('Frozen inputs it was shown')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded.</p>'}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Answers to the open questions', answers, 'No answer.')}${group('Positions on codes', positions, 'No position.')}${group('Codes proposed after peer review', added, 'No code proposed.')}${group('References it says it used', traceReferencesUsed(review.references_used), 'None cited.')}</div>`;
+}
+
+// Each HTTP exchange of a participant run's tool loop (HARNESS.md 11.2) with the tool calls CPT Studio executed for it:
+// the tool, its arguments as the participant wrote them, the refs returned and the result's sha256. '' for a run served
+// without exchanges (before harness@2) and for one with none (Corti's).
+function traceExchanges(run) {
+  const exchanges = objects(run.exchanges);
+  if (!exchanges.length) return '';
+  const items = exchanges.map(exchange => {
+    const usage = usagePairs(exchange.usage && typeof exchange.usage === 'object' ? exchange.usage : {});
+    const fields = traceFields([
+      ['Turn', shownOr(exchange.turn)],
+      ['State', lookup(RUN_STATES, exchange.state, shownOr(exchange.state))],
+      ['HTTP status', Number.isInteger(exchange.http_status) ? String(exchange.http_status) : 'No HTTP response recorded'],
+      ['Latency', typeof exchange.latency_ms === 'number' ? `${(exchange.latency_ms / 1000).toFixed(1)} s` : 'Not recorded'],
+      ['Usage', usage.length ? usage.join(' · ') : 'Not reported'],
+      ['Request sha256', shownOr(exchange.request_sha256)],
+      ['Response sha256', shownOr(exchange.response_sha256)],
+      ['Vendor request id', shownOr(exchange.provider_request_id)],
+      ['Response id', shownOr(exchange.response_id)],
+      ['Error', shownOr(exchange.error, 'None')],
+    ]);
+    const calls = objects(exchange.tool_calls).map(call => {
+      const written = JSON.stringify(call.arguments ?? null);
+      const where = [textValue(call.result_sha256) ? `result sha256 ${call.result_sha256}` : 'no result sha256 recorded', formatTimestamp(call.executed_at) ? `executed ${formatTimestamp(call.executed_at)}` : ''].filter(Boolean).join(' · ');
+      return `<li><b>${escapeHtml(`${textValue(call.tool) || 'Tool not named'}${textValue(call.call_id) ? ` (${call.call_id})` : ''}`)}</b><br>${escapeHtml(`Arguments: ${DESCRIPTOR_LIKE.test(written) ? DESCRIPTOR_WITHHELD : written}`)}<br>${escapeHtml(`Refs returned: ${strings(call.refs).join(', ') || 'none'}`)}<small class="check-source">${escapeHtml(where)}</small></li>`;
+    });
+    return `<div class="trace-exchange">${fields}${calls.length ? `<ul class="trace-list">${calls.join('')}</ul>` : '<p class="harness-note">No tool call in this exchange.</p>'}</div>`;
+  });
+  return `<div class="trace-reading">${groupLabel(`Exchanges · ${exchanges.length}`)}${items.join('')}</div>`;
+}
+
+// Each assessment of the revision (HARNESS.md 12.3), oldest first: its phase, whether it is its chain's final one and the
+// current one, and the sha256 of every frozen phase-1 output it recorded.
+function traceAssessments(entries) {
+  const list = objects(entries);
+  if (!list.length) return '<div class="check-list-card"><p class="harness-note">No assessment is recorded for this revision.</p></div>';
+  return list.map(entry => {
+    const title = [lookup(ASSESSMENT_PHASES, String(entry.phase), 'Phase not recorded'), entry.final === true ? 'final' : 'not final', entry.current === true ? 'current' : ''].filter(Boolean).join(' · ');
+    const fields = traceFields([['Assessment', shownOr(entry.id)], ['Created', formatTimestamp(entry.created_at) || 'Not recorded']]);
+    const frozen = (Array.isArray(entry.frozen) ? entry.frozen : []).filter(Array.isArray).map(([name, digest]) => [textValue(name) || 'input', textValue(digest) || 'not recorded']);
+    return `<div class="check-list-card">${groupLabel(title)}${fields}${groupLabel('Frozen phase-1 outputs (sha256)')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded: no model participant\'s first reading was frozen for it.</p>'}</div>`;
+  }).join('');
 }
 
 // One request of one participant, with every field its run records (HARNESS.md 6), then the reading made of it.
@@ -1421,8 +1830,14 @@ function traceRun(run) {
     ['Reused from', shownOr(run.reused_from, 'Not reused')],
     ['Error', shownOr(run.error, 'None')],
   ];
+  // harness@2's run identity and who asked (HARNESS.md 6), where the trace serves them
+  if ('run_identity' in run) {
+    fields.splice(1, 0, ['Mode', lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, shownOr(run.mode))], ['Run identity (client request id)', shownOr(run.run_identity)]);
+    fields.push(['Sent', run.sent === true ? 'Yes' : run.sent === false ? 'No' : 'Not recorded'], ['Requested by', shownOr(run.requested_by)], ['Authorization reference', shownOr(run.authorization_ref)], ['Reconciled', run.reconciled === true ? 'Yes, by a member' : 'No']);
+  }
   const title = [lookup(RUN_PURPOSES, run.purpose, ''), lookup(RUN_STATES, run.state, shownOr(run.state, 'State not recorded'))].filter(Boolean).join(' · ');
-  return `<div class="check-list-card trace-run">${groupLabel(title)}${traceFields(fields)}${traceReading(run.reading)}</div>`;
+  const answer = run.purpose === 'peer_review' ? traceReview(run.review) : traceReading(run.reading);
+  return `<div class="check-list-card trace-run">${groupLabel(title)}${traceFields(fields)}${traceExchanges(run)}${answer}</div>`;
 }
 
 // The retrieval traces (Assessment.retrieval, HARNESS.md 5): per code, each fact looked up and each CMS passage retrieved,
@@ -1486,7 +1901,9 @@ function traceView(trace, id) {
     const about = [textValue(participant.vendor), model ? `model ${model}` : 'no model named (its API takes none)'].filter(Boolean).join(' · ');
     return `${sectionHeading(title, plural(runs.length, 'request', 'requests'))}<p class="section-description">${escapeHtml(about)}</p><div class="card-stack">${runs.length ? runs.map(traceRun).join('') : '<div class="check-list-card"><p class="harness-note">No request is recorded for this participant on this revision.</p></div>'}</div>`;
   }).join('');
-  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="heading-row review-heading"><div><span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span><h1>${escapeHtml(textValue(encounter.title) || 'Document trace')}</h1><div class="review-meta">${meta}</div></div></div><p class="checks-disclaimer">Costs are estimated from fixed, dated vendor rates and are not reconciled to an invoice; Corti reports credits, not USD. Each hash names the exact stored request or raw response.</p>${participants}${sectionHeading('Reference retrieval', objects(data.retrieval).length)}<div class="card-stack">${retrievalTraces(data.retrieval)}</div>${sectionHeading('Reconciliation', objects(data.reconciliation).length)}${traceReconciliation(data.reconciliation)}</section>`;
+  // harness@2: each assessment of the revision with the frozen phase-1 outputs it recorded (HARNESS.md 12.3)
+  const assessments = Array.isArray(data.assessments) ? `${sectionHeading('Assessments of this revision', objects(data.assessments).length)}<div class="card-stack">${traceAssessments(data.assessments)}</div>` : '';
+  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="heading-row review-heading"><div><span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span><h1>${escapeHtml(textValue(encounter.title) || 'Document trace')}</h1><div class="review-meta">${meta}</div></div></div><p class="checks-disclaimer">Costs are estimated from fixed, dated vendor rates and are not reconciled to an invoice; Corti reports credits, not USD. Each hash names the exact stored request or raw response.</p>${participants}${assessments}${sectionHeading('Reference retrieval', objects(data.retrieval).length)}<div class="card-stack">${retrievalTraces(data.retrieval)}</div>${sectionHeading('Reconciliation', objects(data.reconciliation).length)}${traceReconciliation(data.reconciliation)}</section>`;
 }
 
 // What the trace page says when the API refuses it: a 403 plainly (the trace is the owner's), never as an error to retry.
@@ -2205,6 +2622,50 @@ function requestSecondReview(button) {
   });
 }
 
+// What a confirmation did (POST .../confirm answers the confirmation and its effect, HARNESS.md 12.5): a date of service
+// entered as the member's date, or a re-assessment that reads the finding. Neither approves anything.
+function confirmedMessage(result) {
+  const confirmation = result?.confirmation && typeof result.confirmation === 'object' ? result.confirmation : result || {};
+  const fact = lookup(FINDING_FACTS, confirmation.fact, 'The finding');
+  const value = textValue(confirmation.value);
+  if (result?.effect === 'context') return `Confirmed: ${fact.toLowerCase()} ${value} entered as your date, and the codes are being re-checked. Nothing was approved.`;
+  if (result?.effect === 'reassessment') return `Confirmed: ${fact.toLowerCase()} ${value}. The codes are being re-checked with the confirmed finding; nothing was approved.`;
+  return 'Confirmation recorded. Nothing was approved.';
+}
+
+// A reviewer's confirmation of one verified candidate (HARNESS.md 11.3, 12.5): the attestation must be ticked, and what is
+// sent is the candidate's served attestation, never text rebuilt here. A member act: nothing ever confirms by itself.
+function confirmFinding(button) {
+  if (!state.doc || !button) return undefined;
+  const clarificationId = button.dataset.clarification;
+  const candidateId = button.dataset.confirm;
+  const box = button.closest('.confirm-finding');
+  const error = box?.querySelector('.form-error');
+  const fail = message => {
+    if (!error) return toast(message);
+    error.textContent = message;
+    error.hidden = false;
+    return undefined;
+  };
+  const question = (state.doc.clarifications || []).find(item => item?.id === clarificationId);
+  const candidate = objects(question?.candidates).find(item => item.id === candidateId);
+  if (!candidate || candidate.verified !== true || !textValue(candidate.attestation) || state.doc.permissions?.can_confirm !== true) {
+    return fail('This answer can no longer be confirmed here. Reload the page.');
+  }
+  if (box?.querySelector('input[data-attest]')?.checked !== true) return fail('Tick the attestation first: confirm that you read this passage in the source document.');
+  return guarded(`confirm:${clarificationId}`, async () => {
+    setBusy(button, true);
+    if (error) error.hidden = true;
+    try {
+      const result = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/clarifications/${encodeURIComponent(clarificationId)}/confirm`, { method: 'POST', json: { candidate_id: candidate.id, attestation: candidate.attestation } });
+      await afterChange(confirmedMessage(result));
+    } catch (failure) {
+      fail(failure.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function submitReconcile(form) {
   if (!state.doc) return undefined;
   const note = $('#reconcileNote').value.trim();
@@ -2326,8 +2787,16 @@ function onClick(event) {
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
     'second-review': () => requestSecondReview(action),
+    'confirm-finding': () => confirmFinding(action),
     retry: route,
   })[action.dataset.action]?.();
+}
+
+// The confirm action is offered once its attestation is ticked.
+function onChange(event) {
+  const box = event.target.matches?.('input[data-attest]') ? event.target.closest('.confirm-finding') : null;
+  const button = box?.querySelector('[data-action="confirm-finding"]');
+  if (button && !button.hasAttribute('aria-busy')) button.disabled = !event.target.checked;
 }
 
 function onKeydown(event) {
@@ -2378,6 +2847,7 @@ function bindDragAndDrop() {
 
 function boot() {
   document.addEventListener('click', onClick);
+  document.addEventListener('change', onChange);
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('input', event => { if (event.target.id === 'documentSearch') applySearch(); });
   document.addEventListener('submit', event => {
@@ -2416,6 +2886,8 @@ if (typeof module === 'object' && module.exports) {
     codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,
     serviceDateMeta, participantsCard, codeStatusLines, participantPositions, retrievalSection, participantText, traceView,
     traceFailure, showTrace, STAGES, PARTICIPANT_STATES, DESCRIPTOR_LIKE, DESCRIPTOR_WITHHELD,
+    PEER_STAGES, PEER_STATES, PEER_NOT_RUN, CANDIDATE_NOTE, harness2, phasedJobs, peerPhaseOnly, confirmedFrom, locatedBy,
+    candidateAnswers, referenceLists, confirmedFindings, confirmFinding, confirmedMessage, onChange,
   };
 }
 if (typeof document !== 'undefined') boot();
