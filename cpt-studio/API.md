@@ -394,7 +394,16 @@ for the reviewer's actor kind (`acknowledgement` in `GET /api/session`;
 surrounding whitespace is ignored); any other text, or none, answers 400, so a page
 loaded before the attestation changed is told to reload. → `201 {decision}`; 400 when the
 action is not one of the five (any other text, none, or not a string); 409 when the
-action is not allowed for that proposal now. A documentation check's exclusion
+action is not allowed for that proposal now. harness@2 (HARNESS.md 12.1): a decision
+is recorded on its chain's final assessment only - while the current assessment is an
+assess #1 whose peer stages are owed, every proposal's `allowed_actions` is `[]`, a
+decision answers 409 "The peer reviews of this document have not finished: a decision
+is recorded on its final assessment.", and `readiness.blockers` lists "The peer reviews
+have not finished: decisions are recorded on the final assessment". Decisions carry
+between final assessments only: persisting such an assess #1 neither carries nor
+invalidates one, and the next final assessment carries (or invalidates, with its reason)
+each current decision of the assessment that holds them; a new revision invalidates them
+there. A documentation check's exclusion
 (`bucket` excluded, `reinstatable` true) is a recommendation, not a final
 outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and
 `readiness.blockers` lists "<code> was excluded by a documentation check:

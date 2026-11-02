@@ -24,7 +24,11 @@ from studio.providers.base import canonical_body
 from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
+from tests.test_harness2_pipeline import TWO_EXTENTS
+from tests.test_harness2_pipeline import ColonCase as PipelineColonCase
+from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness_api import DESCRIPTOR_LIKE, UNLISTED_ONE
+from tests.test_pipeline_api import drain
 from tests.test_participants_support import NOTE, PAGES, astra_with, fable_with, fixture_reading
 
 BOTH = dict(ASTRA_MODE='replay', FABLE_MODE='replay')
@@ -709,3 +713,144 @@ class DescriptorLikeTextTests(Harness2Case):
         snap = reports.snapshot(self.encounter, 'draft')
         for content in (reports.render_txt(snap), reports.render_csv(snap)):
             self.assertNotIn(DESCRIPTOR_LIKE, content.decode('utf-8'))
+
+
+# --- decisions carry between FINAL assessments only (refutation r1 repair plan, Q1) -----------------------------------
+#
+# The real pipeline (tests.test_harness2_pipeline's replayed participants, scripted loops, the real engine): a context
+# change makes a new assess #1, which owes the peer stages, then its assess #2. Persisted, assess #1 used to carry or
+# invalidate the decisions of the final assessment before it - and assess #1 does not have the codes a peer review adds,
+# so a code whose checks read them (45385's endoscopic base reads 45378, which Fable adds in peer review) had its
+# approval invalidated there, and assess #2 had nothing left to carry.
+
+NOT_FINAL = 'The peer reviews of this document have not finished: a decision is recorded on its final assessment.'
+NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment'
+
+
+class _Decisions:
+    def detail(self, encounter_id):
+        response = self.client.get(f'/api/encounters/{encounter_id}')
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def proposal_of(self, encounter_id, code):
+        return next(p for p in self.detail(encounter_id)['assessment']['proposals'] if p['code'] == code)
+
+    def decide(self, encounter_id, code, action='approve'):
+        proposal = self.proposal_of(encounter_id, code)
+        body = {'proposal_id': proposal['id'], 'action': action}
+        if action == 'approve':
+            body['acknowledgement'] = review.ACKNOWLEDGEMENTS['human']
+        return self.post(f'/api/encounters/{encounter_id}/decisions', body)
+
+    def approve(self, encounter_id, code):
+        response = self.decide(encounter_id, code)
+        self.assertEqual(response.status_code, 201, response.content)
+        return models.Decision.objects.get(pk=response.json()['id'])
+
+    def created(self, assessment):
+        """(carried, invalidated) as persisting ``assessment`` recorded them (its 'assessment.created' audit row)."""
+        event = models.AuditEvent.objects.get(event='assessment.created', data__assessment=str(assessment.pk))
+        return event.data['carried'], event.data['invalidated']
+
+    def change_context(self, encounter_id, **values):
+        before = len(self.assessments(encounter_id))
+        response = self.post(f'/api/encounters/{encounter_id}/context', values)
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        later = self.assessments(encounter_id)[before:]
+        self.assertEqual([jobs.assessment_phase(a) for a in later], [1, 2])  # a new assess #1, then its assess #2
+        return later
+
+
+class DecisionCarryTests(_Decisions, PipelineColonCase):
+    def confirm_extent(self, encounter_id):
+        """A reviewer confirms sel:0's extent (45385) through the endpoint, from the verified candidate Astra's peer
+        review located (HARNESS.md 12.5); the re-assessment it queues runs."""
+        detail = self.detail(encounter_id)
+        snare = next(p['id'] for p in detail['assessment']['proposals'] if p['key'] == 'sel:0')
+        question = next(c for c in detail['clarifications'] if c['proposal_id'] == snare and c['fact'] == 'extent')
+        candidate = next(c for c in question['candidates'] if c['verified'])
+        attestation = candidates.attestation(candidate['value'])
+        response = self.post(f'/api/encounters/{encounter_id}/clarifications/{question["id"]}/confirm',
+                             {'candidate_id': candidate['id'], 'attestation': attestation})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+
+    def test_an_approval_crosses_the_intermediate_assess_one_and_the_next_final_assessment_carries_it(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        self.confirm_extent(encounter_id)
+        approved = self.approve(encounter_id, '45385')  # on the final assessment, which reads Fable's 45378
+        first, final = self.change_context(encounter_id, billing_context='professional')
+        # assess #1 owed the peer stages: it neither carried nor invalidated a decision, and none is recorded on it
+        self.assertEqual(self.created(first), (0, 0))
+        self.assertFalse(first.decisions.exists())
+        self.assertFalse(models.DecisionInvalidation.objects.filter(decision=approved).exists())
+        # the final assessment carried it from the last final one, where its fingerprint is unchanged
+        carried = final.decisions.get()
+        self.assertEqual((carried.action, carried.carried_from_id, carried.proposal.code, self.created(final)),
+                         ('approve', approved.pk, '45385', (1, 0)))
+        self.assertEqual(self.proposal_of(encounter_id, '45385')['decision_state'], 'approved')
+
+
+class DecisionInvalidationTests(_Decisions, PipelineCase):
+    def test_an_approval_whose_final_fingerprint_changed_is_invalidated_by_the_final_assessment_with_its_reason(self):
+        encounter_id = self.create()
+        drain()
+        approved = self.approve(encounter_id, '99213')
+        first, final = self.change_context(encounter_id, billing_context='facility')  # an E/M reads the billing context
+        self.assertEqual(self.created(first), (0, 0))  # assess #1 invalidates nothing
+        self.assertEqual(self.created(final), (0, 1))
+        invalidation = models.DecisionInvalidation.objects.get(decision=approved)
+        self.assertEqual(invalidation.by_context_id, final.context_id)
+        self.assertTrue(invalidation.reason.startswith('Re-assessed after changes (billing context'),
+                        invalidation.reason)
+        self.assertFalse(final.decisions.exists())
+        self.assertEqual(self.proposal_of(encounter_id, '99213')['decision_state'], 'undecided')
+
+    def stop_after_assess_one(self, encounter_id):
+        """Run the chain to its assess #1, whose first peer stage is then queued, and Stop it there."""
+        jobs.run_job(self.run_until('assess'))
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        first = self.encounter(encounter_id).current_assessment
+        self.assertEqual((jobs.assessment_phase(first), review.is_final(first), self.jobs_of(encounter_id)[-1].kind),
+                         (1, False, 'astra_peer'))
+        return first
+
+    def test_an_addendum_invalidates_the_decisions_the_last_final_assessment_holds(self):
+        # while an assess #1 that owes peer stages is current, the current decisions are still the final one's: a new
+        # revision invalidates them there, at once (never left current until a later final assessment)
+        encounter_id = self.create()
+        drain()
+        approved = self.approve(encounter_id, '99213')
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'facility'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.stop_after_assess_one(encounter_id)
+        self.assertFalse(models.DecisionInvalidation.objects.filter(decision=approved).exists())
+        response = self.post(f'/api/encounters/{encounter_id}/addenda',
+                             {'text': 'Addendum (synthetic): no change to the visit.', 'clarification_id': None,
+                              'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content)
+        revision = self.encounter(encounter_id).current_revision
+        invalidation = models.DecisionInvalidation.objects.get(decision=approved)
+        self.assertEqual((invalidation.by_revision_id, invalidation.reason),
+                         (revision.pk, review.revised_reason(revision)))
+
+    def test_no_decision_is_recorded_on_an_assessment_whose_peer_reviews_have_not_finished(self):
+        encounter_id = self.create()
+        self.stop_after_assess_one(encounter_id)
+        detail = self.detail(encounter_id)
+        self.assertEqual([p['allowed_actions'] for p in detail['assessment']['proposals']],
+                         [[] for _ in detail['assessment']['proposals']])
+        response = self.decide(encounter_id, '99213')
+        self.assertEqual((response.status_code, response.json()['error']), (409, NOT_FINAL))
+        self.assertFalse(models.Decision.objects.filter(encounter_id=encounter_id).exists())
+        self.assertIn(NOT_FINAL_BLOCKER, detail['readiness']['blockers'])
+        # once the peer reviews are assessed, the final assessment takes the decision
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertTrue(review.is_final(self.encounter(encounter_id).current_assessment))
+        self.approve(encounter_id, '99213')
+        self.assertNotIn(NOT_FINAL_BLOCKER, self.detail(encounter_id)['readiness']['blockers'])
