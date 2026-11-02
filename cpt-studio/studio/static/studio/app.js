@@ -100,12 +100,12 @@ const REFERENCE_STATES = {
   failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio\'s retrieval for this assessment\'s codes failed, so no CMS reference fact or passage is listed here; each code\'s CMS reference checks stand as its status line shows them.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
-// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no CMS reference
-// fact or passage is listed for any code - never to be read as a lookup that found nothing for this one - and the code's
-// CMS reference checks stand as its status line shows them (refutation round 2, truth-4). Said of every card, so it
-// claims neither that the checks read the CMS facts - where no CMS reference file applied to the service date none did,
-// and each reads "not verified" - nor that none did: the Reference validation row's own sentence says which
-// (refutation round 3, truth-1).
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no CMS
+// reference fact or passage is listed for any code - never to be read as a lookup that found nothing for this one - and
+// the code's CMS reference checks stand as its status line shows them (refutation round 2, truth-4). Said of every
+// card, so it claims neither that the checks read the CMS facts - where no CMS reference file applied to the service
+// date none did, and each reads "not verified" - nor that none did: the Reference validation row's own sentence says
+// which (refutation round 3, truth-1).
 const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage is listed for this code. Its CMS reference checks stand as its status line shows them; the Reference validation row says what failed.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };

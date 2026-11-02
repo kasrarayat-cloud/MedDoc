@@ -439,9 +439,10 @@ def _participants(assessment):
             entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')),
                          unpriced_exchanges=[[turn, state] for turn, state in review.unpriced_exchanges(run)])
             if run is not None and run.reused_from_id:
-                # a reuse sent nothing: the entry counts the exchanges and tool calls of the loop that answered for it,
-                # the retained run's (jobs.loop_run), so they are said to be that run's, and the reuse's own - none - are
-                # its own (refutation round 3, truth-4: "Exchanges: 2 · tool calls: 1" was printed as the reuse's)
+                # a reuse sent nothing: the entry counts the exchanges and tool calls of the loop that answered for
+                # it, the retained run's (jobs.loop_run), so they are said to be that run's, and the reuse's own -
+                # none - are its own (refutation round 3, truth-4: "Exchanges: 2 · tool calls: 1" was printed as the
+                # reuse's)
                 from .models import ToolCall  # local import: only this count needs it
 
                 entry.update(retained={'run': str(run.reused_from_id), 'exchanges': entry['exchanges'],

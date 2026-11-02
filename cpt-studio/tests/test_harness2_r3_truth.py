@@ -217,7 +217,9 @@ class FirstReadingUnlocatedTests(R2WordingCase):
         self.assertEqual(peer['codes_added'], ['45385'])  # proposed after peer review, never independent
         card = json.dumps(snare['id'])
         lines = browser(f'visible(cardOf(page(), {card})).split("\\n")', detail)
-        said = [line for line in lines if line.startswith('Astra ')]
+        # the card's positions (participantPositions: "<label> <position words>: <detail>")
+        said = [line for line in lines if re.match(r'Astra (proposed it|did not propose it|advised not to code it|gave '
+                                                    r'no reading)\b', line)]
         self.assertEqual(said, [f'Astra did not propose it: {LISTED_FIRST}'])
         self.assertEqual(browser(f'statusLine(cardOf(page(), {card}), "Proposed by")', detail),
                          'Corti, Astra (after peer review), Fable (independent reading)')
@@ -442,7 +444,8 @@ class PtpOncePerCardTests(R2WordingCase):
             noted = [line for line in lines if line.startswith('Not verified: ')]
             modifiers = [line for line in lines if line.startswith('Modifier considerations, never assigned')]
             self.assertEqual(len(status), 1, lines)
-            self.assertEqual(sum(_statements(line) for line in status + noted + modifiers), 1, status + noted + modifiers)
+            surfaces = status + noted + modifiers
+            self.assertEqual(sum(_statements(line) for line in surfaces), 1, surfaces)
             self.assertEqual(_statements(status[0]), 1, status)  # the status line is where it is stated (I4)
             for line in modifiers:
                 modifier_lines += 1
@@ -494,8 +497,8 @@ class FailedExchangeCostTests(hp.Harness2Case):
 
 class SecondReviewRelationTests(TestCase):
     """corti_relation 'second_review' through the real engine: Corti selects 45385; its bounded second review lists
-    45380 only as a candidate (alt2:0); Astra proposes 45380 from the biopsy passage. The engine's result is persisted as
-    the assess stage persists it and served by the real API; the page words the relation as the engine's rationale
+    45380 only as a candidate (alt2:0); Astra proposes 45380 from the biopsy passage. The engine's result is persisted
+    as the assess stage persists it and served by the real API; the page words the relation as the engine's rationale
     does. A mutant returning 'none' here made the page say "Corti did not propose this code." beside the rationale's
     second review, and every gate stayed green (refutation round 3, falsegreen-10)."""
 
