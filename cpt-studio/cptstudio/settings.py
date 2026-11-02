@@ -159,6 +159,11 @@ for _name, _mode in (('ASTRA', ASTRA_MODE), ('FABLE', FABLE_MODE)):
 OPENAI_CREDENTIALS_FILE = _env('OPENAI_CREDENTIALS_FILE', '')
 ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
 PARTICIPANT_REPLAY_DIR = _env('PARTICIPANT_REPLAY_DIR', '')
+# Release scope after refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer
+# confirmation of a participant's located passage. A code-level literal, deliberately never read from the environment or
+# an installer file, so no variable, file or member action turns it on; only a test's override_settings does, for the
+# dormant confirmation path's own tests (studio.review.confirmations_offered reads it, and only the literal True is on).
+STUDIO_OFFER_CONFIRMATIONS = False
 
 # Bounded execution.
 EXTRACTION_TIMEOUT_SECONDS = int(_env('EXTRACTION_TIMEOUT_SECONDS', '240'))

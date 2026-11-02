@@ -265,7 +265,7 @@ whose API takes no model identifier), which the Activity tab names. The Activity
 
 ```json
 {
-  "permissions": {"can_review": true, "is_owner": false, "can_confirm": true},
+  "permissions": {"can_review": true, "is_owner": false, "can_confirm": false},
   "harness": {"phase": 2, "participants": [{"name": "astra", "...": "the harness@1 row as above",
       "peer": {"state": "done", "detail": "Answered in peer review, after its first reading was frozen; the review was used.",
                "run_id": "uuid", "codes_added": ["45381"], "unverified_quotes": 0},
@@ -282,8 +282,9 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                       "spans": [{"start": 207, "end": 249, "text": "The colonoscope was advanced to the cecum.", "page": 1}],
                       "sentences": [{"start": 196, "end": 249,
                                      "text": "Technique: The colonoscope was advanced to the cecum."}],
-                      "verified": true, "why": "",
-                      "attestation": "I read this passage in the source document; it documents cecum for this encounter."}],
+                      "verified": false,
+                      "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
+                      "attestation": ""}],
       "confirmation": null}],
   "confirmations": [{"id": "uuid", "clarification_id": "uuid", "scope": "proposal", "fact": "extent",
                      "family": "gi.colonoscopy", "proposal_key": "sel:0", "value": "cecum", "spans": [...],
@@ -363,6 +364,18 @@ page sends it as served, as it sends a decision's acknowledgement from `GET /api
 revision, oldest first, also after its question has gone (a re-assessment that read it raises it no more).
 `permissions.can_confirm` is `can_review`.
 
+**This release offers no reviewer confirmation (refutation round 3, D7; HARNESS.md 12.10).** Candidates are served as
+above - each participant's passage located for the question, exact slices of `revision.text` with their `sentences`
+and pages, `located_by`, `phase`, `phases` and `runs` - but unchecked: no check that decides `verified` runs for the
+response, so every candidate is `verified` false, with the one `why` "CPT Studio does not check what a participant's
+passage states, and this release offers no confirmation." and `attestation` `''`; a source that cites no passage, or
+whose passage is not located as exact slices of the text, is not served. `permissions.can_confirm` is false for every
+member. No confirmation can be recorded, so `confirmation` is null and `confirmations` lists none; a row that exists
+anyway is listed as recorded, and no assessment reads it (`current_effect` `not_read`). What this section says above of
+`verified`, `why`, `attestation`, the checks and `can_confirm` describes the dormant confirmation path behind the
+code-level setting `STUDIO_OFFER_CONFIRMATIONS` (off; no environment variable or installer file changes it), kept as
+written.
+
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
 every confirmation of a fact other than the date was read): `{"state": "read" | "not_read", "detail": "..."}`. A
@@ -411,6 +424,13 @@ replayed peer-review run reads `mode` `replay`. The Activity tab reads "Finding 
 passage (not a decision)" for a confirmation, with its `fact` and `effect`.
 
 ## POST /api/encounters/{id}/clarifications/{clarification_id}/confirm
+
+**In this release every request is refused (refutation round 3, D7; HARNESS.md 12.10).** After the session (401) and
+the encounter's workspace scoping (404 outside the caller's workspaces), before the body, the member's role, the
+question or the candidate is read: `409 {"error": "This release offers no reviewer confirmation of a candidate answer,
+so nothing was recorded; a question is answered with an addendum.", "details": {}}`. Nothing is recorded: no
+confirmation, audit event, context, job or provider request. What follows describes the dormant path behind
+`STUDIO_OFFER_CONFIRMATIONS`, kept as written.
 
 `{"candidate_id": "16 hex", "attestation": "I read this passage in the source document; it documents <value> for this
 encounter."}` → `201 {confirmation, "effect": "context" | "reassessment"}` (the confirmation as in `confirmations`).

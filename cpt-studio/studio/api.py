@@ -235,9 +235,16 @@ def confirm_finding(request, encounter_id, clarification_id):
     ``{"candidate_id", "attestation"}``. An owner or reviewer only (403); the question must be open on the current
     final assessment, unconfirmed, and the candidate one of its verified candidates, recomputed server-side (409 with
     why); the attestation exactly the candidate's (400). A service date then enters as the member's date through the
-    context path; any other fact is read by a re-assessment. Nothing is approved."""
-    data = _payload(request)
+    context path; any other fact is read by a re-assessment. Nothing is approved.
+
+    Refutation round 3 (HARNESS.md 12.10, D7): this release offers no reviewer confirmation. After the session and the
+    encounter's workspace scoping (401, 404 as before), every request is refused (409) with
+    review.CONFIRMATIONS_NOT_OFFERED before its body, the member's role, the question or the candidate is read; nothing
+    is recorded."""
     encounter, membership = scoped_encounter(request.user, encounter_id)
+    if not review.confirmations_offered():
+        raise ApiError(409, review.CONFIRMATIONS_NOT_OFFERED)
+    data = _payload(request)
     _require_reviewer(membership)
     if not encounter.clarifications.filter(pk=clarification_id).exists():
         raise ApiError(404, 'That question is not part of this document.')

@@ -224,6 +224,9 @@ class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonC
 
 # --- truth-5: one reading of what the current assessment made of a confirmation, for the page and the reports --------
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationEffectTests(ColonCase):
     """review.confirmation_effect states what the current assessment made of each reviewer-confirmed finding - read,
     or not read with why - and the API's confirmations (current_effect) and the reports' CONFIRMED FINDINGS ("Effect:")

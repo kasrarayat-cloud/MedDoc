@@ -8,7 +8,7 @@ import hashlib
 from dataclasses import replace
 from datetime import date
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from studio import candidates as c
 from studio.gi import services as gi_services
@@ -83,6 +83,9 @@ def peer(name, text, value, *quotes, settled=True, question='q', run=None):
     return c.PeerAnswer(name=name, run=run or f'run-{name}-peer', answer=answer)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DateTests(SimpleTestCase):
     def test_a_located_passage_stating_the_date_is_verified(self):
         (candidate,) = c.candidates(DATE, NOTE, PAGES, [frozen('astra', NOTE, date='2026-10-21',
@@ -141,6 +144,9 @@ class DateTests(SimpleTestCase):
         self.assertEqual(unverified['why'], 'The value qualifies its date (a negation, a doubt or an alternative).')
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ExtentTests(SimpleTestCase):
     def reading(self, extent, *quotes):
         return frozen('astra', NOTE, services=[service(NOTE, extent=extent, quotes=quotes)])
@@ -210,6 +216,9 @@ class ExtentTests(SimpleTestCase):
                          ('', 'the value is an extent of a service whose landmarks CPT Studio does not read'))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class TargetTests(SimpleTestCase):
     def test_the_passage_must_name_the_structure_the_value_names(self):
         question = TARGET
@@ -238,6 +247,9 @@ class TargetTests(SimpleTestCase):
                          ('pancreas', False, 'The passage states the pancreas as not reached or not seen.'))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class CannulationTests(SimpleTestCase):
     QUOTE = 'Deep biliary cannulation was achieved with a sphincterotome.'
 
@@ -261,6 +273,9 @@ class CannulationTests(SimpleTestCase):
         self.assertEqual((doubt['value'], doubt['verified']), ('', False))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class StatusTests(SimpleTestCase):
     def candidate(self, status, quote):
         return c.candidates(STATUS, NOTE, PAGES, [frozen('astra', NOTE, services=[service(NOTE, status=status,
@@ -328,6 +343,9 @@ class StatusTests(SimpleTestCase):
                                     'encounter.'))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class BasisTests(SimpleTestCase):
     TIME = 'Total time on the date of the encounter was 24 minutes.'
     MDM = 'Medical decision making: moderate complexity.'
@@ -359,6 +377,9 @@ class BasisTests(SimpleTestCase):
         self.assertFalse(procedure['verified'])
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class VerificationTests(SimpleTestCase):
     def reading_with(self, *quotes, text=NOTE):
         visit = ParticipantService(id='s1', family='colonoscopy', status='performed', description='', anatomy='',
@@ -402,6 +423,9 @@ class VerificationTests(SimpleTestCase):
         self.assertEqual(bare['why'], 'No passage is cited for this value.')
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class MergeAndIdentityTests(SimpleTestCase):
     def both(self, value_astra='cecum', value_fable='cecum', quote_fable=CECUM_QUOTE):
         return [frozen('astra', NOTE, services=[service(NOTE, extent=value_astra, quotes=[CECUM_QUOTE])]),
@@ -445,6 +469,9 @@ class MergeAndIdentityTests(SimpleTestCase):
         self.assertEqual(len({x['id'] for x in first}), 3)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class NothingToOfferTests(SimpleTestCase):
     def test_a_corti_only_encounter_has_no_candidates(self):
         for question in (DATE, EXTENT, STATUS, TARGET, CANNULATION, BASIS):

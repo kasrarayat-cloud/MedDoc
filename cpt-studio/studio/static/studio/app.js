@@ -120,6 +120,14 @@ const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', canno
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
+// Refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer confirmation, so where the
+// API does not allow the member to confirm (permissions.can_confirm not true, as it never is in this release) a
+// question's candidates are shown as what they are - the participants' located passages, each with the answer it gave
+// in CPT Studio's words - with no Verified or Not verified badge, no sentence about what CPT Studio's readers read in
+// them, and no Confirm control (locatedPassage). The rendering below for a served can_confirm true is the dormant
+// path's, kept.
+const LOCATED_LABEL = 'The participants\' located passages';
+const LOCATED_NOTE = 'These are the passages the participants located for this question, each with the answer it gave in CPT Studio\'s words. CPT Studio does not check what a participant\'s passage states, and this release offers no confirmation: a question is answered with an addendum.';
 // What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
 // every fact's passage lies in no history, plan or indication section (VERIFIED_SECTIONS), and a status is read by CPT
 // Studio's readers on the act the code accounts for, in the passage's whole sentence (EV2-1, EV2-2, EV2-3, truth-1).
@@ -848,14 +856,16 @@ function clarificationQuestion(clarification, doc) {
 // 12.5), the readers' whole sentence of each span, in its order - a span that is a slice of a longer sentence is shown
 // with that sentence, so a hedge around it is never hidden behind a Verified badge (refutation round 2, EV2-1); one whose
 // sentence is not served exactly says so. A payload that serves no sentences (a confirmation) is quoted as before.
-function quotedSpans(spans, exact, sentences) {
+// ``confirming`` false (a located passage where no confirmation is offered, HARNESS.md 12.10): the unshown sentence's
+// words name no confirming.
+function quotedSpans(spans, exact, sentences, confirming = true) {
   return objects(spans).map((span, index) => {
     const page = Number.isInteger(span.page) ? ` (page ${span.page})` : '';
     const quote = `“${textValue(span.text)}”${page}`;
     if (!exact(span)) return `${quote} — not found at this position in the current revision`;
     const whole = spanSentence(span, index, sentences, exact);
     if (whole === null) return quote;
-    return whole === '' ? `${quote} — its whole sentence is not shown: read it in the document before confirming` : `${quote} — a part of the sentence “${whole}”`;
+    return whole === '' ? `${quote} — its whole sentence is not shown: read it in the document${confirming ? ' before confirming' : ''}` : `${quote} — a part of the sentence “${whole}”`;
   });
 }
 
@@ -904,20 +914,35 @@ function candidateAnswer(candidate, clarificationId, confirmable, exact) {
   return `<li class="candidate-answer" data-candidate="${escapeHtml(textValue(candidate.id))}" data-verified="${verified}"><span class="participant-head"><strong>${escapeHtml(value || 'No value CPT Studio can state')}</strong>${verified ? badge('green', 'Verified') : badge('amber', 'Not verified')}</span>${(quotes.length ? quotes : ['No passage is cited.']).map(quote => `<p class="candidate-quote">${escapeHtml(quote)}</p>`).join('')}<small class="check-source">${escapeHtml(locatedBy(candidate))}</small><small class="check-source">${escapeHtml(why)}</small>${action}</li>`;
 }
 
+// One participant's located passage for an open question where no confirmation is offered (refutation round 3,
+// HARNESS.md 12.10): the answer it gave in CPT Studio's words, the passage quoted from the document with its whole
+// sentence, and who located it in which phase - no Verified or Not verified badge, no sentence about what CPT Studio's
+// readers read in it (not the served why either: a page never states a check that was not run), and no Confirm control.
+function locatedPassage(candidate, exact) {
+  const spans = objects(candidate.spans);
+  const quotes = quotedSpans(spans, exact, candidate.sentences, false);
+  const value = textValue(candidate.value).trim();
+  return `<li class="candidate-answer" data-candidate="${escapeHtml(textValue(candidate.id))}" data-verified="${candidate.verified === true}"><span class="participant-head"><strong>${escapeHtml(value ? `Their answer: ${value}` : 'An answer CPT Studio cannot restate')}</strong></span>${(quotes.length ? quotes : ['No passage is cited.']).map(quote => `<p class="candidate-quote">${escapeHtml(quote)}</p>`).join('')}<small class="check-source">${escapeHtml(locatedBy(candidate))}</small></li>`;
+}
+
 // An open question's candidate answers from the participants' located passages and its confirmation (HARNESS.md 11.3,
 // 12.5, 12.6); '' for a question served with neither (a payload before harness@2, a Corti-only encounter, an assess
 // #1). Agreement is never shown as confirmation: a candidate several participants located is one candidate naming them
-// all.
+// all. Where the API does not allow this member to confirm (permissions.can_confirm not true: never in this release,
+// HARNESS.md 12.10), each is drawn as the participants' located passage (locatedPassage); otherwise as the dormant
+// confirmation path drew it.
 function candidateAnswers(clarification, doc) {
   const candidates = objects(clarification.candidates);
   const confirmation = clarification.confirmation && typeof clarification.confirmation === 'object' ? clarification.confirmation : null;
   if (!candidates.length && !confirmation) return '';
   const exact = exactIn(doc.revision?.text);
   const id = textValue(clarification.id);
-  const confirmable = !confirmation && doc.permissions?.can_confirm === true && !doc.pipeline?.busy;
-  const items = candidates.map(candidate => candidateAnswer(candidate, id, confirmable, exact)).join('');
-  const list = candidates.length ? `${groupLabel(`Candidate answers from the participants' located passages · ${candidates.length}`)}<ul class="candidate-list">${items}</ul>` : '';
-  return `<div class="candidate-answers" data-question="${escapeHtml(id)}"${confirmation ? ` data-confirmation="${escapeHtml(textValue(confirmation.id))}"` : ''}>${confirmation ? confirmedAnswer(confirmation, exact) : ''}${list}<p class="harness-note">${escapeHtml(CANDIDATE_NOTE)}</p></div>`;
+  const offered = doc.permissions?.can_confirm === true;
+  const confirmable = !confirmation && offered && !doc.pipeline?.busy;
+  const items = candidates.map(candidate => (offered ? candidateAnswer(candidate, id, confirmable, exact) : locatedPassage(candidate, exact))).join('');
+  const label = offered ? 'Candidate answers from the participants\' located passages' : LOCATED_LABEL;
+  const list = candidates.length ? `${groupLabel(`${label} · ${candidates.length}`)}<ul class="candidate-list">${items}</ul>` : '';
+  return `<div class="candidate-answers" data-question="${escapeHtml(id)}"${confirmation ? ` data-confirmation="${escapeHtml(textValue(confirmation.id))}"` : ''}>${confirmation ? confirmedAnswer(confirmation, exact) : ''}${list}<p class="harness-note">${escapeHtml(offered ? CANDIDATE_NOTE : LOCATED_NOTE)}</p></div>`;
 }
 
 // A code's CMS reference check (HARNESS.md I4: PTP is always "not verified"), stating the PTP limit exactly once: the

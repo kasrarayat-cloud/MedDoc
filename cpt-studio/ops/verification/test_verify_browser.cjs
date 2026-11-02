@@ -2402,7 +2402,10 @@ test('summarize records which participants ran and what reference validation ret
 // The rows and the questions are held to what the API serves, read from the markup the live app.js renders for the
 // serializer's own fixtures; the walk reads them and never confirms anything.
 
-const H2 = ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness2-confirmed.json'];
+// encounter-harness2-dormant.json: the final scenario as the dormant confirmation path serves it (HARNESS.md 12.10: this
+// release offers no confirmation, so the final fixture serves its candidates unchecked and can_confirm false)
+const H2 = ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness2-confirmed.json',
+  'encounter-harness2-dormant.json'];
 const statusOf = results => results.map(r => [r.id, r.status]);
 
 test('readDom reads the peer-review rows and each question\'s candidates the live app.js renders, and both checks pass', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
@@ -2418,7 +2421,15 @@ test('readDom reads the peer-review rows and each question\'s candidates the liv
     assert.deepEqual(dom.questions.map(q => q.id).sort(), served.map(c => c.id).sort(), name);  // the encounter's card first
     assert.deepEqual(statusOf(vb.checkCandidates(enc, dom.questions)), [[`dom.candidates`, served.length ? 'pass' : 'skipped']], name);
   }
-  const final = apiFixture(H2[1]);
+  // this release (HARNESS.md 12.10): every question's candidates drawn unchecked, and no Confirm action anywhere
+  const release = apiFixture(H2[1]);
+  const drawn = await vb.readDom(fakePage(app.reviewView(release, app.documentLayout(release), 'codes', true)));
+  assert.ok(drawn.questions.length > 0 && drawn.questions.every(q => q.confirmable === 0 && q.candidates.length > 0));
+  assert.ok(drawn.questions.every(q => q.candidates.every(c => c.verified === false)));
+  assert.deepEqual(failures(vb.checkCandidates(release, drawn.questions)), []);
+  // moved by refutation round 3 (HARNESS.md 12.10): a Confirm action is drawn only for the dormant confirmation path's
+  // fixture, which this part held the final fixture to
+  const final = apiFixture(H2[3]);
   const dom = await vb.readDom(fakePage(app.reviewView(final, app.documentLayout(final), 'codes', true)));
   const extent = final.clarifications.find(c => c.fact === 'extent');
   assert.deepEqual(dom.questions.find(q => q.id === extent.id), { id: extent.id, confirmation: '',
@@ -2429,6 +2440,8 @@ test('readDom reads the peer-review rows and each question\'s candidates the liv
   assert.ok(viewed.questions.every(q => q.confirmable === 0));
   assert.deepEqual(failures(vb.checkCandidates(viewer, viewed.questions)), []);
   assert.deepEqual(failures(vb.checkCandidates(viewer, dom.questions)), ['dom.candidates'], 'a Confirm action the API does not allow');
+  assert.deepEqual(failures(vb.checkCandidates({ ...release, clarifications: final.clarifications }, dom.questions)), ['dom.candidates'],
+    'nor one this release does not offer');
   // a confirmed question shows the confirmation's id and offers no confirmation
   const confirmation = apiFixture(H2[2]).confirmations[0];
   const confirmed = { ...final, clarifications: final.clarifications.map(c => (c.id === extent.id ? { ...c, confirmation: { ...confirmation, clarification_id: extent.id } } : c)) };
@@ -2498,11 +2511,14 @@ test('summarize records the phase, the peer reviews, the candidates and the conf
   assert.deepEqual(summary.harness.participants.map(p => [p.name, p.peer?.state, p.peer?.codes_added]),
     [['corti', undefined, undefined], ['astra', 'done', ['45381']], ['fable', 'done', ['45380']]]);
   assert.deepEqual(summary.harness.participants[1].references, { retrieved: 1, used: 2, cited_not_retrieved: 1 });
+  // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's - 45380's status (no candidate
+  // verifies on a biopsy the readers leave in doubt) and extent, and the date, stay open after 45385's extent is confirmed
   assert.deepEqual(summary.clarifications.map(c => [c.fact, c.candidates.map(x => [x.value, x.verified]), c.confirmation]),
-    [['performed_status', [['performed', true], ['performed', false], ['performed', false]], null], ['service_date', [['2026-10-21', true]], null]]);
+    [['performed_status', [['performed', false], ['performed', false], ['performed', false]], null],
+      ['extent', [['cecum', true], ['cecum', false]], null], ['service_date', [['2026-10-21', true]], null]]);
   assert.deepEqual(summary.confirmations.map(c => [c.fact, c.value, c.located_by, c.confirmed_by]), [['extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer']]);
   const text = JSON.stringify(summary);
-  for (const passage of ['The colonoscope was advanced to the cecum.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {
+  for (const passage of ['Landmarks photographed: appendiceal orifice and ileocecal valve.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {
     assert.equal(text.includes(passage), false, passage);
   }
   // a payload served before harness@2 records as before

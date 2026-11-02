@@ -29,7 +29,7 @@ import json
 from datetime import date
 from unittest import mock
 
-from django.test import Client, SimpleTestCase
+from django.test import Client, SimpleTestCase, override_settings
 
 from studio import jobs, models, review
 from studio.gi import context as gi_context
@@ -72,6 +72,9 @@ def say(*parts):
     print('R2EV', *parts, flush=True)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class EvidenceCase(Harness2Case):
     """The pipeline suite's case: Corti's fake and the replay participants on the real loop, the real API and the real
     confirmation endpoint."""
@@ -323,6 +326,9 @@ def engine_run(text, codes, confirmed=()):
                   provider_status='succeeded', participants=CONFIGURED, confirmed=confirmed)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class OneCheckTests(SimpleTestCase):
     """reconcile.status_stated is the one check: every status candidate passes it, and engine._Confirmations applies it
     to every status confirmation it is given, however it was made."""
@@ -566,6 +572,9 @@ def page(detail):
     return json.loads(done.stdout)['codes']
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ContextChangedTests(ColonCase):
     """truth-10 (s5): the colon chain to phase 2, then a member's context change, then Stop. The live assessment is the
     earlier context's, which no re-assessment would read: the page offers no candidate and no control, and the endpoint
@@ -677,6 +686,9 @@ class CortiLeadTests(SimpleTestCase):
 DATE_LINE = 'Date of service: 2026-10-14\n'
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationAcrossChangesCase(ColonCase):
     """The pipeline suite's colon case: Corti selects 45385 and 45380, both held on the extent, and Astra's peer review
     answers 45385's with the landmark passage, which a reviewer confirms through the endpoint."""

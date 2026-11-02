@@ -921,8 +921,9 @@ def encounter_detail(encounter, membership):
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
+        # can_confirm: a reviewer, while confirmations are offered - never in this release (HARNESS.md 12.10, D7)
         'permissions': {'can_review': membership.can_review, 'is_owner': is_owner(membership),
-                        'can_confirm': membership.can_review},
+                        'can_confirm': membership.can_review and review.confirmations_offered()},
         'harness': harness_json(encounter, jobs),
         'revision': _revision_json(revision),
         'context': {'facts': _context_facts(encounter.current_context),

@@ -444,6 +444,9 @@ CMS sources; nothing is fetched from the web, and no vendor web-search tool is e
 
 ### 11.3 Source-supported corrections of shared date, status and extent readings
 
+**Not offered in this release (refutation round 3, D7; 12.10): no reviewer confirmation is offered, so this section
+describes the dormant path behind `settings.STUDIO_OFFER_CONFIRMATIONS`, kept as written.**
+
 A participant's finding can correct a false hold. It does this as the reviewer-confirmed answer to the open question the
 hold raised, never by agreement and never on its own. This is the documented path.
 
@@ -666,6 +669,9 @@ model participant configured the record is today's ("not configured") and there 
     participants' requests).
 
 ### 12.5 Candidates and confirmations (11.3)
+
+**Not offered in this release (refutation round 3, D7; 12.10): the confirm endpoint refuses first and candidates are
+served unchecked; what follows is the dormant path behind `settings.STUDIO_OFFER_CONFIRMATIONS`, kept as written.**
 
 **Candidates** (`studio/candidates.py`, pure; used by the API and the confirmation endpoint): for each OPEN clarification
 of the final assessment, from the frozen phase-1 readings and the peer answers of the runs that assessment read:
@@ -1038,3 +1044,94 @@ the gi4 replay against the round-4 head `80f2f2dc8` is EQUAL and the battery sho
   does); truth-12 shows no partial estimate, even for a failed exchange that reported no usage (fails closed).
 - **I1's wording:** "the only additions are new records outside that result" uses section 6's meaning of records; the
   API and the reports also gained harness fields and sections for Corti-only encounters.
+
+### 12.10 Release scope after refutation round 3: no reviewer confirmation is offered
+
+**What is off, and why.** The third refutation of harness@2 (head `624754eb1`, seven lenses) reproduced every finding
+its verifiers checked. Every blocking finding and eleven of the twelve majors live in, or exist only because of, the
+reviewer-confirmation path of 11.3 and 12.5: a participant's located passage shown as a candidate answer to an open
+question, called "Verified" when CPT Studio's own prose rules read the passage as stating the value, and one
+confirmation then answering the question - making a held code READY, or, for a date, entering the member's date. Three
+rounds each found blocking defects in exactly that check, each in the previous round's repair (round 1 EV-1, round 2
+EV2-1, round 3 status-1..3 and facts-1..7): hedges ("reportedly", "may have been"), denials ("There was no
+visualization of the cecum"), plans ("Planned extent: cecum"), other occasions, an outcome denied in another clause
+("but the polyp was not removed"), a date of birth or a signature date in prose, and a readings-disagree hold
+"verified" by the reader on one side of the disagreement. The check cannot converge: a question is asked because CPT
+Studio's own readers did not establish its answer. The three retained false holds checklist 4.6 names (h4-01 99204
+em_basis, h4-03 43244 extent, h4-06 45385 extent, measured on `624754eb1`'s offline replay) are all "not documented"
+holds - the readers read no basis and no extent anywhere - so a check that verifies only what the readers read can never
+verify them, and one that verifies more is a second, weaker reader whose next misreading each round finds. The session
+decided (D7, fail closed: hold, never offer) that this release offers none. harness@2 has never been installed, so no
+member loses anything they can do today, and the completion criteria of 11.5 need no confirmation.
+
+- `settings.STUDIO_OFFER_CONFIRMATIONS = False`: a code-level literal, read from no environment variable or installer
+  file, so no variable, file or member action turns it on; only a test's `override_settings` does
+  (`review.confirmations_offered`, on only for the literal `True`).
+- The confirm endpoint refuses (409) every request after the session (401) and the encounter's workspace scoping
+  (404) and before it reads the body, the member's role, the question or the candidate, with one sentence,
+  `review.CONFIRMATIONS_NOT_OFFERED`: "This release offers no reviewer confirmation of a candidate answer, so nothing
+  was recorded; a question is answered with an addendum." `review.confirm_finding` and
+  `jobs.reassess_after_confirmation` refuse first with the same sentence. Nothing is recorded: no
+  `FindingConfirmation`, audit row, job, context or provider request.
+- `jobs.confirmed_findings` hands the engine none and reads no row: a `FindingConfirmation` that exists anyway (one a
+  test writes) is never applied, so no assessment, re-assessment or peer request reads one; the assessment is the one
+  its inputs make with no confirmation. Peer-2 (a confirmation reaching a later chain's peer requests as CPT Studio's
+  own reading) is unreachable.
+- Candidates are still served - each participant's passage located for an open question, exact slices of the current
+  revision with their whole sentences (`review.located_passages`: studio.candidates' own source readers, merging and
+  shape) - but no check that decided "verified" runs for the response. Every candidate is `verified` false, its `why`
+  the fixed `review.UNCHECKED_WHY` ("CPT Studio does not check what a participant's passage states, and this release
+  offers no confirmation."), its `attestation` ''. A source that cites no passage, or one not located as exact slices of
+  the text, is not served. `permissions.can_confirm` is false for every member.
+- The page draws each as the participants' located passage - "Their answer: <value>", the passage with its whole
+  sentence, who located it in which phase - under "The participants' located passages", with no Verified or Not
+  verified badge, no sentence about what CPT Studio's readers read in it (not the served `why` either) and no Confirm
+  control, and its note says so: "These are the passages the participants located for this question, each with the
+  answer it gave in CPT Studio's words. CPT Studio does not check what a participant's passage states, and this release
+  offers no confirmation: a question is answered with an addendum." It draws them so wherever `permissions.can_confirm`
+  is not true; the rendering for a served `can_confirm` true is the dormant path's, unchanged.
+
+**What stays, dormant, behind the setting.** The candidates' checks (`studio.candidates`, `reconcile.status_stated`),
+the engine's `_Confirmations`, `jobs.reassess_after_confirmation` and its key, a peer request's D4 confirmation reasons
+(`jobs.PEER_CONFIRMED_REASON`, `_peer_reasons`), the confirm endpoint's checks after the refusal, the reports' CONFIRMED
+FINDINGS and the page's confirmation rendering are neither deleted nor changed. Their tests keep their assertions and
+run with `override_settings(STUDIO_OFFER_CONFIRMATIONS=True)` at class level, each saying it tests the dormant path; the
+release default is tested as the default (`tests/test_harness2_r3_conf.py`, and the `// refutation round 3, R3-CONF`
+block of `tests/frontend/app.test.cjs`). Re-offering any confirmation re-opens all of it, the page's located-passage
+rendering included (its note states this release's scope).
+
+**Dormant-path findings, recorded and not repaired: to be attacked again whenever any confirmation is offered.**
+None is reachable in this release.
+- status-1..4: 'performed' verified on a hedge the inventory does not read ("reportedly", "was thought to have been")
+  and, on a readings_disagree hold, by the reader on one side of the disagreement; on a sentence whose other clause
+  denies or doubts the outcome ("but the polyp was not removed"); on a report title or a procedure label of a
+  colonoscopy routing reads as not performed (a service_uncertain hold); and 'not performed' verified on a sentence that
+  states the act done and denies only its complications, while the true 'performed' is refused (false rejection).
+- facts-1..8: an extent verified on a denial the clause rule does not read as one ("There was no visualization of the
+  cecum"), on a sentence CPT Studio's own completion reader cites as not reached, on a doubt ("may have", "presumably"),
+  on a plan or another occasion ("Planned extent: cecum"); a cannulation and an E/M basis verified on cue presence alone
+  (a hedge, "not the basis"); a date of birth in a sentence, and a previous procedure's, a report's or a signature's
+  date in a labelled field, verified as the date of service.
+- falsegreen-1..4 and -6..-8: gaps in the tests of that path (the D1 tightening pinned only for a readings_disagree
+  hold; D2's section rule only for four facts; "every mention" never told apart from "any one"; a slice never told
+  apart from its sentence; status_stated's own section rule, an engine confirmation's later passages and a date
+  confirmation's effect each pinned by nothing that can fail).
+- peer-2: a confirmation of one proposal's status worded another proposal's same-day rule as CPT Studio's own reading in
+  a later chain's peer requests and on the page, unlabelled.
+
+**The rows the tests and the website fixtures pin are the pipeline's (falsegreen-11).** `tests/test_harness2_api.py`'s
+`Harness2Case`, whose assessments the API tests pin and `tests/test_frontend_harness2.py` serializes into the harness@2
+fixtures, persisted assessments written by hand: questions and a 45380 performed-status hold, with its support and
+candidates, that CPT Studio's readers never produce for its note. Its rows are now the assess stage's own: the context
+as its reader reads the document, Corti's run read by Corti's normalizer, the participants' runs read by the pipeline's
+readers, peer requests built from the pipeline's own peer material, and each assessment the engine's of those inputs
+(`jobs._assess_child`). Its document is the participants' fixture note with what the readers do ask about: two dates of
+service that disagree, landmarks photographed but no extent reached, and a biopsy left in doubt (so no status candidate
+verifies, even on the dormant path). `tests/test_harness2_r3_conf.py` pins that the assess stage makes the case's first
+assessment, digest for digest, and that its final one is the engine's for the stored runs; the fixtures are regenerated
+from it and every pin moved to what they serve, saying so.
+
+**Checklist 4.6 is NOT DONE in this release.** What it becomes is an open owner question (a product decision with no
+ruled precedent), with two options: (i) a human-override confirmation that claims nothing CPT Studio cannot check - the
+reviewer's reading decides, and the page says so; or (ii) no override, with the false holds repaired at the readers
+(the second wave: framed time, instrument reach), which also helps Corti-only coding but is a change I1 must declare.

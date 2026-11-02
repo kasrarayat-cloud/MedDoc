@@ -65,6 +65,9 @@ class FieldCase(TestCase):
         return {p['code']: p for p in data['assessment']['proposals']}
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class PermissionsTests(FieldCase):
     def test_is_owner_beside_can_review(self):
         # harness@2 (HARNESS.md 12.6): permissions.can_confirm is can_review

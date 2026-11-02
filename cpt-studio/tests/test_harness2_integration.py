@@ -40,6 +40,9 @@ def served_candidates(case, encounter_id, question):
 
 # --- a confirmation, end to end (HARNESS.md 11.3, 12.1, 12.5) ---------------------------------------------------------
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationEndToEndTests(ColonCase):
     def extent_question(self, assessment):
         question = assessment.clarifications.get(proposal__key='sel:0', state=models.Clarification.OPEN)
@@ -154,6 +157,9 @@ ASTRA_DOUBTS = reading(codes=[('45385', 'hot snare polypectomy of the sigmoid po
                        services=[('c1', 'colonoscopy', 'performed', DONE_SNARE)])
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationBindingTests(Harness2Case):
     corti_codes = ()
 
@@ -510,6 +516,9 @@ class ContextAuditTests(Harness2Case):
 DATE_LINE = 'Date of service: 2026-10-20'
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class FinalAssessmentTests(Harness2Case):
     def assertTheApiReadsTheFinalAssessmentAsThePipelineDecided(self, encounter_id):
         """Every assess #1 the pipeline made queued a peer stage exactly when the API reads it as not final."""
