@@ -19,6 +19,7 @@
   date makes the next chain list it as moved.
 - FG2-2 (tests only): a new revision's assessments read no confirmation of an earlier one, and its page and draft
   report list none.
+- FG2-4 (tests only): an agent reviewer's confirmation is served, reported and shown as an agent's.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
 replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
@@ -26,6 +27,7 @@ their tool calls over a synthetic reference store.
 """
 import json
 from datetime import date
+from unittest import mock
 
 from django.test import Client, SimpleTestCase
 
@@ -766,3 +768,39 @@ class NewRevisionTests(ConfirmationAcrossChangesCase):
         self.assertEqual(review.revision_confirmations(revision), [])
         self.assertEqual(self.txt_section(encounter_id, 'CONFIRMED FINDINGS'),
                          ['  None: no reviewer has confirmed a finding for this revision.'])
+
+
+# --- FG2-4: an agent's confirmation is served and reported as an agent's ----------------------------------------------
+
+class AgentConfirmationTests(ConfirmationAcrossChangesCase):
+    def test_an_agent_reviewer_s_confirmation_is_labelled_an_agent_s_everywhere(self):
+        import csv
+        import io
+
+        from studio import reports
+        from tests.support import factories as f
+
+        agent = f.member(self.ws, f.user('agent2r', actor_kind=models.User.AGENT))
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        with mock.patch('studio.jobs.reassess_after_confirmation'):  # the question stays shown with its confirmation
+            confirmation, made = self.confirm_extent(encounter_id, user=agent)
+        label = agent.label()
+        self.assertTrue(label.endswith('(automated agent)'), label)
+        self.assertEqual((made['confirmed_by'], made['confirmed_by_kind']), (label, 'agent'))
+        detail = self.detail(encounter_id)
+        self.assertEqual([(c['confirmed_by'], c['confirmed_by_kind']) for c in detail['confirmations']],
+                         [(label, 'agent')])
+        snap = reports.snapshot(self.encounter(encounter_id), 'draft')
+        lines = reports.render_txt(snap).decode('utf-8').split('\n')
+        start = lines.index('CONFIRMED FINDINGS') + 1
+        line = next(text for text in lines[start:lines.index('', start)] if 'confirmed by' in text)
+        self.assertIn(f'confirmed by {label} at ', line)
+        self.assertNotIn('(human)', line)
+        rows = list(csv.reader(io.StringIO(reports.render_csv(snap).decode('utf-8'), newline='')))
+        header = rows[0]
+        named = [dict(zip(header, row)) for row in rows[1:] if len(row) == len(header) and label in row]
+        self.assertTrue(named)
+        self.assertEqual({row['reviewer_kind'] for row in named}, {'agent'})
+        # the page, rendering the served payload, tags it as an agent's synthetic review, never clinical approval
+        self.assertIn('agent-executed synthetic review — not clinical approval', page(detail))
