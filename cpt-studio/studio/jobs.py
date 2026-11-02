@@ -306,6 +306,24 @@ def _owed_peers(first, after=None):
     return [PEER_KIND[name] for name in later if name in names and (records.get(name) or {}).get('state') == 'read']
 
 
+def peer_review_held(first):
+    """Whether a member date conflict holds assess #1 ``first`` - the Corti run it read is the hold, or its context's
+    service date is a member conflict - while which nothing is sent, a peer review included (owed_peer_stages)."""
+    run, context = first.provider_run, first.context
+    if (run is not None and run.state == models.ProviderRun.NOT_SENT
+            and (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT):
+        return True
+    return context is not None and gi_context.is_member_conflict((context.facts or {}).get('service_date'))
+
+
+def owed_peer_stages(first):
+    """The peer stages assess #1 ``first`` owes (HARNESS.md 12.1), in order (_owed_peers) - and none while a member date
+    conflict holds it (peer_review_held). stage_assess queues the first of them; an assessment that owes none is its
+    chain's final assessment (review.is_final), and the reports say whether peer reviews follow by the same rule, so the
+    pipeline, the API and the reports never disagree about which assessment is final."""
+    return [] if peer_review_held(first) else _owed_peers(first)
+
+
 def _assessment_base(assessment):
     """The base of the key of the assess that made ``assessment``, from its own row: 'assess:<context>:<Corti run or
     no-provider>', and ':review2:<that run>' when it read a second review. (An assess queued after a second review that
@@ -370,7 +388,11 @@ def run_refs(run) -> frozenset:
 
 def assessment_phase(assessment) -> int:
     """HARNESS.md 12.3: 0 when the assessment had no model participant configured (its record is harness@1's 'not
-    configured'), else 2 when any entry has a peer state and 1 when none has."""
+    configured') - and for no assessment -, else 2 when any entry has a peer state and 1 when none has. The one reading
+    of an assessment's phase: the API's harness.phase, the trace and the reports read it here (review.assessment_phase).
+    """
+    if assessment is None:
+        return 0
     records = [record for name, record in _records(assessment).items() if name in participants.PARTICIPANTS]
     if not any(record.get('state') != 'not_configured' for record in records):
         return 0
@@ -1363,13 +1385,52 @@ def _peer_material(revision, first, name, records):
 
 def _frozen_reading(revision, name, records):
     """Participant ``name``'s frozen first reading as assess #1 read it: re-read from the phase-1 run its entry names,
-    and the same reading only when its sha256 is the one the entry recorded."""
-    record = records.get(name) or {}
-    run = _own_run(revision, name, record.get('run'), models.ProviderRun.INDEPENDENT)
-    reading = participant_reading(run)[0] if run is not None and run.state == models.ProviderRun.SUCCEEDED else None
-    if reading is None or reading.refused or sha256_json(to_jsonable(reading)) != record.get('reading_sha256'):
+    and the same reading only when its sha256 is the one the entry recorded (recorded_reading)."""
+    _, reading = recorded_reading(revision, records.get(name) or {})
+    if reading is None:
         raise _PeerUnbuilt(PEER_FROZEN_CHANGED)
     return reading
+
+
+def answer_sha256(answer) -> str:
+    """The sha256 of a normalized reading or peer review in canonical JSON (HARNESS.md 12.3: an entry's reading_sha256
+    and peer_sha256): the one hash an assessment records for a frozen output and every reader compares it with."""
+    return sha256_json(to_jsonable(answer))
+
+
+def recorded_reading(revision, record):
+    """(run, reading) of the frozen first reading an Assessment.participants entry ``record`` names (HARNESS.md 12.3):
+    its phase-1 run of ``revision`` (entry_run), re-read as participant_reading reads it, and the reading only when it
+    was read, is not refused and its sha256 is the entry's reading_sha256 - anything else is not what was frozen (None).
+    The peer stage builds its request from it, and the API's candidates read it (review.frozen_inputs)."""
+    run = entry_run(revision, record, models.ProviderRun.INDEPENDENT)
+    reading = participant_reading(run)[0] if run is not None and run.state == models.ProviderRun.SUCCEEDED else None
+    if (reading is None or reading.refused or not record.get('reading_sha256')
+            or answer_sha256(reading) != record['reading_sha256']):
+        return run, None
+    return run, reading
+
+
+def recorded_peer_review(revision, record):
+    """(run, peer review) of the peer review an assess #2 entry ``record`` names (HARNESS.md 12.3), read as
+    recorded_reading reads a first reading: re-read with peer_reading, and the review only when its state was 'read',
+    it is not refused and its sha256 is the entry's peer_sha256 (None otherwise)."""
+    run = entry_run(revision, record, models.ProviderRun.PEER_REVIEW)
+    review_ = peer_reading(run)[0] if run is not None and run.state == models.ProviderRun.SUCCEEDED else None
+    if (review_ is None or review_.refused or record.get('peer_state') != 'read' or not record.get('peer_sha256')
+            or answer_sha256(review_) != record['peer_sha256']):
+        return run, None
+    return run, review_
+
+
+def entry_run(revision, record, purpose):
+    """The run an Assessment.participants entry names for its participant - its phase-1 'run' (purpose independent) or
+    its 'peer_run' (purpose peer_review) - when that is the participant's run of ``revision`` with that purpose; None
+    otherwise (no entry, no run named, or one that is not a run id)."""
+    if not isinstance(record, dict):
+        return None
+    field = 'peer_run' if purpose == models.ProviderRun.PEER_REVIEW else 'run'
+    return _own_run(revision, record.get('name'), record.get(field), purpose)
 
 
 def _corti_conclusions(run):
@@ -1396,12 +1457,14 @@ def _corti_conclusions(run):
 def _cpt_studio_reading(first):
     """CPT Studio's rule-based reading after assess #1 (HARNESS.md 12.4): its open clarifications, as the questions a
     peer answers by id, and its held and excluded proposals, each with the details of its checks that did not pass. The
-    peer instructions label it as a reading that may be wrong."""
-    questions = [{'question_id': str(item.pk), 'scope': item.scope, 'fact': item.fact, 'family': item.family,
-                  'proposal_key': item.proposal.key if item.proposal_id else '', 'question': item.question,
-                  'reason': item.reason}
-                 for item in first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
-                 .order_by('created_at', 'pk')]
+    peer instructions label it as a reading that may be wrong. Each question is described by review.question_identity,
+    the one function the API's candidates match a peer answer back to the final assessment's question by (12.5)."""
+    questions = []
+    for item in (first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
+                 .order_by('created_at', 'pk')):
+        scope, family, fact, proposal_key, _ = review.question_identity(item)
+        questions.append({'question_id': str(item.pk), 'scope': scope, 'fact': fact, 'family': family,
+                          'proposal_key': proposal_key, 'question': item.question, 'reason': item.reason})
 
     def proposals(status):
         return [{'key': p.key, 'code': p.code, 'status': p.status,
@@ -1443,7 +1506,7 @@ def _participant_record(name, state, run, reading, reason):
             'unverified_quotes': reading.unverified_quotes if reading is not None else 0, 'reason': reason,
             'codes': [{'code': code, 'quote': quote} for code, quote in proposed.items()],
             'not_coded': list(advised.values()),
-            'reading_sha256': sha256_json(to_jsonable(reading)) if reading is not None else '',
+            'reading_sha256': answer_sha256(reading) if reading is not None else '',
             'exchanges': source.exchanges.count() if source is not None else 0,
             'tool_calls': models.ToolCall.objects.filter(exchange__run=source).count() if source is not None else 0}
 
@@ -1560,7 +1623,7 @@ def _with_peer(encounter, item, record, run, kept=None):
     first_reason = item.reason if item.state != 'read' else ('' if state == 'read' else reason)
     item = dataclasses.replace(item, peer_state=state, peer=peer if state == 'read' else None, reason=first_reason)
     return item, {**record, 'peer_state': state, 'peer_run': str(run.pk) if run is not None else None,
-                  'peer_reason': reason, 'peer_sha256': sha256_json(to_jsonable(peer)) if peer is not None else '',
+                  'peer_reason': reason, 'peer_sha256': answer_sha256(peer) if peer is not None else '',
                   'peer_unverified_quotes': peer.unverified_quotes if peer is not None else 0}
 
 
@@ -1591,8 +1654,13 @@ def _reread(encounter, revision, basis, names, mode):
 
 
 def _own_run(revision, name, pk, purpose):
-    """The run an assessment's entry names for participant ``name``, of this revision and purpose; None for none."""
-    if not pk:
+    """The run an assessment's entry names for participant ``name``, of this revision and purpose; None for none, and
+    for a value that is not a run id (an entry is read back from JSON, never assumed well formed)."""
+    if not pk or not isinstance(pk, str) or not isinstance(name, str):
+        return None
+    try:
+        pk = uuid.UUID(pk)
+    except ValueError:
         return None
     return revision.provider_runs.filter(pk=pk, provider=name, purpose=purpose).first()
 
@@ -1728,13 +1796,11 @@ def stage_assess(job):
     out = {'assessment': str(assessment.pk), 'provider_status': provider_status}
     if second is not None:
         out['second_review'] = str(second.pk)
-    if names and mode == FIRST and not held and not gi_context.is_member_conflict(
-            (context.facts or {}).get('service_date')):
+    if names and mode == FIRST and owed_peer_stages(assessment):
         # HARNESS.md 12.1: assess #1 queues the first owed peer stage when a configured participant's first reading was
         # read; otherwise it is the final assessment. Nothing is sent while a member date conflict holds the encounter.
         queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job))
-        if queued is not None:
-            out['peer_review'] = queued.kind
+        out['peer_review'] = queued.kind
     return out
 
 
@@ -2431,7 +2497,7 @@ def _settles_member_conflict(previous, context):
             and not gi_context.is_member_conflict((context.facts or {}).get('service_date')))
 
 
-def change_context(encounter, user, values):
+def change_context(encounter, user, values, *, confirmation=None):
     """Apply member-supplied metadata, snapshot a new context and re-assess.
 
     Re-assesses with the run already in use only when that run answers exactly the
@@ -2440,6 +2506,10 @@ def change_context(encounter, user, values):
     provider (_attempt_owed: the request the hold deferred is made); otherwise
     re-predicts (an identical retained result is still reused for free by the predict
     stage, and a date the revision was never routed for is routed first).
+
+    ``confirmation``: the FindingConfirmation of a service date a reviewer confirmed (HARNESS.md 11.3, 12.5;
+    review.confirm_finding), which enters here as the member's date, exactly as a member's save: its context.changed
+    audit row names the confirmation. None for a member's own save, whose row is as before.
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -2472,7 +2542,8 @@ def change_context(encounter, user, values):
         encounter.current_context = context
         encounter.save(update_fields=['current_context', 'updated_at'])
         audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
-                     fields=sorted(values), context=str(context.pk))
+                     fields=sorted(values), context=str(context.pk),
+                     **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
         last_run = _run_in_use(revision)
         clear_stop(encounter)
         # Refutation p2 sends2-0 (repair gi2): a save that settles a held member date conflict makes the request the

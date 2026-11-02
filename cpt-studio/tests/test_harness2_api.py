@@ -38,13 +38,21 @@ RECTUM_QUOTE = 'A 3 mm polyp in the rectum was biopsied with cold forceps.'
 PREP_QUOTE = 'Bowel preparation was good.'
 FACT_REF = 'fact:cms-pfs-rvu26d:45385:mult_proc'
 PASSAGE_REF = 'ncci-2026-ch6-c-1'
-FACTS_RESULT = {'codes': [{'code': '45385', 'facts': [
-    {'field': 'pfs.mult_proc', 'value': '3', 'source_key': 'cms-pfs-rvu26d', 'release': 'RVU26D',
-     'effective_start': '2026-10-01', 'effective_end': '2026-12-31', 'sha256': '0' * 64}]}]}
-PASSAGES_RESULT = {'topic': 'ncci_endoscopy_rules', 'passages': [
-    {'passage_key': PASSAGE_REF, 'source_key': 'cms-ncci-policy-manual-2026', 'release': 'Revision 2026',
-     'effective_start': '2026-01-01', 'effective_end': '2026-12-31', 'section': 'Chapter VI §C.1', 'page': '6',
-     'sha256': '1' * 64, 'text': 'Synthetic passage text for the tests.'}]}
+# The two tools' stored results in the layout CPT Studio's executor writes them (studio.reference.tools), which the
+# API's references read back with its own reader (tools.retrieved_references).
+FACTS_RESULT = {'tool': 'cms_code_facts', 'date_of_service': '', 'releases': 'every release held', 'codes': [
+    {'code': '45385', 'notes': [], 'sources': [
+        {'source_key': 'cms-pfs-rvu26d', 'kind': 'cms-pfs', 'release': 'RVU26D', 'effective_start': '2026-10-01',
+         'effective_end': '2026-12-31', 'sha256': '0' * 64,
+         'facts': [{'ref': FACT_REF, 'field': 'mult_proc', 'label': 'PFS multiple procedure indicator',
+                    'value': '3'}]}]}]}
+PASSAGES_RESULT = {'tool': 'cms_policy_passages', 'topic': 'ncci_endoscopy_rules', 'codes': ['45385'], 'notes': [],
+                   'passages': [
+    {'ref': PASSAGE_REF, 'passage_key': PASSAGE_REF, 'source_key': 'cms-ncci-policy-manual-2026',
+     'kind': 'cms-ncci-policy-manual', 'release': 'Revision 2026', 'effective_start': '2026-01-01',
+     'effective_end': '2026-12-31', 'section': 'Chapter VI §C.1', 'page': '6', 'topic': 'ncci.endoscopy',
+     'topic_value': '', 'sha256': '1' * 64, 'source_sha256': '2' * 64,
+     'text': 'Synthetic passage text for the tests.'}]}
 
 
 def sha(data: bytes) -> str:
@@ -451,6 +459,9 @@ class ConfirmationTests(Harness2Case):
                       .order_by('created_at'))
         self.assertEqual([e.event for e in events], ['finding.confirmed', 'context.changed'])
         self.assertEqual(events[1].data['fields'], ['service_date'])
+        # the context's own audit row names the confirmation the date entered by (HARNESS.md 12.5)
+        self.assertEqual((events[1].data['confirmation'], events[1].data['context']),
+                         (str(confirmation.pk), str(self.encounter.current_context_id)))
         self.assertFalse(models.Decision.objects.exists())
 
 

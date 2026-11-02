@@ -270,14 +270,20 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 (`codes_added`, never independent) and its unverified quotes. The three kinds of references are never merged (11.2):
 `references` are those of the row's first-reading run and `peer_references` those of its peer-review run - in each,
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
-with the source, release and effective window its tool result stated, '' where it stated none, and the tool), and
-`used` every reference the run's answer says it relied on, with `retrieved` CPT Studio's check against that same run's
-tool results (`retrieved: false` is a reference cited but never retrieved, never shown as retrieved; one participant's
-or phase's retrieval never counts for another's). `harness.reference_validation` stays the reconciliation's retrieval
-only.
+with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a
+stored result - '' where it stated none, and the tool; a run that reused a retained answer has the tool calls of the
+run it reused, which answered for it), and `used` every reference the run's answer says it relied on, with `retrieved`
+CPT Studio's check against that same run's tool results, as the reader recorded it (`retrieved: false` is a reference
+cited but never retrieved, never shown as retrieved; one participant's or phase's retrieval never counts for
+another's). `harness.reference_validation` stays the reconciliation's retrieval only. The phase, each run's reading and
+peer review and these references are read by the pipeline's own functions (studio/jobs.py), so the page states exactly
+what the assessments read.
 
 Each clarification gains `candidates` and `confirmation`. Only an OPEN question of the final assessment has candidates
-(an assess #1 whose peer stages follow has none, and neither has a Corti-only encounter): the answers the frozen
+(an assess #1 whose peer stages follow has none, and neither has a Corti-only encounter, nor any encounter while no
+model participant is configured, when no assessment would read a confirmation). The final assessment is the pipeline's
+own: assess #2 and its re-assessments, or an assess #1 that owes no peer stage - no participant's first reading was
+read, or a member date conflict holds the encounter, while which nothing is sent: the answers the frozen
 phase-1 readings and the peer answers of the runs that assessment read offer for it (HARNESS.md 12.5) - the service
 date, a proposal's performed status, the extent, the structure examined, the cannulation outcome, the E/M basis; never
 another fact. `value` is in CPT Studio's own words (a `YYYY-MM-DD` date; `performed`, `not performed`, `cancelled`,
@@ -548,7 +554,9 @@ located it, the attestation, and what became of it - the service date through th
 read by the assessment or not, with why), and after REVIEW PARTICIPANTS a PEER REVIEW section (each participant's peer
 review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions with the value in CPT
 Studio's own words, its positions on codes and the codes it proposed "after peer review, never independent", each with
-its located passages; a phase-1 report says the peer reviews follow) and a PARTICIPANT REFERENCES section (by
+its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
+no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
+and a PARTICIPANT REFERENCES section (by
 participant and phase, what that run's own tool calls retrieved and what it says it used, "cited, not retrieved" where
 its own run never returned it) - apart from REFERENCE RETRIEVAL, which stays the reconciliation's. REVIEW PARTICIPANTS
 gives a tool loop's exchanges and tool calls, and PROVIDER USAGE lists a peer-review run as a "peer review". No

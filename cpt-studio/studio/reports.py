@@ -487,13 +487,18 @@ def _harness2(assessment):
 def _peer_reviews(assessment, phase):
     """Each configured model participant's peer review as this assessment read it (12.3): its state, run and mode, the
     frozen inputs it was shown, and its answers, positions and additional codes with their located passages. Phase 1:
-    none recorded yet - ``owed`` says whether any is to follow (a participant's first reading was read)."""
+    none recorded yet - ``owed`` says whether any is to follow, by the pipeline's own rule (review.owed_peer_stages: a
+    participant's first reading was read, and no member date conflict holds the encounter - ``held``)."""
     records = review.model_records(assessment)
     owed = any(record.get('state') == 'read' for record in records.values())
     if phase != 2:
         # a harness@1 assessment records no frozen phase-1 outputs (12.3): no peer review ever follows it
         predates = not any('frozen' in record for record in records.values())
-        return {'recorded': False, 'owed': owed and not predates, 'predates': predates, 'participants': []}
+        due = bool(review.owed_peer_stages(assessment))
+        held = owed and not predates and review.peer_review_held(assessment)
+        unowned = owed and not predates and not due and not held  # read, but no participant that read is configured
+        return {'recorded': False, 'owed': due and not predates, 'predates': predates,
+                **({'held': True} if held else {}), **({'unowned': True} if unowned else {}), 'participants': []}
     revision = assessment.revision
     text, index = revision.text, candidates._page_index(revision.pages)
     out = []
@@ -512,8 +517,9 @@ def _peer_reviews(assessment, phase):
         if peer_run is not None:
             entry.update(run=str(peer_run.pk), mode=review.run_mode(peer_run))
         if state == 'read' and peer_run is not None:
-            peer_review, problem = review.stored_peer_review(peer_run)
-            if peer_review is None or peer_review.refused or sha256_json(peer_review) != record.get('peer_sha256'):
+            peer_review = review.recorded_peer_review(assessment, record)  # as assess #2 read it, or None
+            if peer_review is None:
+                problem = review.stored_peer_review(peer_run)[1]
                 entry.update(state='unreadable', reason=problem or 'Its stored answer no longer reads as recorded.')
             else:
                 entry.update(_peer_items(assessment, peer_review, text, index))
@@ -1112,6 +1118,12 @@ def _peer_section(snap):
     if data.get('predates'):
         return ['  - none: this assessment was recorded before peer review existed']
     if not data.get('recorded'):
+        if data.get('held'):
+            return ['  - none: the service date entered as encounter metadata conflicts with the document, and no '
+                    'peer review is sent while that question is open']
+        if data.get('unowned'):
+            return ['  - none: no participant whose first reading was read is configured now, so no peer review '
+                    'follows it']
         return ['  - none recorded for this assessment: its peer reviews follow it (phase 1)' if data.get('owed') else
                 "  - none: no participant's first reading was read, so no peer review was owed"]
     lines = []

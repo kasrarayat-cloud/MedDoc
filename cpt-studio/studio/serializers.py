@@ -448,9 +448,15 @@ def is_owner(membership):
 
 # --- the harness block (HARNESS.md 7): one row per participant, reference validation, clarification, final status -----
 
+# The stages of a chain, in order (HARNESS.md 12.1): the assess stands twice - assess #1, which ends phase 1 (every
+# assess before harness@2 is one), and assess #2, which follows the peer stages, as its re-assessments after a
+# confirmation do. A job takes its kind's place; an assess, the place of what it reads (_stage_index).
 STAGE_ORDER = (models.Job.EXTRACT, models.Job.ANALYZE, models.Job.PREDICT, models.Job.ASTRA, models.Job.FABLE,
-               models.Job.ASSESS)
-HARNESS_STAGES = {review.CORTI: models.Job.PREDICT, 'astra': models.Job.ASTRA, 'fable': models.Job.FABLE}
+               models.Job.ASSESS, models.Job.ASTRA_PEER, models.Job.FABLE_PEER, models.Job.ASSESS)
+# Each row's stages, in chain order: Corti's predict; each model participant's first reading, then its peer review.
+HARNESS_STAGES = {review.CORTI: (models.Job.PREDICT,), 'astra': (models.Job.ASTRA, models.Job.ASTRA_PEER),
+                  'fable': (models.Job.FABLE, models.Job.FABLE_PEER)}
+PEER_STAGES = tuple(kind for kind in STAGE_ORDER if kind in models.Job.PEER_KINDS)  # astra_peer, then fable_peer
 # Assessment.participants states (types.PARTICIPANT_STATES) -> the row's state
 RECORD_STATES = {'read': 'done', 'refused': 'refused', 'failed': 'failed', 'unknown': 'unknown', 'not_sent': 'not_sent',
                  'blocked': 'blocked', 'not_configured': 'not_configured', 'not_run': 'not_sent'}
@@ -465,11 +471,25 @@ BLOCKED_DETAIL = 'Nothing was sent: a previous request has an unknown outcome.' 
 REUSED_WORDS = ' (a retained answer to the identical request was reused; nothing was sent)'
 
 
+def _stage_index(job):
+    """``job``'s place in STAGE_ORDER, or None for a stage the chain does not list (the second review's): its kind's
+    first place, except an assess that reads the peer reviews - assess #2 or a re-assessment after a confirmation
+    (jobs._assess_mode, which reads the key it was queued under) - which takes the second assess's."""
+    from .jobs import FIRST, _assess_mode  # local import: jobs imports this module's peers
+
+    if job.kind not in STAGE_ORDER:
+        return None
+    if job.kind == models.Job.ASSESS and _assess_mode(job) != FIRST:
+        return len(STAGE_ORDER) - 1
+    return STAGE_ORDER.index(job.kind)
+
+
 def _stage_progress(jobs, kind):
     """(the stage's latest job, whether the current chain has yet to reach it): a job of an earlier stage newer than the
     stage's own latest - or one while it has none - means the chain has not got there. ``jobs``: the current revision's,
     oldest first."""
-    earlier = [job for job in jobs if job.kind in STAGE_ORDER[:STAGE_ORDER.index(kind)]]
+    position = STAGE_ORDER.index(kind)
+    earlier = [job for job in jobs if job.kind in STAGE_ORDER[:position] and _stage_index(job) < position]
     own = [job for job in jobs if job.kind == kind]
     latest = own[-1] if own else None
     return latest, bool(earlier) and (latest is None or earlier[-1].created_at > latest.created_at)
@@ -572,7 +592,7 @@ def _participant_row(encounter, assessment, jobs, name, configured):
     from .jobs import _participant_run, _unreconciled_unknown  # local import: jobs imports this module's peers
 
     _, label, vendor, model = next(entry for entry in review.HARNESS_PARTICIPANTS if entry[0] == name)
-    progress = _progress(jobs, HARNESS_STAGES[name], name in configured)
+    progress = _progress(jobs, HARNESS_STAGES[name][0], name in configured)
     if progress is not None:
         detail = {'running': RUNNING_DETAIL, 'waiting': WAITING_DETAIL, 'stopped': STOPPED_DETAIL}[progress]
         return _row(name, label, vendor, model, progress, detail, None)
@@ -648,17 +668,16 @@ PEER_WAITING = {'waiting': WAITING_DETAIL, 'running': RUNNING_DETAIL, 'stopped':
 
 def _peer_progress(jobs, name):
     """'waiting', 'running' or 'stopped' while the current chain has not finished ``name``'s peer stage (HARNESS.md
-    12.1: astra_peer, then fable_peer); None once its outcome stands or nothing will run it."""
-    order = participants.PARTICIPANTS
-    kinds = {f'{other}_peer': other for other in order}
-    own = [job for job in jobs if job.kind == f'{name}_peer']
+    12.1: astra_peer, then fable_peer, in STAGE_ORDER); None once its outcome stands or nothing will run it."""
+    kind = HARNESS_STAGES[name][1]
+    own = [job for job in jobs if job.kind == kind]
     if own and own[-1].state in (models.Job.QUEUED, models.Job.RUNNING):
         return 'running' if own[-1].state == models.Job.RUNNING else 'waiting'
     if own and own[-1].state == models.Job.CANCELLED and jobs and jobs[-1].pk == own[-1].pk:
         return 'stopped'
     # an earlier participant's peer stage (or this one's) is under way, and this participant's comes after it
-    ahead = [job for job in jobs if job.kind in kinds and job.state in (models.Job.QUEUED, models.Job.RUNNING)
-             and order.index(kinds[job.kind]) <= order.index(name)]
+    upto = PEER_STAGES[:PEER_STAGES.index(kind) + 1]
+    ahead = [job for job in jobs if job.kind in upto and job.state in (models.Job.QUEUED, models.Job.RUNNING)]
     if ahead and (not own or own[-1].created_at < ahead[0].created_at):
         return 'waiting'
     return None
@@ -709,7 +728,7 @@ def _harness2(row, assessment, jobs):
         peer_run = review.record_run(assessment, record, 'peer_run')
         peer_review = None
         if peer_run is not None and record.get('peer_state') == 'read':
-            peer_review, _ = review.stored_peer_review(peer_run)
+            peer_review = review.recorded_peer_review(assessment, record)  # the review assess #2 read, or None
         out['peer'] = {'state': RECORD_STATES.get(record.get('peer_state'), 'unknown'), 'detail': _peer_detail(record),
                        'run_id': str(peer_run.pk) if peer_run is not None else None,
                        'codes_added': _codes_added(peer_review),
