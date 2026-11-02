@@ -207,6 +207,18 @@ class StopTimeoutTests(unittest.TestCase):
         # the access check sends once and must not be cut off before the send deadline
         self.assertGreater(install.ACCESS_CHECK_SECONDS, participant)
 
+    def test_the_worker_outlasts_a_whole_tool_loop_and_stops_at_the_stale_sweeps_bound(self):
+        # harness@2 (HARNESS.md 11.2): one participant phase is a loop of at most PARTICIPANT_MAX_EXCHANGES exchanges
+        # within PARTICIPANT_LOOP_DEADLINE_SECONDS; a stop must let it record its outcome, and a stage the stop
+        # outlasts is one the stale-stage sweep settles as cut short anyway.
+        loop, stale = settings_value('PARTICIPANT_LOOP_DEADLINE_SECONDS'), settings_value('STALE_RUNNING_SECONDS')
+        self.assertEqual((loop, stale), (540, 600))
+        self.assertGreater(install.STOP_SECONDS['worker'], loop)
+        self.assertEqual(install.STOP_SECONDS['worker'], stale)
+        self.assertEqual(install.STOP_SECONDS['worker'], 600)
+        self.assertEqual(install.STOP_SECONDS['web'], 30)  # the web sends nothing: unchanged
+        self.assertGreater(loop, settings_value('PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS'))
+
     def test_parking_and_removing_wait_for_the_whole_stop_timeout(self):
         calls = []
 
@@ -215,12 +227,13 @@ class StopTimeoutTests(unittest.TestCase):
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         worker = {'Id': 'w', 'Image': 'old', 'Config': {'Labels': {install.LABEL: '1', install.ROLE_LABEL: 'worker'}}}
         with mock.patch.object(install, 'docker', fake_docker), \
-                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker]):
+                mock.patch.object(install, 'inspect', side_effect=[None, worker, worker, worker]):
             install.park('worker')
             install.remove_service_container(install.SERVICES['worker'], 'worker')
+            install.stop_service_container(install.SERVICES['worker'], 'worker')
         stops = [(args, kwargs) for args, kwargs in calls if args[0] == 'stop']
-        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '360')] * 2)
-        self.assertTrue(all(kwargs['timeout'] > 360 for _, kwargs in stops))
+        self.assertEqual([args[:3] for args, _ in stops], [('stop', '--time', '600')] * 3)
+        self.assertTrue(all(kwargs['timeout'] > 600 for _, kwargs in stops))
 
 
 class ServiceMountTests(unittest.TestCase):
@@ -943,6 +956,13 @@ class MigrationSafetyTests(TemporaryDirectoryTest):
             self.assertIn(f"{column}: NOT NULL, given a database default by this migration's SQL", why)
         self.assertIn('PassageSource: a new table no older revision reads', why)
         self.assertIn('ReferencePassage: a new table no older revision reads', why)
+        # harness@2: three new tables and constraints on two of them; no column of an existing table (so no AddField)
+        self.assertEqual(verdicts['0008_harness2_exchanges_tools_confirmations'], {'safe': True, 'why': [
+            'FindingConfirmation: a new table no older revision reads',
+            'ProviderExchange: a new table no older revision reads',
+            'ToolCall: a new table no older revision reads',
+            'providerexchange: a constraint on a table this migration creates',
+            'toolcall: a constraint on a table this migration creates']})
 
     def test_safe_shapes(self):
         cases = [

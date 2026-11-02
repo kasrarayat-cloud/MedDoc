@@ -610,8 +610,9 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'type=bind,src={install.CORTI_TARGET},dst={install.CREDENTIALS_IN_CONTAINER},readonly', mounts)
         self.assertIn(f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}', self.flags(live, '-e'))
         self.assertIn('--no-healthcheck', live)
-        # above the participants' 330 s send deadline (test_install_harness pins it against settings.py)
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['360'])
+        # above a participant phase's 540 s tool-loop deadline and equal to the 600 s stale-stage sweep
+        # (test_install_harness pins both against settings.py)
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['600'])
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())

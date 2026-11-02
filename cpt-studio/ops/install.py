@@ -54,10 +54,12 @@ DB_VOLUME = 'cpt-studio-pg'
 FILES_VOLUME = 'cpt-studio-files'
 DB_CONTAINER = 'cpt-studio-db'
 SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
-# A stopped worker finishes the stage it is in (run_worker), which may be inside a harness participant's send: that ends
-# by settings.PARTICIPANT_SEND_DEADLINE_SECONDS (330 s; Corti's by 150 s) and must be recorded before Docker kills the
-# worker, or a request that reached the vendor is left 'sending' (HARNESS.md 8).
-STOP_SECONDS = {'web': 30, 'worker': 360}
+# A stopped worker finishes the stage it is in (run_worker), which may be inside a harness participant phase's tool
+# loop: that ends by settings.PARTICIPANT_LOOP_DEADLINE_SECONDS (540 s for at most 4 exchanges; one send by 330 s,
+# Corti's by 150 s) and must be recorded before Docker kills the worker, or a request that reached the vendor is left
+# 'sending' (HARNESS.md 8, 11.2). 600 s is settings.STALE_RUNNING_SECONDS, the stale-stage sweep's bound: a stage still
+# running when the stop timeout passes is one that sweep settles as cut short anyway, so waiting longer buys nothing.
+STOP_SECONDS = {'web': 30, 'worker': 600}
 DB_NAME = DB_USER = 'cptstudio'
 APP_UID = 10150  # must equal the Dockerfile's USER; unique on this host (10001 is a co-tenant's)
 POSTGRES_UID = 70
@@ -139,6 +141,16 @@ REFERENCE_FILES = {
                              'url': 'https://www.cms.gov/files/zip/'
                                     'medicare-ncci-2026-q4-practitioner-services-mue-table.zip'},
 }
+# CPT Studio's own note on every CMS reference source it imports (ReferenceSource.license_note, written from
+# studio.reference.importers.LICENSE_NOTE). The owner, 2026-11-01 (HARNESS.md 11.6): CPT Studio's own wording must not
+# imply a licensing exemption, so the note states a fact, never a permission. The license-note phase replaces exactly
+# the old text with exactly the new one on the rows imported before the importer changed; any other note is left alone.
+LICENSE_NOTE_OLD = ('CPT codes are copyright the American Medical Association; descriptors are not imported or '
+                    'displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA '
+                    'license.')
+LICENSE_NOTE_NEW = ('CPT codes are copyright the American Medical Association; descriptors are not imported or '
+                    'displayed. CPT Studio holds no AMA licence; whether its use of CPT content needs one is an open '
+                    'owner decision.')
 
 COMMAND_ENV = {'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8',
                'HOME': os.environ.get('HOME', '/home/claude'), 'DOCKER_HOST': 'unix:///run/docker.sock'}
@@ -1698,8 +1710,10 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              older) reads a participant: its page and both reports show the code as the provider's own proposal,
 #              naming no other proposer (I4), and its re-assessment reads Corti's answer alone, so the code leaves the
 #              decision set without a reviewer's decision - the 'second_review' case again. No state can be put back for
-#              it (SHOWN_HAZARDS). Its stages (kinds astra and fable) are closed like a second review's: no such
-#              revision's worker has a stage for them (CLOSE_STAGES).
+#              it (SHOWN_HAZARDS). Its stages - kinds astra and fable, and harness@2's peer reviews astra_peer and
+#              fable_peer (HARNESS.md 11.1) - are closed like a second review's whenever the next worker has no stage
+#              for them: no worker before the harness has any of the four, and none before harness@2 a peer review
+#              (CLOSE_STAGES, given the next worker's own kinds).
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1946,6 +1960,51 @@ for pk in P['encounters']:
             models.Encounter.objects.filter(pk=encounter.pk).update(state=derived, updated_at=timezone.now())
             changed[str(encounter.pk)] = [read, derived]
 print(ANSWER + json.dumps({'encounters': len(P['encounters']), 'changed': changed}))
+'''
+# The license-note phase's correction (HARNESS.md 11.6), run in this revision's own image. It refuses, changing nothing,
+# unless that image's importer writes exactly P['new']: the rows would otherwise hold another note than its next import
+# writes. Then, in one transaction holding the table against writers (SHARE ROW EXCLUSIVE: readers are not blocked),
+# every ReferenceSource row whose license_note is exactly P['old'] gets exactly P['new'], and nothing else changes: the
+# rows are read before and after, and any other difference raises, so the transaction is rolled back. Assessments and
+# reports are never touched (they record what was shown); the answer counts the assessments that recorded the old note.
+LICENSE_NOTE_FIX = '''
+from django.db import connection, transaction
+from studio import models
+from studio.reference import importers
+
+
+def counts(rows):
+    found = {'old': 0, 'new': 0, 'other': 0}
+    for row in rows:
+        note = row['license_note']
+        found['old' if note == P['old'] else 'new' if note == P['new'] else 'other'] += 1
+    return found
+
+
+Source = models.ReferenceSource
+if getattr(importers, 'LICENSE_NOTE', None) != P['new']:
+    answer = {'refused': 'this image writes another note on a source it imports (studio.reference.importers.'
+                         'LICENSE_NOTE is not the corrected text), so its next import would undo the correction'}
+else:
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL lock_timeout = '30s'")
+            cursor.execute('LOCK TABLE ' + connection.ops.quote_name(Source._meta.db_table)
+                           + ' IN SHARE ROW EXCLUSIVE MODE')
+        before = list(Source.objects.order_by('pk').values())
+        old = [row['id'] for row in before if row['license_note'] == P['old']]
+        updated = Source.objects.filter(pk__in=old, license_note=P['old']).update(license_note=P['new'])
+        after = list(Source.objects.order_by('pk').values())
+        if updated != len(old) or after != [dict(row, license_note=P['new']) if row['id'] in old else row
+                                            for row in before]:
+            raise RuntimeError('correcting the licence note would have changed more than the old notes; nothing '
+                               'was changed')
+    answer = {'rows': len(before), 'before': counts(before), 'after': counts(after), 'updated': updated,
+              'updated_keys': sorted(row['key'] for row in before if row['id'] in old),
+              'other_keys': sorted(row['key'] for row in after if row['license_note'] not in (P['old'], P['new'])),
+              'assessments_with_old_note': models.Assessment.objects.filter(
+                  reference_sources__contains=[{'license_note': P['old']}]).count()}
+print(ANSWER + json.dumps(answer))
 '''
 
 
@@ -2903,6 +2962,62 @@ def phase_passages(ctx) -> dict:
     return {'files': results, 'summary': f'passages imported from {len(results)} file(s); the importer is idempotent'}
 
 
+LICENSE_NOTE_COUNTS = ('old', 'new', 'other')
+LICENSE_NOTE_ANSWER = ('rows', 'before', 'after', 'updated', 'updated_keys', 'other_keys', 'assessments_with_old_note')
+
+
+def license_note_problem(answer) -> str:
+    """'' when LICENSE_NOTE_FIX's answer adds up - exactly the old notes became the new one and every other count stayed
+    - else what does not. An answer that is not the counts this phase reads is never read as 'nothing to correct'."""
+    try:
+        before, after, updated, rows = answer['before'], answer['after'], answer['updated'], answer['rows']
+        shaped = (set(answer) >= set(LICENSE_NOTE_ANSWER) and set(before) == set(after) == set(LICENSE_NOTE_COUNTS)
+                  and all(type(value) is int for value in (*before.values(), *after.values(), updated, rows,
+                                                            answer['assessments_with_old_note']))
+                  and all(isinstance(answer[name], list) and all(isinstance(key, str) for key in answer[name])
+                          for name in ('updated_keys', 'other_keys')))
+    except (KeyError, TypeError, AttributeError):
+        shaped = False
+    if not shaped:
+        return 'its answer is not the counts this phase reads'
+    if (updated != before['old'] or len(answer['updated_keys']) != updated
+            or after != {'old': 0, 'new': before['new'] + updated, 'other': before['other']}
+            or not rows == sum(before.values()) == sum(after.values())
+            or len(answer['other_keys']) != after['other']):
+        return f'its counts do not add up (before {before}, after {after}, {updated} updated of {rows} row(s))'
+    return ''
+
+
+def phase_license_note(ctx) -> dict:
+    """After app (and reference): CPT Studio's own licence note on the CMS reference sources already imported, corrected
+    in place (owner, 2026-11-01; HARNESS.md 11.6) by LICENSE_NOTE_FIX in a one-shot of this revision's image, as the
+    passages phase runs its importer. Exactly LICENSE_NOTE_OLD becomes exactly LICENSE_NOTE_NEW; nothing else changes.
+    Idempotent: with no row left holding the old note it changes nothing, and its receipt says so."""
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    # The image's models must be the schema's, as for the passages phase: every migration this revision has applied.
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. Nothing was changed.')
+    answer = app_script(image_id, env, LICENSE_NOTE_FIX, {'old': LICENSE_NOTE_OLD, 'new': LICENSE_NOTE_NEW},
+                        what='Correcting the reference licence note')
+    if isinstance(answer, dict) and 'refused' in answer:
+        raise InstallError(f'{answer["refused"]}; nothing was changed. Install a revision whose importer writes the '
+                           'corrected note, then run this phase.', details=answer)
+    problem = license_note_problem(answer)
+    if problem:
+        raise InstallError(f'The licence note correction answered, but {problem}. Run --phase license-note again: it '
+                           'changes nothing more and records the counts as they are.', details={'answer': answer})
+    counts = {name: answer[name] for name in LICENSE_NOTE_ANSWER}
+    summary = (f'licence note corrected on {counts["updated"]} reference source(s): {", ".join(counts["updated_keys"])}'
+               if counts['updated'] else 'no reference source holds the old licence note; nothing changed')
+    return {'image_id': image_id, 'old_note': LICENSE_NOTE_OLD, 'new_note': LICENSE_NOTE_NEW,
+            'old_note_sha256': sha256(LICENSE_NOTE_OLD.encode()), 'new_note_sha256': sha256(LICENSE_NOTE_NEW.encode()),
+            **counts, 'summary': summary}
+
+
 def credentials_document(ctx, accounts) -> dict:
     return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'synthetic_only': True,
             'workspace': ctx.args.workspace_name, 'revision': ctx.revision, 'created_at': utc_now(),
@@ -3397,7 +3512,8 @@ def phase_rollback_vhost(ctx) -> dict:
 
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
-    'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'provision': phase_provision,
+    'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
+    'provision': phase_provision,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
     'verify': phase_verify, 'rollback-app': phase_rollback_app, 'rollback-vhost': phase_rollback_vhost,
 }
