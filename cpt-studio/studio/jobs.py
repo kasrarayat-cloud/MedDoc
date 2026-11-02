@@ -908,7 +908,10 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
     CPT Studio's CMS tool executor (``execute_tool``; studio.reference.tools for the encounter's workspace when none is
     given) and ``original_bytes`` - a PDF upload's original, read back through studio.storage against its sha256 - to be
     re-verified against the request and expanded at send time. Every exchange and tool call of the loop is recorded with
-    the run's outcome (_finish_loop). Corti's path is unchanged."""
+    the run's outcome (_finish_loop). A member's Stop is observed before every exchange of the loop, not only the first
+    (refutation round 1, sends-3): one recorded while the loop runs ends it before its next exchange, the run records
+    the exchanges sent (failed, sent: it has no final answer, and its request is never sent again) and the stage ends
+    stopped. Corti's path is unchanged."""
     encounter, revision = job.encounter, job.revision
     independent = purpose in PARTICIPANT_PURPOSES
     if independent:
@@ -924,8 +927,7 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
             requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {},
             **(_participant_identity(provider) if independent else {}))
-        job.refresh_from_db(fields=['stop_requested_at'])
-        if job.stop_requested_at or is_stopped(encounter.pk):
+        if _stop_requested(job, encounter):
             run.state = models.ProviderRun.CANCELLED
             run.error = 'Stopped before sending; nothing was sent.'
             run.finished_at = timezone.now()
@@ -937,22 +939,35 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
                      run_identity=str(run.run_identity), purpose=purpose)
+        outcome = None
         if independent:
             tools = execute_tool or reference_tools.executor(encounter.workspace)
-            _finish_loop(run, _send_loop(provider, request, run, original_bytes, tools))
+            outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter))
+            _finish_loop(run, outcome)
         else:
             _finish_run(run, provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30))
         # a participant's row names its provider, so the Activity tab words it ("Astra response recorded")
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
                      purpose=purpose, **({'provider': provider.name} if independent else {}))
+        if outcome is not None and outcome.stopped:
+            raise StageCancelled(STOPPED_IN_LOOP_MESSAGE)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
     return run
 
 
+def _stop_requested(job, encounter):
+    """Whether a member's Stop was recorded for ``job`` or its encounter, read again from the database: before the
+    send, and before every later exchange of a participant's tool loop."""
+    job.refresh_from_db(fields=['stop_requested_at'])
+    return bool(job.stop_requested_at) or is_stopped(encounter.pk)
+
+
 PARTICIPANT_PURPOSES = (models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW)
+STOPPED_IN_LOOP_MESSAGE = ('Stopped by a workspace member while the tool loop ran: what was sent is recorded, and '
+                           'nothing more was sent.')
 LOOP_RECORDING_SECONDS = 15  # kept, after a whole tool loop, for recording its outcome within the stage's deadline
 LOOP_LATE_MESSAGE = ('the stage has run too long to finish a whole tool loop before its deadline; nothing was reserved '
                      'or sent, and it starts again')
@@ -976,15 +991,16 @@ def _check_loop_time(job):
         raise Requeue(LOOP_LATE_MESSAGE)
 
 
-def _send_loop(provider, request, run, original_bytes, execute_tool):
+def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
     exchange recorded, and blocks every further send until a member reconciles it - never a run left 'sending' that
-    nothing blocks on and no member can reconcile (I8)."""
+    nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's Stop, observed before every later
+    exchange (sends-3)."""
     try:
         outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                                      client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                     execute_tool=execute_tool)
+                                     execute_tool=execute_tool, should_stop=should_stop)
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):

@@ -111,8 +111,9 @@ class FakeParticipant:
         return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
                                canonical_sha256=hashlib.sha256(canonical_body(body)).hexdigest(), contexts=(text,))
 
-    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool):
-        """The run (HARNESS.md 11.2): the real tool loop, its one exchange answered by send, asking for no tool."""
+    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None):
+        """The run (HARNESS.md 11.2): the real tool loop, its one exchange answered by send, asking for no tool; the
+        member's Stop is passed on as the adapters pass it."""
         self.executors.append(execute_tool)
 
         def post(turn, body, deadline):
@@ -127,7 +128,8 @@ class FakeParticipant:
                         longest_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                         max_exchanges=settings.PARTICIPANT_MAX_EXCHANGES,
                         max_tool_result_bytes=settings.PARTICIPANT_MAX_TOOL_RESULT_BYTES,
-                        max_request_bytes=settings.PARTICIPANT_MAX_REQUEST_BYTES, body_keys=frozenset(request.body))
+                        max_request_bytes=settings.PARTICIPANT_MAX_REQUEST_BYTES, body_keys=frozenset(request.body),
+                        should_stop=should_stop)
 
     def send(self, request, *, deadline_s, client_request_id, original_bytes):
         peer = request.body.get('instructions') == prompt.PEER_INSTRUCTIONS

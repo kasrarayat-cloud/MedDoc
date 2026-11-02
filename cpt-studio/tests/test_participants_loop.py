@@ -77,14 +77,15 @@ class _LoopContract:
         return FakeResponse(200, raw, headers={self.request_id_header: f'req_synthetic_{number:04d}'})
 
     def run_loop(self, *steps, kind='paste', original_bytes=None, request=None, deadline_s=540, executor=None,
-                 client_request_id=CLIENT_REQUEST_ID, **options):
+                 client_request_id=CLIENT_REQUEST_ID, should_stop=None, **options):
         session = FakeSession(*steps)
         adapter, made = self.make(session, **options)
         if request is None:
             request = adapter.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None)
         executor = FakeExecutor() if executor is None else executor
+        stop = {} if should_stop is None else {'should_stop': should_stop}
         outcome = adapter.send_loop(request, deadline_s=deadline_s, client_request_id=client_request_id,
-                                    original_bytes=original_bytes, execute_tool=executor)
+                                    original_bytes=original_bytes, execute_tool=executor, **stop)
         self.assertNoSecrets(outcome)
         self.assertTrue(all(response.closed for response in session.responses))
         self.assertGreaterEqual(len(made), len(session.calls))  # a session per exchange that reached http.post
@@ -329,6 +330,68 @@ class _LoopContract:
                          ('not_sent', 'The deadline passed before the request was sent; nothing was sent.'))
         self.assertEqual((outcome.final.outcome, outcome.final.sent), ('failed', True))
         self.assertIn('The tool loop stopped at exchange 2, which was not sent', outcome.final.error)
+
+    # --- a member's Stop (refutation round 1, sends-3: HARNESS.md 2, a Stop observed before sending) ------------------
+
+    def test_a_stop_is_observed_before_the_tools_are_answered_and_nothing_more_is_sent(self):
+        answer = self.tool_answer(self.facts_call())
+        asked = []
+
+        def should_stop():
+            asked.append(True)
+            return True
+        outcome, session, _, _, executor = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2),
+                                                         should_stop=should_stop)
+        self.assertEqual(len(session.calls), 1)  # the exchange that asked for tools, then nothing
+        self.assertEqual((executor.calls, asked), ([], [True]))  # its tool calls were never answered
+        self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.stopped), ('failed', True, True))
+        self.assertEqual(outcome.final.error, loop.STOPPED.format(number=1, plural=''))
+        self.assertEqual([(record.outcome, record.tool_calls) for record in outcome.exchanges], [('succeeded', ())])
+        self.assertEqual(outcome.final.response_bytes, answer)
+
+    def test_a_stop_while_the_tools_are_answered_is_observed_before_the_next_exchange_is_sent(self):
+        requested = []
+
+        def answering(name, arguments):
+            requested.append(True)  # a member's Stop lands while CPT Studio answers the tool call
+            return {'ok': True}, ['fact:synthetic:45385:status']
+        answer = self.tool_answer(self.facts_call())
+        outcome, session, _, _, executor = self.run_loop(
+            self.ok(answer), self.ok(self.final_raw, 2), executor=FakeExecutor({'cms_code_facts': answering}),
+            should_stop=lambda: bool(requested))
+        self.assertEqual((len(session.calls), len(executor.calls)), (1, 1))
+        self.assertEqual([len(record.tool_calls) for record in outcome.exchanges], [1])  # recorded, never sent
+        self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.stopped), ('failed', True, True))
+        self.assertEqual(outcome.final.error, loop.STOPPED.format(number=1, plural=''))
+
+    def test_a_stop_after_two_exchanges_names_them_and_one_never_asked_changes_nothing(self):
+        first = self.tool_answer(self.facts_call('call_synthetic_1'), number=1)
+        second = self.tool_answer(self.facts_call('call_synthetic_2'), number=2)
+        asked = []  # asked before answering exchange 1's tools, before sending exchange 2, then after exchange 2
+
+        def third_time():
+            asked.append(True)
+            return len(asked) >= 3
+        outcome, session, _, _, _ = self.run_loop(self.ok(first, 1), self.ok(second, 2), self.ok(self.final_raw, 3),
+                                                  should_stop=third_time)
+        self.assertEqual((len(session.calls), outcome.stopped), (2, True))
+        self.assertEqual(outcome.final.error, loop.STOPPED.format(number=2, plural='s'))
+        never, session, _, _, _ = self.run_loop(self.ok(first, 1), self.ok(self.final_raw, 2),
+                                                should_stop=lambda: False)
+        self.assertEqual((len(session.calls), never.final.outcome, never.stopped), (2, 'succeeded', False))
+        # a final answer is never cut short: the Stop is asked only where the loop would go on
+        done, session, _, _, _ = self.run_loop(self.ok(self.final_raw), should_stop=lambda: True)
+        self.assertEqual((len(session.calls), done.final.outcome, done.stopped), (1, 'succeeded', False))
+
+    def test_a_stop_check_that_cannot_be_made_ends_the_loop_as_a_stop(self):
+        def broken():
+            raise RuntimeError('synthetic: the database is gone')
+        outcome, session, _, _, _ = self.run_loop(self.ok(self.tool_answer(self.facts_call())),
+                                                  self.ok(self.final_raw, 2), should_stop=broken)
+        self.assertEqual((len(session.calls), outcome.final.outcome, outcome.stopped), (1, 'failed', True))
+        self.assertEqual(outcome.final.error, loop.STOP_UNCHECKED.format(number=1, plural='',
+                                                                          error='RuntimeError'))
+        self.assertNotIn('database is gone', outcome.final.error)
 
     # --- unknown, failed and unsent exchanges --------------------------------------------
 
@@ -731,11 +794,11 @@ class ReplayLoopTests(OfflineTestCase):
             if turns is None or record.turn in turns:
                 write_file(folder / f'{record.request_sha256}.json', record.response_bytes)
 
-    def replay(self, kind='paste', original_bytes=None, executor=None):
+    def replay(self, kind='paste', original_bytes=None, executor=None, **stop):
         replay = ReplayParticipant('astra', self.recordings)
         request = replay.build_request(NOTE, PAGES, kind, ORIGINAL if kind == 'pdf' else None)
         return replay.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID,
-                                original_bytes=original_bytes, execute_tool=executor or FakeExecutor())
+                                original_bytes=original_bytes, execute_tool=executor or FakeExecutor(), **stop)
 
     @staticmethod
     def shape(outcome):
@@ -758,6 +821,12 @@ class ReplayLoopTests(OfflineTestCase):
         self.assertEqual([record.usage for record in replayed.exchanges], [{}, {}, {}])
         self.assertEqual(replayed.refs_retrieved, live.refs_retrieved)
         self.assertEqual(final.response_bytes, live.final.response_bytes)
+
+    def test_a_replayed_loop_observes_a_stop_before_its_next_exchange(self):
+        self.record(self.live_loop())
+        replayed = self.replay(should_stop=lambda: True)
+        self.assertEqual((len(replayed.exchanges), replayed.final.outcome, replayed.stopped), (1, 'failed', True))
+        self.assertFalse(replayed.final.sent)  # a replay sends nothing, stopped or not
 
     def test_a_missing_recording_for_a_later_exchange_fails_the_replayed_loop(self):
         live = self.live_loop()

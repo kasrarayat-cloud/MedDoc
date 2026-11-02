@@ -173,7 +173,7 @@ class LoopParticipant(ReplayParticipant):
         self.first_loops, self.peer_loops = [], []
         self.endpoint = LIVE_MODULES[name].ENDPOINT
 
-    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool):
+    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None):
         phase = 'peer' if is_peer(request.body) else 'first'
         queued = self.peer_loops if phase == 'peer' else self.first_loops
         steps = list(queued.pop(0) if queued else (self.peer if phase == 'peer' else self.first))
@@ -197,10 +197,11 @@ class LoopParticipant(ReplayParticipant):
                                endpoint=self.endpoint, requested_model=self.requested_model, returned_model=returned,
                                response_id=response_id)
 
+        stop = {} if should_stop is None else {'should_stop': should_stop}  # the member's Stop, as the adapters pass it
         return loop.run(self, request, post=post, parse_turn=self.live.parse_turn, follow_up=self.live.follow_up,
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
-                        max_request_bytes=self.max_request_bytes, body_keys=self.live.BODY_KEYS)
+                        max_request_bytes=self.max_request_bytes, body_keys=self.live.BODY_KEYS, **stop)
 
     def loops_of(self, phase):
         return [record for record in self.loops if record['phase'] == phase]
@@ -506,6 +507,40 @@ class PhaseOneLoopTests(Harness2Case):
             self.assertEqual((peer.scope['assessment'], records[second][name]['peer_run']),
                              (str(self.assessments(second)[0].pk), str(peer.pk)))
         self.assertEqual(self.encounter(second).state, 'ready_for_review')
+
+
+class StopInLoopTests(Harness2Case):
+    """Refutation round 1, sends-3 (HARNESS.md 2: a Stop observed before sending): a member's Stop recorded while a tool
+    loop runs ends it before its next exchange. The run records what was sent and has no final answer, so it is failed
+    and its request is never sent again; the stage ends stopped, and a member's Resume goes on from it."""
+
+    def test_a_stop_recorded_while_the_loop_runs_ends_it_before_the_next_exchange(self):
+        encounter_id = self.create()
+
+        def stopped_then_asks(body):
+            jobs.stop_encounter(self.encounter(encounter_id), self.reviewer)  # the member's Stop lands mid-loop
+            return asks('astra', facts_call('call_astra_1', ['99213']))
+        self.adapters['astra'].first = [stopped_then_asks, answered('astra', ASTRA_READING)]
+        drain()
+        (astra,) = self.runs_of(encounter_id, 'astra', 'independent')
+        (loop_record,) = self.adapters['astra'].loops_of('first')
+        self.assertEqual(len(loop_record['bodies']), 1)  # exchange 2 was never sent
+        self.assertEqual((astra.state, astra.sent, astra.exchanges.count()), ('failed', True, 1))
+        self.assertEqual(astra.error, loop.STOPPED.format(number=1, plural=''))
+        job = [j for j in self.jobs_of(encounter_id) if j.kind == 'astra'][-1]
+        self.assertEqual((job.state, job.error), ('cancelled', jobs.STOPPED_IN_LOOP_MESSAGE))
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
+        self.assertEqual((self.sent('fable', 'first'), self.kinds(encounter_id)[-1]), (0, 'astra'))
+        # a member's Resume goes on: the stopped request is never sent again, and the chain runs to its end
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual((self.sent('astra', 'first'), self.sent('fable', 'first')), (1, 1))
+        later = self.runs_of(encounter_id, 'astra', 'independent')[-1]
+        self.assertEqual((later.state, later.sent), ('not_sent', False))
+        self.assertTrue(later.error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        record = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((record['astra']['state'], record['fable']['state']), ('not_sent', 'read'))
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
 
 
 class SingleExchangeRunTests(Harness2Case):
