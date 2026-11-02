@@ -1680,19 +1680,26 @@ def confirmed_findings(revision):
     FindingConfirmation of this revision only - a new revision's assessment reads none - except the service date's,
     which entered through the context as the member's date and is never the engine's. Each passage's exactness is
     checked against the revision text, never assumed; the engine checks it again and lists a confirmation it does not
-    read, with why."""
+    read, with why. A proposal's question is bound to the proposal it was made for: the code and support['identity'] of
+    its clarification's own proposal row, which is the question the reviewer answered - never the key alone, which
+    a later assessment can give to another code (EV-1); a row whose proposal records no identity binds to nothing, and
+    the engine says so."""
     text = revision.text
     found = []
-    for row in (models.FindingConfirmation.objects.filter(revision=revision).select_related('confirmed_by')
-                .order_by('created_at', 'pk')):
+    for row in (models.FindingConfirmation.objects.filter(revision=revision)
+                .select_related('confirmed_by', 'clarification__proposal').order_by('created_at', 'pk')):
         if row.scope == 'encounter' or row.fact == 'service_date':
             continue
+        proposal = row.clarification.proposal if row.scope == 'proposal' else None
+        identity = (proposal.support or {}).get('identity') if proposal is not None else ''
         found.append(ConfirmedFinding(
             scope=row.scope, fact=row.fact, family=row.family, proposal_key=row.proposal_key, value=row.value,
             evidence=tuple(_confirmed_span(span, text) for span in row.spans if isinstance(span, dict))
             if isinstance(row.spans, list) else (),
             located_by=tuple(row.located_by) if isinstance(row.located_by, list) else (),
-            confirmed_by=row.confirmed_by.label(), confirmation_id=str(row.pk)))
+            confirmed_by=row.confirmed_by.label(), confirmation_id=str(row.pk),
+            proposal_code=proposal.code if proposal is not None else '',
+            proposal_identity=identity if isinstance(identity, str) else ''))
     return tuple(found)
 
 

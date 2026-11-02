@@ -19,19 +19,22 @@ from django.test import SimpleTestCase
 
 from ops.gi4 import regression, replay
 from studio.gi import detect
-from studio.types import ConfirmedFinding, EvidenceSpan, RoutingResult, from_jsonable, to_jsonable
-from studio.validation import checks
+from studio.types import ConfirmedFinding, EvidenceSpan, ParticipantInput, RoutingResult, from_jsonable, to_jsonable
+from studio.validation import checks, engine
 from studio.validation.engine import assess
 
 PIN = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'pins' / 'replay.json').read_text())
 REVIEWER = 'Rowan Synthetic-Reviewer (fictional)'
-# What each document's open question asks and the passage of the document itself that answers it.
+CONFIGURED = (ParticipantInput('astra', 'failed', reason='HTTP 529 (synthetic)'),)  # a participant that read nothing
+# What each document's open question asks and the passage of the document itself that answers it. An extent is in CPT
+# Studio's own words, as a candidate restates the passage (HARNESS.md 12.7: routing's landmark label): the engine places
+# it on its readers' scale and reads no other value (refutation round 1, EV-4).
 CONFIRMATIONS = {
     'h4-01': ('em_basis', 'gi.office_em', 'sel:0', 'total time on the date of the visit: 52 minutes',
               'Total time I spent on her care on the date of this visit: 52 minutes'),
-    'h4-06': ('extent', 'gi.colonoscopy', 'sel:0', 'ileocolic anastomosis',
+    'h4-06': ('extent', 'gi.colonoscopy', 'sel:0', 'terminal ileum',
               'Reach of the examination: ileocolic anastomosis, with 6 cm of neoterminal ileum viewed through it.'),
-    'h4-03': ('extent', 'gi.egd', 'sel:0', 'descending duodenum',
+    'h4-03': ('extent', 'gi.egd', 'sel:0', 'second part of duodenum',
               'passed down the esophagus, through the stomach and pylorus, into the descending duodenum'),
 }
 # The record: (document, member state) -> (code, (status, its questions) without the confirmation, the same with it,
@@ -82,19 +85,26 @@ class RegressionConfirmationTests(SimpleTestCase):
                                context=m.jobs.context_facts(SimpleNamespace(facts=facts)),
                                reference=replay._reference(m, doc, normalized))
 
-    def assessed(self, i, confirmed=()):
+    def assessed(self, i, confirmed=(), participants=()):
         routing = from_jsonable(RoutingResult, to_jsonable(detect.route(i.text, i.day)))  # as the assess child reads it
         return assess(text=i.text, pages=i.pages, context=i.context, routing=routing, normalized=i.normalized,
                       reference=i.reference, service_date=i.day, provider_status='succeeded', extraction_status='ok',
-                      extraction_messages=(), confirmed=confirmed)
+                      extraction_messages=(), confirmed=confirmed, participants=participants)
 
-    def confirmation(self, doc_id, text):
-        fact, family, key, value, passage = CONFIRMATIONS[doc_id]
-        start = text.index(passage)
-        self.assertEqual(text.count(passage), 1, doc_id)
-        return ConfirmedFinding('proposal', fact, family, key, value, (EvidenceSpan(0, start, start + len(passage),
-                                                                                    passage, True),),
-                                ('fable',), REVIEWER, f'confirmation-{doc_id}')
+    def binding(self, i, key):
+        """What a confirmation of a question of the proposal at ``key`` is bound to (HARNESS.md 12.5): its code and
+        identity, as an assessment a model participant took part in records them."""
+        item = next(p for p in self.assessed(i, participants=CONFIGURED).proposals if p.key == key)
+        return {'proposal_code': item.code, 'proposal_identity': item.support['identity']}
+
+    def confirmation(self, doc_id, i, passage=None, value=None, by=('fable',), cid=None):
+        fact, family, key, named, quoted = CONFIRMATIONS[doc_id]
+        passage = passage or quoted
+        start = i.text.index(passage)
+        self.assertEqual(i.text.count(passage), 1, doc_id)
+        return ConfirmedFinding('proposal', fact, family, key, value or named,
+                                (EvidenceSpan(0, start, start + len(passage), passage, True),), by, REVIEWER,
+                                cid or f'confirmation-{doc_id}', **self.binding(i, key))
 
     def test_the_rows(self):
         for (doc_id, state), (code, held, after_row, asked, complete) in ROWS.items():
@@ -113,7 +123,7 @@ class RegressionConfirmationTests(SimpleTestCase):
             item = next(p for p in before.proposals if p.key == key)
             self.assertEqual((item.code, item.status, sorted(q.fact for q in item.clarifications)), (code, *held), label)
 
-            after = self.assessed(i, (self.confirmation(doc_id, i.text),))
+            after = self.assessed(i, (self.confirmation(doc_id, i),))
             answered = next(p for p in after.proposals if p.key == key)
             self.assertEqual((answered.code, answered.status, sorted(q.fact for q in answered.clarifications)),
                              (code, *after_row), label)
@@ -157,13 +167,23 @@ class RegressionConfirmationTests(SimpleTestCase):
         same hold, with fingerprints that differ, so a decision made on one never carries to the other."""
         doc = self.docs['h4-06']
         i = self.inputs(doc, 'walk')
-        one = self.confirmation('h4-06', i.text)
-        other_passage = 'Anastomosis: widely patent, with healthy mucosa'
-        start = i.text.index(other_passage)
-        other = ConfirmedFinding('proposal', 'extent', 'gi.colonoscopy', 'sel:0', 'ileocolic anastomosis',
-                                 (EvidenceSpan(0, start, start + len(other_passage), other_passage, True),),
-                                 ('astra',), REVIEWER, 'other')
+        one = self.confirmation('h4-06', i)
+        other = self.confirmation('h4-06', i, passage='Anastomosis: widely patent, with healthy mucosa', by=('astra',),
+                                  cid='other')
         a, b = self.assessed(i, (one,)), self.assessed(i, (other,))
         pa, pb = (next(p for p in r.proposals if p.key == 'sel:0') for r in (a, b))
         self.assertEqual((pa.status, pb.status), ('ready', 'ready'))
         self.assertNotEqual(pa.fingerprint, pb.fingerprint)
+
+    def test_a_value_its_readers_cannot_place_is_not_read(self):
+        """An anastomosis is no landmark routing reads: confirmed as the extent, it leaves CPT Studio unable to tell
+        whether the colonoscopy was completed, so it is not read and the proposal stays held (refutation round 1,
+        EV-4: fail closed)."""
+        i = self.inputs(self.docs['h4-06'], 'walk')
+        before = self.assessed(i)
+        after = self.assessed(i, (self.confirmation('h4-06', i, value='ileocolic anastomosis'),))
+        item = next(p for p in after.proposals if p.key == 'sel:0')
+        self.assertEqual((item.status, [q.fact for q in item.clarifications]), ('needs_clarification', ['extent']))
+        self.assertEqual(after.proposals, before.proposals)
+        ignored = next(c for c in after.encounter_checks if c.id == 'confirmations.ignored')
+        self.assertIn(engine.UNPLACED, ignored.detail)

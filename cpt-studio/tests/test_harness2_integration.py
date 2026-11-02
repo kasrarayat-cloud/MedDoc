@@ -11,14 +11,16 @@ import json
 from datetime import timedelta
 from unittest import mock
 
+from django.db import connection
 from django.test import override_settings
 from django.utils import timezone
 
 from studio import jobs, models, reports, review, serializers
 from studio.reference import tools
 from studio.types import EvidenceSpan, to_jsonable
-from tests.test_harness2_pipeline import (LAND, PFS_KEY, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks, failed,
-                                          open_questions, passages_call, reading)
+from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, LAND, PFS_KEY, TWO_EXTENTS, ColonCase, Harness2Case,
+                                          answered, asks, failed, open_questions, passages_call, peer_answer,
+                                          reading)
 from tests.test_harness_pipeline import TIME_QUOTE
 from tests.test_harness_pipeline import _WorkerDied
 from tests.test_pipeline_api import drain
@@ -125,6 +127,97 @@ class ConfirmationEndToEndTests(ColonCase):
         response = confirm(self, encounter_id, question, candidate)
         self.assertEqual(response.status_code, 409, response.content)
         self.assertEqual(response.json()['error'], jobs.REASSESS_NONE)
+        self.assertFalse(models.FindingConfirmation.objects.exists())
+        self.assertFalse(models.AuditEvent.objects.filter(event='finding.confirmed').exists())
+
+
+# --- a confirmation is bound to the proposal it was made for (HARNESS.md 12.5; refutation round 1, EV-1) ---------------
+
+# Each act is left in doubt by its own sentence, and a specimen log documents each. Corti selects nothing; Astra's first
+# reading lists 45385 with a quote that is not in the text and 45380 with a located one, and its peer review locates
+# 45385: assess #1 selects 45380 alone (sel:0), and assess #2 selects 45385 ahead of it (sel:0, then 45380 at sel:1).
+JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
+DOUBTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+          'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
+          'The colonoscope was advanced to the cecum and the examination was completed.\n'
+          'It is unclear whether biopsies of the ascending colon lesion were taken.\n'
+          'It is unclear whether the sigmoid polyp was removed with a hot snare.\n'
+          + JAR_1 + '\nSpecimen log: jar 2, ascending colon lesion, cold forceps.\n')
+ASTRA_DOUBTS = reading(codes=[('45385', 'hot snare polypectomy of the sigmoid polyp'),
+                              ('45380', 'biopsies of the ascending colon lesion were taken')],
+                       services=[('c1', 'colonoscopy', 'performed', JAR_1)])
+
+
+class ConfirmationBindingTests(Harness2Case):
+    corti_codes = ()
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].first = [answered('astra', ASTRA_DOUBTS)]
+        self.adapters['fable'].first = [answered('fable', reading())]
+        self.adapters['astra'].peer = [answered('astra', peer_answer(codes=[
+            ('45385', 'the sigmoid polyp was removed with a hot snare')]), number=2)]
+        self.adapters['fable'].peer = [answered('fable', EMPTY_PEER, number=2)]
+
+    def rows(self, assessment):
+        return [(p.key, p.code, p.status) for p in assessment.proposals.filter(bucket='selected').order_by('position')]
+
+    def test_a_confirmation_is_never_read_for_the_proposal_that_holds_its_key_after_a_context_change(self):
+        encounter_id = self.create(DOUBTS)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(self.rows(final), [('sel:0', '45385', 'needs_clarification'),
+                                            ('sel:1', '45380', 'needs_clarification')])
+        question = final.clarifications.get(proposal__key='sel:0', fact='performed_status',
+                                            state=models.Clarification.OPEN)
+        candidate = next(c for c in served_candidates(self, encounter_id, question) if c['verified']
+                         and c['spans'][0]['text'] == JAR_1)
+        response = confirm(self, encounter_id, question, candidate)  # 45385's snare removal, on the jar 1 passage
+        self.assertEqual(response.status_code, 201, response.content)
+        confirmation = models.FindingConfirmation.objects.get()
+        drain()
+        again = self.encounter(encounter_id).current_assessment
+        self.assertEqual(self.rows(again)[0], ('sel:0', '45385', 'ready'))
+        # a member's save of another billing context: assess #1 runs again (45380 alone, at sel:0), then phase 2
+        before = len(self.assessments(encounter_id))
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        first, last = self.assessments(encounter_id)[before:]
+        self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(last)), (1, 2))
+        # assess #1 holds 45380 at the key the confirmation names: the confirmation, made for 45385, never answers it
+        biopsy = first.proposals.get(key='sel:0')
+        self.assertEqual((biopsy.code, biopsy.status), ('45380', 'needs_clarification'))
+        self.assertNotIn('confirmed', biopsy.support)
+        self.assertNotIn(JAR_1, json.dumps([biopsy.rationale, biopsy.checks]))
+        ignored = next(c for c in first.encounter_checks if c['id'] == 'confirmations.ignored')
+        self.assertIn('proposal sel:0 (45385)', ignored['detail'])
+        # assess #2 selects 45385 again, read from the same passages: the confirmation answers it there
+        snare = last.proposals.get(key='sel:0')
+        self.assertEqual((snare.code, snare.status, snare.support['confirmed']), ('45385', 'ready', [str(confirmation.pk)]))
+        self.assertEqual(last.proposals.get(key='sel:1').status, 'needs_clarification')
+        # what binds it: the code and identity of its question's own proposal, which jobs.confirmed_findings reads
+        (finding,) = jobs.confirmed_findings(last.revision)
+        self.assertEqual((finding.proposal_key, finding.proposal_code, finding.proposal_identity),
+                         ('sel:0', '45385', question.proposal.support['identity']))
+        self.assertEqual(snare.support['identity'], question.proposal.support['identity'])
+
+    def test_a_question_whose_proposal_records_no_identity_cannot_be_confirmed(self):
+        encounter_id = self.create(DOUBTS)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        question = final.clarifications.get(proposal__key='sel:0', fact='performed_status',
+                                            state=models.Clarification.OPEN)
+        candidate = next(c for c in served_candidates(self, encounter_id, question) if c['verified'])
+        # as an assessment recorded before proposals recorded identities would read (Proposal rows are immutable, so
+        # only the database itself can make one)
+        support = {k: v for k, v in question.proposal.support.items() if k != 'identity'}
+        with connection.cursor() as cursor:
+            cursor.execute(f'UPDATE {models.Proposal._meta.db_table} SET support = %s WHERE id = %s',
+                           [json.dumps(support), question.proposal_id])
+        response = confirm(self, encounter_id, question, candidate)
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertIn('records no identity', response.json()['error'])
         self.assertFalse(models.FindingConfirmation.objects.exists())
         self.assertFalse(models.AuditEvent.objects.filter(event='finding.confirmed').exists())
 

@@ -147,13 +147,16 @@ class Harness2Case(TestCase):
         snare = replace(pf.proposal('sel:0', '45385', ['was removed with a cold snare'], text=NOTE,
                                     status='needs_clarification', clarifications=(extent,)),
                         support={'origin': 'primary', 'proposed_by': ['corti', 'astra', 'fable'],
-                                 'phases': {'astra': 'independent', 'fable': 'independent'}})
+                                 'phases': {'astra': 'independent', 'fable': 'independent'},
+                                 'identity': sha(b'synthetic identity of 45385')})
         biopsy = replace(pf.proposal('sel:1', '45380', [RECTUM_QUOTE], text=NOTE, status='needs_clarification',
                                      clarifications=(status,),
                                      rationale='Proposed by Astra (independent participant) and Fable after peer '
                                                'review; Corti did not propose this code.'),
                          support={'origin': 'participant', 'proposed_by': ['astra', 'fable'],
-                                  'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': []})
+                                  'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': [],
+                                  'identity': sha(b'synthetic identity of 45380')})
+        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5)
         return pf.result(snare, biopsy, clarifications=(date_question,))
 
     def entry(self, name, *, peer=False):
@@ -430,6 +433,32 @@ class ConfirmationTests(Harness2Case):
                           ['astra', 'fable']))
         self.assertNotIn('cecum', json.dumps(event.data))  # ids and names, never the confirmed text
         self.assertFalse(models.Decision.objects.exists())  # nothing is approved (I3, I4)
+
+    def test_the_row_is_built_from_the_recomputed_candidate_never_from_the_request(self):
+        """Refutation round 1, EV-3: the endpoint reads only the candidate's id and the attestation. The passage, value,
+        participants and runs it records are those of the candidate CPT Studio recomputes from its own located quotes,
+        and the question and its proposal those of the clarification - whatever else a request carries."""
+        candidate = self.verified('extent')
+        question = self.questions['extent']
+        forged = {'candidate_id': candidate['id'], 'attestation': candidates.attestation(candidate['value']),
+                  'value': 'terminal ileum', 'spans': [{'start': 0, 'end': 3, 'text': NOTE[:3], 'page': 1}],
+                  'located_by': ['corti'], 'runs': ['run-forged'], 'proposal_key': 'sel:1', 'proposal_code': '45380',
+                  'scope': 'service', 'fact': 'performed_status', 'family': 'gi.egd'}
+        with mock.patch('studio.jobs.reassess_after_confirmation'):
+            response = self.client_for(self.reviewer).post(
+                f'/api/encounters/{self.encounter.pk}/clarifications/{question.pk}/confirm', data=json.dumps(forged),
+                content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        row = models.FindingConfirmation.objects.get()
+        self.assertEqual((row.clarification_id, row.scope, row.fact, row.family, row.proposal_key, row.value, row.spans,
+                          row.located_by, row.runs),
+                         (question.pk, 'proposal', 'extent', 'gi.colonoscopy', 'sel:0', candidate['value'],
+                          candidate['spans'], candidate['located_by'], candidate['runs']))
+        offered = {c['id']: c for c in self.candidates_of('extent')}  # recomputed again: the same verified candidate
+        self.assertTrue(offered[candidate['id']]['verified'])
+        (finding,) = jobs.confirmed_findings(self.revision)
+        self.assertEqual((finding.proposal_code, finding.proposal_identity),
+                         (question.proposal.code, question.proposal.support['identity']))
 
     def test_an_owner_may_confirm_a_status(self):
         with mock.patch('studio.jobs.reassess_after_confirmation'):

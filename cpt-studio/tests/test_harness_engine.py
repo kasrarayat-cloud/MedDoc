@@ -45,6 +45,9 @@ BIOPSY = 'was biopsied with cold forceps'
 CECUM = 'The colonoscope was advanced to the cecum'
 PLAN = 'Plan: Surveillance colonoscopy in three years.'
 COLON_PLAN = COLON + PLAN + '\n'
+# A later sentence leaves further biopsies of the same lesion in doubt (refutation round 1, EV-5).
+HEDGE = 'further biopsies were taken from the ascending colon lesion'
+COLON_HEDGE = COLON + 'It is unclear whether ' + HEDGE + '.\n'
 # The GI round 2 regression office note h2-08 (a committed synthetic fixture): its closing charge block asks the date.
 H208 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h2-08.txt').read_text(encoding='utf-8')
 CHARGED = 'a 6 mm polyp in the sigmoid colon was removed with a cold snare'
@@ -162,11 +165,13 @@ def decision(item):
             item.units, item.fingerprint, item.clarifications)
 
 
-RECORD = ('proposed_by', 'participants', 'phases')  # the participants' record on a proposal (outside its decision)
+# What a configured participant adds to a proposal's support, outside its decision: the participants' record, and the
+# identity a confirmation of its question is bound to (HARNESS.md 12.5), recorded only while one is configured.
+RECORD = ('proposed_by', 'participants', 'phases', 'identity')
 
 
 def without_record(item):
-    """A proposal with the participants' record taken out of its support: what it was before them."""
+    """A proposal with what the participants add taken out of its support: what it was before them."""
     support = {k: v for k, v in item.support.items() if k not in RECORD}
     return replace(item, support=support)
 
@@ -356,6 +361,7 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertIn('stated units 2', agreed.support['participants']['fable']['detail'])
         self.assertEqual({k: v for k, v in agreed.support.items() if k not in RECORD},
                          {k: v for k, v in alone.support.items() if k not in RECORD})
+        self.assertEqual(agreed.support['identity'], alone.support['identity'])  # whoever proposed it (I3)
 
     def test_agreement_on_a_code_the_provider_selected_changes_nothing_but_the_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
@@ -374,6 +380,45 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertEqual(decision(proposal(a, '45380')), decision(proposal(b, '45380')))
         self.assertEqual([e.text for e in proposal(a, '45380').evidence], [CECUM, BIOPSY])
         self.assertEqual(len([p for p in a.proposals if p.code == '45380']), 1)
+
+
+    def test_agreement_never_releases_a_held_code(self):
+        """I3 on a HELD code (refutation round 1, FG-1: every agreement test above uses a code that is ready already, so
+        a regression releasing a held code once a second proposer agrees passed them all). 45378 beside 45385 is held on
+        the base-inclusion question - exactly where a ready result would offer a wrong code - and stays held, its
+        decision unchanged, whoever else proposes it with the same passage."""
+        codes = corti(('45385', span(COLON, SNARE)), ('45378', span(COLON, CECUM)))
+        alone = proposal(run(COLON, codes), '45378')
+        self.assertEqual((alone.status, [q.fact for q in alone.clarifications]),
+                         ('needs_clarification', ['base_included']))
+        astra, fable = read('astra', [code(COLON, '45378', CECUM)]), read('fable', [code(COLON, '45378', CECUM)])
+        for participants in ([astra], [astra, fable]):
+            agreed = proposal(run(COLON, codes, participants), '45378')
+            self.assertEqual(decision(agreed), decision(alone), [p.provider for p in participants])
+            self.assertEqual(agreed.support['proposed_by'], ['corti', *[p.provider for p in participants]])
+        # the proposal provider's answer failed: the participants' own proposal, by one proposer and then by two
+        own = read('astra', [code(COLON, '45385', SNARE), code(COLON, '45378', CECUM)])
+        one = proposal(run(COLON, (), [own], provider_status='failed'), '45378')
+        self.assertEqual((one.status, [q.fact for q in one.clarifications]), ('needs_clarification', ['base_included']))
+        two = proposal(run(COLON, (), [own, fable], provider_status='failed'), '45378')
+        self.assertEqual(decision(two), decision(one))
+        self.assertEqual(two.support['proposed_by'], ['astra', 'fable'])
+
+    def test_another_proposer_s_own_passage_can_hold_a_code_and_agreement_never_releases_it(self):
+        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9): another proposer's located
+        quote joins the code's evidence, read with it by the same readers, so a passage that hedges holds the code -
+        and agreement never makes a held code ready, whichever proposer comes first."""
+        codes = corti(('45385', span(COLON_HEDGE, SNARE)))
+        fable, astra = (read('fable', [code(COLON_HEDGE, '45380', BIOPSY)]),
+                        read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
+        self.assertEqual(proposal(run(COLON_HEDGE, codes, [fable]), '45380').status, 'ready')
+        hedged = proposal(run(COLON_HEDGE, codes, [astra]), '45380')
+        self.assertEqual((hedged.status, [(q.scope, q.fact) for q in hedged.clarifications]),
+                         ('needs_clarification', [('proposal', 'performed_status')]))
+        both = proposal(run(COLON_HEDGE, codes, [astra, fable]), '45380')
+        self.assertEqual((both.status, [(q.scope, q.fact) for q in both.clarifications]),
+                         ('needs_clarification', [('proposal', 'performed_status')]))
+        self.assertEqual(decision(proposal(run(COLON_HEDGE, codes, [fable, astra]), '45380')), decision(both))
 
 
 class ContradictionTests(SimpleTestCase):
@@ -738,6 +783,15 @@ class PeerReviewTests(SimpleTestCase):
             self.assertEqual((result.clarifications, result.completeness), (alone.clarifications, alone.completeness))
             self.assertEqual(item.support['participants']['fable']['peer']['position'], position)
         self.assertEqual(proposal(alone, '45385').support['participants']['fable']['peer']['position'], 'no_position')
+        # and on a HELD code (FG-1): 45378 beside 45385 stays held on the base-inclusion question
+        codes = corti(('45385', span(COLON, SNARE)), ('45378', span(COLON, CECUM)))
+        held = proposal(run(COLON, codes, [reviewed('fable')]), '45378')
+        self.assertEqual((held.status, [q.fact for q in held.clarifications]),
+                         ('needs_clarification', ['base_included']))
+        for position in ('supports', 'cannot_tell'):
+            item = proposal(run(COLON, codes, [reviewed('fable', review=peer(
+                'fable', positions=[stance(COLON, '45378', position, CECUM)]))]), '45378')
+            self.assertEqual(decision(item), decision(held), position)
 
     def test_an_additional_code_is_read_as_a_participant_code_and_recorded_as_after_peer_review(self):
         first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
@@ -776,6 +830,35 @@ class PeerReviewTests(SimpleTestCase):
         self.assertIn('in its independent reading and again in peer review',
                       proposal(again, '45380').support['participants']['astra']['detail'])
 
+    def test_a_first_reading_quote_that_was_not_found_never_makes_a_peer_review_code_independent(self):
+        """11.1 and 11.4 (refutation round 1, EV-2 = IND-3): a participant's phase is the phase of its LOCATED evidence.
+        A code its first reading listed with a quote not found in the text - no proposal in phase 1 - that its peer
+        review then quotes verbatim was proposed after peer review, exactly as if the first reading had not listed it."""
+        unlocated = code(COLON, '45380', 'a 12 mm flat lesion was sampled with forceps')  # not in the text
+        added = peer('astra', additional=[code(COLON, '45380', BIOPSY)])
+        first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [unlocated])])
+        self.assertEqual((proposal(first, '45380').bucket, proposal(first, '45380').support['phases']),
+                         ('alternative', {'astra': 'independent'}))  # what it did in its first reading
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added)])
+        control = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', review=added)])
+        item = proposal(result, '45380')
+        self.assertEqual(decision(item), decision(proposal(control, '45380')))
+        self.assertEqual(item.support['phases'], {'astra': 'peer_review'})
+        self.assertTrue(item.rationale.startswith('Proposed by Astra after peer review; Corti did not propose this '
+                                                  'code.'), item.rationale)
+        self.assertEqual(item.rationale, proposal(control, '45380').rationale)
+        # Corti's own code, listed by Astra with a quote not found and then quoted in peer review: the same rule
+        snare = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed(
+            'astra', [code(COLON, '45385', 'hot snare polypectomy of the sigmoid polyp')],
+            peer('astra', additional=[code(COLON, '45385', SNARE)]))])
+        self.assertEqual(proposal(snare, '45385').support['phases'], {'astra': 'peer_review'})
+        # beside a participant whose first reading located it: each named in its own phase
+        both = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added),
+                                                                  read('fable', [code(COLON, '45380', BIOPSY)])])
+        self.assertEqual(proposal(both, '45380').support['phases'], {'astra': 'peer_review', 'fable': 'independent'})
+        self.assertTrue(proposal(both, '45380').rationale.startswith(
+            'Proposed by Fable (independent participant) and Astra after peer review;'), proposal(both, '45380').rationale)
+
     def test_an_additional_code_a_decidable_proposal_carries_only_adds_to_its_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
         result = run(COLON, corti(('45385', span(COLON, SNARE))),
@@ -795,8 +878,12 @@ class PeerReviewTests(SimpleTestCase):
         self.assertEqual(proposal(result, '45378').support['phases'], {'fable': 'peer_review'})
 
     def test_peer_review_keeps_the_keys_of_every_first_reading_code(self):
-        """assess #1 and assess #2: a code added in peer review comes after every first reading's code, so the keys
-        a question names on the first assessment name the same proposals on the second."""
+        """assess #1 and assess #2: a code no first reading listed, added in peer review, comes after every first
+        reading's code, so it never takes the key of one a first reading proposed. That is all it guarantees: a code a
+        first reading listed with no located quote is selected at its own place once its peer review locates it, and
+        a later reading or a new answer selects other codes, so keys still move between assessments - which is why a
+        confirmation is bound to its proposal's code and identity, never its key (refutation round 1, EV-1;
+        tests/test_harness_engine_confirmations.py BindingTests)."""
         first = run(COLON, (), [read('astra', [code(COLON, '45385', SNARE)]), read('fable', [code(COLON, '45378', CECUM)])],
                     provider_status='failed')
         second = run(COLON, (), [reviewed('astra', [code(COLON, '45385', SNARE)], peer('astra', additional=[

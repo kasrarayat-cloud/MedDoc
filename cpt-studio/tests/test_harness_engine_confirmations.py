@@ -20,10 +20,11 @@ from django.test import SimpleTestCase
 from studio.gi import context as gi_context
 from studio.gi import detect
 from studio.reference.store import InMemoryReferenceLookup
-from studio.types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, ProviderCode,
+from studio.types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, ParticipantInput, ProviderCode,
                           ReferenceSourceInfo, canonical_json, sha256_json)
 from studio.validation import checks, engine
 from studio.validation.engine import assess
+from tests.test_harness_engine import code as participant_code, peer, read, reviewed
 
 DAY = date(2026, 10, 14)
 REVIEWER = 'Rowan Synthetic-Reviewer (fictional)'
@@ -83,8 +84,9 @@ def info(key, kind, release):
 
 PFS_INFO = info('cms-pfs-rvu26d', 'cms-pfs', 'RVU26D')
 MUE_INFO = info('cms-mue-practitioner-2026q4', 'cms-mue-practitioner', '2026-Q4')
-CODES = {'45378': ('2', None), '45380': ('3', '45378'), '45385': ('3', '45378'), '45330': ('2', None),
-         '45331': ('3', '45330'), '43235': ('2', None), '43239': ('3', '43235'), '43274': ('0', None)}
+CODES = {'45378': ('2', None), '45380': ('3', '45378'), '45384': ('3', '45378'), '45385': ('3', '45378'),
+         '45330': ('2', None), '45331': ('3', '45330'), '43235': ('2', None), '43239': ('3', '43235'),
+         '43274': ('0', None)}
 PFS_ROWS = {(code, ''): {'status': 'A', 'global_days': '000', 'mult_proc': mult, 'endo_base': base, 'pctc': '0'}
             for code, (mult, base) in CODES.items()}
 PFS_ROWS[('99213', '')] = {'status': 'A', 'global_days': 'XXX', 'mult_proc': '0', 'endo_base': None, 'pctc': '0'}
@@ -100,8 +102,17 @@ def span(text, phrase, nth=0):
     return EvidenceSpan(0, start, start + len(phrase), phrase, True)
 
 
-def run(text, codes=(), confirmed=(), *, provider_status='succeeded', **kwargs):
-    """``codes``: the proposal provider's selected codes, (code, quote) pairs."""
+# A configured participant that read nothing: an assessment a model participant took part in, where each decidable
+# proposal records the identity a confirmation of its question is bound to (support['identity']).
+CONFIGURED = (ParticipantInput('astra', 'failed', reason='HTTP 529 (synthetic)'),)
+
+
+def run(text, codes=(), confirmed=(), *, provider_status='succeeded', bind=True, **kwargs):
+    """``codes``: the proposal provider's selected codes, (code, quote) pairs. ``bind``: each proposal confirmation of
+    a list given that names no proposal yet is bound as the confirmation endpoint binds it (bound) on these same
+    inputs; an iterator is given to the engine as it is."""
+    if bind and isinstance(confirmed, (list, tuple)):
+        confirmed = [bound(c, text, codes, provider_status=provider_status, **kwargs) for c in confirmed]
     selected = tuple(ProviderCode('selected', 'cpt', value, 'UNVERIFIED PROVIDER WORDING', (span(text, quote),))
                      for value, quote in codes)
     response = NormalizedResponse('corti', 'test@1', selected) if provider_status == 'succeeded' else None
@@ -115,6 +126,24 @@ def confirm(text, phrase, *, fact, family, value, key='', scope='', by=('fable',
     spans = (span(text, phrase),) if evidence is None else evidence
     return ConfirmedFinding(scope or ('proposal' if key else 'service'), fact, family, key, value, spans, tuple(by),
                             reviewer, cid)
+
+
+def binding(item):
+    """What a confirmation of a question of ``item`` is bound to (HARNESS.md 12.5): its code and identity."""
+    return {'proposal_code': item.code, 'proposal_identity': item.support['identity']}
+
+
+def bound(c, text, codes=(), **kwargs):
+    """``c`` as the confirmation endpoint records it: bound to the proposal whose question it is - the proposal at its
+    key on the assessment these inputs make without any confirmation, with a participant configured (as every
+    assessment that reads a confirmation has one) - by that proposal's code and identity, never by the key alone.
+    Unchanged when it is no proposal's question, names one already, or no proposal holds its key."""
+    if not isinstance(c, ConfirmedFinding) or c.scope != 'proposal' or c.proposal_code:
+        return c
+    kwargs['participants'] = kwargs.get('participants') or CONFIGURED
+    found = [p for p in run(text, codes, bind=False, **kwargs).proposals
+             if p.key == c.proposal_key and 'identity' in p.support]
+    return replace(c, **binding(found[0])) if found else c
 
 
 def proposal(result, key):
@@ -194,12 +223,12 @@ class ConfirmedFactTests(SimpleTestCase):
         before = run(EGD_UNCODED, (('45385', SNARE),))
         self.assertEqual([(q.scope, q.family, q.fact) for q in before.clarifications], [('service', 'gi.egd', 'extent')])
         after = run(EGD_UNCODED, (('45385', SNARE),), [confirm(EGD_UNCODED, DUODENUM, fact='extent', family='gi.egd',
-                                                               value='second part of the duodenum')])
+                                                               value='second part of duodenum')])  # CPT Studio's words
         self.assertEqual(after.clarifications, ())
         self.assertEqual(after.proposals, before.proposals)  # no proposal of the family: none reads it
         applied = encounter_check(after, 'confirmations.applied')
         self.assertIn('extent reached of the documented Upper GI endoscopy (EGD, esophagoscopy, POEM) = second part of '
-                      f'the duodenum, {WORDS} (“{DUODENUM}”)', applied.detail)
+                      f'duodenum, {WORDS} (“{DUODENUM}”)', applied.detail)
         self.assertEqual(after.completeness['confirmations']['applied'][0]['scope'], 'service')
 
     def test_an_em_basis_question_takes_the_cited_passage_as_its_basis(self):
@@ -225,10 +254,11 @@ class ConfirmedFactTests(SimpleTestCase):
         before = run(ERCP, (('43274', STENT),))
         self.assertEqual(questions(proposal(before, 'sel:0')), [('proposal', 'gi.ercp', 'cannulation')])
         after = run(ERCP, (('43274', STENT),), [confirm(ERCP, CONTRAST, fact='cannulation', family='gi.ercp',
-                                                        key='sel:0', value='bile duct cannulated')])
+                                                        key='sel:0', value='successful')])  # CPT Studio's words
         item = proposal(after, 'sel:0')
         self.assertEqual((item.status, questions(item)), ('ready', []))
-        self.assertIn(f'cannulation outcome = bile duct cannulated, {WORDS} (“{CONTRAST}”)',
+        self.assertIsNone(check(item, 'service.incomplete'))
+        self.assertIn(f'cannulation outcome = successful, {WORDS} (“{CONTRAST}”)',
                       check(item, 'facts.required').detail)
 
     def test_a_confirmed_value_never_replaces_a_value_the_readers_read(self):
@@ -290,20 +320,24 @@ class ConfirmedStatusTests(SimpleTestCase):
                                                             family='gi.colonoscopy', key='sel:0', value=value)])
             self.assertIn(f'(documented as {word})', proposal(after, 'sel:0').exclusion_reason, value)
 
-    def test_a_second_confirmation_on_the_confirmed_assessment_finds_its_proposal_by_the_same_key(self):
+    def test_a_second_confirmation_on_the_confirmed_assessment_is_bound_to_its_proposal(self):
         excluded = confirm(STATUS_AND_EXTENT, UNCLEAR, fact='performed_status', family='gi.colonoscopy', key='sel:0',
                            value='not_performed', cid='conf-a')
-        first = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded])
+        first = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded], participants=CONFIGURED)
         self.assertEqual([(p.key, p.code, p.bucket) for p in first.proposals],
                          [('sel:1', '45385', 'selected'), ('sel:0', '45380', 'excluded')])
         self.assertEqual(questions(proposal(first, 'sel:1')), [('proposal', 'gi.colonoscopy', 'extent')])
-        # a reviewer answers 45385's extent question as that assessment asks it: proposal sel:1
-        extent = confirm(STATUS_AND_EXTENT, LAND, fact='extent', family='gi.colonoscopy', key='sel:1', value='cecum',
-                         cid='conf-b')
-        second = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded, extent])
+        # a reviewer answers 45385's extent question as that assessment asks it: the identity 45385 records there is the
+        # one these inputs give it without any confirmation, so the next assessment finds it
+        unconfirmed = run(STATUS_AND_EXTENT, STATUS_CODES, participants=CONFIGURED)
+        self.assertEqual(binding(proposal(first, 'sel:1')), binding(proposal(unconfirmed, 'sel:1')))
+        extent = replace(confirm(STATUS_AND_EXTENT, LAND, fact='extent', family='gi.colonoscopy', key='sel:1',
+                                 value='cecum', cid='conf-b'), **binding(proposal(first, 'sel:1')))
+        second = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded, extent], participants=CONFIGURED)
         self.assertEqual((proposal(second, 'sel:1').code, proposal(second, 'sel:1').status), ('45385', 'ready'))
         self.assertEqual(proposal(second, 'sel:0'), proposal(first, 'sel:0'))
-        self.assertEqual(second, run(STATUS_AND_EXTENT, STATUS_CODES, [extent, excluded]))  # whatever the order
+        self.assertEqual(second, run(STATUS_AND_EXTENT, STATUS_CODES, [extent, excluded],
+                                     participants=CONFIGURED))  # whatever the order
 
     def test_a_value_that_is_neither_performed_nor_not_performed_is_not_read(self):
         before = run(STATUS_ONLY, STATUS_CODES)
@@ -328,8 +362,8 @@ class GuardTests(SimpleTestCase):
             self.assertEqual(without_confirmations(after), before, bad)
             warn = encounter_check(after, 'confirmations.ignored')
             self.assertEqual(warn.status, 'warn')
-            self.assertIn("the confirmation of extent reached for proposal sel:0: its passage is not an exact slice of "
-                          "this revision's text", warn.detail)
+            self.assertIn("the confirmation of extent reached for proposal sel:0 (45385): its passage is not an exact "
+                          "slice of this revision's text", warn.detail)
             self.assertIsNone(encounter_check(after, 'confirmations.applied'))
             self.assertEqual(after.completeness['confirmations'], {'applied': [], 'ignored': [
                 {'id': 'conf-1', 'why': "its passage is not an exact slice of this revision's text"}]})
@@ -364,8 +398,8 @@ class GuardTests(SimpleTestCase):
         self.assertEqual((item.status, questions(item)), ('needs_clarification', [
             ('proposal', 'gi.office_em', 'performed_status'), ('proposal', 'gi.office_em', 'separate_em')]))
         self.assertEqual(check(item, 'em.same_day_procedure'), check(proposal(before, 'sel:0'), 'em.same_day_procedure'))
-        self.assertIn('the confirmation of separate em for proposal sel:0: a confirmation answers whether a code was '
-                      'performed or a required fact the readers take from the document',
+        self.assertIn('the confirmation of separate em for proposal sel:0 (99213): a confirmation answers whether a '
+                      'code was performed or a required fact the readers take from the document',
                       encounter_check(after, 'confirmations.ignored').detail)
 
     def test_a_confirmation_never_approves_anything(self):
@@ -384,14 +418,18 @@ class GuardTests(SimpleTestCase):
                           value='performed'),  # 45385 is not held on its status
                   confirm(STATUS_ONLY, SPECIMEN, fact='performed_status', family='gi.egd', key='sel:0',
                           value='performed'),  # another family
-                  confirm(STATUS_ONLY, SPECIMEN, fact='performed_status', family='gi.colonoscopy', key='sel:7',
-                          value='performed'),  # no such proposal
                   confirm(STATUS_ONLY, SPECIMEN, fact='extent', family='gi.colonoscopy', key='sel:0',
                           value='cecum'),  # the extent is read
                   confirm(STATUS_ONLY, SPECIMEN, fact='extent', family='gi.colonoscopy', value='cecum')):  # nor asked
             after = run(STATUS_ONLY, STATUS_CODES, [c])
             self.assertEqual(without_confirmations(after), before, c)
             self.assertIn(engine.NOT_OPEN, encounter_check(after, 'confirmations.ignored').detail, c)
+        # a confirmation naming no proposal of these inputs is bound to none: never read by the key it names
+        nowhere = confirm(STATUS_ONLY, SPECIMEN, fact='performed_status', family='gi.colonoscopy', key='sel:7',
+                          value='performed')
+        after = run(STATUS_ONLY, STATUS_CODES, [nowhere])
+        self.assertEqual(without_confirmations(after), before)
+        self.assertIn(engine.UNBOUND, encounter_check(after, 'confirmations.ignored').detail)
 
     def test_the_service_date_and_other_context_facts_never_come_this_way(self):
         before = run(VISIT, (('99213', SEEN),))
@@ -426,6 +464,21 @@ class GuardTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             run(TWO_EXTENTS, COLON_CODES, [{'fact': 'extent'}])
 
+    def test_a_passage_shorter_than_any_located_quote_is_not_read(self):
+        """I7 (refutation round 1, EV-3): a quote with fewer than 8 non-space characters is never located, so it is
+        never a participant's located passage - "NOT", a slice of the synthetic banner, is not read; 8 characters
+        are."""
+        before = run(STATUS_ONLY, STATUS_CODES)
+        for passage in ('NOT', 'Specime', ' jar 2, a'):
+            after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, passage, fact='performed_status',
+                                                            family='gi.colonoscopy', key='sel:0', value='performed',
+                                                            by=('astra',))])
+            self.assertEqual(without_confirmations(after), before, passage)
+            self.assertIn(engine.TOO_SHORT, encounter_check(after, 'confirmations.ignored').detail, passage)
+        read_ = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, 'Specimen', fact='performed_status',
+                                                        family='gi.colonoscopy', key='sel:0', value='performed')])
+        self.assertEqual(proposal(read_, 'sel:0').status, 'ready')
+
     def test_confirmations_of_one_question_that_disagree_are_all_left_unread(self):
         before = run(TWO_EXTENTS, COLON_CODES)
         a = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum', cid='a')
@@ -452,6 +505,224 @@ class GuardTests(SimpleTestCase):
                       'Synthetic-Reviewer (fictional)', detail)
 
 
+# EV-4: a confirmed value the readers would read as an incomplete procedure - an extent short of the depth the procedure
+# calls for, a failed cannulation - is read as they read the same fact.
+COLON_HEAD = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+              'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n')
+POLYP_LINE = 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+SHORT_PREP = 'The colonoscope was advanced only to the splenic flexure because of poor preparation.'
+PHOTOS = 'Photos: splenic flexure reached, scope withdrawn.'
+SHORT_READ = COLON_HEAD + SHORT_PREP + '\n' + POLYP_LINE  # the readers read the extent: short of the cecum
+SHORT_UNREAD = COLON_HEAD + POLYP_LINE + PHOTOS + '\n'  # they read none: the photos line is no reach they read
+ERCP_HEAD = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+             'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla. ' + STENT + '\n')
+NO_ACCESS = 'Duct access note: no cannulation achieved; procedure ended.'
+ERCP_READ = ERCP_HEAD + 'Cannulation of the bile duct failed despite multiple attempts.\n'
+ERCP_UNREAD = ERCP_HEAD + NO_ACCESS + '\n'
+ANTRUM = 'Biopsies of the gastric antrum were taken with cold forceps.'
+EGD_UNREAD = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\n'
+              'Place of service: Ambulatory surgery center\nProcedure: EGD\n' + ANTRUM + '\n' + DUODENUM
+              + '\n')  # an EGD calls for the duodenal bulb
+
+
+class IncompleteTests(SimpleTestCase):
+    """HARNESS.md 11.3: "the engine reads the confirmed fact as documented by the cited passage" - through the readers'
+    own path (I2), so a confirmed fact that they would read as an incomplete procedure gives the proposal their
+    incomplete result: the service.incomplete warn and the modifier 52/53 consideration (refutation round 1, EV-4)."""
+
+    def test_a_confirmed_extent_short_of_the_cecum_is_read_as_the_readers_read_one(self):
+        read_ = proposal(run(SHORT_READ, (('45385', SNARE),)), 'sel:0')
+        self.assertEqual(check(read_, 'service.incomplete').status, 'warn')  # the readers' own reading of it
+        before = proposal(run(SHORT_UNREAD, (('45385', SNARE),)), 'sel:0')
+        self.assertEqual(questions(before), [('proposal', 'gi.colonoscopy', 'extent')])
+        after = proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+            SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value='splenic flexure')]),
+            'sel:0')
+        self.assertEqual((after.status, questions(after)), ('ready', []))
+        warn = check(after, 'service.incomplete')
+        self.assertEqual((warn.status, warn.source), ('warn', checks.CONFIRMATION_SOURCE))
+        self.assertIn(f'extent reached = splenic flexure, {WORDS} (“{PHOTOS}”)', warn.detail)
+        self.assertIn('short of the cecum', warn.detail)
+        self.assertIn('Kept for review: not treated as completed and not excluded.', warn.detail)
+        self.assertEqual(after.modifier_considerations, read_.modifier_considerations)  # the 52/53 consideration
+        self.assertIn('Service status: incomplete (performed in part)', after.rationale)
+        self.assertIn('read as incomplete (performed in part)', check(after, 'service.status').detail)
+        self.assertNotEqual(after.fingerprint, proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+            SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum')]),
+            'sel:0').fingerprint)
+        # an extent at or beyond the cecum is a completed examination, as before
+        for value in ('cecum', 'terminal ileum'):
+            complete = proposal(run(SHORT_UNREAD, (('45385', SNARE),), [confirm(
+                SHORT_UNREAD, PHOTOS, fact='extent', family='gi.colonoscopy', key='sel:0', value=value)]), 'sel:0')
+            self.assertEqual(complete.status, 'ready', value)
+            self.assertIsNone(check(complete, 'service.incomplete'), value)
+            self.assertEqual(complete.modifier_considerations, before.modifier_considerations, value)
+            self.assertIn('Service status: performed', complete.rationale, value)
+
+    def test_a_confirmed_failed_cannulation_is_read_as_the_readers_read_one(self):
+        read_ = proposal(run(ERCP_READ, (('43274', STENT),)), 'sel:0')
+        self.assertEqual(check(read_, 'service.incomplete').status, 'warn')
+        self.assertEqual(questions(proposal(run(ERCP_UNREAD, (('43274', STENT),)), 'sel:0')),
+                         [('proposal', 'gi.ercp', 'cannulation')])
+        failed = proposal(run(ERCP_UNREAD, (('43274', STENT),), [confirm(
+            ERCP_UNREAD, NO_ACCESS, fact='cannulation', family='gi.ercp', key='sel:0', value='failed')]), 'sel:0')
+        warn = check(failed, 'service.incomplete')
+        self.assertEqual(warn.status, 'warn')
+        self.assertIn(f'cannulation outcome = failed, {WORDS} (“{NO_ACCESS}”)', warn.detail)
+        self.assertIn('a failed cannulation', warn.detail)
+        self.assertEqual(failed.modifier_considerations, read_.modifier_considerations)
+        self.assertIn('Service status: incomplete (performed in part)', failed.rationale)
+        succeeded = proposal(run(ERCP_UNREAD, (('43274', STENT),), [confirm(
+            ERCP_UNREAD, NO_ACCESS, fact='cannulation', family='gi.ercp', key='sel:0', value='successful')]), 'sel:0')
+        self.assertEqual(succeeded.status, 'ready')
+        self.assertIsNone(check(succeeded, 'service.incomplete'))
+
+    def test_an_upper_extent_is_placed_against_the_depth_the_named_procedure_calls_for(self):
+        codes = (('43239', ANTRUM[:-1]),)
+        self.assertEqual(questions(proposal(run(EGD_UNREAD, codes), 'sel:0')), [('proposal', 'gi.egd', 'extent')])
+        short = proposal(run(EGD_UNREAD, codes, [confirm(EGD_UNREAD, ANTRUM, fact='extent', family='gi.egd',
+                                                        key='sel:0', value='stomach')]), 'sel:0')
+        self.assertIn('short of the duodenal bulb', check(short, 'service.incomplete').detail)
+        for value in ('duodenal bulb', 'second part of duodenum'):
+            deep = proposal(run(EGD_UNREAD, codes, [confirm(EGD_UNREAD, DUODENUM, fact='extent', family='gi.egd',
+                                                           key='sel:0', value=value)]), 'sel:0')
+            self.assertEqual(deep.status, 'ready', value)
+            self.assertIsNone(check(deep, 'service.incomplete'), value)
+
+    def test_a_value_cpt_studio_cannot_place_is_not_read(self):
+        """Fail closed: a value that is not one of routing's landmarks (for the extent) or successful or failed (for a
+        cannulation) cannot be read as complete or incomplete, so it answers nothing and the question stays open."""
+        for text, codes, phrase, fact, family, value in (
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'ileocolic anastomosis'),
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'splenic flexure only'),
+                (SHORT_UNREAD, (('45385', SNARE),), PHOTOS, 'extent', 'gi.colonoscopy', 'incomplete: splenic flexure'),
+                (ERCP_UNREAD, (('43274', STENT),), NO_ACCESS, 'cannulation', 'gi.ercp', 'no cannulation achieved'),
+                (ERCP_UNREAD, (('43274', STENT),), NO_ACCESS, 'cannulation', 'gi.ercp', 'bile duct cannulated')):
+            before = run(text, codes)
+            after = run(text, codes, [confirm(text, phrase, fact=fact, family=family, key='sel:0', value=value)])
+            self.assertEqual(without_confirmations(after), before, value)
+            self.assertIn(engine.UNPLACED, encounter_check(after, 'confirmations.ignored').detail, value)
+
+
+# EV-1: a revision's assessments do not keep their keys - a code a first reading listed with no located quote is
+# selected, at its first reading's place, once its peer review locates it; a later reading or a new answer selects
+# other codes - so a question's key names another proposal later. Each passage below leaves its code's act in doubt,
+# and the specimen log documents one act each.
+DOUBTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+          'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n'
+          'The colonoscope was advanced to the cecum and the examination was completed.\n'
+          'It is unclear whether biopsies of the ascending colon lesion were taken.\n'
+          'It is unclear whether the sigmoid polyp was removed with a hot snare.\n'
+          'Specimen log: jar 1, sigmoid polyp, hot snare.\n' + SPECIMEN + '\n')
+HEDGED_SNARE = 'the sigmoid polyp was removed with a hot snare'
+JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
+UNLOCATED_SNARE = 'hot snare polypectomy of the sigmoid polyp'  # not in the text: never evidence
+
+
+def rows(result):
+    return [(p.key, p.code, p.status) for p in result.proposals]
+
+
+def made_for(result, key, phrase, cid='conf-1'):
+    """A reviewer's confirmation that the code of proposal ``key`` of ``result`` was performed, on ``phrase``, bound to
+    that proposal as the confirmation endpoint binds it."""
+    return replace(confirm(DOUBTS, phrase, fact='performed_status', family='gi.colonoscopy', key=key,
+                           value='performed', by=('astra',), cid=cid), **binding(proposal(result, key)))
+
+
+class BindingTests(SimpleTestCase):
+    """A confirmation answers the proposal it was made for, wherever that proposal's key is later, and never the
+    proposal that holds its key afterwards (HARNESS.md 11.3, 12.5)."""
+
+    def assertNeverAnswers(self, result, key, code):
+        item = proposal(result, key)
+        self.assertEqual((item.code, item.status), (code, 'needs_clarification'))
+        self.assertNotIn('confirmed', item.support)
+        self.assertNotIn('confirmed from', check(item, 'service.status').detail)
+
+    def test_a_peer_review_that_selects_a_first_reading_code_ahead_never_takes_the_confirmation(self):
+        first = [participant_code(DOUBTS, '45385', UNLOCATED_SNARE), participant_code(DOUBTS, '45380', UNCLEAR)]
+        one = run(DOUBTS, (), provider_status='failed', participants=[read('astra', first)])
+        self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'), ('altp:0', '45385', 'informational')])
+        made = made_for(one, 'sel:0', SPECIMEN)  # on assess #1: 45380's biopsy, on the jar 2 passage
+        later = [reviewed('astra', first, peer('astra', additional=[participant_code(DOUBTS, '45385', HEDGED_SNARE)]))]
+        self.assertEqual(rows(run(DOUBTS, (), provider_status='failed', participants=later)),
+                         [('sel:0', '45385', 'needs_clarification'), ('sel:1', '45380', 'needs_clarification')])
+        two = run(DOUBTS, (), [made], provider_status='failed', participants=later)
+        self.assertNeverAnswers(two, 'sel:0', '45385')  # its snare removal is still in doubt
+        moved = proposal(two, 'sel:1')
+        self.assertEqual((moved.code, moved.status, moved.support['confirmed']), ('45380', 'ready', ['conf-1']))
+        self.assertEqual([(a['code'], a['proposal_key']) for a in two.completeness['confirmations']['applied']],
+                         [('45380', 'sel:1')])
+        self.assertIn('45380 (sel:1): performed on the date of service',
+                      encounter_check(two, 'confirmations.applied').detail)
+
+    def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
+        fable = read('fable', [participant_code(DOUBTS, '45380', UNCLEAR)])
+        early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
+        one = run(DOUBTS, (), provider_status='failed', participants=early)
+        self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification')])
+        made = made_for(one, 'sel:0', SPECIMEN)
+        later = [read('astra', [participant_code(DOUBTS, '45385', HEDGED_SNARE)]), fable]
+        two = run(DOUBTS, (), [made], provider_status='failed', participants=later)
+        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45385'), ('sel:1', '45380')])
+        self.assertNeverAnswers(two, 'sel:0', '45385')
+        self.assertEqual((proposal(two, 'sel:1').code, proposal(two, 'sel:1').status), ('45380', 'ready'))
+
+    def test_a_new_answer_that_selects_a_code_ahead_never_takes_the_confirmation(self):
+        astra = [read('astra', [participant_code(DOUBTS, '45385', HEDGED_SNARE)])]
+        one = run(DOUBTS, (('45380', UNCLEAR),), participants=astra)
+        self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'),
+                                     ('sel:1', '45385', 'needs_clarification')])
+        made = made_for(one, 'sel:1', JAR_1)  # 45385's snare removal, on the jar 1 passage
+        # another context: the proposal provider now also selects 45384 on the hedged snare passage
+        two = run(DOUBTS, (('45380', UNCLEAR), ('45384', HEDGED_SNARE)), [made], participants=astra)
+        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('sel:1', '45384'),
+                                                                      ('sel:2', '45385')])
+        self.assertNeverAnswers(two, 'sel:1', '45384')
+        self.assertNeverAnswers(two, 'sel:0', '45380')
+        self.assertEqual((proposal(two, 'sel:2').code, proposal(two, 'sel:2').status), ('45385', 'ready'))
+
+    def test_a_proposal_read_from_other_passages_is_another_proposal(self):
+        """A confirmation made for 45380 read from one passage is not read for 45380 read from more: the reviewer
+        confirmed the question that reading raised (the identity changes with the passages, never with the checks)."""
+        fable = read('fable', [participant_code(DOUBTS, '45380', UNCLEAR)])
+        one = run(DOUBTS, (), provider_status='failed', participants=[fable])
+        made = made_for(one, 'sel:0', SPECIMEN)
+        more = [read('astra', [participant_code(DOUBTS, '45380', 'It is unclear whether biopsies')]), fable]
+        before = run(DOUBTS, (), provider_status='failed', participants=more)
+        after = run(DOUBTS, (), [made], provider_status='failed', participants=more)
+        self.assertEqual(without_confirmations(after), before)
+        self.assertNeverAnswers(after, 'sel:0', '45380')
+        self.assertIn(engine.MOVED, encounter_check(after, 'confirmations.ignored').detail)
+        self.assertEqual(after.completeness['confirmations']['ignored'], [{'id': 'conf-1', 'why': engine.MOVED}])
+
+    def test_a_confirmation_that_names_no_proposal_is_never_read_by_its_key(self):
+        before = run(STATUS_ONLY, STATUS_CODES, participants=CONFIGURED)
+        unbound = confirm(STATUS_ONLY, SPECIMEN, fact='performed_status', family='gi.colonoscopy', key='sel:0',
+                          value='performed')
+        for c in (unbound, replace(unbound, proposal_code='45380'),
+                  replace(unbound, proposal_identity=binding(proposal(before, 'sel:0'))['proposal_identity'])):
+            after = run(STATUS_ONLY, STATUS_CODES, [c], participants=CONFIGURED, bind=False)
+            self.assertEqual(without_confirmations(after), before, c)
+            self.assertIn(engine.UNBOUND, encounter_check(after, 'confirmations.ignored').detail, c)
+
+    def test_the_identity_is_recorded_only_with_a_participant_and_never_moves_with_checks_or_confirmations(self):
+        plain = run(STATUS_ONLY, STATUS_CODES)
+        self.assertFalse(any('identity' in p.support for p in plain.proposals))  # none configured: unchanged (I1)
+        configured = run(STATUS_ONLY, STATUS_CODES, participants=CONFIGURED)
+        self.assertTrue(all(len(p.support['identity']) == 64 for p in configured.proposals))
+        confirmed = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, SPECIMEN, fact='performed_status',
+                                                            family='gi.colonoscopy', key='sel:0', value='performed')],
+                        participants=CONFIGURED)
+        self.assertNotEqual(proposal(confirmed, 'sel:0').fingerprint, proposal(configured, 'sel:0').fingerprint)
+        self.assertEqual([binding(p) for p in confirmed.proposals], [binding(p) for p in configured.proposals])
+        # a code's identity is its own reading: another code beside it changes its checks, never its identity
+        alone = run(STATUS_ONLY, (('45385', SNARE),), participants=CONFIGURED)
+        self.assertNotEqual(proposal(alone, 'sel:0').fingerprint, proposal(configured, 'sel:1').fingerprint)
+        self.assertEqual(binding(proposal(alone, 'sel:0')), binding(proposal(configured, 'sel:1')))
+
+
 class DeterminismTests(SimpleTestCase):
     def test_none_given_is_the_engine_as_before(self):
         for text, codes in ((TWO_EXTENTS, COLON_CODES), (STATUS_ONLY, STATUS_CODES), (VISIT, (('99213', SEEN),))):
@@ -467,7 +738,8 @@ class DeterminismTests(SimpleTestCase):
 
     def test_an_iterator_is_read_once_as_the_sequence_it_yields(self):
         """An exhausted or empty iterator is no input (I1); a non-empty one is read as its items, never dropped."""
-        c = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum')
+        c = bound(confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum'),
+                  TWO_EXTENTS, COLON_CODES)
         self.assertEqual(run(TWO_EXTENTS, COLON_CODES, iter(())), run(TWO_EXTENTS, COLON_CODES))
         self.assertEqual(run(TWO_EXTENTS, COLON_CODES, (x for x in [c])), run(TWO_EXTENTS, COLON_CODES, [c]))
         self.assertEqual(assess(text=TWO_EXTENTS, pages=(), context=gi_context.extract_context(TWO_EXTENTS),

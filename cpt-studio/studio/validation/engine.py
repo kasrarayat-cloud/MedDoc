@@ -21,6 +21,7 @@ from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.participants import VENDORS as PARTICIPANT_VENDORS
+from studio.participants.reading import MIN_QUOTE_CHARACTERS
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_POSITIONS, AssessmentResult, Check,
                           ClarificationSpec, CodePosition, CodeReference, ConfirmedFinding, EvidenceSpan, Fact,
@@ -226,12 +227,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     confirmation = _Confirmations(confirmed, text, pages) if confirmed else None
     if confirmation is not None:
-        # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any, then read; the
-        # proposals keep the keys they have without them, so a question's key names the same proposal before and after
+        # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any - a proposal's by
+        # the proposal it was made for, never by its key - then read; the proposals keep the keys they have without them
         selections, proposals, procedure_day = confirmation.apply(
             selections, proposals, procedure_day, harness=harness,
             provider=response.provider if response is not None else '', context=context, routing=routing,
-            sources=sources, date_state=date_state, inventory=usable)
+            sources=sources, date_state=date_state, inventory=usable, day=service_date)
     if harness is not None:
         proposals = harness.recorded(proposals)
         provider = harness.provider_checks(provider, provider_status, response, proposals)
@@ -2158,21 +2159,38 @@ def _keyed(selections: Sequence[_Selection], encounter: _Encounter, harness: Opt
     """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order. ``harness``: the
     independent participants' merge, whose contradiction checks a decidable proposal carries (HARNESS.md 5); None adds
     nothing. ``keys`` and ``answers`` (by selection index): the keys these selections have without any reviewer-confirmed
-    finding, and the confirmed answers each proposal reads (_Confirmations.apply); None gives the keys above."""
+    finding, and the confirmed answers each proposal reads (_Confirmations.apply); None gives the keys above. With a
+    harness, each decidable proposal records its identity (_identity)."""
     keys = _keys(selections) if keys is None else keys
     selected, excluded = [], []
     for index, selection in enumerate(selections):
         bucket = excluded if selection.excluded else selected
         extra = harness.disagreements(selection) if harness is not None else ()
-        bucket.append(_proposal(selection, keys[index], encounter, extra, (answers or {}).get(index)))
+        bucket.append(_proposal(selection, keys[index], encounter, extra, (answers or {}).get(index),
+                                identify=harness is not None))
     return tuple(selected + excluded)
 
 
+def _identity(s: _Selection, enc: _Encounter) -> str:
+    """The identity of a decidable proposal's own reading (support['identity']): the sha256 of its code, family, profile
+    version, cited passages, units and the context values a decision on it depends on - its fingerprint without its
+    checks and status, which the other proposals and the reviewer-confirmed findings move. A confirmation of one of its
+    questions is bound to it (HARNESS.md 11.3, 12.5), never to the key it holds: keys count in selection order, and
+    another reading, a peer review or a new answer can select a code ahead of it."""
+    release = enc.pfs_source.release if enc.pfs_source else ''
+    pctc = checks.pctc_consideration(s.code, s.evaluation.reference.pfs, release, _billing(enc.context))
+    return sha256_json({'code': s.code, 'family': s.family, 'profile_version': s.profile.version,
+                        'evidence': sorted(span.text for span in s.evidence),
+                        'context': _relevant_context(s.family, enc, bool(pctc)), 'units': s.units})
+
+
 def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] = (),
-              answers: Optional['_Answers'] = None) -> ProposalAssessment:
+              answers: Optional['_Answers'] = None, *, identify: bool = False) -> ProposalAssessment:
     """``extra``: checks added after every rule's own (an independent participant's contradiction, which never changes
     the status); like every check, they are part of the fingerprint. ``answers``: the reviewer-confirmed answers to the
-    required-fact questions this proposal reads (HARNESS.md 11.3; a confirmed status is in its evaluation already)."""
+    required-fact questions this proposal reads (HARNESS.md 11.3; a confirmed status is in its evaluation already).
+    ``identify``: record support['identity'] (_identity), what a confirmation of a question of this proposal is bound
+    to - only while an independent participant is configured, so with none the result is unchanged (I1)."""
     if s.evaluation is None:
         return _excluded_early(s, key, enc.provider)
     finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
@@ -2180,11 +2198,25 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
     release = enc.pfs_source.release if enc.pfs_source else ''
     m, supported = s.evaluation.match, s.evaluation.support
     told = s.evaluation.confirmed  # a reviewer-confirmed status, read in place of the readers' hold
+    states = checks.required_fact_states(profile, finding, enc.context)
+    used: list[_Answer] = []  # the reviewer-confirmed answers this proposal reads (HARNESS.md 11.3)
+    if answers is not None and answers.facts:
+        # a confirmed value stands only where the readers leave the fact missing or in conflict: never over a reading
+        states = tuple(answers.state(state) for state in states)
+        used = [answers.facts[state.name] for state in states if state.confirmed]
+    if told is not None:
+        used.insert(0, told)
+    # a confirmed fact the readers read as an incomplete procedure gives a performed service their incomplete result:
+    # the incomplete check, the modifier 52/53 consideration, the status worded incomplete (refutation round 1, EV-4)
+    short = next((answer for answer in used if answer.short), None) if outcome.state == 'performed' else None
     if told is not None:
         status_found = checks.confirmed_status_check(told.performed, told.status, told.words, told.quoted,
                                                      s.evaluation.held)
     else:
         status_found = checks.status_check(outcome, name) if m is None else _service_status_check(m, s.evaluation.note)
+    if short is not None:
+        note = checks.confirmed_incomplete_note(short.fact, short.value, short.words)
+        status_found = replace(status_found, detail=f'{status_found.detail} {note}')
     found: list[Check] = [checks.scope_check(s.code_kind, s.scope_reason),
                           *checks.evidence_checks(s.evidence, s.dropped),
                           checks.routing_check(profile, finding), status_found]
@@ -2194,7 +2226,10 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         found.append(s.evaluation.placed)
     clarifications: list[ClarificationSpec] = []
     considerations: list[str] = []
-    if outcome.state == 'incomplete':
+    if short is not None:
+        found.append(checks.confirmed_incomplete_check(short.fact, short.value, short.words, short.quoted, short.short))
+        considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
+    elif outcome.state == 'incomplete':
         found.append(checks.incomplete_check(outcome))
         considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
     if m is not None:
@@ -2215,14 +2250,6 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                 proposal_key=key, reason=reason,
                                                 question=f'Is {s.code} reported separately from {", ".join(included)} '
                                                          'for this examination?'))
-    states = checks.required_fact_states(profile, finding, enc.context)
-    used: list[_Answer] = []  # the reviewer-confirmed answers this proposal reads (HARNESS.md 11.3)
-    if answers is not None and answers.facts:
-        # a confirmed value stands only where the readers leave the fact missing or in conflict: never over a reading
-        states = tuple(answers.state(state) for state in states)
-        used = [answers.facts[state.name] for state in states if state.confirmed]
-    if told is not None:
-        used.insert(0, told)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
@@ -2287,6 +2314,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         # reading never carries to another), and in the record the confirmations read
         context_values = {**context_values, 'confirmed': [answer.basis() for answer in used]}
         support = {**support, 'confirmed': sorted({i for answer in used for i in answer.ids})}
+    if identify:
+        support = {**support, 'identity': _identity(s, enc)}  # what a confirmation of a question of its is bound to
     return ProposalAssessment(
         key=key, bucket='excluded' if s.excluded else 'selected', code=s.code, code_kind=s.code_kind,
         family=s.family, profile_version=profile.version, status=status,
@@ -2298,11 +2327,14 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                          else _participant_names(s.proposers)
                                                          if s.origin == 'participant' else enc.provider),
                                                units=s.units, evidence_count=len(s.evidence),
-                                               profile=profile, detected=finding is not None, outcome=outcome,
+                                               profile=profile, detected=finding is not None,
+                                               outcome=replace(outcome, state='incomplete') if short else outcome,
                                                facts=_documented_facts(finding, states, m),
                                                entered=_entered_facts(states),
                                                lead=s.lead if s.origin == 'participant' else '',
-                                               status_words=told.words if told is not None else '',
+                                               status_words=(told.words if told is not None else
+                                                             f'on the reviewer-confirmed '
+                                                             f'{checks.fact_label(short.fact)}' if short else ''),
                                                confirmed=tuple(answer.sentence() for answer in used
                                                                if answer is not told)),
         checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
@@ -2922,8 +2954,11 @@ class _Harness:
       proposal of its own (support['origin'] 'participant'), whose rationale says who proposed it, in which phase, and
       that Corti did not (11.4); otherwise an alternative saying why ('altp:<n>'). A participant's stated units,
       modifiers and confidence are recorded in its position and never used.
-    - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every first
-      reading's code (so they keep their keys), and is recorded as proposed after peer review, never as independent.
+    - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every code a
+      first reading listed, and is recorded as proposed after peer review, never as independent. Keys still move
+      between assessments (a code a first reading listed with no located quote is selected, at its first reading's
+      place, once its peer review locates it; a later reading or a new answer selects other codes), so a question's
+      key never identifies its proposal across assessments: a confirmation is bound by code and identity.
     - Agreement never promotes (I3): a second proposer adds its quotes to the code's evidence and its name to the
       record; with the same quotes it changes nothing else - not the bucket, status, checks, units or fingerprint (only
       the rationale's first sentence, which names the proposers). A peer review's 'supports' changes nothing at all.
@@ -2986,8 +3021,13 @@ class _Harness:
         return tuple(name for name in PARTICIPANT_ORDER if any(s.good for s in by.get(name, ())))
 
     def phase(self, code: str, name: str) -> str:
-        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review."""
-        return INDEPENDENT if any(s.phase == INDEPENDENT for s in self.codes[code][name]) else PEER_REVIEW
+        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read from its
+        entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a first
+        reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
+        proposed after peer review); from all its entries only when none does (an alternative it never located)."""
+        said = self.codes[code][name]
+        counted = [s for s in said if s.good] or said
+        return INDEPENDENT if any(s.phase == INDEPENDENT for s in counted) else PEER_REVIEW
 
     def _who(self, code: str, names: Sequence[str]) -> str:
         """'Astra (independent participant)', 'Fable after peer review', 'Astra (independent participant) and Fable
@@ -3355,24 +3395,73 @@ CONFIRMABLE_FACTS = tuple(sorted({fact for profile in PROFILES.values() for fact
 NOT_PERFORMED_VALUES = {'not_performed': 'negated', 'negated': 'negated', 'cancelled': 'cancelled',
                         'planned': 'planned', 'historical': 'historical'}
 # The participants whose quote a confirmed passage can be: the model participants, whose frozen readings and peer-review
-# answers are the only candidates (HARNESS.md 11.3, step 1) - so with none configured nothing is ever confirmed (I1).
+# answers are the only candidates (HARNESS.md 11.3, step 1). With none configured there is no candidate, and the assess
+# stage gives the engine no confirmation at all (jobs.stage_assess, HARNESS.md 12.7), so nothing is confirmed (I1); the
+# engine itself reads only what it is given, checked as below.
 LOCATORS = dict(PARTICIPANT_LABELS)
 NOT_OPEN = ('it answers no question this assessment asks (the question is not open here, or its proposal is held for '
             'another reason or not at all)')
 DISAGREEING = 'confirmations of the same question disagree, so none of them is read and the question stays open'
 CONTEXT_ONLY = ('the service date and the other encounter-context facts enter through the encounter context as a '
                 "member's value, never by a confirmation")
+# A proposal's question is bound to the proposal it was made for, never to the key it held (HARNESS.md 12.5, EV-1).
+UNBOUND = ('it does not name the proposal it was made for (its code and the identity of its reading), and a '
+           'confirmation is never read for whichever proposal holds a key now')
+MOVED = ('the proposal it was made for is not in this assessment (no proposal of its code reads the same passages '
+         'under the same context), so it answers nothing here; it is never read for the proposal that holds its key '
+         'now')
+TWICE = 'the proposal it was made for is in this assessment more than once, so CPT Studio cannot tell which it answers'
+TOO_SHORT = (f'its passage is shorter than any quote CPT Studio locates (fewer than {MIN_QUOTE_CHARACTERS} non-space '
+             'characters), so it is no located passage and never evidence (I7)')
+# The required facts the readers read a procedure's completion from (refutation round 1, EV-4): a confirmed value of one
+# is read as they read the same fact, so one they would read as incomplete makes the procedure incomplete.
+REACH_FACTS = ('extent', 'cannulation')
+UNPLACED = ("CPT Studio cannot place its value on its readers' own scale - one landmark routing reads, for an extent; "
+            'successful or failed, for a cannulation - so it cannot tell whether the procedure was completed, and the '
+            'question stays open')
 
 
 def _status_value(value: str) -> str:
     return re.sub(r'[\s-]+', '_', value.strip().lower())
 
 
+def _shortfall(family: str, fact: str, value: str, text: str, day: Optional[date]) -> Optional[str]:
+    """How a reviewer-confirmed ``value`` of ``fact`` leaves its procedure incomplete, as CPT Studio's readers read the
+    same fact: '' when they would read it completed, why when incomplete ('a failed cannulation'; 'short of the cecum,
+    ...'), None when CPT Studio cannot place it (UNPLACED). An extent is one of routing's own landmarks, placed against
+    the depth the procedure calls for as detect places a reach: the cecum for a colonoscopy (cues.CECUM_DEPTH), the
+    depth the document's named upper endoscopy calls for (detect._expected_upper_depth), none for a flexible
+    sigmoidoscopy. A cannulation is successful or failed, as detect._cannulation reads one. Any other fact has no
+    completion reading ('')."""
+    from studio.gi import cues, detect  # local, as in _routing_agrees; the analysis is cached per text and date
+    word = ' '.join(value.split()).casefold()
+    if fact == 'cannulation':
+        return {'successful': '', 'failed': 'a failed cannulation'}.get(word)
+    if fact != 'extent':
+        return ''
+    if family == 'gi.colonoscopy':
+        table, expected = cues.LOWER_LANDMARKS, cues.CECUM_DEPTH
+    elif family == 'gi.flex_sig':
+        table, expected = cues.LOWER_LANDMARKS, 0  # a flexible sigmoidoscopy calls for no depth
+    elif family in ('gi.egd', 'gi.enteroscopy'):  # an enteroscopy's codes are read through the EGD routing (legacy)
+        table, expected = cues.UPPER_LANDMARKS, detect._expected_upper_depth(detect._analysis(text, day)[0])
+    else:
+        return None
+    depth = next((depth for label, depth, _ in table if label == word), None)
+    if depth is None:
+        return None
+    if depth >= expected:
+        return ''
+    called = next((label for label, at, _ in table if at == expected), 'depth')
+    return f'short of the {called}, the depth the procedure calls for'
+
+
 def _confirmation_order(c: ConfirmedFinding) -> tuple:
     """The order confirmations are read and listed in, whatever order they are given in (every field, so that even two
     confirmations sharing an id are read the same way each time)."""
     return tuple(str(getattr(c, name)) for name in ('scope', 'family', 'proposal_key', 'fact', 'confirmation_id',
-                                                    'value', 'confirmed_by', 'located_by', 'evidence'))
+                                                    'value', 'confirmed_by', 'located_by', 'evidence',
+                                                    'proposal_code', 'proposal_identity'))
 
 
 @dataclass(frozen=True)
@@ -3387,6 +3476,7 @@ class _Answer:
     spans: tuple[EvidenceSpan, ...]  # their passages: exact slices of the revision text, each once, in document order
     ids: tuple[str, ...]
     words: str  # "confirmed from Fable's located passage by <reviewer>" (each confirmation's)
+    short: str = ''  # how the confirmed value leaves the procedure incomplete, as the readers read it (_shortfall)
 
     @property
     def performed(self) -> bool:
@@ -3472,9 +3562,12 @@ class _Confirmations:
     its passage and the reviewer; and every one of its passages must be an exact slice of the revision text.
 
     It is then matched to the open question it was made for, in the assessment these same inputs make WITHOUT any
-    confirmation: (proposal key, family, fact) for a proposal's question, (family, fact) for a service question. One that
-    answers no such question answers nothing; confirmations of one question that disagree are all left unread. So a
-    confirmation never touches another question, and none depends on which others are read.
+    confirmation: a proposal's question by the proposal it was made for - the one proposal whose code and identity
+    (_identity: its own reading, whatever else is proposed) are the confirmation's, asking (family, fact) - and never by
+    the key it held, which another reading, a peer review or a new answer can give to another code; a service question
+    by (family, fact). One whose proposal is not there, or is there twice, or that answers no such question, answers
+    nothing; confirmations of one question that disagree are all left unread. So a confirmation never touches another
+    question, and none depends on which others are read.
 
     Read, it answers its question and nothing else (apply): a status is decided as performed or not performed on its
     passage (_confirmed), through the status path; a required fact takes its confirmed value, with its passages as the
@@ -3482,11 +3575,11 @@ class _Confirmations:
     missing or in conflict. Every check, rationale and support record that uses it says so ("confirmed from Fable's
     located passage by <reviewer>") and support['confirmed'] lists the confirmations. Everything else - the same-day
     rules, the base inclusion, the references, every other question - applies as usual, so a confirmed code can still be
-    held for another reason; and it approves nothing. The proposals keep the keys they have without confirmations, so
-    the key a question names stays the proposal's whatever confirmations are read."""
+    held for another reason; and it approves nothing. The proposals keep the keys they have without confirmations."""
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
         confirmed = tuple(confirmed)
+        self.text = text
         for c in confirmed:
             if not isinstance(c, ConfirmedFinding):
                 raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
@@ -3507,7 +3600,8 @@ class _Confirmations:
 
     @staticmethod
     def _malformed(c: ConfirmedFinding) -> str:
-        for name in ('scope', 'fact', 'family', 'proposal_key', 'value', 'confirmed_by', 'confirmation_id'):
+        for name in ('scope', 'fact', 'family', 'proposal_key', 'value', 'confirmed_by', 'confirmation_id',
+                     'proposal_code', 'proposal_identity'):
             if not isinstance(getattr(c, name), str):
                 return f'its {name.replace("_", " ")} is not text'
         if not c.confirmation_id.strip():
@@ -3525,7 +3619,9 @@ class _Confirmations:
             return 'it names no service family CPT Studio knows'
         if c.scope == 'proposal' and not c.proposal_key:
             return 'it names no proposal'
-        if c.scope == 'service' and c.proposal_key:
+        if c.scope == 'proposal' and not (c.proposal_code.strip() and c.proposal_identity.strip()):
+            return UNBOUND
+        if c.scope == 'service' and (c.proposal_key or c.proposal_code or c.proposal_identity):
             return 'a service question names no proposal'
         if not c.value.strip():
             return 'it confirms no value'
@@ -3540,6 +3636,9 @@ class _Confirmations:
         if not isinstance(c.evidence, (tuple, list)) or not c.evidence \
                 or not all(isinstance(span, EvidenceSpan) for span in c.evidence):
             return 'it cites no passage'
+        if any(isinstance(span.text, str) and len(re.sub(r'\s+', '', span.text)) < MIN_QUOTE_CHARACTERS
+               for span in c.evidence):
+            return TOO_SHORT  # as the reading normaliser's Locator counts a quote (refutation round 1, EV-3)
         return ''
 
     @staticmethod
@@ -3552,9 +3651,11 @@ class _Confirmations:
         return 'confirmed from ' + '; and from '.join(dict.fromkeys(phrases))
 
     def apply(self, selections: list, proposals: tuple, procedure_day: bool, *, harness, provider: str, context,
-              routing: RoutingResult, sources, date_state, inventory) -> tuple[list, tuple, bool]:
+              routing: RoutingResult, sources, date_state, inventory,
+              day: Optional[date] = None) -> tuple[list, tuple, bool]:
         """(selections, proposals, procedure day) with the confirmed answers read. ``proposals``: the assessment's
-        proposals without any - one per selection (_keyed), then the alternatives, which no confirmation touches."""
+        proposals without any - one per selection (_keyed), then the alternatives, which no confirmation touches.
+        ``day``: the date the routing was read on (an extent is placed as its reading places one, _shortfall)."""
         count = len(selections)
         keyed, tail = tuple(proposals[:count]), tuple(proposals[count:])
         keys = _keys(selections)
@@ -3563,12 +3664,25 @@ class _Confirmations:
         asked = {(p.key, q.family, q.fact) for p in keyed for q in p.clarifications}
         services = {(q.family, q.fact) for q in (_service_questions(inventory, proposals, context)
                                                  if inventory is not None else ()) if q.scope == 'service'}
+        # each decidable proposal's identity, as these inputs make it without any confirmation (_identity reads no check
+        # and no status, so the same proposal has it whichever confirmations an assessment reads)
+        unconfirmed = _encounter(provider, context, routing, sources, date_state, selections)
+        identities = {keys[i]: (s.code, _identity(s, unconfirmed)) for i, s in enumerate(selections)
+                      if s.evaluation is not None}
         groups: dict[tuple, list] = {}
         for c, spans in self.candidates:
-            asks = ((c.proposal_key, c.family, c.fact) in asked if c.scope == 'proposal'
+            key = c.proposal_key
+            if c.scope == 'proposal':
+                # bound to the proposal it was made for, wherever its key is now: never to whichever holds the key
+                bound = [k for k, identity in identities.items() if identity == (c.proposal_code, c.proposal_identity)]
+                if len(bound) != 1:
+                    self.ignored.append((c, TWICE if bound else MOVED))
+                    continue
+                key = bound[0]
+            asks = ((key, c.family, c.fact) in asked if c.scope == 'proposal'
                     else (c.family, c.fact) in services)
             if asks:
-                groups.setdefault((c.scope, c.family, c.proposal_key, c.fact), []).append((c, spans))
+                groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
             else:
                 self.ignored.append((c, NOT_OPEN))
         status: dict[int, _Answer] = {}
@@ -3582,11 +3696,16 @@ class _Confirmations:
             if len(same) > 1:
                 self.ignored += [(c, DISAGREEING) for c, _ in items]
                 continue
+            value = ' '.join(items[0][0].value.split())
+            short = _shortfall(family, fact, value, self.text, day) if fact in REACH_FACTS else ''
+            if short is None:  # neither complete nor incomplete on the readers' scale: fail closed (EV-4)
+                self.ignored += [(c, UNPLACED) for c, _ in items]
+                continue
             spans = {(sp.start, sp.end): sp for _, kept in items for sp in kept}
             answer = _Answer(scope, family, key, selections[index[key]].code if scope == 'proposal' else '', fact,
-                             ' '.join(items[0][0].value.split()), tuple(spans[k] for k in sorted(spans)),
+                             value, tuple(spans[k] for k in sorted(spans)),
                              tuple(sorted(dict.fromkeys(c.confirmation_id for c, _ in items))),
-                             self._words([c for c, _ in items]))
+                             self._words([c for c, _ in items]), short)
             self.applied.append(answer)
             if fact == STATUS_FACT:
                 status[index[key]] = answer
@@ -3624,7 +3743,9 @@ class _Confirmations:
         what = 'whether it was performed' if fact == STATUS_FACT else checks.excerpt(checks.fact_label(fact) or 'a fact')
         family = c.family if isinstance(c.family, str) else ''
         key = c.proposal_key if isinstance(c.proposal_key, str) else ''
-        target = (f'proposal {checks.excerpt(key)}' if c.scope == 'proposal' and key
+        code = c.proposal_code.strip() if isinstance(c.proposal_code, str) else ''
+        named = f' ({checks.excerpt(code)})' if code else ''  # the code of the proposal it was made for
+        target = (f'proposal {checks.excerpt(key)}{named}' if c.scope == 'proposal' and key
                   else f'the documented {PROFILES[family].label}' if family in PROFILES else 'an unnamed service')
         return f'the confirmation of {what} for {target}: {why}'
 

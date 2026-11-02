@@ -2644,6 +2644,22 @@ def confirmed_exclusion(status: str, words: str, quoted: str) -> str:
     return f'{confirmed_status_detail(False, status, words, quoted)} Reinstate if this code is supported.'
 
 
+def confirmed_incomplete_check(fact: str, value: str, words: str, quoted: str, shortfall: str) -> Check:
+    """The service.incomplete check of a code whose reviewer-confirmed fact CPT Studio's readers read as an incomplete
+    procedure (``shortfall``: an extent short of the depth the procedure calls for, or a failed cannulation), as
+    incomplete_check words the readers' own reading - said to be confirmed, never documented by the readers."""
+    return Check('service.incomplete', 'Incomplete procedure documented', 'warn',
+                 f'{CONFIRMED_HEADING}: {fact_label(fact)} = {excerpt(value)}, {words} ({quoted}) - {shortfall}, '
+                 "which CPT Studio's readers read as an incomplete procedure. Kept for review: not treated as "
+                 'completed and not excluded.', CONFIRMATION_SOURCE)
+
+
+def confirmed_incomplete_note(fact: str, value: str, words: str) -> str:
+    """What a service.status check adds when a reviewer-confirmed fact makes its procedure incomplete."""
+    return (f'With the reviewer-confirmed {fact_label(fact)} ({excerpt(value)}, {words}), it is read as incomplete '
+            '(performed in part).')
+
+
 def confirmations_applied_check(items: Sequence[str]) -> Check:
     """``items``: each question a reviewer-confirmed finding answers, worded with its passage (engine._Answer.item)."""
     return Check('confirmations.applied', 'Reviewer-confirmed findings', 'info',
