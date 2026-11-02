@@ -1,5 +1,5 @@
-"""Refutation round 2, R2-WORDING (HARNESS.md 7, 11.1, 11.4, I9): how the page and the reports name proposers, phases and
-participant text, so that every sentence is true of the record.
+"""Refutation round 2, R2-WORDING (HARNESS.md 7, 11.1, 11.4, I9): how the page and the reports name proposers, phases
+and participant text, so that every sentence is true of the record.
 
 Each class reproduces one finding of the round (refute-harness-r2/findings.json, verified in
 verify-harness-r2/results.json) through the real pipeline - the real jobs, engine, readers, tool executor and tool loop,
@@ -29,10 +29,11 @@ APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
 PRELUDE = r"""
 const app = require(process.argv[1]);
 const data = JSON.parse(process.argv[2]);
-const visible = html => html
-  .replace(/<(br|\/p|\/li|\/div|\/h[1-6]|\/summary|\/small|\/strong|\/article|\/section|\/ul|\/details|\/dd|\/dt)\b[^>]*>/gi, '\n')
-  .replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
-  .replace(/&#x60;/g, '`').replace(/&amp;/g, '&').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+const BREAKS = new RegExp('<(br|/p|/li|/div|/h[1-6]|/summary|/small|/strong|/article|/section|/ul|/details|/dd|/dt)'
+  + '\\b[^>]*>', 'gi');
+const visible = html => html.replace(BREAKS, '\n').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#x60;/g, '`').replace(/&amp;/g, '&').split('\n')
+  .map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
 const page = (tab = 'codes') => app.reviewView(data, app.documentLayout(data), tab, true);
 const cards = html => [...html.matchAll(/<article class="code-card"[\s\S]*?<\/article>/g)].map(match => match[0]);
 const cardOf = (html, id) => cards(html).find(card => card.includes(`id="card-${id}"`)) || '';
@@ -161,15 +162,15 @@ class CortiRelationTests(R2WordingCase):
     def test_a_payload_that_serves_no_relation_says_nothing_of_corti(self):
         # a proposal served without corti_relation (before it existed): who proposed it, and nothing about Corti that
         # the record would have to support
-        lines = browser("['', 'none', 'unheard-of'].map(relation => visible(app.codeStatusLines({ proposed_by: ['fable'], "
-                        "reference_check: { state: 'passed' }, ...(relation ? { corti_relation: relation } : {}) })))",
-                        {})
+        lines = browser("['', 'none', 'unheard-of'].map(relation => visible(app.codeStatusLines({ "
+                        "proposed_by: ['fable'], reference_check: { state: 'passed' }, "
+                        "...(relation ? { corti_relation: relation } : {}) })))", {})
         self.assertEqual([text.split('\n')[0] for text in lines],
                          ['Proposed by: Fable', 'Proposed by: Fable; Corti did not propose this code.',
                           'Proposed by: Fable'])
 
 
-# --- truth-11: a participant row never says "It proposed no code" beside the codes it cannot list ----------------------
+# --- truth-11: a participant row never says "It proposed no code" beside the codes it cannot list ---------------------
 
 class UnlistedCodesTests(R2WordingCase):
     """truth-11 (HARNESS.md 7; the round-1 IND-1 repair's count sentence): a participant whose reading proposed only a
@@ -286,7 +287,7 @@ class PhaseOneFinalRowsTests(h2.Harness2Case):
             self.assertNotIn(NOT_RECORDED, row)
 
 
-# --- truth-8: "proposed after peer review, never independent" only for a code first proposed there ---------------------
+# --- truth-8: "proposed after peer review, never independent" only for a code first proposed there --------------------
 
 REPEATED = 'It listed 45385 again in peer review; it first proposed it in its independent reading.'
 
@@ -361,13 +362,14 @@ PLURAL = 'Polyp(s) in the sigmoid colon were removed with a hot snare.'
 
 
 class DocumentQuoteTests(R2WordingCase):
-    """IR2-4 (b) (I9; app.js's own rule that the document's text is shown as it is): a participant's position quote is its
-    first LOCATED quote - an exact slice of the revision (jobs._first_located, I7) - and the code card withheld it as
-    "reads like a CPT descriptor" because the document itself wrote a plural mark, while the owner's trace showed the
-    same passage verbatim. The card now shows it as the document's own text."""
+    """IR2-4 (b) (I9; app.js's own rule that the document's text is shown as it is): a participant's position quote is
+    its first LOCATED quote - an exact slice of the revision (jobs._first_located, I7) - and the code card withheld it
+    as "reads like a CPT descriptor" because the document itself wrote a plural mark, while the owner's trace showed
+    the same passage verbatim. The card now shows it as the document's own text."""
 
     def test_a_located_quote_with_the_document_s_own_plural_mark_is_shown(self):
-        text = TWO_EXTENTS.replace('A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.', PLURAL)
+        text = TWO_EXTENTS.replace('A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.',
+                                   PLURAL)
         self.assertIn(PLURAL, text)
         snare = 'were removed with a hot snare'
         self.corti.selections = [('45385', snare), ('45380', BIOPSY)]
@@ -390,10 +392,10 @@ class DocumentQuoteTests(R2WordingCase):
 # --- FG2-5: every real code card states the PTP limit once -----------------------------------------------------------
 
 class ReferenceLineTests(R2WordingCase):
-    """FG2-5 (I4: PTP always "not verified"): the API's reference_check detail always ends with review.PTP_NOT_CONNECTED,
-    and the page always appended its own "(NCCI procedure-to-procedure edits not verified: not connected)" too, so every
-    real code card stated the PTP limit twice; only hand-written fixtures, whose details the API cannot produce, were
-    tested. Each card the real API serves now states it exactly once."""
+    """FG2-5 (I4: PTP always "not verified"): the API's reference_check detail always ends with
+    review.PTP_NOT_CONNECTED, and the page always appended its own "(NCCI procedure-to-procedure edits not verified:
+    not connected)" too, so every real code card stated the PTP limit twice; only hand-written fixtures, whose details
+    the API cannot produce, were tested. Each card the real API serves now states it exactly once."""
 
     def test_each_code_card_states_the_ptp_limit_once(self):
         encounter_id = self.create(TWO_EXTENTS)

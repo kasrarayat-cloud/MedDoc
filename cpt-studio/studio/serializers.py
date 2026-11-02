@@ -783,8 +783,8 @@ def _peer_detail(record, repeated=()):
 
 # Why a final assessment of phase 1 read no peer review, by the pipeline's own rule (jobs.owed_peer_stages; HARNESS.md
 # 12.7, the final assessment): none is owed while a member date conflict holds it, nor for a participant not configured
-# now. The reports' PEER REVIEW says the same (refutation round 2, truth-9: the page read "No peer review is recorded for
-# this revision" beside the revision's own peer-review runs).
+# now. The reports' PEER REVIEW says the same (refutation round 2, truth-9: the page read "No peer review is recorded
+# for this revision" beside the revision's own peer-review runs).
 PEER_HELD = ('Peer review: none is read by this assessment: the service date entered as encounter metadata conflicts '
              'with the document, and no peer review is sent while that question is open.')
 PEER_NOT_CONFIGURED = 'Peer review: none follows this assessment: {label} is not configured on this installation now.'
