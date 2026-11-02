@@ -1,6 +1,7 @@
-"""Participant requests (HARNESS.md 3, 8; I5, I9): the exact bodies both adapters build from a revision alone, the
-fields they must never carry, the original-file placeholder and its size accounting, and what refuses a request
-before anything is built. Offline and synthetic (test_participants_support)."""
+"""Participant requests (HARNESS.md 3, 8, 11.2; I5, I9): the exact bodies both adapters build from a revision alone -
+since harness@2 with CPT Studio's two reference tools - the fields they must never carry, the original-file placeholder
+and its size accounting, and what refuses a request before anything is built. Offline and synthetic
+(test_participants_support)."""
 from __future__ import annotations
 
 import base64
@@ -19,7 +20,11 @@ from studio.types import PageSpan
 from tests.test_participants_support import NOTE, ORIGINAL, PAGE_BREAK, PAGES, PDF, OfflineTestCase
 
 FORBIDDEN_FABLE_FIELDS = ('thinking', 'temperature', 'top_p', 'top_k', 'fallbacks', 'betas', 'anthropic_beta',
-                          'tools', 'tool_choice', 'stop_sequences', 'metadata')
+                          'stop_sequences', 'metadata', 'mcp_servers', 'container')
+ASTRA_TOOLS = [{'type': 'function', 'name': tool['name'], 'description': tool['description'],
+                'parameters': tool['parameters'], 'strict': True} for tool in prompt.TOOLS]
+FABLE_TOOLS = [{'name': tool['name'], 'description': tool['description'], 'input_schema': tool['parameters'],
+                'strict': True} for tool in prompt.TOOLS]
 
 
 def framed() -> str:
@@ -50,8 +55,12 @@ class AstraRequestTests(OfflineTestCase):
             'reasoning': {'effort': 'medium'},
             'max_output_tokens': 16000,
             'store': False,
+            'tools': ASTRA_TOOLS,
+            'tool_choice': 'auto',
+            'include': ['reasoning.encrypted_content'],
         })
-        self.assertEqual((request.provider, request.adapter_version), ('astra', 'openai-responses@cptstudio-harness-1'))
+        self.assertEqual([tool['name'] for tool in request.body['tools']], ['cms_code_facts', 'cms_policy_passages'])
+        self.assertEqual((request.provider, request.adapter_version), ('astra', 'openai-responses@cptstudio-harness-2'))
         self.assertEqual(request.contexts, (NOTE,))  # quotes are located in the revision text itself
 
     def test_only_a_pdf_attaches_its_original(self):
@@ -86,9 +95,11 @@ class FableRequestTests(OfflineTestCase):
                                                          '$original_bytes': ORIGINAL['bytes']}}},
                 {'type': 'text', 'text': framed()}]}],
             'output_config': {'format': {'type': 'json_schema', 'schema': prompt.SCHEMA}, 'effort': 'medium'},
+            'tools': FABLE_TOOLS,
+            'tool_choice': {'type': 'auto'},
         })
         self.assertEqual((request.provider, request.adapter_version),
-                         ('fable', 'anthropic-messages@cptstudio-harness-1'))
+                         ('fable', 'anthropic-messages@cptstudio-harness-2'))
         self.assertEqual(request.contexts, (NOTE,))
 
     def test_no_forbidden_field_is_ever_built(self):
@@ -98,8 +109,10 @@ class FableRequestTests(OfflineTestCase):
             for field in FORBIDDEN_FABLE_FIELDS:
                 with self.subTest(kind=kind, field=field):
                     self.assertNotIn(f'"{field}"', encoded)
-            self.assertEqual(set(request.body), {'model', 'max_tokens', 'system', 'messages', 'output_config'})
+            self.assertEqual(set(request.body), {'model', 'max_tokens', 'system', 'messages', 'output_config', 'tools',
+                                                 'tool_choice'})
             self.assertEqual(set(request.body['output_config']), {'format', 'effort'})
+            self.assertEqual(request.body['tool_choice'], {'type': 'auto'})  # a forced tool_choice is a 400 here
 
     def test_only_a_pdf_attaches_its_original(self):
         request = self.fable.build_request(NOTE, PAGES, 'addendum', ORIGINAL)
@@ -142,15 +155,18 @@ class SharedRequestTests(OfflineTestCase):
                 self.assertNotIn(base, variants)
 
     def test_the_request_carries_nothing_but_the_revision(self):
-        """I5: no title, filename, date, setting, billing context or CPT Studio reading. Outside the fixed schema, every
-        string in the body is the fixed prompt, the framed revision text, the original's sha256 or a fixed label."""
+        """I5: no title, filename, date, setting, billing context or CPT Studio reading. Outside the fixed schema and
+        the fixed tool definitions (prompt.TOOLS), every string in the body is the fixed prompt, the framed revision
+        text, the original's sha256 or a fixed label."""
         labels = {'gpt-6-astra', 'claude-fable-5-1', 'user', 'input_file', 'original.pdf', 'input_text', 'json_schema',
-                  'gi_encounter_reading', 'medium', 'document', 'base64', 'application/pdf', 'text'}
+                  'gi_encounter_reading', 'medium', 'document', 'base64', 'application/pdf', 'text', 'auto',
+                  'reasoning.encrypted_content'}
         for adapter in self.adapters:
             with self.subTest(adapter=adapter.name):
                 body = copy.deepcopy(adapter.build_request(NOTE, PAGES, 'pdf', ORIGINAL).body)
                 holder = body['text']['format'] if adapter.name == 'astra' else body['output_config']['format']
                 self.assertEqual(holder.pop('schema'), prompt.SCHEMA)
+                self.assertEqual(body.pop('tools'), ASTRA_TOOLS if adapter.name == 'astra' else FABLE_TOOLS)
                 strings, pending = [], [body]
                 while pending:
                     node = pending.pop()
@@ -162,7 +178,7 @@ class SharedRequestTests(OfflineTestCase):
                         strings.append(node)
                 self.assertEqual(set(strings) - labels, {prompt.INSTRUCTIONS, framed(), ORIGINAL['sha256']})
 
-    def test_the_schema_constant_is_copied_never_shared(self):
+    def test_the_schema_and_tool_constants_are_copied_never_shared(self):
         for adapter in self.adapters:
             with self.subTest(adapter=adapter.name):
                 request = adapter.build_request(NOTE, PAGES, 'paste', None)
@@ -170,6 +186,10 @@ class SharedRequestTests(OfflineTestCase):
                           else request.body['output_config']['format']['schema'])
                 schema['properties']['injected'] = {'type': 'string'}
                 self.assertNotIn('injected', prompt.SCHEMA['properties'])
+                tool = request.body['tools'][0]
+                parameters = tool['parameters'] if adapter.name == 'astra' else tool['input_schema']
+                parameters['properties']['injected'] = {'type': 'string'}
+                self.assertNotIn('injected', prompt.TOOLS[0]['parameters']['properties'])
 
     def test_unframeable_text_is_refused_before_anything_is_built(self):
         cases = {'pages that leave a gap': (PageSpan(1, 0, 10), PageSpan(2, 11, len(NOTE))),

@@ -87,3 +87,46 @@ class PricingTests(SimpleTestCase):
             with self.subTest(model=model):
                 self.assertIsNone(pricing.estimate(model, usage))
         self.assertIsNone(pricing.estimate('corti', {'creditsConsumed': 0.019524}))  # credits, not tokens
+
+
+class LoopEstimateTests(SimpleTestCase):
+    """A tool loop (HARNESS.md 11.2) is several requests, each priced on its own."""
+
+    def test_one_exchange_is_estimate_exactly(self):
+        for model, usage in (('gpt-6-astra', astra(2412, 911, cached=0)), ('claude-fable-5-1', fable(2650, 1034))):
+            with self.subTest(model=model):
+                self.assertEqual(pricing.estimate_loop(model, [usage]), pricing.estimate(model, usage))
+
+    def test_each_exchange_is_priced_on_its_own_never_as_one_long_request(self):
+        each = astra(200_000, 1_000, cached=0)
+        loop = pricing.estimate_loop('gpt-6-astra', [each, each])
+        single = Decimal(pricing.estimate('gpt-6-astra', each)['estimated_usd'])
+        self.assertEqual(Decimal(loop['estimated_usd']), 2 * single)
+        self.assertEqual(loop['estimated_usd'], '4.100000')
+        summed = pricing.estimate('gpt-6-astra', astra(400_000, 2_000, cached=0))  # what pricing the sum would claim
+        self.assertEqual(summed['estimated_usd'], '8.150000')
+        self.assertEqual((loop['rates']['exchanges'], loop['rates']['exchanges_priced'],
+                          loop['rates']['long_context_exchanges']), (2, 2, 0))
+        self.assertEqual(loop['rates']['priced_tokens'], {'input': 400_000, 'cached_input': 0, 'output': 2_000})
+        long = astra(300_000, 1_000, cached=0)
+        self.assertEqual(pricing.estimate_loop('gpt-6-astra', [each, long])['rates']['long_context_exchanges'], 1)
+        self.assertEqual(loop['basis'], BASIS)
+
+    def test_fable_exchanges_add_up(self):
+        loop = pricing.estimate_loop('claude-fable-5-1', [fable(1_000, 100), fable(2_000, 200, cache_read=1_000)])
+        self.assertEqual(loop['estimated_usd'], f'{(Decimal(3000 * 10 + 300 * 50) + Decimal("250")) / 1_000_000:.6f}')
+        self.assertEqual(loop['rates']['priced_tokens'], {'input': 3_000, 'cache_write': 0, 'cache_read': 1_000,
+                                                          'output': 300})
+
+    def test_an_exchange_that_reported_nothing_is_counted_not_priced(self):
+        usage = astra(2412, 911, cached=0)
+        loop = pricing.estimate_loop('gpt-6-astra', [usage, {}])
+        self.assertEqual(loop['estimated_usd'], pricing.estimate('gpt-6-astra', usage)['estimated_usd'])
+        self.assertEqual((loop['rates']['exchanges'], loop['rates']['exchanges_priced']), (2, 1))
+
+    def test_no_estimate_rather_than_a_guess(self):
+        usage = astra(2412, 911, cached=0)
+        for usages in ([usage, {'input_tokens': 'many'}], [{}, {}], [], 'not a list', None, [usage, None]):
+            with self.subTest(usages=usages):
+                self.assertIsNone(pricing.estimate_loop('gpt-6-astra', usages))
+        self.assertIsNone(pricing.estimate_loop('another-model', [usage, usage]))

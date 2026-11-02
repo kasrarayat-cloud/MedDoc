@@ -552,7 +552,8 @@ class FableSendTests(_SendContract, OfflineTestCase):
                 headers = {name.lower() for name in session.calls[0]['headers']}
                 self.assertEqual(headers, {'x-api-key', 'anthropic-version', 'content-type'})
                 sent = json.loads(session.calls[0]['data'])
-                self.assertEqual(set(sent), {'model', 'max_tokens', 'system', 'messages', 'output_config'})
+                self.assertEqual(set(sent), {'model', 'max_tokens', 'system', 'messages', 'output_config', 'tools',
+                                             'tool_choice'})
                 for field in ('thinking', 'temperature', 'top_p', 'top_k', 'fallbacks'):
                     self.assertNotIn(f'"{field}"', session.calls[0]['data'].decode())
 

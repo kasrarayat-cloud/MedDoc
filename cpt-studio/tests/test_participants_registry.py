@@ -1,6 +1,7 @@
-"""The participant registry and replay (HARNESS.md 8): which adapter a mode builds and from which settings, which
-reader reads a stored run, and replayed answers that send nothing, report no new usage and are read exactly as live
-ones. Offline and synthetic (test_participants_support)."""
+"""The participant registry and replay (HARNESS.md 8, 11): which adapter a mode builds and from which settings (the
+tool loop's limits included), which reader reads a stored run (harness@2's, and harness@1's exactly as before), and
+replayed answers that send nothing, report no new usage and are read exactly as live ones. Offline and synthetic
+(test_participants_support)."""
 from __future__ import annotations
 
 import copy
@@ -22,8 +23,10 @@ from studio.providers.base import ProviderUnavailable
 from tests.test_participants_support import (CLIENT_REQUEST_ID, NOTE, ORIGINAL, PAGES, PDF, OfflineTestCase,
                                              fixture_bytes, write_file)
 
-ASTRA_VERSION = 'openai-responses@cptstudio-harness-1'
-FABLE_VERSION = 'anthropic-messages@cptstudio-harness-1'
+ASTRA_VERSION = 'openai-responses@cptstudio-harness-2'
+FABLE_VERSION = 'anthropic-messages@cptstudio-harness-2'
+ASTRA_VERSION_1 = 'openai-responses@cptstudio-harness-1'
+FABLE_VERSION_1 = 'anthropic-messages@cptstudio-harness-1'
 
 
 class RegistryTests(OfflineTestCase):
@@ -31,7 +34,9 @@ class RegistryTests(OfflineTestCase):
         openai_path, anthropic_path = str(self.tmp / 'openai-not-yet.env'), str(self.tmp / 'anthropic-not-yet.env')
         with override_settings(OPENAI_CREDENTIALS_FILE=openai_path, ANTHROPIC_CREDENTIALS_FILE=anthropic_path,
                                PARTICIPANT_CONNECT_TIMEOUT_SECONDS=7, PARTICIPANT_READ_TIMEOUT_SECONDS=99,
-                               PARTICIPANT_MAX_REQUEST_BYTES=1234, PARTICIPANT_MAX_RESPONSE_BYTES=5678):
+                               PARTICIPANT_MAX_REQUEST_BYTES=1234, PARTICIPANT_MAX_RESPONSE_BYTES=5678,
+                               PARTICIPANT_MAX_EXCHANGES=3, PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS=77,
+                               PARTICIPANT_LOOP_DEADLINE_SECONDS=88, PARTICIPANT_MAX_TOOL_RESULT_BYTES=999):
             astra, fable = registry.build('astra', 'live'), registry.build('fable', 'live')
         for adapter, kind, path in ((astra, AstraParticipant, openai_path), (fable, FableParticipant, anthropic_path)):
             with self.subTest(adapter=adapter.name):
@@ -39,6 +44,8 @@ class RegistryTests(OfflineTestCase):
                 self.assertIsInstance(adapter, Participant)
                 self.assertEqual((adapter.credentials_path, adapter.connect_timeout, adapter.read_timeout,
                                   adapter.max_request_bytes, adapter.max_response_bytes), (path, 7, 99, 1234, 5678))
+                self.assertEqual((adapter.max_exchanges, adapter.exchange_read_timeout, adapter.loop_deadline,
+                                  adapter.max_tool_result_bytes), (3, 77, 88, 999))
                 self.assertFalse(Path(path).exists())
 
     def test_the_settings_defaults_are_the_contract(self):
@@ -46,10 +53,20 @@ class RegistryTests(OfflineTestCase):
 
         self.assertEqual((settings.PARTICIPANT_CONNECT_TIMEOUT_SECONDS, settings.PARTICIPANT_READ_TIMEOUT_SECONDS,
                           settings.PARTICIPANT_SEND_DEADLINE_SECONDS), (10, 300, 330))
+        self.assertEqual((settings.PARTICIPANT_MAX_EXCHANGES, settings.PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS,
+                          settings.PARTICIPANT_LOOP_DEADLINE_SECONDS, settings.PARTICIPANT_MAX_TOOL_RESULT_BYTES),
+                         (4, 240, 540, 256 * 1024))
+        self.assertLess(settings.PARTICIPANT_LOOP_DEADLINE_SECONDS, settings.STALE_RUNNING_SECONDS)
         with override_settings(OPENAI_CREDENTIALS_FILE='/run/cpt-studio/openai.env'):
             adapter = registry.build('astra', 'live')
         self.assertEqual((adapter.connect_timeout, adapter.read_timeout, adapter.max_request_bytes,
                           adapter.max_response_bytes), (10, 300, 24 * 1024 * 1024, 4 * 1024 * 1024))
+        self.assertEqual((adapter.max_exchanges, adapter.exchange_read_timeout, adapter.loop_deadline,
+                          adapter.max_tool_result_bytes), (4, 240, 540, 256 * 1024))
+        for adapter_class in (AstraParticipant, FableParticipant):  # the constructors' own defaults match
+            built = adapter_class('/run/cpt-studio/x.env')
+            self.assertEqual((built.max_exchanges, built.exchange_read_timeout, built.loop_deadline,
+                              built.max_tool_result_bytes), (4, 240, 540, 256 * 1024))
 
     def test_live_without_its_credentials_setting_is_unavailable(self):
         with override_settings(OPENAI_CREDENTIALS_FILE='', ANTHROPIC_CREDENTIALS_FILE=''):
@@ -60,10 +77,12 @@ class RegistryTests(OfflineTestCase):
                 self.assertIn(setting, str(caught.exception))
 
     def test_replay_needs_its_directory(self):
-        with override_settings(PARTICIPANT_REPLAY_DIR=str(self.tmp)):
+        with override_settings(PARTICIPANT_REPLAY_DIR=str(self.tmp), PARTICIPANT_MAX_EXCHANGES=2,
+                               PARTICIPANT_LOOP_DEADLINE_SECONDS=60, PARTICIPANT_MAX_TOOL_RESULT_BYTES=500):
             adapter = registry.build('fable', 'replay')
         self.assertIsInstance(adapter, ReplayParticipant)
         self.assertEqual((adapter.name, adapter.mode, adapter.replay_dir), ('fable', 'replay', self.tmp))
+        self.assertEqual((adapter.max_exchanges, adapter.loop_deadline, adapter.max_tool_result_bytes), (2, 60, 500))
         with override_settings(PARTICIPANT_REPLAY_DIR=''), self.assertRaises(ProviderUnavailable):
             registry.build('astra', 'replay')
 
@@ -95,7 +114,12 @@ class RegistryTests(OfflineTestCase):
         self.assertIs(registry.reader('astra', ASTRA_VERSION), openai_astra.read_response)
         self.assertIs(registry.reader('fable', FABLE_VERSION), anthropic_fable.read_response)
         self.assertIs(reader_for('astra', ASTRA_VERSION), openai_astra.read_response)
+        # harness@1's stored runs keep their reader; the reader reads each as the version that recorded it
+        self.assertIs(registry.reader('astra', ASTRA_VERSION_1), openai_astra.read_response)
+        self.assertIs(registry.reader('fable', FABLE_VERSION_1), anthropic_fable.read_response)
         for provider, version in (('astra', FABLE_VERSION), ('fable', ASTRA_VERSION), ('astra', ASTRA_VERSION + '0'),
+                                  ('astra', FABLE_VERSION_1), ('fable', ASTRA_VERSION_1),
+                                  ('astra', 'openai-responses@cptstudio-harness-3'),
                                   ('corti', 'corti-coding-v2@cptstudio-1'), ('replay', ASTRA_VERSION),
                                   ('Astra', ASTRA_VERSION), ('astra', None), (None, None), (['astra'], ASTRA_VERSION)):
             with self.subTest(provider=provider, version=version), self.assertRaises(ProviderUnavailable):

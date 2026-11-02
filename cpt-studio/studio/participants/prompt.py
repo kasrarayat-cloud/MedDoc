@@ -11,6 +11,8 @@ output (I5), and the schema holds no clinical data (vendors ask that none be put
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from typing import Optional, Sequence
 
 READING_VERSION = 'harness-reading@2'  # @2: tools and references_used (HARNESS.md 11.2)
@@ -213,3 +215,191 @@ PEER_SCHEMA = _object({
     'additional_codes': {'type': 'array', 'items': _CODE_ITEM},
     'references_used': {'type': 'array', 'items': _object({'ref': _string(), 'use': _string()})},
 })
+
+
+# --- phase 2: what a peer review is shown (HARNESS.md 11.1) -----------------------------------------------------------
+# One text block made from frozen inputs only, each section labelled for what it is. Every section's content is one
+# line of canonical JSON (json.dumps escapes every line break inside a string), so the block is exactly determined by
+# its inputs, and the question ids and frozen inputs it lists are read back from a stored request by
+# peer_document_inputs. The names below are this section's own; none of the constants above changes.
+_PEER_QUESTIONS = '== question_ids =='
+_PEER_FROZEN = '== Frozen inputs: the sha256 of each frozen output shown above =='
+_PEER_LABELS = {'corti': 'another coding system', 'astra': 'another model', 'fable': 'another model'}
+_QUESTION_KEYS = ('question_id', 'scope', 'fact', 'family', 'proposal_key', 'question', 'reason')
+_TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}')  # a question id or a frozen input's name
+_SHA256 = re.compile(r'[0-9a-f]{64}')
+_DISPLAY_FIELDS = frozenset({'display', 'provider_display'})  # Corti's own wording: never shown to a peer (I9)
+
+
+def reading_answer(reading) -> dict:
+    """A participant's reading (studio.types.ParticipantReading) in the reading schema's own shape (SCHEMA): what the
+    participant answered, as CPT Studio recorded it, with every quote as the participant wrote it - and none of CPT
+    Studio's checks of it (located spans, unverified reasons, problems, counts)."""
+    def quotes(items) -> list:
+        return [item.quote for item in items]
+
+    return {
+        'date_of_service': {'value': reading.date_of_service, 'evidence': quotes(reading.date_evidence)},
+        'services': [{'id': item.id, 'family': item.family, 'status': item.status, 'description': item.description,
+                      'anatomy': item.anatomy, 'extent': item.extent, 'technique': item.technique,
+                      'lesions': [{'site': lesion.site, 'size': lesion.size, 'morphology': lesion.morphology,
+                                   'action': lesion.action, 'specimen': lesion.specimen} for lesion in item.lesions],
+                      'provider_role': item.provider_role, 'evidence': quotes(item.evidence)}
+                     for item in reading.services],
+        'codes': [{'code': item.code, 'modifiers': list(item.modifiers), 'units': item.units,
+                   'service_ids': list(item.service_ids), 'basis': item.basis, 'evidence': quotes(item.evidence),
+                   'confidence': item.confidence} for item in reading.codes],
+        'not_coded': [{'service_ids': list(item.service_ids), 'code': item.code, 'reason': item.reason,
+                       'evidence': quotes(item.evidence)} for item in reading.not_coded],
+        'clarifications': [{'question': item.question, 'why': item.why, 'service_ids': list(item.service_ids),
+                            'evidence': quotes(item.evidence)} for item in reading.questions],
+        'extraction_issues': [{'page': item.page, 'issue': item.issue} for item in reading.extraction_issues],
+        'references_used': [{'ref': item.ref, 'use': item.use} for item in reading.references_used],
+    }
+
+
+def peer_framed_document(text: str, pages: Sequence, kind: str) -> Optional[str]:
+    """framed_document for a peer review, which attaches no original file: a PDF's first line says only its extracted
+    text is given (framed_document's says the original is attached, which is true of the first reading only). Every
+    other line, and every other kind's framing, is framed_document's exactly."""
+    framed = framed_document(text, pages, kind)
+    if framed is None or kind != 'pdf':
+        return framed
+    first = f'Document: {KINDS["pdf"]}.\n'
+    if not framed.startswith(first):
+        raise RuntimeError('framed_document no longer opens with the PDF line peer_framed_document replaces.')
+    return 'Document: a PDF; only its extracted text is given for this review.\n' + framed[len(first):]
+
+
+def peer_document(own, peers: dict, cpt_studio: dict, frozen: Sequence) -> str:
+    """The phase-2 material as one text block (HARNESS.md 11.1): the participant's own frozen first reading (in the
+    reading schema's shape, reading_answer), the frozen peer conclusions exactly as given, CPT Studio's rule-based
+    reading - its open questions, held and excluded codes, and their reasons - then the open questions' ids and the
+    sha256 of each frozen input. Pure. Raises TypeError or ValueError when an input is not the documented shape:
+    ``peers`` {name: dict} for corti, astra or fable other than the participant itself, never carrying a 'display' or
+    'provider_display' field at any depth; ``cpt_studio`` exactly {open_questions, held, excluded}, each open question
+    exactly {question_id, scope, fact, family, proposal_key, question, reason} (strings; ids unique tokens), held and
+    excluded lists of objects; ``frozen`` (name, sha256) pairs, names unique tokens, at least one."""
+    questions = _open_questions(cpt_studio)
+    pairs = _frozen_pairs(frozen)
+    items = _peer_items(peers, getattr(own, 'provider', None))
+    lines = ['What follows was recorded before this review began. Each section names what it is; its content is one '
+             'line of JSON.',
+             '', '== Your frozen first reading ==', _json_line(reading_answer(own)),
+             '', '== Frozen peer conclusions - not authoritative ==']
+    for name, conclusions in items:
+        lines += [f'{name} ({_PEER_LABELS[name]}):', _json_line(conclusions)]
+    if not items:
+        lines.append('(no peer conclusion was recorded)')
+    lines += ['', "== CPT Studio's rule-based reading - it can be wrong ==",
+              _json_line({'open_questions': questions, 'held': list(cpt_studio['held']),
+                          'excluded': list(cpt_studio['excluded'])}),
+              '', _PEER_QUESTIONS, _json_line([item['question_id'] for item in questions]),
+              '', _PEER_FROZEN, _json_line([list(pair) for pair in pairs])]
+    return '\n'.join(lines)
+
+
+def peer_document_inputs(document) -> Optional[tuple[tuple[str, ...], tuple[tuple[str, str], ...]]]:
+    """(question ids, frozen inputs) as a peer_document lists them in its last five lines, or None when ``document``
+    does not end exactly as peer_document writes it (each list canonical, ids and names unique tokens, at least one
+    frozen input)."""
+    if not isinstance(document, str):
+        return None
+    lines = document.split('\n')
+    if len(lines) < 5 or (lines[-5], lines[-3], lines[-2]) != (_PEER_QUESTIONS, '', _PEER_FROZEN):
+        return None
+    try:
+        ids, pairs = json.loads(lines[-4]), json.loads(lines[-1])
+    except ValueError:
+        return None
+    if not isinstance(ids, list) or not all(isinstance(item, str) and _TOKEN.fullmatch(item) for item in ids):
+        return None
+    if not isinstance(pairs, list) or not pairs or not all(
+            isinstance(pair, list) and len(pair) == 2 and all(isinstance(part, str) for part in pair)
+            and _TOKEN.fullmatch(pair[0]) and _SHA256.fullmatch(pair[1]) for pair in pairs):
+        return None
+    if len(set(ids)) != len(ids) or len({pair[0] for pair in pairs}) != len(pairs):
+        return None
+    if (_json_line(ids), _json_line(pairs)) != (lines[-4], lines[-1]):
+        return None
+    return tuple(ids), tuple((name, sha256) for name, sha256 in pairs)
+
+
+def _json_line(value) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError, RecursionError):
+        raise ValueError('The peer review material must be JSON data (objects with string keys, lists, strings, '
+                         'whole or finite numbers, true, false, null).') from None
+
+
+def _no_display(value, what: str) -> None:
+    pending = [value]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            if any(isinstance(key, str) and key in _DISPLAY_FIELDS for key in node):
+                raise ValueError(f'{what} carry a display field ("display" or "provider_display"); a provider\'s '
+                                 'display text is never shown to a peer.')
+            pending.extend(node.values())
+        elif isinstance(node, (list, tuple)):
+            pending.extend(node)
+
+
+def _open_questions(cpt_studio) -> list:
+    if not isinstance(cpt_studio, dict) or set(cpt_studio) != {'open_questions', 'held', 'excluded'}:
+        raise ValueError("CPT Studio's reading must be exactly {'open_questions', 'held', 'excluded'}.")
+    questions = cpt_studio['open_questions']
+    if not isinstance(questions, (list, tuple)):
+        raise ValueError("CPT Studio's open questions must be a list.")
+    seen = set()
+    for item in questions:
+        if not isinstance(item, dict) or set(item) != set(_QUESTION_KEYS) or not all(
+                isinstance(item[key], str) for key in _QUESTION_KEYS):
+            raise ValueError('Each open question must be exactly {' + ', '.join(_QUESTION_KEYS) + '}, all strings.')
+        if not _TOKEN.fullmatch(item['question_id']):
+            raise ValueError('A question id must be 1 to 80 letters, digits, "_", ".", ":" or "-", beginning with a '
+                             'letter or digit.')
+        if item['question_id'] in seen:
+            raise ValueError('Two open questions share one question id.')
+        seen.add(item['question_id'])
+    for key in ('held', 'excluded'):
+        if not isinstance(cpt_studio[key], (list, tuple)) or not all(isinstance(item, dict)
+                                                                      for item in cpt_studio[key]):
+            raise ValueError(f"CPT Studio's {key} codes must be a list of objects.")
+    _no_display(cpt_studio, "CPT Studio's reading and its codes")
+    return list(questions)
+
+
+def _frozen_pairs(frozen) -> list:
+    if isinstance(frozen, (str, bytes, dict)) or not isinstance(frozen, (list, tuple)):
+        raise TypeError('The frozen inputs must be a sequence of (name, sha256) pairs.')
+    pairs, names = [], set()
+    for item in frozen:
+        if isinstance(item, (str, bytes)) or not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise TypeError('Each frozen input must be a (name, sha256) pair.')
+        name, sha256 = item
+        if not isinstance(name, str) or not _TOKEN.fullmatch(name):
+            raise ValueError('A frozen input\'s name must be 1 to 80 letters, digits, "_", ".", ":" or "-", beginning '
+                             'with a letter or digit.')
+        if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
+            raise ValueError("A frozen input's sha256 must be 64 lowercase hexadecimal characters.")
+        if name in names:
+            raise ValueError('Two frozen inputs share one name.')
+        names.add(name)
+        pairs.append((name, sha256))
+    if not pairs:
+        raise ValueError('A peer review shows frozen inputs, so at least one must be named.')
+    return sorted(pairs)
+
+
+def _peer_items(peers, own: Optional[str]) -> list:
+    if not isinstance(peers, dict):
+        raise TypeError('The peer conclusions must be a dict of participant name to its conclusions.')
+    for name, conclusions in peers.items():
+        if name not in _PEER_LABELS or name == own:
+            raise ValueError('A peer must be corti, astra or fable, and never the participant itself.')
+        if not isinstance(conclusions, dict):
+            raise TypeError("A peer's conclusions must be a dict.")
+    _no_display(peers, 'The peer conclusions')
+    return [(name, peers[name]) for name in sorted(peers)]
