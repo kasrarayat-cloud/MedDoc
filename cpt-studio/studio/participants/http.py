@@ -82,24 +82,28 @@ class _Watch:
     (the default session's) hands it its socket once connected - the connect timeout, clamped to the time left, bounds
     the connection and its TLS handshake - and at the deadline every socket handed over is shut down, so whatever read
     is blocked on it returns at once. The timer starts with the first socket and is cancelled and joined when the
-    exchange ends (disarm), so no socket is touched after it."""
+    exchange ends (disarm), so no socket is touched after it. A socket handed over once the deadline has passed - the
+    connection took the time that was left - is shut down and refused before the request is written (``unsent``):
+    nothing left, so the outcome is not_sent, never an unknown outcome a member must reconcile."""
 
     def __init__(self, deadline: float):
         self.deadline = deadline
         self.fired = False
+        self.unsent = False
         self._sockets = []
         self._timer = None
         self._done = False
         self._lock = threading.Lock()
 
     def watch(self, sock) -> None:
+        """Watch a connection's socket; a watched connection calls it once connected, before the request is written."""
         with self._lock:
             if self._done:
                 return
             if self.fired or monotonic() >= self.deadline:
-                self.fired = True
+                self.fired = self.unsent = True
                 _shutdown(sock)
-                return
+                raise ConnectionAbortedError('the deadline passed before the request was sent')
             self._sockets.append(sock)
             if self._timer is None:
                 self._timer = threading.Timer(max(0.0, self.deadline - monotonic()), self._fire)
@@ -338,7 +342,10 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                 response = session.post(url, data=body, headers=headers, timeout=timeouts, allow_redirects=False,
                                         stream=True)
             except Exception as exc:
-                if watch.disarm():
+                if watch.disarm() and watch.unsent:
+                    return not_sent('The deadline passed before the request was sent; nothing was sent.',
+                                    requested_model)
+                if watch.fired:
                     return _unknown(vendor, _BodyError(DEADLINE_READING), started, url, requested_model)
                 if _never_connected(exc):
                     return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',

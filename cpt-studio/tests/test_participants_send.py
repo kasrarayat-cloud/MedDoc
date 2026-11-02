@@ -611,13 +611,15 @@ class TrickleTests(SimpleTestCase):
 
     def serve(self, head, trickled, every=0.25):
         """A one-connection loopback server: it reads the request, sends ``head`` at once, then ``trickled`` one byte
-        every ``every`` seconds - until it is done, the client goes away or the test ends - and then closes."""
+        every ``every`` seconds - until it is done, the client goes away or the test ends - and then closes. What it
+        received is kept in ``self.received``."""
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.bind(('127.0.0.1', 0))
         listener.listen(1)
         listener.settimeout(10)
         self.addCleanup(listener.close)
         stop = threading.Event()
+        self.received = bytearray()
 
         def run():
             try:
@@ -628,7 +630,11 @@ class TrickleTests(SimpleTestCase):
                 conn.settimeout(10)
                 data = b''
                 while b'\r\n\r\n' not in data:
-                    data += conn.recv(65536)
+                    more = conn.recv(65536)
+                    self.received.extend(more)
+                    if not more:
+                        return  # the client went away before its request was complete
+                    data += more
                 head_part, _, rest = data.partition(b'\r\n\r\n')
                 length = int(re.search(rb'(?i)content-length: *([0-9]+)', head_part).group(1))
                 while len(rest) < length:
@@ -678,6 +684,23 @@ class TrickleTests(SimpleTestCase):
         # no length: the body ends when the connection does, so the deadline's cut must never read as the end of it
         head = b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n'
         self.assertCutOffAtTheDeadline(*self.post(self.serve(head, self.BODY)))
+
+    def test_a_deadline_that_passes_while_connecting_sends_nothing(self):
+        # the watch is handed the socket once connected, before the request is written: past the deadline there, the
+        # request never leaves, so the outcome is not_sent - never an unknown outcome a member must reconcile
+        real = participants_http.HTTPConnection.connect
+
+        def slow(connection):
+            real(connection)
+            time.sleep(0.6)  # the connection (or its TLS handshake) took the time that was left
+        url = self.serve(b'HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n', b'')
+        with mock.patch.object(participants_http.HTTPConnection, 'connect', slow):
+            exchange, elapsed = self.post(url, deadline_s=0.4)
+        self.assertEqual((exchange.outcome, exchange.sent, exchange.error),
+                         ('not_sent', False, 'The deadline passed before the request was sent; nothing was sent.'))
+        self.assertLess(elapsed, 2.5)
+        time.sleep(0.2)
+        self.assertEqual(bytes(self.received), b'')  # not a byte of the request reached the server
 
     def test_an_answer_that_arrives_in_time_is_kept_exactly(self):  # control: nothing is cut that arrives in time
         head = b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n' % len(self.BODY)
