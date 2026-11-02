@@ -228,9 +228,9 @@ assessment, which stands as made (HARNESS.md 5): its retrieval is recorded as on
 `not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`: it says what failed (CPT Studio
 could not record which CMS reference facts and passages it retrieved, so none is listed) and that each code's checks,
 which read the CMS facts before that, stand as shown (refutation round 2, truth-4: it said no proposal was checked).
-`detail` is `""` in every other state, and a failed entry is counted in neither `codes_checked` nor `passages`. The code cards then say that reference
-validation failed for the assessment, and the reports' REFERENCE RETRIEVAL section prints the entry as one line,
-"Reference validation failed: ...".
+`detail` is `""` in every other state, and a failed entry is counted in neither `codes_checked` nor `passages`. The
+code cards then say that reference validation failed for the assessment, and the reports' REFERENCE RETRIEVAL section
+prints the entry as one line, "Reference validation failed: ...".
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
@@ -358,8 +358,8 @@ passage is shorter than any quote CPT Studio locates (fewer than 8 non-space cha
 value on its readers' own scale (an extent's landmark, a cannulation's outcome); it answers no question this assessment
 asks; confirmations of the same question disagree; or it is malformed (its passage no exact slice of this revision's
 text, no value, no locating participant, no reviewer). The encounter checks say the same: `confirmations.applied`
-(`info`) lists what was read, and `confirmations.ignored` (`warn`) what was not, with why. A proposal's question is bound
-to the proposal it was made for through `support.identity`: recorded on every decidable proposal while a model
+(`info`) lists what was read, and `confirmations.ignored` (`warn`) what was not, with why. A proposal's question is
+bound to the proposal it was made for through `support.identity`: recorded on every decidable proposal while a model
 participant is configured (with none, the record is harness@1's), it is the sha256 of the proposal's own reading - its
 code, family, profile version, cited passages, units and the context values its decision depends on: its fingerprint
 without its checks and status, which the other proposals and the confirmations move (HARNESS.md 12.5, refutation round
