@@ -13,10 +13,12 @@ input that was not shown, never shows one it does not list, and never files the 
 answer is the peer-review schema (prompt.PEER_SCHEMA), and the tools are the same as in phase 1, through the same loop.
 
 What a peer is shown of another model's frozen reading (shown_reading; HARNESS.md 12.4 as amended after refutation round
-2, IR2-3) carries none of that model's own wording to the other vendor: its codes, modifiers and ids only as short
-tokens (shown_token), the quotes CPT Studio located in the revision text, a reference's ref as given when that model's
-own tool results returned it (any other ref as a token), and its enumerated values, units, pages and date; every other
-text it wrote only by its length.
+2, IR2-3, and round 3, peer-1) carries none of that model's own wording to the other vendor: its codes, modifiers and
+ids only in their strict shapes (shown_code, shown_modifier, ShownIds: a CPT or HCPCS code's five characters, two
+capital letters or digits, letters and digits up to 8), the quotes CPT Studio located in the revision text, a
+reference's ref as given when that model's own tool results returned it (any other ref only as such an id), and its
+enumerated values, units, pages and date; every other value and text it wrote only by its length, an id so withheld
+under a name of CPT Studio's own that is the same wherever the request mentions it.
 
 The answer (read) is checked as a reading is (reading.py): strict JSON, CPT Studio's own schema validation, bounds that
 refuse it whole (more than 64 question answers, 128 code positions, 64 additional codes or 64 references used, more than
@@ -36,6 +38,7 @@ never replaces it; a code it adds is proposed after peer review, never independe
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Callable, Optional, Sequence
 
 from studio.participants import http, prompt, reading
@@ -79,19 +82,65 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
 
 NOT_SHOWN = ' (not shown)'  # what follows a value a peer request names only by its length (serializers._token's words)
 LESION_FIELDS = ('site', 'size', 'morphology', 'action', 'specimen')
+# The strict shapes in which a value another model - or Corti - wrote is shown to the other vendor as given (HARNESS.md
+# 12.4 as amended after refutation round 3, peer-1). Each is ASCII and whole: fullmatch, no case folding.
+HCPCS = re.compile(r'[A-Z][0-9]{4}')  # an HCPCS Level II code (checks.SCOPE_FORMATS 'hcpcs'); a CPT code: reading.CODE
+MODIFIER = re.compile(r'[A-Z0-9]{2}')  # a modifier as the engine states a participant's (engine.MODIFIER_SHAPE)
+SHORT_ID = re.compile(r'[A-Za-z0-9]{1,8}')  # an id: letters and digits only, at most 8 characters
 
 
-def shown_token(value):
-    """A code, modifier or id a participant - or Corti - wrote, as a peer request shows it to the other vendor: as given
-    when it is a short token (reading._token: at most 20 characters, no whitespace), otherwise only by its length, in
-    the words the owner's trace uses (serializers._token). Longer text in such a field may carry a CPT descriptor, which
-    CPT Studio never lists, displays or sends (I9; refutation round 2, IR2-3: the engine refused to list it, the trace
-    named it by its length, and a peer request relayed it verbatim). A value that is not a string is returned as it
+def shown_code(value):
+    """A code another model - or Corti - wrote, as a peer request shows it to the other vendor: as given only in a
+    code's shape - the five characters CPT Studio lists a CPT code in (reading.CODE, serializers.CODE_SHAPE: four digits
+    and a digit or capital letter) or an HCPCS Level II code's (HCPCS: a capital letter and four digits) - and otherwise
+    only by its length (withheld). The 20-character token rule this replaces (refutation round 3, peer-1) passed
+    'SYNTH;WITH-LESION(S)' - a Corti code the engine refuses to list and tells the member is not shown - verbatim to
+    both vendors, and any piece of a descriptor cut to 20 characters; text in a code field may carry a CPT descriptor,
+    which CPT Studio never sends (I9). '' (no code named) stays ''; a value that is not a string is returned as it
     is."""
-    if not isinstance(value, str):
+    if not isinstance(value, str) or reading.CODE.fullmatch(value) or HCPCS.fullmatch(value):
         return value
-    named = reading._token(value)
-    return value if named == repr(value) else f'{named}{NOT_SHOWN}'
+    return withheld(value)
+
+
+def shown_modifier(value):
+    """A modifier another model wrote, as a peer request shows it: as given only when it is exactly two capital letters
+    or digits (MODIFIER, the shape the engine states a participant's modifiers in), otherwise only by its length - a
+    descriptor cut into pieces of 20 characters or fewer reached the other vendor as one code's modifiers (peer-1). A
+    value that is not a string is returned as it is."""
+    if not isinstance(value, str) or MODIFIER.fullmatch(value):
+        return value
+    return withheld(value)
+
+
+class ShownIds:
+    """The ids one peer request shows of another model's reading - its services' ids and every list of service ids that
+    refers to them: an id of letters and digits only, at most 8 characters (SHORT_ID), as given; any other id (peer-1:
+    'SNARE;WITH-SYNTH(S)' reached the other vendor as a service id) under a name of CPT Studio's own, "id N: a value of
+    L characters (not shown)", numbered in the order the request first mentions each. One instance serves one request,
+    so a withheld id has the same name wherever that request mentions it - what refers to a service still finds it - and
+    two withheld ids never share one, so two services are never made one; a name holds a space, which no id shown as
+    given does, so it never meets one. '' stays ''; a value that is not a string is returned as it is."""
+
+    def __init__(self):
+        self.names: dict[str, str] = {}
+
+    def __call__(self, value):
+        if not isinstance(value, str) or not value or SHORT_ID.fullmatch(value):
+            return value
+        if value not in self.names:
+            self.names[value] = f'id {len(self.names) + 1}: {withheld(value)}'
+        return self.names[value]
+
+
+def shown_ref(item: ReferenceUse):
+    """A reference another model says it used, as a peer request shows it: its ref as given when that model's own tool
+    results returned it (CPT Studio's own identifier, ``retrieved``), any other ref only when it is a short id
+    (SHORT_ID), and otherwise only by its length. A ref that is not a string is returned as it is."""
+    ref = item.ref
+    if item.retrieved or not isinstance(ref, str) or SHORT_ID.fullmatch(ref):
+        return ref
+    return withheld(ref)
 
 
 def withheld(text):
@@ -104,42 +153,42 @@ def withheld(text):
 
 def shown_reading(other: ParticipantReading) -> dict:
     """Another model's frozen first reading as a peer request shows it (HARNESS.md 12.4, amended after refutation round
-    2, IR2-3; the session lead's D4: a peer request carries no other model's free text). The reading schema's shape, as
-    prompt.reading_answer gives it, with only what is not that model's own wording as written: its codes, modifiers and
-    ids as given when each is a short token (shown_token); every quote CPT Studio located in the revision text, as the
-    model quoted it (the document's own text); a reference by its ref only when that model's own tool results returned
-    it (CPT Studio's own identifier; any other ref as a token); and its enumerated values (family, status, reason,
-    confidence), units, pages and date of service as CPT Studio recorded them. Everything else it wrote - a basis, a
-    description, the anatomy, extent and technique, a lesion's fields, the provider role, a question and why it is
-    asked, an extraction issue, a reference's use, a quote that was not located - is shown only by its length
-    (withheld). The request's frozen list still names the reading itself (its reading_sha256), from which this is
-    made. Pure."""
+    2, IR2-3, and round 3, peer-1; the session lead's D4: a peer request carries no other model's free text). The
+    reading schema's shape, as prompt.reading_answer gives it, with only what is not that model's own wording as
+    written: its codes, modifiers and ids only in their strict shapes (shown_code, shown_modifier, ShownIds - one for
+    the whole reading, so an id it withholds has one name wherever the reading mentions it); every quote CPT Studio
+    located in the revision text, as the model quoted it (the document's own text); a reference by its ref when that
+    model's own tool results returned it (CPT Studio's own identifier; any other ref only as a short id, shown_ref);
+    and its enumerated values (family, status, reason, confidence), units, pages and date of service as CPT Studio
+    recorded them. Everything else it wrote - a basis, a description, the anatomy, extent and technique, a lesion's
+    fields, the provider role, a question and why it is asked, an extraction issue, a reference's use, a quote that was
+    not located - is shown only by its length (withheld). The request's frozen list still names the reading itself (its
+    reading_sha256), from which this is made. Pure."""
     def quotes(items) -> list:
         return [item.quote if item.spans else withheld(item.quote) for item in items]
 
-    def tokens(values) -> list:
-        return [shown_token(value) for value in values]
-
+    ids = ShownIds()  # services first, then the lists that refer to them: the names follow the reading's own order
+    services = [{'id': ids(item.id), 'family': item.family, 'status': item.status,
+                 'description': withheld(item.description), 'anatomy': withheld(item.anatomy),
+                 'extent': withheld(item.extent), 'technique': withheld(item.technique),
+                 'lesions': [{field: withheld(getattr(lesion, field)) for field in LESION_FIELDS}
+                             for lesion in item.lesions],
+                 'provider_role': withheld(item.provider_role), 'evidence': quotes(item.evidence)}
+                for item in other.services]
+    codes = [{'code': shown_code(item.code), 'modifiers': [shown_modifier(value) for value in item.modifiers],
+              'units': item.units, 'service_ids': [ids(value) for value in item.service_ids],
+              'basis': withheld(item.basis), 'evidence': quotes(item.evidence), 'confidence': item.confidence}
+             for item in other.codes]
+    not_coded = [{'service_ids': [ids(value) for value in item.service_ids], 'code': shown_code(item.code),
+                  'reason': item.reason, 'evidence': quotes(item.evidence)} for item in other.not_coded]
+    clarifications = [{'question': withheld(item.question), 'why': withheld(item.why),
+                       'service_ids': [ids(value) for value in item.service_ids], 'evidence': quotes(item.evidence)}
+                      for item in other.questions]
     return {
         'date_of_service': {'value': other.date_of_service, 'evidence': quotes(other.date_evidence)},
-        'services': [{'id': shown_token(item.id), 'family': item.family, 'status': item.status,
-                      'description': withheld(item.description), 'anatomy': withheld(item.anatomy),
-                      'extent': withheld(item.extent), 'technique': withheld(item.technique),
-                      'lesions': [{field: withheld(getattr(lesion, field)) for field in LESION_FIELDS}
-                                  for lesion in item.lesions],
-                      'provider_role': withheld(item.provider_role), 'evidence': quotes(item.evidence)}
-                     for item in other.services],
-        'codes': [{'code': shown_token(item.code), 'modifiers': tokens(item.modifiers), 'units': item.units,
-                   'service_ids': tokens(item.service_ids), 'basis': withheld(item.basis),
-                   'evidence': quotes(item.evidence), 'confidence': item.confidence} for item in other.codes],
-        'not_coded': [{'service_ids': tokens(item.service_ids), 'code': shown_token(item.code), 'reason': item.reason,
-                       'evidence': quotes(item.evidence)} for item in other.not_coded],
-        'clarifications': [{'question': withheld(item.question), 'why': withheld(item.why),
-                            'service_ids': tokens(item.service_ids), 'evidence': quotes(item.evidence)}
-                           for item in other.questions],
+        'services': services, 'codes': codes, 'not_coded': not_coded, 'clarifications': clarifications,
         'extraction_issues': [{'page': item.page, 'issue': withheld(item.issue)} for item in other.extraction_issues],
-        'references_used': [{'ref': item.ref if item.retrieved else shown_token(item.ref), 'use': withheld(item.use)}
-                            for item in other.references_used],
+        'references_used': [{'ref': shown_ref(item), 'use': withheld(item.use)} for item in other.references_used],
     }
 
 

@@ -879,7 +879,10 @@ class ShownReadingTests(SimpleTestCase):
             'lesions': [{'site': length('Sigmoid'), 'size': length('9 mm'), 'morphology': length('pedunculated'),
                          'action': length('removed'), 'specimen': length('retrieved')}],
             'provider_role': length('endoscopist'), 'evidence': ['was removed  with a hot snare']})
-        self.assertEqual(shown['services'][1]['id'], 'a value of 24 characters (not shown)')  # 'a service id ...'
+        # moved by refutation round 3 (peer-1): an id that is not letters and digits up to 8 is withheld under a name of
+        # CPT Studio's own, the same wherever the request mentions it (peer.ShownIds); it was 'a value of 24 characters
+        # (not shown)', which two withheld ids of one length shared
+        self.assertEqual(shown['services'][1]['id'], 'id 1: a value of 24 characters (not shown)')  # 'a service id ...'
         self.assertEqual(len('a service id with spaces'), 24)
         self.assertEqual(shown['codes'], [{'code': '45385', 'modifiers': ['XS', 'a value of 21 characters (not shown)'],
                                            'units': 2, 'service_ids': ['c1'], 'basis': length('Its basis.'),
@@ -892,5 +895,7 @@ class ShownReadingTests(SimpleTestCase):
         self.assertEqual(shown['extraction_issues'], [{'page': 2, 'issue': length('Smudged.')}])
         self.assertEqual(shown['references_used'], [
             {'ref': 'fact:cms-pfs-rvu26d:45385:status', 'use': length('Payable.')},
-            {'ref': 'rule-01', 'use': length('Cited.')},
+            {'ref': 'a value of 7 characters (not shown)', 'use': length('Cited.')},  # moved by round 3 (peer-1):
+            # a ref never retrieved is shown as given only when it is letters and digits up to 8 (peer.shown_ref);
+            # 'rule-01' passed the 20-character token rule
             {'ref': f'a value of {len(CITED_REF)} characters (not shown)', 'use': ''}])

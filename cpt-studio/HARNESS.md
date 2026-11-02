@@ -667,6 +667,32 @@ model participant configured the record is today's ("not configured") and there 
     (`jobs._peer_text`). So a save that changes only a member's value, where no question or reason of CPT Studio's own
     changes with it, makes the identical peer request, which is reused (section 2: a context change reuses the
     participants' requests).
+- **Amended after refutation round 3 (peer-1; peer-2 recorded as a dormant-path finding): a value another model or
+  Corti wrote is shown only in a strict shape.** The short-token rule above ("at most 20 characters, no whitespace",
+  `participants.reading._token`; `peer.shown_token`, now removed) passed `SYNTH;WITH-LESION(S)` - a Corti code the
+  engine refuses to list and tells the member is not shown - to both vendors, and round 2's IR2-3 text re-split into
+  pieces of 20 characters or fewer as one code's modifiers, a service id or a code. A code is now shown as given only
+  in a CPT code's shape (`reading.CODE`, as `serializers.CODE_SHAPE`) or an HCPCS Level II code's (`peer.HCPCS`; the
+  repair plan's "CPT/HCPCS code shape", which keeps a code such as G0121 that FG2-3's pin shows), a modifier only as
+  two capital letters or digits (`peer.MODIFIER`, the engine's `MODIFIER_SHAPE`), and an id - a service's, and every
+  list of service ids - or a ref never retrieved only as letters and digits, at most 8 characters (`peer.SHORT_ID`).
+  Everything else is named by its length as before, "a value of N characters (not shown)" (`peer.shown_code`,
+  `shown_modifier`, `shown_ref`), and an id so withheld under a name of CPT Studio's own, "id N: a value of L characters
+  (not shown)", the same wherever one request mentions it (`peer.ShownIds`), so a code's or a question's service ids
+  still find their service and two services are never made one. Corti's section (`jobs._corti_conclusions`) and CPT
+  Studio's held and excluded codes (`jobs._peer_codes`: the engine lists a Corti code of up to 10 characters as a
+  proposal, excluded for scope when it has no code's shape, with the scope check's fixed sentence as its only reason)
+  follow the same code rule. The frozen list, the participant's own reading and the owner's trace (which still serves
+  these fields by the 20-character rule, 12.7) are as before: this changes only what is sent. A known limit: a shape is
+  not a meaning, and a model could still write one word of up to 8 letters as each id it gives; no real descriptor is
+  written so. **peer-2:** a reviewer-confirmed 'performed' status of one code joined the same-day E/M rule's procedures,
+  so another proposal's `em.same_day_procedure` check and its `separate_em` question worded it "documented as performed
+  on the same date" with no confirmation label, and a later peer request showed that sentence as CPT Studio's own
+  reading (`jobs._peer_reasons` sees only the proposal that records the confirmation; open questions pass through
+  `_peer_text` alone). This release offers no reviewer confirmation (12.10, the session's D7), so none exists for an
+  assessment to read and the path cannot be reached; it is to be attacked again, with its two repairs (label the
+  cross-proposal wording in the engine; give every reason and open question the confirmation test), whenever any
+  confirmation is offered. Tests: `tests/test_harness2_r3_peer.py`.
 
 ### 12.5 Candidates and confirmations (11.3)
 

@@ -1452,7 +1452,8 @@ def _peer_material(revision, first, name, records):
     refs; Corti's selected codes with the exact passages of the document their evidence quotes (_corti_conclusions);
     the other model's frozen reading, when it has one, in the reading schema's shape with none of that model's own
     wording (peer.shown_reading: refutation round 2, IR2-3); CPT Studio's rule-based reading after assess #1, which
-    names no person and no value a member entered (_cpt_studio_reading: IR2-1, IR2-2); and assess #1's frozen list with
+    names no person and no value a member entered (_cpt_studio_reading: IR2-1, IR2-2), with each held or excluded
+    proposal's code only in a code's shape (_peer_codes: refutation round 3, peer-1); and assess #1's frozen list with
     that reading's sha256 added. A frozen reading that no longer reads back as assess #1 recorded it refuses the request
     (_PeerUnbuilt): the record shows exactly what was shown. Of assess #1's frozen list, only what this request shows
     is listed (refutation round 1, IND-5): a Corti answer or another model's reading that is not shown - not read, or
@@ -1465,7 +1466,7 @@ def _peer_material(revision, first, name, records):
     for other in participants.PARTICIPANTS:
         if other != name and (records.get(other) or {}).get('state') == 'read':
             peers[other] = participant_peer.shown_reading(_frozen_reading(revision, other, records))
-    cpt_studio = _cpt_studio_reading(first)
+    cpt_studio = _peer_codes(_cpt_studio_reading(first))
     shown = {name, *peers, 'revision'}
     frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []
               if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[0] in shown]
@@ -1527,10 +1528,11 @@ def _corti_conclusions(run):
     """Corti's frozen conclusions as a peer is shown them (HARNESS.md 12.4): its selected codes in its own order, each
     once, with the units it selected it in (as the engine counts them), no modifiers (its API states none) and the
     passages of the document its evidence quotes exactly - never its display text, and never a passage of the date line
-    CPT Studio adds to its request, which is no document text. A code that is not a short token is named only by its
-    length (peer.shown_token; refutation round 2, IR2-3: Corti's adapter keeps any string as a code, which the engine
-    never lists and a peer request relayed to the other vendors). None when its answer was not read: no run, a run that
-    did not succeed, or a response refused whole."""
+    CPT Studio adds to its request, which is no document text. A code is shown as given only in a CPT or HCPCS code's
+    shape, and any other only by its length (peer.shown_code; refutation round 3, peer-1: Corti's adapter keeps any
+    string as a code, and 'SYNTH;WITH-LESION(S)' - 20 characters, which the engine never lists - passed the 20-character
+    token rule of round 2's IR2-3 repair to both vendors). None when its answer was not read: no run, a run that did not
+    succeed, or a response refused whole."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED:
         return None
     _, normalized = _provider_inputs(run)
@@ -1540,10 +1542,22 @@ def _corti_conclusions(run):
     for code in normalized.codes:
         if code.role == 'selected' and isinstance(code.code, str):
             selected.setdefault(code.code, []).append(code)
-    return {'codes': [{'code': participant_peer.shown_token(code), 'modifiers': [], 'units': len(items),
+    return {'codes': [{'code': participant_peer.shown_code(code), 'modifiers': [], 'units': len(items),
                        'evidence': list(dict.fromkeys(span.text for item in items for span in item.evidence
                                                       if span.context_index == 0 and span.exact))}
                       for code, items in selected.items()]}
+
+
+def _peer_codes(cpt_studio):
+    """CPT Studio's rule-based reading (_cpt_studio_reading) as a peer request shows it: each held or excluded
+    proposal's code only in a CPT or HCPCS code's shape, any other only by its length (peer.shown_code), as Corti's own
+    section shows it. The engine lists any code of up to 10 characters Corti selected as a proposal, and one in no
+    code's shape is excluded for scope with the scope check's sentence alone, which never names it - so its code was the
+    one place such a value reached a peer request through CPT Studio's reading (refutation round 3, peer-1: a Corti
+    code withheld in Corti's section was shown as given here). Everything else is as _cpt_studio_reading made it; a new
+    dict."""
+    return {**cpt_studio, **{key: [dict(item, code=participant_peer.shown_code(item['code']))
+                                   for item in cpt_studio[key]] for key in ('held', 'excluded')}}
 
 
 # What a peer request shows of CPT Studio's reading carries no person and no value a member entered (refutation round 2,
