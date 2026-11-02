@@ -149,11 +149,12 @@ class ShownIds:
 
 
 def shown_reference(ref, retrieved):
-    """A reference a model says it used, as CPT Studio shows it anywhere - a peer request, the owner's trace, the API and
-    both reports (refutation round 4, the session's D9, shapes-3): its ref as given when that model's own tool results
-    returned it (``retrieved`` True: CPT Studio's own identifier), any other ref only when it is a short id (SHORT_ID),
-    and otherwise only by its length - a ref no tool returned is the model's own text: 'colonoscopy-flexible-with-biopsy-
-    single-or-multiple' was served and printed as written. A ref that is not a string is returned as it is."""
+    """A reference a model says it used, as CPT Studio shows it anywhere - a peer request, the owner's trace, the API
+    and both reports (refutation round 4, the session's D9, shapes-3): its ref as given when that model's own tool
+    results returned it (``retrieved`` True: CPT Studio's own identifier), any other ref only when it is a short id
+    (SHORT_ID), and otherwise only by its length - a ref no tool returned is the model's own text:
+    'colonoscopy-flexible-with-biopsy-single-or-multiple' was served and printed as written. A ref that is not a string
+    is returned as it is."""
     if retrieved is True or not isinstance(ref, str) or SHORT_ID.fullmatch(ref):
         return ref
     return withheld(ref)
@@ -165,10 +166,10 @@ def shown_ref(item: ReferenceUse):
 
 
 def shown_tool(name):
-    """The tool a model's call names, as the owner's trace shows it (refutation round 4, shapes-4): as given only when it
-    is one of CPT Studio's tools (TOOL_NAMES) - a model can name any other, which the loop answers as unknown and records
-    by a name of up to 40 characters - and otherwise only by its length. '' (none recorded) stays ''; a value that is
-    not a string is returned as it is."""
+    """The tool a model's call names, as the owner's trace shows it (refutation round 4, shapes-4): as given only when
+    it is one of CPT Studio's tools (TOOL_NAMES) - a model can name any other, which the loop answers as unknown and
+    records by a name of up to 40 characters - and otherwise only by its length. '' (none recorded) stays ''; a value
+    that is not a string is returned as it is."""
     if not isinstance(name, str) or not name or name in TOOL_NAMES:
         return name
     return withheld(name)

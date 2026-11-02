@@ -5,9 +5,10 @@ digits, an id only as letters and digits of at most 8 characters (any other unde
 reference the participant's own tool results never returned only as such a short id; anything else only by its length.
 
 - shapes-1: a participant's code outside a code's shape ('W/LES(S)', 8 characters) was listed by the engine (any code of
-  1 to 10 characters), so it reached the reconciliation, the retrieval, the alternatives, the participants.summary check,
-  both reports and the trace's reconciliation and retrieval rows - while the same trace named it by its length in the
-  reading. It is now counted, as Corti's unlisted codes are, and never listed. Corti's own listing does not change (I1).
+  1 to 10 characters), so it reached the reconciliation, the retrieval, the alternatives, the participants.summary
+  check, both reports and the trace's reconciliation and retrieval rows - while the same trace named it by its length in
+  the reading. It is now counted, as Corti's unlisted codes are, and never listed. Corti's own listing does not change
+  (I1).
 - shapes-2, truth-3: the trace named a peer review's service ids with a ShownIds of its own, so the biopsy code a peer
   review added on 'colon-b' was shown on 'id 1', the name the same trace gave the snare service. One ShownIds now serves
   all of a participant's runs in one trace.
@@ -44,8 +45,9 @@ from tests.test_pipeline_api import drain
 
 LES = 'W/LES(S)'  # 8 characters: the engine listed it (1 to 10), the trace's reading named it by its length
 REF = 'colonoscopy-flexible-with-biopsy-single-or-multiple'  # 51: CPT 45380's descriptor, its punctuation as hyphens
-ARG_CODES = ['Colonoscopy, flexible, diagnostic', 'SNARE-POLYPECTOMY']  # the opening of 45378's descriptor, a comma for ;
-TOOL_WORDS = 'Colonoscopy, flexible; diagnostic'  # a tool name CPT Studio does not have, 34 characters (it keeps up to 40)
+# the opening of 45378's descriptor, its semicolon written as a comma
+ARG_CODES = ['Colonoscopy, flexible, diagnostic', 'SNARE-POLYPECTOMY']
+TOOL_WORDS = 'Colonoscopy, flexible; diagnostic'  # a tool CPT Studio does not have, 34 characters (it keeps up to 40)
 TOPIC_WORDS = 'colonoscopy; with biopsy, single or multiple'  # a topic outside the enumeration
 RAW_ARGUMENTS = 'Colonoscopy, flexible; with biopsy'  # arguments that are not JSON: the loop records the text as given
 FACT = f'fact:{PFS_KEY}:45385:mult_proc'  # what Astra's own cms_code_facts call returns: CPT Studio's own identifier
@@ -190,8 +192,8 @@ class ParticipantCodeShapeTests(ShapesCase):
                       'peer review is never counted as independent. '
                       + engine.participant_unlisted_codes(1, 'In peer review it'), summary)
         self.assertIn('It returned 1 code that cannot be listed: not in the shape of a CPT code (four digits, then a '
-                      'digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four digits). It is '
-                      'not shown and never truncated.', summary)
+                      'digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four digits). '
+                      'It is not shown and never truncated.', summary)
         # nowhere on the reconciliation's side, the reports, the trace or the API - the participant row's codes aside,
         # which review.listed_codes serves (R4-SHAPES NEEDS: it reads engine.participant_listable there)
         served = {**detail, 'harness': {**detail['harness'], 'participants': [
@@ -265,10 +267,10 @@ class ReferenceShapeTests(ShapesCase):
                      f'    Used: {length(PASSAGE)} — cited, not retrieved by this run, so never shown as retrieved'):
             self.assertIn(line, txt.splitlines())
         header = rows[0]
-        used = [(row[header.index('proposal_origin')], row[header.index('status')],
-                 row[header.index('exclusion_reason')]) for row in rows[1:]
-                if row[header.index('item_list')] == 'participant_reference' and row[header.index('status')] != 'retrieved'
-                and row[header.index('proposed_by')] == 'astra']
+        column = {name: header.index(name) for name in header}
+        used = [(row[column['proposal_origin']], row[column['status']], row[column['exclusion_reason']])
+                for row in rows[1:] if row[column['item_list']] == 'participant_reference'
+                and row[column['status']] != 'retrieved' and row[column['proposed_by']] == 'astra']
         self.assertEqual(used, [('independent', 'cited_not_retrieved', length(REF)),
                                 ('independent', 'cited_not_retrieved', 'rule01'), ('independent', 'used', FACT),
                                 ('independent', 'cited_not_retrieved', length(UNRETRIEVED_FACT)),
@@ -288,9 +290,11 @@ class ToolArgumentShapeTests(ShapesCase):
     def test_the_trace_shows_a_tool_call_s_arguments_and_tool_only_in_their_shapes(self):
         _, trace, _, _, _ = self.run_chain()
         first, _ = self.astra_runs(trace)
-        calls = [(call['tool'], call['arguments']) for exchange in first['exchanges'] for call in exchange['tool_calls']]
+        calls = [(call['tool'], call['arguments'])
+                 for exchange in first['exchanges'] for call in exchange['tool_calls']]
         self.assertEqual(calls, [
-            ('cms_code_facts', {'codes': [length(ARG_CODES[0]), length(ARG_CODES[1])], 'date_of_service': '2026-10-20'}),
+            ('cms_code_facts',
+             {'codes': [length(ARG_CODES[0]), length(ARG_CODES[1])], 'date_of_service': '2026-10-20'}),
             (length(TOOL_WORDS), {'codes': ['45385']}),
             ('cms_policy_passages', {'topic': length(TOPIC_WORDS), 'codes': ['45380']}),
             ('cms_code_facts', length(RAW_ARGUMENTS)),
@@ -463,7 +467,8 @@ class SharedRuleTests(OfflineTestCase):
             ({'codes': ['45385', 'G0121', *ARG_CODES], 'date_of_service': '2026-10-20'},
              {'codes': ['45385', 'G0121', *[length(value) for value in ARG_CODES]], 'date_of_service': '2026-10-20'}),
             ({'codes': [], 'date_of_service': ''}, {'codes': [], 'date_of_service': ''}),
-            ({'topic': 'ncci_endoscopy_rules', 'codes': ['45380']}, {'topic': 'ncci_endoscopy_rules', 'codes': ['45380']}),
+            ({'topic': 'ncci_endoscopy_rules', 'codes': ['45380']},
+             {'topic': 'ncci_endoscopy_rules', 'codes': ['45380']}),
             ({'topic': TOPIC_WORDS, 'codes': ['45380']}, {'topic': length(TOPIC_WORDS), 'codes': ['45380']}),
             ({'codes': ['45385'], 'date_of_service': '2026-10-21;W/LES(S)'},
              {'codes': ['45385'], 'date_of_service': length('2026-10-21;W/LES(S)')}),

@@ -490,8 +490,8 @@ function locatedBy(candidate) {
 // Whether a participant's reference concerns ``code``: a fact ref names its code (fact:<source>:<code>:<field>); a
 // policy passage names none, so it concerns every code. Only a ref CPT Studio's own tool results returned is read so
 // (``own``): one a participant cites that its run's tool calls never returned is its own text, read for no code, so it
-// is listed with every code, as a policy passage is (refutation round 4, shapes-3: a cited "fact:" ref was placed by its
-// own text).
+// is listed with every code, as a policy passage is (refutation round 4, shapes-3: a cited "fact:" ref was placed by
+// its own text).
 function refConcerns(ref, code, own = true) {
   const text = textValue(ref);
   if (!own || !text.startsWith('fact:')) return Boolean(text);
@@ -521,8 +521,8 @@ function inShape(value, shape) {
 }
 
 // A reference a participant says it used (references.used[], references_used[]): as given only when its own run's tool
-// calls returned it (``retrieved``: CPT Studio's own key), otherwise only as a short id of letters and digits, or by its
-// length.
+// calls returned it (``retrieved``: CPT Studio's own key), otherwise only as a short id of letters and digits, or by
+// its length.
 function shownReference(item) {
   const ref = item && typeof item.ref === 'string' ? item.ref : '';
   return item?.retrieved === true && REF_KEY.test(ref) ? ref : inShape(ref, SHORT_ID);

@@ -476,9 +476,9 @@ PEER_TITLE = 'PEER REVIEW'
 REFERENCES_TITLE = 'PARTICIPANT REFERENCES'
 # CSV rows that are not proposals (format @4's encounter rows, harness@2's): ops/verify_downloads.py reads them as such.
 HARNESS2_LISTS = ('confirmed_finding', 'peer_answer', 'peer_position', 'peer_additional_code', 'participant_reference')
-# A passage key or a 'fact:<source>:<code>:<field>' ref: the shape of CPT Studio's own identifiers, so it is read only of
-# a ref CPT Studio's tool results returned. A ref a participant cites that no tool returned is its own text, shown only
-# as a short id or by its length (serializers.shown_used; refutation round 4, shapes-3: this shape alone printed
+# A passage key or a 'fact:<source>:<code>:<field>' ref: the shape of CPT Studio's own identifiers, so it is read only
+# of a ref CPT Studio's tool results returned. A ref a participant cites that no tool returned is its own text, shown
+# only as a short id or by its length (serializers.shown_used; refutation round 4, shapes-3: this shape alone printed
 # 'colonoscopy-flexible-with-biopsy-single-or-multiple', a descriptor written with hyphens, as written).
 REF_SHAPE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,199}')
 FACT_TITLES = {candidates.DATE_FACT: 'Service date', candidates.STATUS_FACT: 'Performed at this encounter'}

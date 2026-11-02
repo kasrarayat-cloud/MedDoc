@@ -2792,16 +2792,16 @@ def participant_unlisted_codes(count: int, who: str = 'It') -> str:
     never named or truncated. The proposal provider's (checks.unlisted_codes: "empty, or longer than 10 characters") is
     not true of a participant's 'W/LES(S)', 8 characters in no code's shape."""
     pronoun = 'It is' if count == 1 else 'They are'
-    return (f'{who} returned {checks.plural(count, "code")} that cannot be listed: not in the shape of a CPT code (four '
-            'digits, then a digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four '
+    return (f'{who} returned {checks.plural(count, "code")} that cannot be listed: not in the shape of a CPT code '
+            '(four digits, then a digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four '
             f'digits). {pronoun} not shown and never truncated.')
 
 
 # A participant's position on a code only the proposal provider can list - one in no code's shape - when the participant
 # gave that very value: its entry is not read (participant_listable), so neither "proposed" nor "did not propose" is
 # said of it, and the value is never named as the participant's.
-UNREAD_CODE_POSITION = ("{label} gave this code in an entry CPT Studio does not read: a participant's code is read only "
-                        "in the shape of a CPT or HCPCS code, and this code is not in one.")
+UNREAD_CODE_POSITION = ("{label} gave this code in an entry CPT Studio does not read: a participant's code is read "
+                        "only in the shape of a CPT or HCPCS code, and this code is not in one.")
 UNREAD_PEER_POSITION = ("In peer review, {label} took a position on this code, which CPT Studio does not read: a "
                         "participant's code is read only in the shape of a CPT or HCPCS code, and this code is not in "
                         "one.")
@@ -3034,9 +3034,9 @@ class _Harness:
         self.stances: dict[str, dict[str, list[_Said]]] = {}  # code -> participant -> its peer-review positions
         self.unlisted: dict[str, int] = {}
         self.peer_unlisted: dict[str, int] = {}
-        # a participant's code is read only in a code's shape (participant_listable; refutation round 4, shapes-1): any
-        # other it gave is counted (codes) and kept only as a value it gave, unread (unread, unread_stances), so that its
-        # position on the proposal provider's own code of that value is never said to be "did not propose"
+        # a participant's code is read only in a code's shape (participant_listable; refutation round 4, shapes-1):
+        # any other it gave is counted (codes) and kept only as a value it gave, unread (unread, unread_stances), so
+        # that its position on the proposal provider's own code of that value is never said to be "did not propose"
         self.unread: dict[str, set] = {}
         self.unread_stances: dict[str, set] = {}
         for name, reading in self.readings.items():
