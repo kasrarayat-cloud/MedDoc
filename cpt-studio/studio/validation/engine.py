@@ -21,6 +21,7 @@ from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.participants import VENDORS as PARTICIPANT_VENDORS
+from studio.participants.reading import MIN_QUOTE_CHARACTERS
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_POSITIONS, AssessmentResult, Check,
                           ClarificationSpec, CodePosition, CodeReference, ConfirmedFinding, EvidenceSpan, Fact,
@@ -3394,7 +3395,9 @@ CONFIRMABLE_FACTS = tuple(sorted({fact for profile in PROFILES.values() for fact
 NOT_PERFORMED_VALUES = {'not_performed': 'negated', 'negated': 'negated', 'cancelled': 'cancelled',
                         'planned': 'planned', 'historical': 'historical'}
 # The participants whose quote a confirmed passage can be: the model participants, whose frozen readings and peer-review
-# answers are the only candidates (HARNESS.md 11.3, step 1) - so with none configured nothing is ever confirmed (I1).
+# answers are the only candidates (HARNESS.md 11.3, step 1). With none configured there is no candidate, and the assess
+# stage gives the engine no confirmation at all (jobs.stage_assess, HARNESS.md 12.7), so nothing is confirmed (I1); the
+# engine itself reads only what it is given, checked as below.
 LOCATORS = dict(PARTICIPANT_LABELS)
 NOT_OPEN = ('it answers no question this assessment asks (the question is not open here, or its proposal is held for '
             'another reason or not at all)')
@@ -3408,6 +3411,8 @@ MOVED = ('the proposal it was made for is not in this assessment (no proposal of
          'under the same context), so it answers nothing here; it is never read for the proposal that holds its key '
          'now')
 TWICE = 'the proposal it was made for is in this assessment more than once, so CPT Studio cannot tell which it answers'
+TOO_SHORT = (f'its passage is shorter than any quote CPT Studio locates (fewer than {MIN_QUOTE_CHARACTERS} non-space '
+             'characters), so it is no located passage and never evidence (I7)')
 # The required facts the readers read a procedure's completion from (refutation round 1, EV-4): a confirmed value of one
 # is read as they read the same fact, so one they would read as incomplete makes the procedure incomplete.
 REACH_FACTS = ('extent', 'cannulation')
@@ -3631,6 +3636,9 @@ class _Confirmations:
         if not isinstance(c.evidence, (tuple, list)) or not c.evidence \
                 or not all(isinstance(span, EvidenceSpan) for span in c.evidence):
             return 'it cites no passage'
+        if any(isinstance(span.text, str) and len(re.sub(r'\s+', '', span.text)) < MIN_QUOTE_CHARACTERS
+               for span in c.evidence):
+            return TOO_SHORT  # as the reading normaliser's Locator counts a quote (refutation round 1, EV-3)
         return ''
 
     @staticmethod

@@ -464,6 +464,21 @@ class GuardTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             run(TWO_EXTENTS, COLON_CODES, [{'fact': 'extent'}])
 
+    def test_a_passage_shorter_than_any_located_quote_is_not_read(self):
+        """I7 (refutation round 1, EV-3): a quote with fewer than 8 non-space characters is never located, so it is
+        never a participant's located passage - "NOT", a slice of the synthetic banner, is not read; 8 characters
+        are."""
+        before = run(STATUS_ONLY, STATUS_CODES)
+        for passage in ('NOT', 'Specime', ' jar 2, a'):
+            after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, passage, fact='performed_status',
+                                                            family='gi.colonoscopy', key='sel:0', value='performed',
+                                                            by=('astra',))])
+            self.assertEqual(without_confirmations(after), before, passage)
+            self.assertIn(engine.TOO_SHORT, encounter_check(after, 'confirmations.ignored').detail, passage)
+        read_ = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, 'Specimen', fact='performed_status',
+                                                        family='gi.colonoscopy', key='sel:0', value='performed')])
+        self.assertEqual(proposal(read_, 'sel:0').status, 'ready')
+
     def test_confirmations_of_one_question_that_disagree_are_all_left_unread(self):
         before = run(TWO_EXTENTS, COLON_CODES)
         a = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum', cid='a')
