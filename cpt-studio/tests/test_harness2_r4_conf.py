@@ -19,6 +19,7 @@ default, settings.STUDIO_OFFER_CONFIRMATIONS (a code-level False):
   on the pipeline's own cases: a question about the encounter holds the reviewed report; a question about a code holds
   that code, which can still be rejected; a question about a documented service no code carries holds neither.
 - d7-4: the reports print CONFIRMED FINDINGS only while confirmations are offered.
+- d7-5: the engine's participants.summary says of a participant's peer answers what is true in both modes.
 
 Each test failed on the base 3daafa91b. Synthetic data only; nothing is sent: Corti is the harness@1 suite's in-process
 fake, Astra and Fable the real replay adapters on the real tool loop (tests.test_harness2_pipeline) or the recorded rows
@@ -34,6 +35,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from studio import jobs, models, reports, review
+from studio.types import sha256_json
 from tests import test_harness2_api as h2
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
@@ -276,7 +278,7 @@ class ServiceQuestionTests(PipelineCase):
         self.assertEqual(review._review_state(self.encounter(encounter_id), final), 'reviewed')
 
 
-# --- d7-4: no confirmation wording where none is offered --------------------------------------------------------------
+# --- d7-4, d7-5: no confirmation wording where none is offered --------------------------------------------------------
 
 @override_settings(**h2.BOTH)
 class ConfirmationWordingTests(h2.Harness2Case):
@@ -294,3 +296,16 @@ class ConfirmationWordingTests(h2.Harness2Case):
         with override_settings(**DORMANT):
             self.assertIn('\nCONFIRMED FINDINGS\n  None: no reviewer has confirmed a finding for this revision.\n',
                           self.txt())
+
+    def test_the_summary_says_what_a_peer_answer_is_in_either_mode(self):
+        (summary,) = [c['detail'] for c in self.final.encounter_checks if c['id'] == 'participants.summary']
+        said = 'an answer is recorded and decides nothing by itself.'
+        self.assertIn(f'It answered 3 open questions; {said}', summary)  # Astra
+        self.assertIn(f'It answered 1 open question; {said}', summary)  # Fable
+        self.assertNotIn('confirm', summary)
+        text = self.txt()
+        self.assertEqual(text.count(said), 2)
+        self.assertNotIn('reviewer confirms', text)
+        # the engine reads no setting: the dormant path's assessment of the same rows says the same
+        with override_settings(**DORMANT):
+            self.assertEqual(sha256_json(self.result(2)), self.final.sha256)

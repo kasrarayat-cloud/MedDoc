@@ -2595,3 +2595,10 @@ test('R4-CONF d7-3: the Clarification row says what each open question holds, by
   assert.deepEqual(asked([{ ...service, scope: 'another scope' }]), ['One question is open.']);
   assert.deepEqual(asked([encounter, code], 3), ['3 questions are open.']);
 });
+
+test('R4-CONF d7-5: the Checks tab says what a participant\'s peer answers are, never that a reviewer confirms one', () => {
+  const checks = textOf(render(fixture(H2_FINAL), 'checks'));
+  assert.ok(checks.includes('It answered 3 open questions; an answer is recorded and decides nothing by itself.'), checks);
+  assert.ok(checks.includes('It answered 1 open question; an answer is recorded and decides nothing by itself.'), checks);
+  assert.equal(/reviewer confirms|read only as the passage/.test(checks), false);
+});

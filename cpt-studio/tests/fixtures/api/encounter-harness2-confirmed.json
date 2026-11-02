@@ -543,8 +543,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "a037b2672a06dedae4c6d8f59d2f0b97ffa1f4d3ffb98b2bd57a1aabef0d8e58",
-   "response_sha256": "11e37fab734d772712c320c86d7a7cd1a1f1337274282221823e22e7927b19e8",
+   "request_sha256": "203f1299c6f84128e2c684aae9763b5d612246c9d2d57d9c25cd3a73fae636ad",
+   "response_sha256": "4babeab628beb33081addeb4c539c3dcd7c6cdf35c9eedfaf7264ed8caf5e9fc",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -566,8 +566,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "3e5032c84d91a6b8938bd890aee5d78f9f136a7ebd061a027df90285190052b5",
-   "response_sha256": "3dd1811a328d9a1b23849479b37041ab6fe252c7ba8655bf296ef7765707bab6",
+   "request_sha256": "16e9012938c86c0316ba150198574539254db4524cd796204e68305b962510fd",
+   "response_sha256": "dfcfde72dae3957cbdbb28d2fed6db9656020a5c989208e516c7d661912bf5ae",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -1280,7 +1280,7 @@
    {
     "id": "participants.summary",
     "label": "Independent participants",
-    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is read only as the passage a reviewer confirms. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is read only as the passage a reviewer confirms. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
+    "detail": "Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 2 quoting the document verbatim. In peer review, after its first reading was frozen, it took 1 position on codes (1 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45381), 0 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 3 open questions; an answer is recorded and decides nothing by itself. 1 quote it gave in peer review was not found verbatim in the document and is never evidence. Fable (Anthropic, claude-fable-5-1) read the document. It proposed 1 code (45385), 1 quoting the document verbatim. In peer review, after its first reading was frozen, it took 0 positions on codes (0 supports, 0 disputes, 0 cannot tell). It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in peer review is never counted as independent. It answered 1 open question; an answer is recorded and decides nothing by itself. A participant never decides a status and agreement never promotes a code: each code it proposes is judged by CPT Studio's own readers, with exact evidence, by the same rules as the proposal provider's, and its questions are notes that never block.",
     "source": "cpt-studio:harness@1",
     "status": "info"
    },

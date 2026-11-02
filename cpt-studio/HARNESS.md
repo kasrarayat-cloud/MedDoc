@@ -1208,6 +1208,14 @@ that exists anyway (none can be recorded in this release) is still listed by the
 no report, so `ops/verify_downloads.py` would report the section missing for it (fail closed). With D8 the page's
 located-passage rendering is gone, not dormant (above).
 
+**Amended after refutation round 4 (d7-5): the engine's participants.summary names no reviewer confirmation.** It said
+of a participant's peer answers "It answered N open questions; an answer is read only as the passage a reviewer
+confirms." on every phase-2 assessment, in a release that offers no confirmation (the API, the Checks tab and the TXT
+CHECKS all carry it). It now says "an answer is recorded and decides nothing by itself.", true whether or not
+confirmations are offered: the engine reads no setting. Only the harness path writes the summary (no participant
+configured, no summary), so I1 holds; every harness@2 assessment with a peer answer gets a new sha256, and the fixtures
+are regenerated (`tests/test_harness_engine.py`'s pin moved to the new sentence).
+
 **Dormant-path findings, recorded and not repaired: to be attacked again whenever any confirmation is offered.**
 None is reachable in this release.
 - status-1..4: 'performed' verified on a hedge the inventory does not read ("reportedly", "was thought to have been")
