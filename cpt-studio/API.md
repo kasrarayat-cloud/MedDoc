@@ -201,8 +201,12 @@ member reconciles it (`POST reconcile` takes any participant's run). `codes` are
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
-counts those (0 on Corti's row and wherever none was returned), so the page says the reading proposed no code "that can
-be listed", never that it proposed none (refutation round 2, truth-11);
+counts those (0 wherever none was returned), so the page says the reading proposed no code "that can be listed", never
+that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers selected that the engine
+cannot list (its primary answer and any bounded second review, read again as the engine read them), and its `detail`
+then says that only its codes that can be listed were checked, or that none can be listed, so none was checked, before
+the same count sentence; the reports' REVIEW PARTICIPANTS says the same (refutation round 3, truth-3: "Answered; its
+codes were checked." and "It proposed no code." beside a code it selected that cannot be listed);
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool

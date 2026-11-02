@@ -242,3 +242,78 @@ class FirstReadingUnlocatedTests(R2WordingCase):
             self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': '',
                                               'detail': 'Astra proposed this code; none of its quotes was found in '
                                                         'the document.'})
+
+
+# --- truth-3: Corti's row counts the codes it selected that cannot be listed ---------------------------------------
+
+LONG = '45385-SYNTHETIC-LONG-VALUE'
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'It is not shown and never truncated.')
+
+
+class CortiUnlistedMixin:
+    """Corti's answer selects a 'code' longer than any CPT code, which the engine drops with its provider.unlisted
+    warning and never shows. Corti's row read "Answered; its codes were checked." and "It proposed no code." beside it,
+    and the TXT "answered; its codes were checked" (refutation round 3, truth-3). The row now counts the codes Corti
+    selected that cannot be listed (unlisted_codes, as the model rows do since round 2's truth-11) and says none was
+    checked; the code itself is never served."""
+
+    def corti_row(self, detail):
+        return next(row for row in detail['harness']['participants'] if row['name'] == 'corti')
+
+    def corti_lines(self, encounter_id):
+        return _block(_section(_txt(self.encounter(encounter_id)), 'REVIEW PARTICIPANTS'), '  - Corti · ')
+
+    def run_with(self, *selections):
+        self.corti.selections = list(selections)
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        return encounter_id, self.detail(encounter_id)
+
+    def test_corti_selected_only_a_code_it_cannot_list(self):
+        encounter_id, detail = self.run_with((LONG, SNARE))
+        row = self.corti_row(detail)
+        self.assertEqual((row['state'], row['detail'], row['codes'], row['unlisted_codes']),
+                         ('done', f'Answered; none of its codes can be listed, so none was checked. {UNLISTED_ONE}',
+                          [], 1))
+        text = browser('rowOf(page(), "data-participant", "corti")', detail)
+        self.assertIn('It proposed no code that can be listed.', text)
+        for said in ('It proposed no code.', 'its codes were checked'):
+            self.assertNotIn(said, text)
+        lines = self.corti_lines(encounter_id)
+        self.assertEqual(lines[0], '  - Corti · Corti · answered; none of its codes can be listed, so none was checked')
+        self.assertIn(f'    Not listed: {UNLISTED_ONE}', lines)
+        checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
+        self.assertEqual(checks['provider.unlisted']['status'], 'warn')  # the engine's own warning, as before
+        self.assertNotIn(LONG, json.dumps(detail))
+        self.assertNotIn(LONG, '\n'.join(lines))
+
+    def test_codes_it_can_and_cannot_list(self):
+        encounter_id, detail = self.run_with((LONG, SNARE), ('45380', BIOPSY))
+        row = self.corti_row(detail)
+        self.assertEqual((row['detail'], row['codes'], row['unlisted_codes']),
+                         (f'Answered; its codes that can be listed were checked. {UNLISTED_ONE}', ['45380'], 1))
+        text = browser('rowOf(page(), "data-participant", "corti")', detail)
+        self.assertIn('Codes it proposed that can be listed: 45380.', text)
+        self.assertEqual(self.corti_lines(encounter_id)[0],
+                         '  - Corti · Corti · answered; its codes that can be listed were checked')
+
+    def test_every_code_listed_reads_as_before(self):
+        encounter_id, detail = self.run_with(('45385', SNARE), ('45380', BIOPSY))
+        row = self.corti_row(detail)
+        self.assertEqual((row['detail'], row['codes'], row['unlisted_codes']),
+                         ('Answered; its codes were checked.', ['45380', '45385'], 0))
+        lines = self.corti_lines(encounter_id)
+        self.assertEqual(lines[0], '  - Corti · Corti · answered; its codes were checked')
+        self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
+
+
+class CortiUnlistedTests(CortiUnlistedMixin, R2WordingCase):
+    pass
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyUnlistedTests(CortiUnlistedMixin, R2WordingCase):
+    def test_the_chain_is_i1_s(self):
+        encounter_id, _ = self.run_with((LONG, SNARE))
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])

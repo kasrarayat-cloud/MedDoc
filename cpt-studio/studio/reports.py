@@ -393,7 +393,11 @@ def _participant_entry(name, label, vendor, run, state, reason='', unverified=0,
 
 def _participants(assessment):
     """The review participants as this assessment read them (HARNESS.md 6): Corti's run, and each harness participant's
-    Assessment.participants entry with the run it names. An assessment recorded before the harness has no entry."""
+    Assessment.participants entry with the run it names. An assessment recorded before the harness has no entry. Corti's
+    answered state is its row's (serializers.corti_answered), and where its answers selected codes the engine cannot
+    list its entry counts them (``unlisted_codes``, only then), never naming one (refutation round 3, truth-3)."""
+    from .serializers import corti_answered, corti_codes, corti_unlisted  # local: one implementation, the row's
+
     records = _records(assessment)
     runs = {str(run.pk): run for run in ProviderRun.objects.filter(
         pk__in=[record['run'] for record in records.values() if record.get('run')])}
@@ -407,14 +411,19 @@ def _participants(assessment):
             refused = review._refused_run(assessment) == run
             held = (run.state == ProviderRun.NOT_SENT
                     and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT)
+            unlisted = corti_unlisted(assessment) if run.state == ProviderRun.SUCCEEDED and not refused else 0
             state = ('answered; the response was not used' if refused else
                      'nothing was sent: the service date entered as encounter metadata conflicts with the document'
-                     if held else CORTI_STATES.get(run.state, run.state))
+                     if held else corti_answered(bool(corti_codes(assessment)), unlisted)
+                     if run.state == ProviderRun.SUCCEEDED else CORTI_STATES.get(run.state, run.state))
             # a refused response's reason is its own provider check's (provider.status), as the encounter view says it
             reason = (next((check.get('detail') or '' for check in assessment.encounter_checks or []
                             if check.get('id') == 'provider.status'), '') if refused else
                       run.error if run.state in (ProviderRun.FAILED, ProviderRun.NOT_SENT) and not held else '')
-            out.append(_participant_entry(name, label, vendor, run, state, reason, refused=refused))
+            entry = _participant_entry(name, label, vendor, run, state, reason, refused=refused)
+            if unlisted:
+                entry['unlisted_codes'] = unlisted
+            out.append(entry)
             continue
         record = records.get(name)
         if record is None:
@@ -1058,6 +1067,8 @@ def _participants_section(snap):
             lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
         else:
             lines.append('    Estimated cost: none (no usage reported for this run)')
+        if entry.get('unlisted_codes'):  # codes Corti selected that cannot be listed: counted, never named (I9)
+            lines.append(f'    Not listed: {_indent(review.unlisted_words(entry["unlisted_codes"]), "      ")}')
         if entry['unverified_quotes']:
             lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
                          'as evidence)')
