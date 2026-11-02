@@ -742,8 +742,13 @@ class AppPhaseParticipantTests(TemporaryDirectoryTest):
             self.app(app_args(self.tmp, access=True))
         message = str(caught.exception)
         self.assertIn('web and worker running', message)
-        self.assertIn('the access check did not pass for fable (it exited 3.)', message)
+        # Moved by refutation round 5 (R5-SENDS, sends-1) to what the phase now says: a non-zero exit is reported with
+        # what the check itself said (its receipt's error, else its last line on stderr), never as "it exited 3."
+        # alone; this receipt gives no error and nothing was written on stderr, so that is said. No cause is added
+        # (test_install_r5_sends pins the access check's real receipts and the remedy).
+        self.assertIn('the access check did not pass for fable (it exited 3, and it wrote no text on stderr.)', message)
         self.assertIn('The pair stays installed', message)
+        self.assertNotIn('fix the credentials or the vendor account', message)
         checks = caught.exception.details['access_checks']
         self.assertTrue(checks['astra']['ok'])
         self.assertEqual(checks['fable']['receipt'], {'participant': 'fable', 'ok': False, 'http_status': 401})
@@ -794,7 +799,10 @@ class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
     def run_main(self, answers):
         world = AppWorld(self.tmp)
         world.answers = answers
-        receipts = self.tmp / 'receipts'
+        # One receipts directory per run (refutation round 5, R5-SENDS): main keeps the directory's lock for the rest of
+        # the process, so every run after the first on a shared one was refused ("another phase is running on these
+        # receipts") and its subtest read the first run's receipt - three of the four leaks below were never run.
+        receipts = self.tmp / f'receipts-{len(list(self.tmp.glob("receipts-*")))}'
         stdout, stderr = io.StringIO(), io.StringIO()
         umask = os.umask(0o077)
         os.umask(umask)
@@ -812,6 +820,8 @@ class NoCredentialValueLeavesTheInstallerTests(TemporaryDirectoryTest):
             for patcher in reversed(patches):
                 patcher.stop()
             os.umask(umask)
+        self.assertEqual(json.loads(stdout.getvalue().strip().splitlines()[-1]).get('receipt', '').rsplit('/', 1)[0],
+                         str(receipts), 'main did not run: it wrote no receipt of its own')
         written = b''.join(path.read_bytes() for path in receipts.iterdir() if path.is_file())
         return code, stdout.getvalue(), stderr.getvalue(), written, receipts
 
