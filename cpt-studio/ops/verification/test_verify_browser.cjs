@@ -2351,3 +2351,113 @@ test('summarize records which participants ran and what reference validation ret
   assert.equal(text.includes('Cold forceps biopsies of the gastric antrum were taken.'), false);
   assert.equal(vb.summarize(encounter()).harness, null);
 });
+
+// --- harness@2: the peer-review rows and the candidate answers (HARNESS.md 11.1, 12.5, 12.6) ---------------------------
+//
+// The rows and the questions are held to what the API serves, read from the markup the live app.js renders for the
+// serializer's own fixtures; the walk reads them and never confirms anything.
+
+const H2 = ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness2-confirmed.json'];
+const statusOf = results => results.map(r => [r.id, r.status]);
+
+test('readDom reads the peer-review rows and each question\'s candidates the live app.js renders, and both checks pass', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
+  const app = require(APP);
+  for (const name of H2) {
+    const enc = apiFixture(name);
+    const dom = await vb.readDom(fakePage(app.reviewView(enc, app.documentLayout(enc), 'codes', true)));
+    assert.deepEqual(dom.participants.map(row => row.key), ['corti', 'astra', 'fable', 'reference_validation', 'clarification', 'final'], name);
+    assert.deepEqual(failures(vb.checkParticipantsCard(enc, dom.participants)), [], name);
+    assert.deepEqual(dom.peers, enc.harness.participants.filter(p => p.name !== 'corti').map(p => ({ key: p.name, state: p.peer.state || '' })), name);
+    assert.deepEqual(statusOf(vb.checkPeerRows(enc, dom.peers)), [['dom.peer_reviews', 'pass']], name);
+    const served = enc.clarifications.filter(c => c.candidates.length || c.confirmation);
+    assert.deepEqual(dom.questions.map(q => q.id).sort(), served.map(c => c.id).sort(), name);  // the encounter's card first
+    assert.deepEqual(statusOf(vb.checkCandidates(enc, dom.questions)), [[`dom.candidates`, served.length ? 'pass' : 'skipped']], name);
+  }
+  const final = apiFixture(H2[1]);
+  const dom = await vb.readDom(fakePage(app.reviewView(final, app.documentLayout(final), 'codes', true)));
+  const extent = final.clarifications.find(c => c.fact === 'extent');
+  assert.deepEqual(dom.questions.find(q => q.id === extent.id), { id: extent.id, confirmation: '',
+    candidates: extent.candidates.map(c => ({ id: c.id, verified: c.verified })), confirmable: 1 });
+  // a viewer is offered nothing, and the check holds the page to that
+  const viewer = { ...final, permissions: { ...final.permissions, can_confirm: false } };
+  const viewed = await vb.readDom(fakePage(app.reviewView(viewer, app.documentLayout(viewer), 'codes', true)));
+  assert.ok(viewed.questions.every(q => q.confirmable === 0));
+  assert.deepEqual(failures(vb.checkCandidates(viewer, viewed.questions)), []);
+  assert.deepEqual(failures(vb.checkCandidates(viewer, dom.questions)), ['dom.candidates'], 'a Confirm action the API does not allow');
+  // a confirmed question shows the confirmation's id and offers no confirmation
+  const confirmation = apiFixture(H2[2]).confirmations[0];
+  const confirmed = { ...final, clarifications: final.clarifications.map(c => (c.id === extent.id ? { ...c, confirmation: { ...confirmation, clarification_id: extent.id } } : c)) };
+  const after = await vb.readDom(fakePage(app.reviewView(confirmed, app.documentLayout(confirmed), 'codes', true)));
+  assert.deepEqual(after.questions.find(q => q.id === extent.id).confirmation, confirmation.id);
+  assert.equal(after.questions.find(q => q.id === extent.id).confirmable, 0);
+  assert.deepEqual(failures(vb.checkCandidates(confirmed, after.questions)), []);
+  assert.deepEqual(failures(vb.checkCandidates(confirmed, dom.questions)), ['dom.candidates']);
+});
+
+test('checkPeerRows fails a row in another state, a missing or extra row, and skips a payload with no peer review', () => {
+  const enc = apiFixture(H2[0]);
+  const rows = [{ key: 'astra', state: 'running' }, { key: 'fable', state: 'waiting' }];
+  assert.deepEqual(statusOf(vb.checkPeerRows(enc, rows)), [['dom.peer_reviews', 'pass']]);
+  for (const broken of [[rows[0], { key: 'fable', state: 'done' }], [rows[0]], [...rows, { key: 'corti', state: '' }], [...rows, rows[1]], []]) {
+    assert.deepEqual(failures(vb.checkPeerRows(enc, broken)), ['dom.peer_reviews'], JSON.stringify(broken));
+  }
+  // where the API serves no peer review for a participant (phase 1, {}), the row says so: data-peer-state ''
+  const none = { ...enc, harness: { ...enc.harness, participants: enc.harness.participants.map(p => ({ ...p, peer: {} })) } };
+  assert.deepEqual(failures(vb.checkPeerRows(none, [{ key: 'astra', state: '' }, { key: 'fable', state: '' }])), []);
+  assert.deepEqual(failures(vb.checkPeerRows(none, rows)), ['dom.peer_reviews']);
+  // skipped: a release before harness@2, a Corti-only encounter (phase 0), a payload without a harness
+  for (const payload of [apiFixture('encounter-harness-ready.json'), { ...none, harness: { ...none.harness, phase: 0 } }, encounter()]) {
+    assert.deepEqual(statusOf(vb.checkPeerRows(payload, [])), [['dom.peer_reviews', 'skipped']]);
+  }
+});
+
+test('checkCandidates holds each question to the API\'s candidates, flags and confirmation, and skips a payload that serves none', () => {
+  const enc = apiFixture(H2[1]);
+  const shown = enc.clarifications.map(c => ({ id: c.id, confirmation: '', candidates: c.candidates.map(x => ({ id: x.id, verified: x.verified })),
+    confirmable: c.candidates.filter(x => x.verified).length }));
+  assert.deepEqual(statusOf(vb.checkCandidates(enc, shown)), [['dom.candidates', 'pass']]);
+  const edit = (index, fields) => shown.map((q, i) => (i === index ? { ...q, ...fields } : q));
+  const broken = {
+    dropped: edit(0, { candidates: shown[0].candidates.slice(1) }),
+    reordered: edit(0, { candidates: [...shown[0].candidates].reverse() }),
+    flagged: edit(0, { candidates: shown[0].candidates.map(x => ({ ...x, verified: true })) }),
+    extra: edit(0, { candidates: [...shown[0].candidates, { id: 'ffffffffffffffff', verified: true }] }),
+    confirmed: edit(0, { confirmation: 'e2b00000-0000-4000-8000-0000000000ff' }),
+    offered: edit(0, { confirmable: 2 }),
+    missing: shown.slice(1),
+    stray: [...shown, { id: 'not-a-served-question', confirmation: '', candidates: [], confirmable: 0 }],
+  };
+  for (const [name, questions] of Object.entries(broken)) assert.deepEqual(failures(vb.checkCandidates(enc, questions)), ['dom.candidates'], name);
+  // a question that is not open is not held; nothing served is skipped
+  assert.deepEqual(statusOf(vb.checkCandidates({ ...enc, clarifications: enc.clarifications.map(c => ({ ...c, state: 'answered' })) }, [])), [['dom.candidates', 'skipped']]);
+  for (const name of ['encounter-harness2-peer.json', 'encounter-harness-ready.json', 'encounter-clarification.json']) {
+    assert.deepEqual(statusOf(vb.checkCandidates(apiFixture(name), [])), [['dom.candidates', 'skipped']], name);
+  }
+});
+
+test('the walk never confirms a finding: it posts to no confirmation endpoint and clicks no Confirm action', () => {
+  const source = fs.readFileSync(path.join(ROOT, 'ops', 'verify_browser.cjs'), 'utf8');
+  assert.equal(/clarifications\//.test(source), false, 'the confirmation endpoint is never addressed');
+  const uses = source.split('\n').filter(line => line.includes('confirm-finding'));
+  assert.deepEqual(uses.map(line => line.trim()), ["confirmable: el.querySelectorAll('[data-action=\"confirm-finding\"]').length,"], 'it is only counted');
+  assert.equal(/data-attest|data-confirm[="\]]/.test(source), false, 'no candidate is selected and no attestation ticked');
+});
+
+test('summarize records the phase, the peer reviews, the candidates and the confirmations, never a passage or sentence', () => {
+  const enc = apiFixture(H2[2]);
+  const summary = vb.summarize(enc);
+  assert.equal(summary.harness.phase, 2);
+  assert.deepEqual(summary.harness.participants.map(p => [p.name, p.peer?.state, p.peer?.codes_added]),
+    [['corti', undefined, undefined], ['astra', 'done', ['45381']], ['fable', 'done', ['45380']]]);
+  assert.deepEqual(summary.harness.participants[1].references, { retrieved: 1, used: 2, cited_not_retrieved: 1 });
+  assert.deepEqual(summary.clarifications.map(c => [c.fact, c.candidates.map(x => [x.value, x.verified]), c.confirmation]),
+    [['performed_status', [['performed', true], ['performed', true], ['performed', true]], null], ['service_date', [['2026-10-21', true]], null]]);
+  assert.deepEqual(summary.confirmations.map(c => [c.fact, c.value, c.located_by, c.confirmed_by]), [['extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer']]);
+  const text = JSON.stringify(summary);
+  for (const passage of ['The colonoscope was advanced to the cecum.', 'Date of service: 2026-10-21', 'I read this passage', 'The endoscopic base']) {
+    assert.equal(text.includes(passage), false, passage);
+  }
+  // a payload served before harness@2 records as before
+  const older = vb.summarize(apiFixture('encounter-harness-degraded.json'));
+  assert.equal('phase' in older.harness || 'confirmations' in older || older.harness.participants.some(p => 'peer' in p), false);
+});
