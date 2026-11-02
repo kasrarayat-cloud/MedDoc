@@ -2383,6 +2383,19 @@ def run_job(job):
     return job
 
 
+def may_have_reached_vendor(runs):
+    """The runs of ``runs`` (a ProviderRun queryset) whose record shows they may have reached the vendor: a recorded
+    exchange in any state but not_sent - a participant's loop records each exchange as it ends - of a run that called a
+    vendor at all, its reservation naming the endpoint its adapter calls. A replay calls none (its endpoint is ''): its
+    exchanges are recorded 'succeeded' and reached nothing (refutation round 3, sends-4). Corti's runs record no
+    exchange. The one rule by which a run left sending is settled as sent, by the stale sweep (mark_stale) and by the
+    installer's undo (ops/install.py CLOSE_STAGES, run in the undone revision's image; refutation round 3, sends-3)."""
+    from django.db.models import Exists, OuterRef
+
+    return runs.exclude(endpoint='').filter(Exists(models.ProviderExchange.objects.filter(run=OuterRef('pk')).exclude(
+        state=models.ProviderRun.NOT_SENT)))
+
+
 def mark_stale():
     """Settle jobs a dead worker left 'running'. A send in flight becomes UNKNOWN, never resent."""
     cutoff = timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
@@ -2406,13 +2419,15 @@ def mark_stale():
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
             unknown = sends and sending.exists()
+            reached = set(may_have_reached_vendor(sending).values_list('pk', flat=True))
             for run in sending:
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
                                                          timezone.now())
                 # a participant's loop records each exchange as it ends: one of them that may have reached the vendor
-                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange)
-                run.sent = run.sent or run.exchanges.exclude(state=models.ProviderRun.NOT_SENT).exists()
+                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange) - by the rule
+                # the installer's undo settles a run with too, and never for a replay (refutation round 3, sends-3/-4)
+                run.sent = run.sent or run.pk in reached
                 run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
             for run in reserved:
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,

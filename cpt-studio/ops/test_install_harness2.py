@@ -752,5 +752,90 @@ class PeerStagesOnTheDatabaseTests(DatabaseTest):
         self.assertNotIn(models.Job.FAILED, {state for state, _ in before.values()})
 
 
+class SentRunsOnTheDatabaseTests(DatabaseTest):
+    """CLOSE_STAGES on real rows (refutation round 3, sends-3 and sends-4): every provider run the undone pair left
+    sending is settled unknown - and sent when an exchange of it that may have reached the vendor (any but not_sent) is
+    recorded, by the stale sweep's own rule (jobs.may_have_reached_vendor) - when the run called a vendor at all: its
+    reservation names the endpoint its adapter calls, and a replay calls none. The close had left sent as it was, so a
+    run whose answered exchange is on record was recorded as never sent."""
+
+    NOTE = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
+    ENDPOINT = 'https://api.openai.com/v1/responses'
+    maxDiff = None
+
+    def provider_run(self, encounter, *exchanges, endpoint=ENDPOINT, provider='astra', purpose='independent',
+                     state='sending'):
+        """A run of ``encounter`` with one recorded exchange per state in ``exchanges`` (turn 1..n). Synthetic."""
+        from studio import models
+        run = models.ProviderRun.objects.create(
+            encounter=encounter, revision=encounter.current_revision, provider=provider, adapter_version='synthetic@1',
+            request_sha256='e' * 64, request_body={}, contexts=[], state=state, purpose=purpose, endpoint=endpoint,
+            scope={'mode': 'live' if endpoint else 'replay'} if purpose == 'independent' else {})
+        for turn, exchange in enumerate(exchanges, start=1):
+            models.ProviderExchange.objects.create(
+                run=run, turn=turn, request_body={}, request_sha256='f' * 64, state=exchange,
+                http_status={'succeeded': 200, 'failed': 529}.get(exchange))
+        return run
+
+    def scenario(self):
+        """{tag: run}: the runs a close since now settles, and one sending since before it, which it leaves alone."""
+        from django.utils import timezone
+        encounter = self.encounter('sent')
+        earlier = self.provider_run(encounter, 'succeeded')
+        self.since = timezone.now()
+        return {
+            'answered': self.provider_run(encounter, 'succeeded'),
+            'answered_529': self.provider_run(encounter, 'failed'),
+            'unknown': self.provider_run(encounter, 'unknown'),
+            'answered_then_not_sent': self.provider_run(encounter, 'succeeded', 'not_sent'),
+            'not_sent_only': self.provider_run(encounter, 'not_sent'),
+            'nothing_recorded': self.provider_run(encounter),
+            'replayed': self.provider_run(encounter, 'succeeded', endpoint=''),
+            'replayed_peer_review': self.provider_run(encounter, 'succeeded', 'succeeded', endpoint='',
+                                                      purpose='peer_review'),
+            'corti': self.provider_run(encounter, endpoint='https://api.us.corti.app/v2/tools/coding/',
+                                       provider='corti', purpose='primary'),
+            'reserved': self.provider_run(encounter, state='reserved'),
+            'earlier': earlier}
+
+    def close(self):
+        return run_in_image(install.CLOSE_STAGES, {'since': self.since.isoformat(), 'note': self.NOTE,
+                                                   'kinds': list(install.COMMON_STAGE_KINDS)})
+
+    def settled(self, runs):
+        from studio import models
+        return {tag: tuple(models.ProviderRun.objects.filter(pk=run.pk).values_list('state', 'sent', 'error').get())
+                for tag, run in runs.items()}
+
+    def test_a_run_left_sending_is_sent_when_a_recorded_exchange_may_have_reached_the_vendor(self):
+        runs = self.scenario()
+        answer = self.close()
+        self.assertEqual((answer['runs_unknown'], answer['runs_not_sent']), (9, 1))
+        unknown = 'The worker stopped while the request was in flight.'
+        self.assertEqual(self.settled(runs), {
+            'answered': ('unknown', True, unknown), 'answered_529': ('unknown', True, unknown),
+            'unknown': ('unknown', True, unknown), 'answered_then_not_sent': ('unknown', True, unknown),
+            'not_sent_only': ('unknown', False, unknown), 'nothing_recorded': ('unknown', False, unknown),
+            'replayed': ('unknown', False, unknown), 'replayed_peer_review': ('unknown', False, unknown),
+            'corti': ('unknown', False, unknown),
+            'reserved': ('not_sent', False, 'The worker stopped before sending.'),
+            'earlier': ('sending', False, '')})  # outside the window: the close never touches it
+
+    def test_an_image_with_no_such_rule_settles_its_runs_as_before(self):
+        # an older revision's image (before harness@2's exchanges) has no jobs.may_have_reached_vendor and records no
+        # exchange: the close runs there as it did, sent left as it was, rather than failing the undo
+        from studio import jobs
+        runs = self.scenario()
+        rule = jobs.may_have_reached_vendor
+        del jobs.may_have_reached_vendor
+        try:
+            answer = self.close()
+        finally:
+            jobs.may_have_reached_vendor = rule
+        self.assertEqual((answer['runs_unknown'], answer['runs_not_sent']), (9, 1))
+        self.assertEqual({tag: sent for tag, (_, sent, _) in self.settled(runs).items()},
+                         dict.fromkeys(runs, False))
+
+
 if __name__ == '__main__':
     unittest.main()
