@@ -93,7 +93,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       {"name": "fable", "label": "Fable", "vendor": "Anthropic", "model": "claude-fable-5-1", "state": "not_configured",
        "detail": "Not configured on this installation.", "run_id": null, "reused": false, "codes": [],
        "unverified_quotes": 0, "usage": {}, "usage_basis": "", "estimated_cost_usd": null, "returned_model": ""}],
-    "reference_validation": {"state": "done", "codes_checked": 2, "passages": 3,
+    "reference_validation": {"state": "done", "detail": "", "codes_checked": 2, "passages": 3,
       "sources": [{"key": "...", "title": "...", "release": "...", "effective_start": "2026-01-01", "effective_end": "2026-12-31"}],
       "not_connected": ["NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
                         "AMA CPT descriptors and guidelines (no licence)", "Payer policies"]},
@@ -208,9 +208,15 @@ loop is priced exchange by exchange (Astra's long-context rate is a property of 
 its recorded exchanges do not add up to its usage. `reused` is true when a retained answer to the identical request was
 reused and nothing was sent.
 
-`harness.reference_validation.state` is `waiting` while processing, `done` when retrieval ran for the current
-assessment and its traces cover every code a proposal can be decided on, and `not_run` otherwise (no assessment, one
-recorded before the harness, or no trace at all - never `done` over zero codes); `not_connected` is always listed.
+`harness.reference_validation.state` is `waiting` while processing, `failed` when the current assessment's retrieval
+failed, `done` when retrieval ran for it and its traces cover every code a proposal can be decided on, and `not_run`
+otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero codes);
+`not_connected` is always listed. A retrieval that fails never stops the assessment, which stands as made (HARNESS.md
+5): its retrieval is recorded as one entry `{"code": "", "failed": true, "notes": ["Reference validation failed: ..."]}`
+(no fact, no passage), and the state is then `failed` - never `not_run` or `done` - with that entry's note, CPT
+Studio's own sentence, as `detail`. `detail` is `""` in every other state, and a failed entry is counted in neither
+`codes_checked` nor `passages`. The code cards then say that reference validation failed for the assessment, and the
+reports' REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation failed: ...".
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
@@ -382,7 +388,9 @@ review's additional codes and positions) is served as given only when it is a sh
 whitespace); any other is named by its length, as the reader's own problems name it: `"a value of 106 characters (not
 shown)"` (I9: such a field may carry a CPT descriptor). Free text (a basis, a question, a description) is served for the
 page, which withholds what reads like a descriptor.
-`retrieval` is the current assessment's retrieval traces as recorded. `reconciliation` keeps proposed (`proposed_by`,
+`retrieval` is the current assessment's retrieval traces as recorded; a retrieval that failed is its one entry marked
+`"failed": true`, with no code, which the page shows as "Reference validation failed" with its note, never as a code
+with nothing found. `reconciliation` keeps proposed (`proposed_by`,
 `positions`), reference-checked (`reference_check`) and approved (`approved`: the member's current decision is an
 approval) apart.
 

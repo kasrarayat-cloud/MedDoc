@@ -38,7 +38,9 @@ PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused',
                       'stopped'}
 HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification', 'final'}
 PERMISSION_KEYS = {'can_review', 'is_owner', 'can_confirm'}
-REFERENCE_VALIDATION_KEYS = {'state', 'codes_checked', 'passages', 'sources', 'not_connected'}
+REFERENCE_VALIDATION_KEYS = {'state', 'detail', 'codes_checked', 'passages', 'sources', 'not_connected'}
+# 'failed': the assessment's retrieval failed, said with its note as the detail (refutation r1 parity-1)
+REFERENCE_VALIDATION_STATES = {'waiting', 'done', 'failed', 'not_run'}
 RETRIEVAL_ITEM_KEYS = {'kind', 'source_key', 'release', 'label', 'value', 'page', 'section', 'text'}
 PROVIDER_RUN_KEYS = {'id', 'provider', 'mode', 'state', 'http_status', 'latency_ms', 'usage', 'usage_basis',
                      'request_sha256', 'response_sha256', 'reused_from', 'error', 'reconciled', 'created_at', 'purpose',
@@ -65,6 +67,7 @@ FIXTURE_LACKS = {
                   'exchanges'},
     'reading': {'references_used'},
     'reconciliation_row': {'bucket'},
+    'reference_validation': {'detail'},
 }
 # The harness@2 additions (HARNESS.md 12.6, as studio/serializers.py serves them) the website renders.
 PEER_KEYS = {'state', 'detail', 'run_id', 'codes_added', 'unverified_quotes'}
@@ -293,8 +296,8 @@ class FixtureTests(SimpleTestCase):
                     self.assertIn(item['state'], PARTICIPANT_STATES)
                     self.assertTrue(item['run_id'] is None or UUID.match(item['run_id']))
                 reference = harness['reference_validation']
-                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS)
-                self.assertIn(reference['state'], {'waiting', 'done', 'not_run'})
+                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS - FIXTURE_LACKS['reference_validation'])
+                self.assertIn(reference['state'], REFERENCE_VALIDATION_STATES)
                 self.assertEqual(harness['clarification'], {'open': doc['open_clarifications']})
                 self.assertEqual(harness['final'], {'state': doc['state'], 'label': doc['state_label']})
                 for proposal in (doc['assessment'] or {}).get('proposals', []):
@@ -354,6 +357,10 @@ class FixtureTests(SimpleTestCase):
                 self.assertEqual(doc['permissions']['can_confirm'], doc['permissions']['can_review'])
                 self.assertEqual(set(doc['harness']), {'participants', 'phase', 'reference_validation', 'clarification',
                                                        'final'})
+                reference = doc['harness']['reference_validation']
+                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS)
+                self.assertIn(reference['state'], REFERENCE_VALIDATION_STATES)
+                self.assertEqual(reference['detail'] != '', reference['state'] == 'failed', reference)
                 rows = {row['name']: row for row in doc['harness']['participants']}
                 self.assertEqual(list(rows), PARTICIPANTS)
                 self.assertEqual(rows['corti']['peer'], {})

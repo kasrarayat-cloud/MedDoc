@@ -1468,11 +1468,12 @@ class RetrievalFailureTests(HarnessCase):
         # no reader takes the failure for a code checked: the page never says reference validation is done
         harness = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']
         self.assertNotEqual(harness['reference_validation']['state'], 'done')
-        # and the reports' REFERENCE RETRIEVAL section says reference validation failed, in CPT Studio's words
+        # and the reports' REFERENCE RETRIEVAL section says reference validation failed, in CPT Studio's words, as one
+        # line of its own - never a code entry with no code
         from studio import reports
 
         snap = reports.snapshot(encounter, 'draft')
-        self.assertIn(f'Note: {note}', reports.render_txt(snap).decode('utf-8'))
+        self.assertIn(f'\n  - {note}\n', reports.render_txt(snap).decode('utf-8'))
 
 
 @override_settings(**LIVE, **BOTH)

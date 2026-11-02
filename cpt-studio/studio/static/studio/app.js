@@ -84,11 +84,18 @@ const PEER_STATES = {
 };
 // Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
 const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
+// Reference validation (harness.reference_validation, HARNESS.md 5): its look, label and plain sentence by state, and -
+// for 'failed', which must be said plainly - the word the API's own sentence (its detail) has to contain for the plain
+// one to be left out. A retrieval that failed is shown as failed, never as not run or done (refutation round 1, parity-1).
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: the CMS facts and passages could not be retrieved, so no proposal was checked against them.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): nothing was
+// retrieved for any code - never to be read as a lookup that found nothing for this one.
+const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage was retrieved for this code.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };
@@ -1007,13 +1014,15 @@ function retrievedFrom(item) {
 // source and release, and each passage - verbatim CMS text - behind its own disclosure. '' for a proposal served before
 // the harness existed.
 // harness@2 (reconciliation): named as the reconciliation's own retrieval beside the participants' (HARNESS.md 11.2).
-function retrievalSection(proposal, reconciliation = false) {
+// ``failed``: the assessment's retrieval failed (harness.reference_validation), so a code with nothing retrieved says that,
+// never that its lookup found nothing.
+function retrievalSection(proposal, reconciliation = false, failed = false) {
   if (!Array.isArray(proposal.retrieval)) return '';
   const items = proposal.retrieval.filter(item => item && typeof item === 'object');
   const facts = items.filter(item => item.kind === 'fact');
   const passages = items.filter(item => item.kind === 'passage');
   const heading = groupLabel(reconciliation ? 'CMS reference facts and passages retrieved by the reconciliation' : 'CMS reference facts and passages');
-  if (!facts.length && !passages.length) return `<div class="evidence-section reference-retrieval">${heading}<p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p></div>`;
+  if (!facts.length && !passages.length) return `<div class="evidence-section reference-retrieval">${heading}<p class="harness-note">${escapeHtml(failed ? RETRIEVAL_FAILED : 'No CMS reference fact or passage was retrieved for this code.')}</p></div>`;
   const factList = facts.length ? `<ul class="reference-facts">${facts.map(fact => `<li><b>${escapeHtml(textValue(fact.label) || textValue(fact.field) || 'Fact')}:</b> ${escapeHtml(textValue(fact.value) || 'not recorded')}<small class="check-source">${escapeHtml(retrievedFrom(fact))}</small></li>`).join('')}</ul>` : '';
   const passageList = passages.map(passage => {
     const page = textValue(passage.page);
@@ -1032,7 +1041,7 @@ function codeCard(proposal, doc, layout) {
   const peer = peerPhaseOnly(proposal) ? '<span class="small-badge">Proposed after peer review</span>' : '';
   const phased = harness2(doc);
   const positions = phased ? participantPositions(proposal, 'What the participants said in their first readings') : participantPositions(proposal);
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${peer}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${codeStatusLines(proposal)}${confirmedFacts(proposal, doc)}${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${positions}${referenceLists(proposal, doc)}${retrievalSection(proposal, phased)}${decisionLine(proposal)}${cardActions(proposal)}</article>`;
+  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${peer}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${codeStatusLines(proposal)}${confirmedFacts(proposal, doc)}${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${positions}${referenceLists(proposal, doc)}${retrievalSection(proposal, phased, doc?.harness?.reference_validation?.state === 'failed')}${decisionLine(proposal)}${cardActions(proposal)}</article>`;
 }
 
 function clarificationCard(clarification, doc) {
@@ -1521,9 +1530,12 @@ function peerRow(doc, participant) {
 
 function referenceRow(reference) {
   const served = reference && typeof reference === 'object' ? reference : {};
-  const [look, label, plain] = lookup(REFERENCE_STATES, served.state, REFERENCE_STATES.not_run);
+  const [look, label, plain, required] = lookup(REFERENCE_STATES, served.state, REFERENCE_STATES.not_run);
   const counted = name => (Number.isInteger(served[name]) && served[name] >= 0 ? served[name] : 0);
-  const lines = served.state === 'done' ? [`${plural(counted('codes_checked'), 'code', 'codes')} checked against the CMS reference files; ${plural(counted('passages'), 'passage', 'passages')} of verbatim CMS text retrieved.`] : [plain];
+  // a failed retrieval says why in the API's own sentence (its detail), after the plain one where it does not say so
+  const said = served.state === 'failed' ? textValue(served.detail).trim() : '';
+  const lines = served.state === 'done' ? [`${plural(counted('codes_checked'), 'code', 'codes')} checked against the CMS reference files; ${plural(counted('passages'), 'passage', 'passages')} of verbatim CMS text retrieved.`]
+    : !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const sources = (Array.isArray(served.sources) ? served.sources : []).filter(source => source && typeof source === 'object').map(source => {
     const window = textValue(source.effective_start) && textValue(source.effective_end) ? `effective ${formatDate(source.effective_start) || source.effective_start} – ${formatDate(source.effective_end) || source.effective_end}` : '';
     return [`${textValue(source.title) || textValue(source.key) || 'CMS source'}${textValue(source.release) ? ` (${source.release})` : ''}`, window].filter(Boolean).join(' · ');
@@ -1860,12 +1872,18 @@ function traceRun(run) {
 }
 
 // The retrieval traces (Assessment.retrieval, HARNESS.md 5): per code, each fact looked up and each CMS passage retrieved,
-// with its source, release, effective dates and sha256, then the lookups made and the notes recorded.
+// with its source, release, effective dates and sha256, then the lookups made and the notes recorded. A retrieval that
+// failed is recorded as one entry marked failed, with no code (refutation round 1, parity-1): it is shown as failed, with
+// its note, never as a code with nothing found.
 function retrievalTraces(entries) {
   const list = objects(entries);
   if (!list.length) return '<div class="check-list-card"><p class="harness-note">No retrieval trace is recorded for this assessment.</p></div>';
   const known = new Set(['source_key', 'release', 'effective', 'sha256', 'field', 'value']);
   return list.map(entry => {
+    if (entry.failed === true) {
+      const notes = strings(entry.notes);
+      return `<div class="check-list-card">${groupLabel('Reference validation failed')}${(notes.length ? notes : [REFERENCE_STATES.failed[2]]).map(note => `<p class="harness-note">${escapeHtml(note)}</p>`).join('')}</div>`;
+    }
     const facts = objects(entry.facts).map(fact => {
       const effective = Array.isArray(fact.effective) ? fact.effective.map(value => formatDate(value) || textValue(value)).filter(Boolean).join(' – ') : '';
       const extra = Object.keys(fact).filter(key => !known.has(key)).map(key => `${key} ${textValue(fact[key]) || (fact[key] == null ? 'none' : JSON.stringify(fact[key]))}`);
@@ -2905,7 +2923,8 @@ if (typeof module === 'object' && module.exports) {
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
     codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,
     serviceDateMeta, participantsCard, codeStatusLines, participantPositions, retrievalSection, participantText, traceView,
-    traceFailure, showTrace, STAGES, PARTICIPANT_STATES, DESCRIPTOR_LIKE, DESCRIPTOR_WITHHELD,
+    traceFailure, showTrace, STAGES, PARTICIPANT_STATES, REFERENCE_STATES, RETRIEVAL_FAILED, DESCRIPTOR_LIKE,
+    DESCRIPTOR_WITHHELD,
     PEER_STAGES, PEER_STATES, PEER_NOT_RUN, CANDIDATE_NOTE, harness2, phasedJobs, peerPhaseOnly, confirmedFrom, locatedBy,
     candidateAnswers, referenceLists, confirmedFindings, confirmFinding, confirmedMessage, onChange,
   };

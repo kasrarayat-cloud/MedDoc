@@ -10,6 +10,7 @@ import io
 import json
 import sys
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -280,6 +281,91 @@ class CortiOnlyReportTests(TestCase):
                 self.assertEqual(lines[0], f'  - Corti · Corti · {corti}')
                 self.assertEqual(lines[-1], PREDATES)
                 self.assertFalse(any('only Corti' in line for line in lines), lines)
+
+
+NOT_CONNECTED_LINE = ('  Not connected: NCCI procedure-to-procedure edits (AMA licence agreement not accepted); '
+                      'AMA CPT descriptors and guidelines (no licence); Payer policies.')
+
+
+class FailedRetrievalReportTests(TestCase):
+    """A retrieval that failed (refutation round 1, parity-1: one Assessment.retrieval entry marked failed, with no
+    code, jobs.retrieval_failure) is one line in REFERENCE RETRIEVAL saying reference validation failed, with the
+    entry's note - never "  -  · service date ..." followed by the note, a code entry with no code."""
+
+    def section_for(self, retrieval):
+        s = pf.scenario()
+        review.persist_assessment(encounter=s.encounter, revision=s.revision, context=s.context,
+                                  routing_run=pf.routing(s.revision),
+                                  provider_run=pf.provider_run(s.encounter, s.revision), result=pf.standard_result(),
+                                  retrieval=retrieval, participants=[jobs.not_configured_record('astra'),
+                                                                     jobs.not_configured_record('fable')])
+        text = reports.render_txt(reports.snapshot(s.encounter, 'draft')).decode('utf-8')
+        return section(text, 'REFERENCE RETRIEVAL')
+
+    def test_a_failed_retrieval_is_one_line_saying_reference_validation_failed(self):
+        failure = jobs.retrieval_failure(date(2026, 10, 21), 'RuntimeError')
+        (note,) = failure['notes']
+        self.assertTrue(note.startswith('Reference validation failed: '), note)
+        self.assertEqual(self.section_for([failure]), [f'  - {note}', NOT_CONNECTED_LINE])
+
+    def test_a_failed_entry_whose_note_does_not_say_so_or_that_has_none_still_says_reference_validation_failed(self):
+        for notes, line in ((['Synthetic reason.'], 'Reference validation failed: Synthetic reason.'),
+                            (['', 7], serializers.REFERENCE_FAILED), ('not a list', serializers.REFERENCE_FAILED)):
+            with self.subTest(notes=notes):
+                failure = {**jobs.retrieval_failure(None, 'ValueError'), 'notes': notes}
+                self.assertEqual(self.section_for([failure]), [f'  - {line}', NOT_CONNECTED_LINE])
+
+    def test_beside_a_code_trace_each_reads_as_what_it_is(self):
+        trace = {'code': '43239', 'service_date': '2026-10-21', 'facts': [], 'passages': [], 'lookups': [],
+                 'notes': ['43239: synthetic note.']}
+        failure = jobs.retrieval_failure(date(2026, 10, 21), 'RuntimeError')
+        self.assertEqual(self.section_for([trace, failure]),
+                         ['  - 43239 · service date 2026-10-21', '    Note: 43239: synthetic note.',
+                          f'  - {failure["notes"][0]}', NOT_CONNECTED_LINE])
+
+
+@override_settings(**LIVE)
+class FailedRetrievalDownloadsTests(HarnessCase):
+    """The server's own TXT and CSV, draft and reviewed, of an encounter whose retrieval raised: the download verifier
+    (ops/verify_downloads.py) still passes both formats, and REFERENCE RETRIEVAL says reference validation failed."""
+
+    def downloads(self):
+        with mock.patch('studio.jobs.reference_passages.retrieve', side_effect=RuntimeError('synthetic defect')), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            encounter_id = self.create()
+            drain()
+        encounter = self.encounter(encounter_id)
+        (note,) = encounter.current_assessment.retrieval[0]['notes']
+        reviewer = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
+        for kind in ('draft', 'reviewed'):
+            if kind == 'reviewed':
+                for proposal in self.client.get(f'/api/encounters/{encounter_id}').json()['assessment']['proposals']:
+                    if 'approve' in proposal['allowed_actions']:
+                        response = self.post(f'/api/encounters/{encounter_id}/decisions',
+                                             {'proposal_id': proposal['id'], 'action': 'approve',
+                                              'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
+                        self.assertEqual(response.status_code, 201, response.content)
+                self.assertTrue(review.readiness(encounter)['reviewed'], review.readiness(encounter))
+            encounter.refresh_from_db()
+            api = json.loads(json.dumps(serializers.encounter_detail(encounter, reviewer), default=str))
+            self.assertEqual((api['harness']['reference_validation']['state'],
+                              api['harness']['reference_validation']['detail']), ('failed', note))
+            snap = reports.snapshot(encounter, kind)
+            text, data = reports.render_txt(snap).decode('utf-8'), reports.render_csv(snap).decode('utf-8')
+            results = (vd.check_txt('harness', f'{kind}.txt', text, kind, api)
+                       + vd.check_csv('harness', f'{kind}.csv', data, kind, api))
+            self.assertEqual([f'{r.check}: {r.detail}' for r in results if r.status != 'pass'], [], kind)
+            self.assertEqual(section(text, 'REFERENCE RETRIEVAL'), [f'  - {note}', NOT_CONNECTED_LINE], kind)
+            self.assertNotIn('synthetic defect', text + data)
+        return text
+
+    def test_corti_only(self):
+        self.assertIn('     Proposed by: Corti', section(self.downloads(), 'APPROVED SELECTIONS'))
+
+    @override_settings(**BOTH)
+    def test_after_peer_review(self):
+        text = self.downloads()
+        self.assertIn('PEER REVIEW', text.splitlines())
 
 
 @override_settings(**LIVE, **BOTH)

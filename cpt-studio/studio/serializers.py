@@ -639,21 +639,45 @@ def _reference_sources(keys):
     return found
 
 
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this "
+                    "assessment's codes, so no proposal was checked against them.")
+
+
+def retrieval_failed(entry) -> bool:
+    """Whether an Assessment.retrieval entry is the record of a retrieval that failed (jobs.retrieval_failure): no
+    code, no fact, no passage, marked 'failed' - never a trace of a code checked (refutation round 1, parity-1)."""
+    return isinstance(entry, dict) and entry.get('failed') is True
+
+
+def failure_note(entry) -> str:
+    """A failed retrieval entry's note - CPT Studio's own sentence saying reference validation failed - or, where the
+    entry carries none, CPT Studio's sentence for it."""
+    notes = entry.get('notes') if isinstance(entry.get('notes'), list) else []
+    return next((item.strip() for item in notes if isinstance(item, str) and item.strip()), REFERENCE_FAILED)
+
+
 def _reference_validation(assessment, active):
-    """'waiting' while processing; 'done' when retrieval ran for the assessment and its traces cover every code a
-    proposal can be decided on (selected or excluded); 'not_run' when there is no assessment, it predates the harness,
-    or no retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is
-    what an absent passages module records too)."""
-    out = {'state': 'not_run', 'codes_checked': 0, 'passages': 0, 'sources': [],
+    """'waiting' while processing; 'failed' when the assessment's retrieval failed - any entry is a failed one
+    (retrieval_failed) - with that entry's note as ``detail``: never 'not_run' or 'done' (refutation round 1,
+    parity-1); 'done' when retrieval ran for the assessment and its traces cover every code a proposal can be decided on
+    (selected or excluded); 'not_run' when there is no assessment, it predates the harness, or no retrieval ran for it -
+    also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what an absent passages
+    module records too). ``detail`` is '' in every state but 'failed'. A failed entry is no code checked, so it is
+    counted in neither ``codes_checked`` nor ``passages``."""
+    out = {'state': 'not_run', 'detail': '', 'codes_checked': 0, 'passages': 0, 'sources': [],
            'not_connected': list(review.NOT_CONNECTED)}
     if active:
         out['state'] = 'waiting'
     if assessment is None:
         return out
-    retrieval = [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
+    entries = [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
+    failures = [entry for entry in entries if retrieval_failed(entry)]
+    retrieval = [entry for entry in entries if not retrieval_failed(entry)]
     traced = {entry.get('code') for entry in retrieval}
     decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
-    if not active and assessment.participants and traced and decidable <= traced:
+    if not active and failures:
+        out.update(state='failed', detail=failure_note(failures[0]))
+    elif not active and assessment.participants and traced and decidable <= traced:
         out['state'] = 'done'
     sources = {}
     for entry in retrieval:

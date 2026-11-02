@@ -2358,6 +2358,31 @@ test('readDom reads the participants card the live app.js renders, and the walk\
   assert.deepEqual(failures(vb.checkParticipantsCard(odd, oddDom.participants)), []);
 });
 
+test('checkParticipantsCard holds a failed reference validation to the card the live app.js draws: failed, never not run or done', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
+  // refutation round 1, parity-1: a retrieval that raised is served as reference_validation 'failed', with its note
+  const app = require(APP);
+  const ready = apiFixture('encounter-harness-ready.json');
+  const failed = { ...ready.harness.reference_validation, state: 'failed', codes_checked: 0, passages: 0, sources: [],
+    detail: 'Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this assessment\'s codes.' };
+  const enc = { ...ready, harness: { ...ready.harness, reference_validation: failed } };
+  const dom = await vb.readDom(fakePage(app.reviewView(enc, app.documentLayout(enc), 'codes', true)));
+  assert.deepEqual(dom.participants.filter(row => row.key === 'reference_validation'), [{ key: 'reference_validation', state: 'failed' }]);
+  assert.deepEqual(vb.checkParticipantsCard(enc, dom.participants).map(r => [r.id, r.status]), [['dom.participants', 'pass']]);
+  // a card that shows it as not run or done fails, and a card showing failed fails against an API that says otherwise
+  for (const shown of ['not_run', 'done', 'waiting']) {
+    const rows = dom.participants.map(row => (row.key === 'reference_validation' ? { ...row, state: shown } : row));
+    assert.deepEqual(failures(vb.checkParticipantsCard(enc, rows)), ['dom.participants'], shown);
+  }
+  for (const served of ['not_run', 'done']) {
+    const other = { ...enc, harness: { ...enc.harness, reference_validation: { ...failed, state: served } } };
+    assert.deepEqual(failures(vb.checkParticipantsCard(other, dom.participants)), ['dom.participants'], served);
+  }
+  // the walk's summary records the state as served, and never the sentence
+  const summary = vb.summarize(enc);
+  assert.deepEqual(summary.harness.reference_validation, { state: 'failed', codes_checked: 0, passages: 0, sources: [] });
+  assert.equal(JSON.stringify(summary).includes(failed.detail), false);
+});
+
 test('summarize records which participants ran and what reference validation retrieved, never a participant\'s sentence', () => {
   const enc = apiFixture('encounter-harness-degraded.json');
   const summary = vb.summarize(enc);
