@@ -639,8 +639,10 @@ def _reference_sources(keys):
     return found
 
 
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this "
-                    "assessment's codes, so no proposal was checked against them.")
+# A failed entry's note where it carries none: the facts jobs.RETRIEVAL_FAILED states (refutation round 2, truth-4).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
+                    "retrieved for this assessment's codes, so none is listed here. Each code's checks read the CMS facts "
+                    "before that and stand as shown.")
 
 
 def retrieval_failed(entry) -> bool:

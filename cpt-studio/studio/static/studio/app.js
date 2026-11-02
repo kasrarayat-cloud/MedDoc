@@ -96,9 +96,11 @@ const REFERENCE_STATES = {
   failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed here; each code\'s checks read the CMS facts before that and stand as shown.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
-// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): nothing was
-// retrieved for any code - never to be read as a lookup that found nothing for this one.
-const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage was retrieved for this code.';
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no record of the
+// reference facts and passages retrieved is listed for any code - never to be read as a lookup that found nothing for
+// this one, nor as checks that did not run: the code's CMS reference checks read the facts first, and stand as its
+// status lines show them (refutation round 2, truth-4).
+const RETRIEVAL_FAILED = 'Reference validation failed for this assessment: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed for this code. Its CMS reference checks read the facts before that and stand as shown.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };

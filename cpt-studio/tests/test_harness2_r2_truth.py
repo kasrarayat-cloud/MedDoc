@@ -6,11 +6,12 @@ Synthetic data only; nothing is sent. The encounters are carried through the rea
 ScriptedCorti, the real replay adapters and tool loop with CPT Studio's CMS tool executor, the readers, the engine, the
 API and the report renderers), as the round's verifiers reproduced each finding.
 """
+import json
 from types import SimpleNamespace
 
 from django.test import Client, override_settings
 
-from studio import models, review, serializers
+from studio import jobs, models, reports, review, serializers
 from tests.support import factories as f
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
 from tests.test_pipeline_api import drain
@@ -142,3 +143,75 @@ class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, Colo
         drain()
         block = self.block(encounter_id)
         self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('done', '', 2))
+
+
+# --- truth-4: a retrieval that failed says what failed, never that the CMS checks did not run ------------------------
+
+# The plan's shared wording (verify-harness-r2/REPAIR-PLAN.md): what failed is the record of the CMS facts and passages
+# retrieved; each code's checks read the CMS facts before that (jobs.run_assess looks them up first), and stand.
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
+                    "retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's checks "
+                    "read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides "
+                    "no status, so the assessment stands as made.")
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
+                    "retrieved for this assessment's codes, so none is listed here. Each code's checks read the CMS facts "
+                    "before that and stand as shown.")
+
+
+def tamper_one_passage():
+    """The integrity failure the passages module anticipates: a stored passage changed after import, which
+    load_passages refuses ("does not match its sha256; it was changed after import")."""
+    row = models.ReferencePassage.objects.order_by('pk').first()
+    models.ReferencePassage.objects.filter(pk=row.pk).update(text=row.text + ' (changed after import)')
+
+
+class RetrievalFailureWordingMixin:
+    """A retrieval whose passages cannot be loaded is recorded as failed (HARNESS.md 5, refutation round 1 parity-1)
+    after every proposal was checked against the CMS facts: its note, the API's detail, the page's fallbacks and the
+    TXT say what failed and never that no proposal was checked (refutation round 2, truth-4)."""
+
+    def assertSaysWhatFailed(self, encounter_id):
+        note = RETRIEVAL_FAILED.format(error='ValueError')
+        self.assertEqual(jobs.RETRIEVAL_FAILED.format(error='ValueError'), note)
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(final.retrieval, [{'code': '', 'service_date': '2026-10-14', 'facts': [], 'passages': [],
+                                            'lookups': [], 'notes': [note], 'failed': True}])
+        decidable = list(final.proposals.exclude(bucket='alternative'))
+        self.assertTrue(decidable)
+        for proposal in decidable:  # what the note says: each code's checks read the CMS facts, and stand
+            statuses = {check['id']: check['status'] for check in proposal.checks}
+            self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('pass', 'pass'), proposal.code)
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        block = detail['harness']['reference_validation']
+        self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('failed', note, 0))
+        text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        self.assertIn(f'  - {note}', text.split('\nREFERENCE RETRIEVAL\n', 1)[1].split('\n\n', 1)[0].splitlines())
+        self.assertIn('[PASS] pfs.presence', text)
+        for served in (json.dumps(detail), text):
+            self.assertNotIn('no proposal was checked against them', served)
+        # the fallback where a failed entry carries no note says the same facts
+        self.assertEqual(serializers.REFERENCE_FAILED, REFERENCE_FAILED)
+        self.assertEqual(serializers.failure_note({'code': '', 'failed': True, 'notes': []}), REFERENCE_FAILED)
+
+    def run_tampered(self):
+        tamper_one_passage()
+        encounter_id = self.create(TWO_EXTENTS)
+        with self.assertLogs('studio.jobs', level='ERROR') as caught:
+            drain()
+        self.assertTrue(any('does not match its sha256' in line for line in caught.output), caught.output)
+        return encounter_id
+
+
+class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+    def test_with_both_participants_after_peer_review(self):
+        encounter_id = self.run_tampered()
+        self.assertEqual(self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['phase'], 2)
+        self.assertSaysWhatFailed(encounter_id)
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+    def test_corti_only(self):
+        encounter_id = self.run_tampered()
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertSaysWhatFailed(encounter_id)

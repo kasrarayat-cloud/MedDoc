@@ -2012,3 +2012,22 @@ test('R2-TRUTH truth-3: reference validation that no CMS reference file applied 
   const done = rowOf({ ...ready.harness.reference_validation, detail });
   assert.ok(done.includes('<p>2 codes checked against the CMS reference files; 3 passages of verbatim CMS text retrieved.</p>') && !done.includes(app.escapeHtml(detail)), done);
 });
+
+test('R2-TRUTH truth-4: a failed retrieval says what failed and that each code\'s CMS checks stand, never that no proposal was checked', () => {
+  // the plan's shared wording (jobs.RETRIEVAL_FAILED), as the API serves it for a passage load that raised
+  const note = 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved for this assessment\'s codes (ValueError, logged), so none is listed here. Each code\'s checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides no status, so the assessment stands as made.';
+  for (const said of [app.REFERENCE_STATES.failed[2], app.RETRIEVAL_FAILED]) {
+    assert.equal(/no proposal was checked|no CMS reference fact or passage was retrieved/.test(said), false, said);
+    assert.ok(said.includes('could not record which CMS reference facts and passages it retrieved') && said.includes('stand as shown'), said);
+  }
+  const ready = fixture(HARNESS_READY);
+  const failed = { ...ready.harness.reference_validation, state: 'failed', detail: note, codes_checked: 0, passages: 0, sources: [] };
+  const doc = { ...ready, harness: { ...ready.harness, reference_validation: failed },
+    assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(proposal => ({ ...proposal, retrieval: [] })) } };
+  const html = render(doc);
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.includes(`<p>${app.escapeHtml(note)}</p>`) && count(row, '<p>') === 1, row);
+  // the card's own CMS reference checks line and its retrieval note agree: the checks ran and stand
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>CMS reference checks:</b> passed') && snare.includes(`<p class="harness-note">${app.escapeHtml(app.RETRIEVAL_FAILED)}</p>`), snare);
+});
