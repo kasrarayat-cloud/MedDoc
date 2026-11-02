@@ -1310,8 +1310,9 @@ def estimated_cost(run):
     property of one request), never as its usage summed over the exchanges - and only when the exchanges recorded add up
     to the usage the run records. None for Corti (its usage is in credits, not USD), for a run that reported no usage (a
     reuse, a request not sent), where the pricing module is not installed, where a loop's exchanges do not add up to its
-    usage, and where pricing cannot price the usage: an estimate is informational, so it never fails the page or a
-    report (its error is logged)."""
+    usage, where an exchange that may have been billed reported no usage (unpriced_exchanges: an estimate of the others
+    is no estimate of the run), and where pricing cannot price the usage: an estimate is informational, so it never
+    fails the page or a report (its error is logged)."""
     if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
         return None
     try:
@@ -1321,15 +1322,36 @@ def estimated_cost(run):
             raise
         return None
     try:
-        usages = [dict(exchange.usage or {}) for exchange in run.exchanges.order_by('turn')]
+        exchanges = list(run.exchanges.order_by('turn').values_list('turn', 'state', 'usage'))
+        usages = [dict(usage or {}) for _, _, usage in exchanges]
         if run.usage_basis != participant_loop.LOOP_USAGE_BASIS and len(usages) <= 1:
             return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
-        if participant_loop.summed_usage([usage for usage in usages if usage]) != dict(run.usage):
+        reported = participant_loop.summed_usage([usage for usage in usages if usage])
+        if _unpriced(exchanges) or reported != dict(run.usage):
             return None
         return _usd(pricing.estimate_loop(run.requested_model, usages))
     except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
         log.exception('the usage of run %s could not be priced', run.pk)
         return None
+
+
+def _unpriced(exchanges):
+    """[(turn, state)] of the (turn, state, usage) ``exchanges`` of a tool loop that may have reached the vendor - every
+    one not recorded not sent - and reported no usage; [] for one exchange or none, whose run's own usage decides."""
+    if len(exchanges) <= 1:
+        return []
+    return [(turn, state) for turn, state, usage in exchanges if state != ProviderRun.NOT_SENT and not usage]
+
+
+def unpriced_exchanges(run):
+    """The exchanges of a participant's tool loop that leave its cost unknown, as (turn, state): each may have been
+    billed - it was not recorded not sent - and reported no usage, so the run has no estimate (estimated_cost), and the
+    reports and the trace say which (refutation round 2, truth-12: pricing.estimate_loop counted such an exchange and
+    priced the rest, and that sum was shown as the run's cost). An exchange recorded not sent cost nothing. [] for
+    Corti's runs and for a run of one exchange or none."""
+    if run is None or run.provider not in participants.PARTICIPANTS:
+        return []
+    return _unpriced(list(run.exchanges.order_by('turn').values_list('turn', 'state', 'usage')))
 
 
 # --- harness@2: phases, frozen records, the participants' references, candidates, confirmations (HARNESS.md 11-12) --

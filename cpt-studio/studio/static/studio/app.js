@@ -1848,6 +1848,21 @@ function traceAssessments(entries) {
   }).join('');
 }
 
+// What an exchange of a tool loop that reported no usage came to (its state), in the reports' words.
+const EXCHANGE_OUTCOMES = { succeeded: 'answered', failed: 'failed', unknown: 'outcome unknown' };
+
+// Why a run has no estimate when the exchanges of its tool loop that may have been billed - every one not recorded not
+// sent - reported no usage (review.unpriced_exchanges; refutation round 2, truth-12); '' otherwise.
+function unpricedNote(run) {
+  const exchanges = objects(run.exchanges);
+  if (exchanges.length < 2) return '';
+  const named = exchanges.filter(exchange => exchange.state !== 'not_sent' && !(exchange.usage && typeof exchange.usage === 'object' && Object.keys(exchange.usage).length))
+    .map(exchange => `${shownOr(exchange.turn)} (${lookup(EXCHANGE_OUTCOMES, exchange.state, textValue(exchange.state) || 'state not recorded')})`);
+  if (!named.length) return '';
+  const which = named.length === 1 ? `exchange ${named[0]}` : `exchanges ${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+  return `Not estimated: ${which} reported no usage and may have been billed, so the cost of this run cannot be estimated from published rates`;
+}
+
 // One request of one participant, with every field its run records (HARNESS.md 6), then the reading made of it.
 function traceRun(run) {
   const usage = usagePairs(run.usage && typeof run.usage === 'object' ? run.usage : {});
@@ -1866,7 +1881,7 @@ function traceRun(run) {
     ['Latency', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : 'Not recorded'],
     ['Usage', usage.length ? usage.join(' · ') : 'Not reported'],
     ['Usage basis', shownOr(run.usage_basis)],
-    ['Estimated cost', cost ? `$${cost} (estimated from published rates, not reconciled to an invoice)` : 'Not estimated'],
+    ['Estimated cost', cost ? `$${cost} (estimated from published rates, not reconciled to an invoice)` : unpricedNote(run) || 'Not estimated'],
     ['Request sha256', shownOr(run.request_sha256)],
     ['Response sha256', shownOr(run.response_sha256)],
     ['Response bytes', Number.isInteger(run.response_bytes) ? String(run.response_bytes) : 'None recorded'],

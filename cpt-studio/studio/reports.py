@@ -426,7 +426,9 @@ def _participants(assessment):
             name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
             review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused')
         if 'exchanges' in record:  # harness@2 (HARNESS.md 12.3): the run was a tool loop
-            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')))
+            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')),
+                         unpriced_exchanges=[[turn, state] for turn, state in
+                                             review.unpriced_exchanges(runs.get(record.get('run')))])
         out.append(entry)
     return out
 
@@ -1003,6 +1005,20 @@ def _reference_section(snap):
     return lines
 
 
+# What an exchange of a tool loop that reported no usage came to, as its record says (ProviderExchange.state).
+EXCHANGE_OUTCOMES = {ProviderRun.SUCCEEDED: 'answered', ProviderRun.FAILED: 'failed',
+                     ProviderRun.UNKNOWN: 'outcome unknown'}
+
+
+def _unpriced_words(items):
+    """Why a tool loop has no estimate when exchanges that may have been billed reported no usage
+    (review.unpriced_exchanges; refutation round 2, truth-12): an estimate of the others is no estimate of the run."""
+    named = [f'{turn} ({EXCHANGE_OUTCOMES.get(state, state)})' for turn, state in items]
+    which = f'exchange {named[0]}' if len(named) == 1 else f'exchanges {", ".join(named[:-1])} and {named[-1]}'
+    return (f'not estimated: {which} reported no usage and may have been billed, so the cost of this run cannot be '
+            'estimated from published rates')
+
+
 def _participants_section(snap):
     """Each review participant as this assessment read it (HARNESS.md 6-7): vendor, endpoint, the models requested and
     returned, its state, the vendor's request id and response id, usage, the estimated cost, and why it was not used or
@@ -1032,6 +1048,8 @@ def _participants_section(snap):
             lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
         elif entry['estimated_cost_usd'] is not None:
             lines.append(f'    Estimated cost: USD {entry["estimated_cost_usd"]} ({review.COST_BASIS})')
+        elif entry.get('unpriced_exchanges'):
+            lines.append(f'    Estimated cost: {_unpriced_words(entry["unpriced_exchanges"])}')
         elif entry['usage']:
             lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
         else:

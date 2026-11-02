@@ -2054,3 +2054,17 @@ test('R2-TRUTH truth-5: the confirmed findings say what the current assessment m
   const dated = app.confirmedFindings({ ...doc, confirmations: [date] });
   assert.ok(dated.includes('It entered as the member&#x27;s date of service, through the encounter context. Effect: entered as the member&#x27;s service date through the encounter context; this assessment&#x27;s context does not carry it (made before it, or with another member date).'), dated);
 });
+
+test('R2-TRUTH truth-12: a run whose sent exchange reported no usage shows no estimate, and says why', () => {
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first] = astra.runs;
+  const [one, two] = first.exchanges;
+  const runOf = (run) => app.traceView({ ...trace, participants: [{ ...astra, runs: [run] }] }, trace.encounter.id);
+  const unknown = { ...first, state: 'unknown', estimated_cost_usd: null, exchanges: [one, { ...two, state: 'unknown', usage: {}, http_status: null }] };
+  assert.ok(runOf(unknown).includes('<dt>Estimated cost</dt><dd>Not estimated: exchange 2 (outcome unknown) reported no usage and may have been billed, so the cost of this run cannot be estimated from published rates</dd>'), runOf(unknown));
+  // an exchange recorded not sent cost nothing; a run the API prices keeps its estimate
+  const unsent = { ...unknown, exchanges: [one, { ...two, state: 'not_sent', usage: {} }] };
+  assert.ok(runOf(unsent).includes('<dt>Estimated cost</dt><dd>Not estimated</dd>'));
+  assert.ok(runOf(first).includes(`<dt>Estimated cost</dt><dd>$${first.estimated_cost_usd} (estimated from published rates, not reconciled to an invoice)</dd>`));
+});

@@ -1,10 +1,10 @@
-"""Refutation round 2, R2-TRUTH (HARNESS.md 5-7, 11.1-11.3, 12.6, 12.7; I4): what the page, the API, the owner's trace and
-the reports state about the participants' positions and references, reference validation, a retrieval that failed,
-the reviewer's confirmations and a run's estimated cost must be true of the record.
+"""Refutation round 2, R2-TRUTH (HARNESS.md 5-7, 11.1-11.3, 12.6, 12.7; I4): what the page, the API, the owner's trace
+and the reports state about the participants' positions and references, reference validation, a retrieval that
+failed, the reviewer's confirmations and a run's estimated cost must be true of the record.
 
-Synthetic data only; nothing is sent. The encounters are carried through the real pipeline (tests.test_harness2_pipeline:
-ScriptedCorti, the real replay adapters and tool loop with CPT Studio's CMS tool executor, the readers, the engine, the
-API and the report renderers), as the round's verifiers reproduced each finding.
+Synthetic data only; nothing is sent. The encounters are carried through the real pipeline
+(tests.test_harness2_pipeline: ScriptedCorti, the real replay adapters and tool loop with CPT Studio's CMS tool
+executor, the readers, the engine, the API and the report renderers), as the round's verifiers reproduced each finding.
 """
 import json
 from types import SimpleNamespace
@@ -12,8 +12,9 @@ from types import SimpleNamespace
 from django.test import Client, override_settings
 
 from studio import jobs, models, reports, review, serializers
+from studio.types import RawExchange
 from tests.support import factories as f
-from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
+from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase, Harness2Case, asks, facts_call, unknown
 from tests.test_pipeline_api import drain
 
 
@@ -21,7 +22,7 @@ def _proposal(detail, code):
     return next(item for item in detail['assessment']['proposals'] if item['code'] == code)
 
 
-# --- truth-2: a code first proposed in peer review is never said to be one its proposer did not propose ----------------
+# --- truth-2: a code first proposed in peer review is never said to be one its proposer did not propose -------------
 
 PEER_ONLY = 'Fable did not propose this code in its first reading. It proposed it after peer review.'
 
@@ -30,7 +31,8 @@ class PeerProposedPositionTests(ColonCase):
     """The default colon chain: Fable's peer review adds 45378 (support proposed_by ['fable'], phases {'fable':
     'peer_review'}). participant_positions reads the frozen first readings, so its position there is 'not_proposed' -
     and its detail says that is its first reading's, and that it proposed the code after peer review, in the API and in
-    the owner's reconciliation table alike (refutation round 2, truth-2: both said "Fable did not propose this code.")."""
+    the owner's reconciliation table alike (refutation round 2, truth-2: both said "Fable did not propose this
+    code.")."""
 
     def setUp(self):
         super().setUp()
@@ -149,13 +151,13 @@ class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, Colo
 
 # The plan's shared wording (verify-harness-r2/REPAIR-PLAN.md): what failed is the record of the CMS facts and passages
 # retrieved; each code's checks read the CMS facts before that (jobs.run_assess looks them up first), and stand.
-RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
-                    "retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's checks "
-                    "read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides "
-                    "no status, so the assessment stands as made.")
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
-                    "retrieved for this assessment's codes, so none is listed here. Each code's checks read the CMS facts "
-                    "before that and stand as shown.")
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
+                    "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
+                    "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
+                    "and decides no status, so the assessment stands as made.")
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
+                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
+                    "CMS facts before that and stand as shown.")
 
 
 def tamper_one_passage():
@@ -267,9 +269,74 @@ class ConfirmationEffectTests(ColonCase):
         expected = {'state': 'not_read', 'detail': f'not read by this assessment: {ignored["why"]}'}
         detail = self.detail(encounter_id)
         (served,) = detail['confirmations']
-        self.assertEqual((served['current_effect'], self.report_effects(encounter_id)), (expected, [expected['detail']]))
+        self.assertEqual((served['current_effect'], self.report_effects(encounter_id)),
+                         (expected, [expected['detail']]))
         checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
         self.assertEqual(checks['confirmations.ignored']['status'], 'warn')
         self.assertNotIn('confirmations.applied', checks)
         self.assertEqual(final.proposals.get(key='sel:0').status, 'needs_clarification')
         self.assertFalse(models.Decision.objects.exists())  # I4: a confirmation is no decision
+
+
+# --- truth-12: an estimate never covers only some of the exchanges that may have been billed --------------------------
+
+NEVER_SENT = RawExchange(outcome='not_sent', sent=False, requested_model='gpt-6-astra',
+                         error='The deadline passed before the request was sent; nothing was sent.')
+UNPRICED = ("not estimated: exchange 2 (outcome unknown) reported no usage and may have been billed, so the cost of "
+            "this run cannot be estimated from published rates")
+
+
+class CostCoverageTests(Harness2Case):
+    """A tool loop is priced exchange by exchange (pricing.estimate_loop), which counts an exchange that reported no
+    usage and prices the rest. An exchange that may have reached the vendor - any not recorded not sent - and reported
+    no usage leaves the run's cost unknown, so it has no estimate (the trace, the participant row, the reports), and
+    the TXT and the trace say why; one recorded not sent cost nothing (refutation round 2, truth-12: the run of an
+    unknown second exchange showed "Estimated cost $0.0310", exchange 1's alone)."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = f.member(self.ws, f.user('owner_r2truth12'), role=models.Membership.OWNER)
+
+    def served_costs(self, encounter_id, run):
+        owner = Client()
+        owner.force_login(self.owner)
+        trace = owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        traced = [item for participant in trace['participants'] for item in participant['runs']
+                  if item['id'] == str(run.pk)]
+        rows = owner.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        row = next(item for item in rows if item['name'] == 'astra')
+        self.assertEqual(row['run_id'], str(run.pk))  # the row reports the run it names
+        return [item['estimated_cost_usd'] for item in traced], row['estimated_cost_usd']
+
+    def cost_line(self, encounter_id):
+        text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        lines = text.split('\nREVIEW PARTICIPANTS\n', 1)[1].split('\n\n', 1)[0].splitlines()
+        start = lines.index(next(line for line in lines if line.startswith('  - Astra · ')))
+        return next(line for line in lines[start + 1:] if line.startswith('    Estimated cost: '))
+
+    def test_a_sent_exchange_that_reported_no_usage_leaves_the_run_unestimated_and_says_why(self):
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), unknown()]
+        encounter_id = self.create()
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((run.state, run.sent), ('unknown', True))
+        self.assertEqual([(item.turn, item.state, bool(item.usage)) for item in run.exchanges.order_by('turn')],
+                         [(1, 'succeeded', True), (2, 'unknown', False)])
+        self.assertTrue(run.usage)  # exchange 1's, which pricing alone would price as the run's
+        self.assertIsNone(review.estimated_cost(run))
+        self.assertEqual(review.unpriced_exchanges(run), [(2, 'unknown')])
+        self.assertEqual(self.served_costs(encounter_id, run), ([None], None))
+        self.assertEqual(self.cost_line(encounter_id), f'    Estimated cost: {UNPRICED}')
+
+    def test_an_exchange_recorded_not_sent_cost_nothing_and_the_estimate_stands(self):
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), NEVER_SENT]
+        encounter_id = self.create()
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual([(item.turn, item.state) for item in run.exchanges.order_by('turn')],
+                         [(1, 'succeeded'), (2, 'not_sent')])
+        self.assertEqual(review.unpriced_exchanges(run), [])
+        self.assertEqual(review.estimated_cost(run), '0.0310')  # 2,500 in x $10/M + 120 out x $50/M, exchange 1's
+        self.assertEqual(self.served_costs(encounter_id, run), (['0.0310'], '0.0310'))
+        self.assertEqual(self.cost_line(encounter_id),
+                         f'    Estimated cost: USD 0.0310 ({review.COST_BASIS})')

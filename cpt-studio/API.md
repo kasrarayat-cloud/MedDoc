@@ -205,8 +205,12 @@ sentence ("It returned 1 code that cannot be listed: ... It is not shown and nev
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
 loop is priced exchange by exchange (Astra's long-context rate is a property of one request), and has no estimate when
-its recorded exchanges do not add up to its usage. `reused` is true when a retained answer to the identical request was
-reused and nothing was sent.
+its recorded exchanges do not add up to its usage, or when an exchange that may have been billed - any not recorded
+not sent - reported no usage: an estimate of the others is no estimate of the run (refutation round 2, truth-12: a
+loop whose second exchange's read timed out showed exchange 1's price as the run's). The reports' REVIEW PARTICIPANTS
+and the trace say which exchange ("not estimated: exchange 2 (outcome unknown) reported no usage and may have been
+billed, so the cost of this run cannot be estimated from published rates"); an exchange recorded not sent cost
+nothing. `reused` is true when a retained answer to the identical request was reused and nothing was sent.
 
 `harness.reference_validation.state` is `waiting` while processing, `failed` when the current assessment's retrieval
 failed, `done` when retrieval ran for it, its traces cover every code a proposal can be decided on and an installed
