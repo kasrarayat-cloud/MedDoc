@@ -2475,7 +2475,9 @@ def reconcile(encounter, run, user, note):
     A harness participant's run (refutation round 1, sends-1): when nothing else blocks a send and Corti's run in use
     answers the request the context makes, the participants' chain starts from that run, as a context change that
     keeps the request does - so Corti's request, sent or recorded not sent, is never attempted again behind another
-    run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before.
+    run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before: also
+    for a context an earlier version recorded, which the predict remakes under the current rules before anything is
+    sent (_remade_context), since those rules may hold the encounter where the earlier ones did not.
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -2491,7 +2493,7 @@ def reconcile(encounter, run, user, note):
         if context is not None and revision is not None and context.revision_id == revision.pk:
             corti = _run_in_use(revision)
             if (run.purpose in PARTICIPANT_PURPOSES and participants.configured()
-                    and not _unreconciled_unknown(encounter)
+                    and context.version not in EARLIER_CONTEXT_VERSIONS and not _unreconciled_unknown(encounter)
                     and not gi_context.is_member_conflict((context.facts or {}).get('service_date'))
                     and _run_answers(corti, revision, context)):
                 _after_predict(encounter, revision, context, corti, key=f'assess:{context.pk}:{corti.pk}',

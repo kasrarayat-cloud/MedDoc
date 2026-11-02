@@ -958,6 +958,27 @@ class NotSentAttemptTests(HarnessCase):
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
 
+    def test_a_reconciliation_on_a_context_an_earlier_version_recorded_queues_the_predict_that_remakes_it(self):
+        # the participants' chain re-checks with Corti's run only on a current context: an earlier version's is remade
+        # under the current rules first, by the predict, since they may hold the encounter where the earlier did not
+        earlier = jobs.EARLIER_CONTEXT_VERSIONS[-1]
+        self.adapters['astra'].outcomes = ['unknown']
+        labels = {'CONTEXT_VERSION': earlier, 'EARLIER_CONTEXT_VERSIONS': jobs.EARLIER_CONTEXT_VERSIONS[:-1]}
+        with mock.patch.multiple(jobs, **labels):
+            encounter_id = self.create()
+            drain()
+        context = self.encounter(encounter_id).current_context
+        self.assertEqual(context.version, earlier)
+        astra = self.runs_of(encounter_id, 'astra')[0]
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        queued = self.jobs_of(encounter_id)[-1]
+        self.assertEqual((queued.kind, queued.idempotency_key),
+                         ('predict', f'predict:{context.pk}:after-reconcile:{astra.pk}'))
+        drain()
+        self.assertEqual(self.encounter(encounter_id).current_context.version, jobs.CONTEXT_VERSION)
+
     def test_a_date_change_never_attempts_a_participant_s_unsent_request_again(self):  # N1
         self.adapters['astra'].outcomes = ['not_sent']
         encounter_id = self.create(OFFICE_NOTE.replace('Date of service: 2026-10-20\n', ''), service_date='2026-10-20')
