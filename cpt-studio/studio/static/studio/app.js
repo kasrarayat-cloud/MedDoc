@@ -113,14 +113,14 @@ const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', canno
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
-// What a verified candidate's consistency check established, by fact (HARNESS.md 12.5) - and, for a status, what it did
-// not: the check reads the passage's section, never whether it names the code's own act.
+// What a verified candidate's consistency check established, by fact (HARNESS.md 12.5): a status is read by CPT Studio's
+// readers on the act the code accounts for, in the passage's whole sentence (refutation round 2, EV2-1).
 const VERIFIED_CHECKS = {
   service_date: 'it states that calendar date',
   extent: 'it names that landmark',
   target: 'it names that structure',
   cannulation: 'it states that cannulation outcome',
-  performed_status: 'it lies in no history, plan or indication section (the check does not read whether it names this code\'s own act)',
+  performed_status: 'CPT Studio\'s readers read its whole sentence as stating that status for the act this code accounts for (for a code of the whole service, for that service)',
   em_basis: 'it states a total time in minutes or a level of medical decision making',
 };
 // Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
@@ -833,12 +833,30 @@ function clarificationQuestion(clarification, doc) {
 }
 
 // Quoted passages of the document (a candidate's or a confirmation's spans), each with its page; one not at its
-// position in the current revision is flagged, never passed off as found.
-function quotedSpans(spans, exact) {
-  return objects(spans).map(span => {
+// position in the current revision is flagged, never passed off as found. ``sentences``: a candidate's (HARNESS.md
+// 12.5), the readers' whole sentence of each span, in its order - a span that is a slice of a longer sentence is shown
+// with that sentence, so a hedge around it is never hidden behind a Verified badge (refutation round 2, EV2-1); one whose
+// sentence is not served exactly says so. A payload that serves no sentences (a confirmation) is quoted as before.
+function quotedSpans(spans, exact, sentences) {
+  return objects(spans).map((span, index) => {
     const page = Number.isInteger(span.page) ? ` (page ${span.page})` : '';
-    return `“${textValue(span.text)}”${page}${exact(span) ? '' : ' — not found at this position in the current revision'}`;
+    const quote = `“${textValue(span.text)}”${page}`;
+    if (!exact(span)) return `${quote} — not found at this position in the current revision`;
+    const whole = spanSentence(span, index, sentences, exact);
+    if (whole === null) return quote;
+    return whole === '' ? `${quote} — its whole sentence is not shown: read it in the document before confirming` : `${quote} — a part of the sentence “${whole}”`;
   });
+}
+
+// The readers' whole sentence of an exact span of a candidate (candidate.sentences[index]): null when the span is that
+// whole sentence, or when no sentences are served at all; '' when the served sentence is not an exact passage holding
+// the span (fail closed: it cannot be shown as the span's sentence); otherwise the sentence's text.
+function spanSentence(span, index, sentences, exact) {
+  if (!Array.isArray(sentences)) return null;
+  const sentence = sentences[index];
+  if (!sentence || typeof sentence !== 'object' || !exact(sentence) || !Number.isInteger(sentence.start) || !Number.isInteger(sentence.end)
+      || sentence.start > span.start || span.end > sentence.end) return '';
+  return sentence.start === span.start && sentence.end === span.end ? null : textValue(sentence.text);
 }
 
 // A reviewer's confirmation of a question (clarification.confirmation, HARNESS.md 11.3): who located the passage and
@@ -864,12 +882,14 @@ function confirmControl(candidate, clarificationId) {
 function candidateAnswer(candidate, clarificationId, confirmable, exact) {
   const verified = candidate.verified === true;
   const spans = objects(candidate.spans);
-  const quotes = quotedSpans(spans, exact);
+  const quotes = quotedSpans(spans, exact, candidate.sentences);
   const value = textValue(candidate.value).trim();
   const checked = lookup(VERIFIED_CHECKS, candidate.fact, 'it passes the consistency check for this fact');
   const why = verified ? `Verified: its passage is an exact slice of the document and ${checked}. It is still only a candidate: read the passage before confirming it.`
     : `Not verified, so it cannot be confirmed: ${textValue(candidate.why).trim() || 'no reason was recorded.'}`;
-  const action = confirmable && verified && spans.length > 0 && spans.every(exact) && textValue(candidate.attestation) ? confirmControl(candidate, clarificationId) : '';
+  // fail closed: a span whose whole sentence cannot be shown is never confirmed from this page
+  const shown = spans.every((span, index) => spanSentence(span, index, candidate.sentences, exact) !== '');
+  const action = confirmable && verified && spans.length > 0 && spans.every(exact) && shown && textValue(candidate.attestation) ? confirmControl(candidate, clarificationId) : '';
   return `<li class="candidate-answer" data-candidate="${escapeHtml(textValue(candidate.id))}" data-verified="${verified}"><span class="participant-head"><strong>${escapeHtml(value || 'No value CPT Studio can state')}</strong>${verified ? badge('green', 'Verified') : badge('amber', 'Not verified')}</span>${(quotes.length ? quotes : ['No passage is cited.']).map(quote => `<p class="candidate-quote">${escapeHtml(quote)}</p>`).join('')}<small class="check-source">${escapeHtml(locatedBy(candidate))}</small><small class="check-source">${escapeHtml(why)}</small>${action}</li>`;
 }
 

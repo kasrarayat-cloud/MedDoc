@@ -1,11 +1,17 @@
 """Candidate answers to open questions (HARNESS.md 11.3, 12.5): the sources of each fact, the value in CPT Studio's own
 words, the verification - located passages, exact spans, no page break, the consistency check of each fact - the merge
-of identical candidates, their ids and phases, and that agreement never verifies one. Pure; synthetic data only."""
+of identical candidates, their ids and phases, and that agreement never verifies one. Pure; synthetic data only.
+
+A status is read as CPT Studio's readers read it (refutation round 2, EV2-1): against the documented-service inventory
+the readers build from the same text, for the act the proposal's code accounts for, in the passage's whole sentence."""
 import hashlib
+from dataclasses import replace
+from datetime import date
 
 from django.test import SimpleTestCase
 
 from studio import candidates as c
+from studio.gi import services as gi_services
 from studio.participants import prompt, reading
 from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantReading, ParticipantService, QuestionAnswer,
                           canonical_json)
@@ -38,7 +44,9 @@ OFFICE_NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient.\nOffice visit for 
 DATE = c.Question(id='q-date', scope='encounter', fact='service_date')
 EXTENT = c.Question(id='q-extent', scope='proposal', fact='extent', family='gi.colonoscopy', proposal_key='sel:0')
 STATUS = c.Question(id='q-status', scope='proposal', fact='performed_status', family='gi.colonoscopy',
-                    proposal_key='sel:1')
+                    proposal_key='sel:1', code='45385', service='S1')
+# the documented-service inventory the readers build from NOTE: one colonoscopy (S1) with its snare removal performed
+INVENTORY = gi_services.build(NOTE, service_date=date(2026, 10, 21))
 TARGET = c.Question(id='q-target', scope='service', fact='target', family='gi.eus')
 CANNULATION = c.Question(id='q-cannulation', scope='service', fact='cannulation', family='gi.ercp')
 BASIS = c.Question(id='q-basis', scope='proposal', fact='em_basis', family='gi.office_em', proposal_key='sel:0')
@@ -78,6 +86,7 @@ class DateTests(SimpleTestCase):
             'located_by': ['astra'], 'phase': 'independent', 'phases': {'astra': 'independent'},
             'runs': ['run-astra-1'],
             'spans': [{'start': start, 'end': start + len(DATE_QUOTE), 'text': DATE_QUOTE, 'page': 1}],
+            'sentences': [{'start': start, 'end': start + len(DATE_QUOTE), 'text': DATE_QUOTE}],
             'verified': True, 'why': '', 'attestation': c.attestation('2026-10-21')})
 
     def test_a_passage_that_states_no_such_calendar_date_is_unverified(self):
@@ -181,41 +190,63 @@ class CannulationTests(SimpleTestCase):
 class StatusTests(SimpleTestCase):
     def candidate(self, status, quote):
         return c.candidates(STATUS, NOTE, PAGES, [frozen('astra', NOTE, services=[service(NOTE, status=status,
-                                                                                         quotes=[quote])])])
+                                                                                         quotes=[quote])])],
+                            inventory=INVENTORY)
 
-    def test_a_passage_outside_history_plan_and_indication_is_verified(self):
+    def test_a_passage_the_readers_read_as_the_code_s_act_done_is_verified(self):
         (verified,) = self.candidate('performed', SNARE_QUOTE)
         self.assertEqual((verified['value'], verified['verified'], verified['spans'][0]['page']),
                          ('performed', True, 2))
+        # refutation round 2, EV2-1: a passage outside history, plan and indication that does not state the code's act
+        # - the examination alone - is no answer to whether the snare removal was performed
+        (examination,) = self.candidate('performed', CECUM_QUOTE)
+        self.assertEqual((examination['verified'], examination['why']),
+                         (False, 'The passage does not name the snare removal.'))
 
     def test_history_plan_and_indication_never_verify_a_status(self):
         for quote, kind in ((PLAN_QUOTE, 'plan'), (HISTORY_QUOTE, 'history'), (INDICATION_QUOTE, 'indication')):
             for status in ('performed', 'planned', 'historical'):
                 (candidate,) = self.candidate(status, quote)
                 self.assertFalse(candidate['verified'], (quote, status))
-                self.assertEqual(candidate['why'], f'The passage is in a {kind} section, which never documents a '
-                                                   'service at this encounter.')
+                article = 'an' if kind == 'indication' else 'a'
+                self.assertEqual(candidate['why'], f'The passage is in {article} {kind} section, which never documents '
+                                                   'a service at this encounter.')
 
     def test_attempted_and_unclear(self):
         (attempted,) = self.candidate('attempted_incomplete', SNARE_QUOTE)
         self.assertEqual((attempted['value'], attempted['verified']), ('', False))
         self.assertIn('attempted, incomplete service', attempted['why'])
         self.assertEqual(self.candidate('unclear', SNARE_QUOTE), [])  # the participant does not settle it
-        (answer,) = c.candidates(STATUS, NOTE, PAGES, answers=[peer('fable', NOTE, 'not performed', SNARE_QUOTE)])
-        self.assertEqual((answer['value'], answer['verified']), ('not performed', True))
-        (odd,) = c.candidates(STATUS, NOTE, PAGES, answers=[peer('fable', NOTE, 'done', SNARE_QUOTE)])
+        # refutation round 2, EV2-1: 'not performed' is never verified on a passage the readers read as the snare
+        # removal done (this pinned it verified, on the section alone)
+        (answer,) = c.candidates(STATUS, NOTE, PAGES, answers=[peer('fable', NOTE, 'not performed', SNARE_QUOTE)],
+                                 inventory=INVENTORY)
+        self.assertEqual((answer['value'], answer['verified'], answer['why']),
+                         ('not performed', False,
+                          'The passage states the snare removal as performed, not as not performed.'))
+        (odd,) = c.candidates(STATUS, NOTE, PAGES, answers=[peer('fable', NOTE, 'done', SNARE_QUOTE)],
+                              inventory=INVENTORY)
         self.assertEqual((odd['value'], odd['verified']), ('', False))
 
+    def test_without_a_subject_the_readers_can_check_no_status_is_verified(self):
+        reading_ = [frozen('astra', NOTE, services=[service(NOTE, quotes=[SNARE_QUOTE])])]
+        for question, inventory in ((STATUS, None), (replace(STATUS, service=''), INVENTORY),
+                                    (replace(STATUS, service='S7'), INVENTORY)):
+            (candidate,) = c.candidates(question, NOTE, PAGES, reading_, inventory=inventory)
+            self.assertEqual((candidate['verified'], candidate['why']),
+                             (False, "CPT Studio's readers cannot tell which act this passage documents."))
+
     def test_a_quote_located_twice_needs_every_occurrence_to_pass(self):
-        text = NOTE + 'History: The colonoscope was advanced to the cecum.\n'
+        text = NOTE + 'History: A 6 mm polyp in the ascending colon was removed with a cold snare.\n'
         (candidate,) = c.candidates(STATUS, text, (), [frozen('astra', text, services=[service(
-            text, quotes=[CECUM_QUOTE])])])
+            text, quotes=[SNARE_QUOTE])])], inventory=gi_services.build(text, service_date=date(2026, 10, 21)))
         self.assertEqual(len(candidate['spans']), 2)
         self.assertEqual((candidate['verified'], candidate['why']),
                          (False, 'The passage is in a history section, which never documents a service at this '
                                  'encounter.'))
-        (extent,) = c.candidates(EXTENT, text, (), [frozen('astra', text, services=[service(
-            text, extent='cecum', quotes=[CECUM_QUOTE])])])
+        twice = NOTE + 'History: The colonoscope was advanced to the cecum.\n'
+        (extent,) = c.candidates(EXTENT, twice, (), [frozen('astra', twice, services=[service(
+            twice, extent='cecum', quotes=[CECUM_QUOTE])])])
         self.assertEqual((len(extent['spans']), extent['verified']), (2, True))
 
 

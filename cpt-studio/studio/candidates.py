@@ -43,9 +43,17 @@ A candidate is verified only when every one of these holds, checked in this orde
   - target: the span names the structure the value names (a design choice of HARNESS.md 12.5);
   - cannulation: the span states that cannulation outcome, by routing's cannulation cues, and not the other (12.5 asks
     for an outcome; the outcome stated must be the value's);
-  - status: the span lies in no history, plan or indication section (gi.sections);
+  - status: CPT Studio's readers read the span's whole sentence as stating exactly that status for the question's
+    subject - the act the proposal's code accounts for, or its service - in the documented service its hold was decided
+    on (reconcile.status_stated, the one check engine._Confirmations applies to every status confirmation too;
+    refutation round 2, EV2-1). A question with no such subject (a hold no documented service decided, an inventory
+    that was inconsistent) has no status candidate that verifies;
   - E/M basis: the span states a total time in minutes (routing's E/M time cues, never a procedure time) for 'time', an
     MDM level for 'mdm'.
+
+Each candidate also carries ``sentences``: for each span, in its order, the readers' whole sentence it lies in
+(reconcile.whole_sentence), so a page shows a span that is a slice of a longer sentence with that sentence and a hedge
+is never hidden behind a Verified badge.
 """
 from __future__ import annotations
 
@@ -56,12 +64,12 @@ from datetime import date
 from functools import lru_cache
 from typing import Optional, Sequence
 
-from studio.gi import cues, sections
+from studio.gi import cues
 from studio.gi.context import find_dates
 from studio.gi.profiles import PROFILES
 from studio.participants import PARTICIPANTS
 from studio.types import LocatedQuote, ParticipantReading, QuestionAnswer, canonical_json
-from studio.validation import engine
+from studio.validation import engine, reconcile
 
 DATE_FACT = 'service_date'
 STATUS_FACT = engine.STATUS_FACT
@@ -73,7 +81,7 @@ MAX_SPANS = 8
 MAX_VALUE_CHARS = 200  # models.FindingConfirmation.value
 # The attestation a confirmation records, with the candidate's value (HARNESS.md 11.3, 12.5).
 ATTESTATION = 'I read this passage in the source document; it documents {value} for this encounter.'
-HELD_SECTIONS = ('history', 'plan', 'indication')  # never documents a service at this encounter (11.3)
+HELD_SECTIONS = reconcile.HELD_SECTIONS  # never documents a service at this encounter (11.3)
 
 # A confirmed status as CPT Studio words it, from what a peer answer states (engine._status_value's normal form) and
 # from a reading's status; every one is a value engine._Confirmations reads ('performed', engine.NOT_PERFORMED_VALUES).
@@ -109,13 +117,16 @@ _UNLOCATED = {'too short': 'Its quote is too short to be located (fewer than 8 c
 
 @dataclass(frozen=True)
 class Question:
-    """An open clarification, as the candidates read it: its id, scope, fact, family and (proposal scope) the key of its
-    proposal."""
+    """An open clarification, as the candidates read it: its id, scope, fact, family and (proposal scope) the key and
+    code of its proposal, and the documented service the readers decided its proposal's hold on (support['service'],
+    '' when none did) - a status question's subject is read there (reconcile.status_subject)."""
     id: str
     scope: str  # encounter | service | proposal
     fact: str
     family: str = ''
     proposal_key: str = ''
+    code: str = ''
+    service: str = ''
 
 
 @dataclass(frozen=True)
@@ -165,13 +176,16 @@ def askable(question: Question) -> bool:
 
 
 def candidates(question: Question, text: str, pages: Sequence = (), readings: Sequence[FrozenReading] = (),
-               answers: Sequence[PeerAnswer] = ()) -> list[dict]:
+               answers: Sequence[PeerAnswer] = (), inventory=None) -> list[dict]:
     """The candidates of ``question`` (see the module docstring), verified against ``text`` (the revision text) and its
     ``pages`` (PageSpan or {page, start, end}); [] for a question no candidate answers or with no source - a Corti-only
-    encounter has neither. Deterministic: the same inputs, in any order, give the same list."""
+    encounter has neither. ``inventory``: the documented-service inventory the final assessment recorded (a
+    ServiceInventory; None when it recorded none or an inconsistent one), which a status is read against. Deterministic:
+    the same inputs, in any order, give the same list."""
     if not askable(question) or not isinstance(text, str):
         return []
     index = _page_index(pages)
+    pages = reconcile.page_spans(pages)
     sources: list[_Source] = []
     for item in sorted(readings, key=_order):
         sources += _reading_sources(question, item)
@@ -184,11 +198,11 @@ def candidates(question: Question, text: str, pages: Sequence = (), readings: Se
         entry = merged.get(key)
         if entry is None:
             entry = merged[key] = {'value': source.value, 'spans': spans, 'by': {}, 'runs': [],
-                                   'why': _why(question, source, spans, text, index)}
+                                   'why': _why(question, source, spans, text, index, pages, inventory)}
         entry['by'].setdefault(source.name, set()).add(source.phase)
         if source.run not in entry['runs']:
             entry['runs'].append(source.run)
-    out = [_candidate(question, entry, index) for entry in merged.values()]
+    out = [_candidate(question, entry, index, text, pages) for entry in merged.values()]
     out.sort(key=lambda c: (not c['verified'], c['spans'][0]['start'] if c['spans'] else len(text) + 1, c['value'],
                             c['id']))
     return out
@@ -396,7 +410,7 @@ def _sentence(clause: str) -> str:
     return clause[:1].upper() + clause[1:] + ('' if clause.endswith('.') else '.')
 
 
-def _why(question: Question, source: _Source, spans: tuple, text: str, index) -> str:
+def _why(question: Question, source: _Source, spans: tuple, text: str, index, pages=(), inventory=None) -> str:
     """'' for a verified candidate; otherwise the first check that fails, in CPT Studio's words."""
     if source.problem or not source.value:
         return _sentence(source.problem or 'the value cannot be stated in CPT Studio\'s words')
@@ -412,13 +426,13 @@ def _why(question: Question, source: _Source, spans: tuple, text: str, index) ->
         if _crosses(index, span):
             return 'A passage runs across a page break (a [Page N] line).'
     for span in spans:
-        failed = _inconsistent(question, source.value, text, span)
+        failed = _inconsistent(question, source.value, text, span, pages, inventory)
         if failed:
             return _sentence(failed)
     return ''
 
 
-def _inconsistent(question: Question, value: str, text: str, span) -> str:
+def _inconsistent(question: Question, value: str, text: str, span, pages=(), inventory=None) -> str:
     """Why ``span`` does not pass the consistency check for ``question``'s fact; '' when it does."""
     passage = text[span.start:span.end]
     fact = question.fact
@@ -449,21 +463,15 @@ def _inconsistent(question: Question, value: str, text: str, span) -> str:
             return 'the passage states no level of medical decision making'
         return ''
     if fact == STATUS_FACT:
-        held = [kind for kind in _section_kinds(text, span) if kind in HELD_SECTIONS]
-        return (f'the passage is in a {held[0]} section, which never documents a service at this encounter'
-                if held else '')
+        # the act the proposal's code accounts for (or its service), as the readers read the whole sentence (EV2-1)
+        return reconcile.status_stated(inventory, question.service, question.code, question.family, value,
+                                       span.start, span.end, text, pages)
     return 'the value answers a question no candidate answers'
 
 
 @lru_cache(maxsize=8)
 def _dates(text: str):
     return find_dates(text)
-
-
-def _section_kinds(text: str, span) -> list[str]:
-    lay = sections.layout(text)
-    kinds = [section.kind for section in lay.sections if section.start < span.end and span.start < section.end]
-    return kinds or [lay.section_at(span.start).kind]
 
 
 def _exact(text: str, span) -> bool:
@@ -494,7 +502,19 @@ def _page_of(index, position: int) -> Optional[int]:
     return next((number for start, end, number in index if start <= position < end), None)
 
 
-def _candidate(question: Question, entry: dict, index) -> dict:
+def _sentences_of(text: str, spans, pages) -> list[dict]:
+    """The readers' whole sentence each span lies in (reconcile.whole_sentence), in span order: what a page shows beside
+    a span that is a slice of a longer sentence (refutation round 2, EV2-1). A span that is not an exact slice of the
+    text is shown as it is: it is never verified, and no sentence of the text is claimed for it."""
+    out = []
+    for span in spans:
+        start, end = ((span.start, span.end) if not _exact(text, span)
+                      else reconcile.whole_sentence(text, span.start, span.end, pages))
+        out.append({'start': start, 'end': end, 'text': text[start:end] if _exact(text, span) else span.text})
+    return out
+
+
+def _candidate(question: Question, entry: dict, index, text: str = '', pages=()) -> dict:
     by = entry['by']
     located = sorted(by, key=lambda name: (PARTICIPANTS.index(name) if name in PARTICIPANTS else len(PARTICIPANTS),
                                            name))
@@ -508,6 +528,7 @@ def _candidate(question: Question, entry: dict, index) -> dict:
             'runs': list(entry['runs']),
             'spans': [{'start': s.start, 'end': s.end, 'text': s.text, 'page': _page_of(index, s.start)}
                       for s in spans],
+            'sentences': _sentences_of(text, spans, pages),
             'verified': entry['why'] == '', 'why': entry['why'],
             # the exact sentence a confirmation of it must carry (as the session serves a decision's), '' if unverified
             'attestation': attestation(entry['value']) if entry['why'] == '' else ''}

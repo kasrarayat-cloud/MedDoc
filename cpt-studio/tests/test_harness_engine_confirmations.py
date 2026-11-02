@@ -51,6 +51,33 @@ STATUS_ONLY = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-
                'The colonoscope was advanced to the cecum and the examination was completed.\n'
                'It is unclear whether biopsies of the ascending colon lesion were taken.\n'
                'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n' + SPECIMEN + '\n')
+# Refutation round 2, EV2-1: a status is read on the act its code accounts for, so a status confirmation is read only
+# where CPT Studio's readers read its passage's whole sentence as that act with that status. Here 45380 cites the hedge
+# while another sentence states the biopsy done, or denies, cancels, plans or dates it: the two readers disagree (or no
+# biopsy is documented as done) and it is held on its status - and that sentence truly states the act.
+COLON_TOP = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+             'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n')
+CECUM_DONE = 'The colonoscope was advanced to the cecum and the examination was completed.\n'
+HEDGE = 'It is unclear whether biopsies of the ascending colon lesion were taken.\n'
+SIGMOID_SNARE = 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n'
+DONE_BX = 'Cold forceps biopsies of the ascending colon lesion were taken.'
+NOT_DONE = {'not_performed': 'No biopsies of the ascending colon lesion were obtained.',
+            'cancelled': 'Biopsies of the ascending colon lesion were cancelled.',
+            'planned': 'Biopsies of the ascending colon lesion are planned at the next colonoscopy.',
+            'historical': 'Biopsies of the ascending colon lesion were taken in 2019.'}
+DENIED_BX = NOT_DONE['not_performed']
+
+
+def stating(line, *, extent=True):
+    """The colonoscopy with 45380's biopsy left in doubt and ``line`` stating it; without the extent, 45380 and 45385
+    are also held on it."""
+    return (COLON_TOP + (CECUM_DONE if extent else '') + HEDGE + line + '\n' + SIGMOID_SNARE + SPECIMEN + '\n'
+            + ('' if extent else LAND + '\n'))
+
+
+STATUS_STATED = stating(DONE_BX)  # 45380 held on its status (the readers disagree), 45385 ready
+STATUS_DENIED = stating(DENIED_BX)
+STATUS_AND_EXTENT_DENIED = stating(DENIED_BX, extent=False)
 TIME = 'Time statement: 25 minutes spent on the date of the visit.'
 VISIT = (HEAD + 'Office visit (fictional)\nDate of service: 2026-10-14\nPlace of service: Office\n'
          'Established patient seen for heartburn. Examination unremarkable.\nAssessment: GERD.\n'
@@ -275,17 +302,17 @@ class ConfirmedFactTests(SimpleTestCase):
 
 class ConfirmedStatusTests(SimpleTestCase):
     def test_a_status_confirmed_performed_is_decided_on_its_passage(self):
-        before = run(STATUS_ONLY, STATUS_CODES)
+        before = run(STATUS_STATED, STATUS_CODES)
         held = proposal(before, 'sel:0')
         self.assertEqual((held.code, held.status, questions(held)),
                          ('45380', 'needs_clarification', [('proposal', 'gi.colonoscopy', 'performed_status')]))
-        after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, SPECIMEN, fact='performed_status',
-                                                        family='gi.colonoscopy', key='sel:0', value='performed')])
+        after = run(STATUS_STATED, STATUS_CODES, [confirm(STATUS_STATED, DONE_BX, fact='performed_status',
+                                                          family='gi.colonoscopy', key='sel:0', value='performed')])
         item = proposal(after, 'sel:0')
         self.assertEqual((item.code, item.bucket, item.status, questions(item)), ('45380', 'selected', 'ready', []))
         status = check(item, 'service.status')
         self.assertEqual((status.status, status.source), ('pass', checks.CONFIRMATION_SOURCE))
-        self.assertTrue(status.detail.startswith(f'Performed on the date of service: {WORDS} (“{SPECIMEN}”). CPT '
+        self.assertTrue(status.detail.startswith(f'Performed on the date of service: {WORDS} (“{DONE_BX}”). CPT '
                                                  "Studio's own readers held it: "), status.detail)
         self.assertIn(check(held, 'service.status').detail, status.detail)  # the readers' own reading stays beside it
         self.assertIn(f'Service status: performed ({WORDS}).', item.rationale)
@@ -300,14 +327,14 @@ class ConfirmedStatusTests(SimpleTestCase):
     def test_a_status_confirmed_not_performed_is_excluded_reinstatable_and_keys_stay(self):
         """The status path excludes it (reinstatable: the existing Reinstate path is unchanged). Its key stays sel:0,
         and 45385 keeps sel:1, so the key a later question names is the same proposal before and after."""
-        after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, UNCLEAR, fact='performed_status',
-                                                        family='gi.colonoscopy', key='sel:0', value='not performed')])
+        after = run(STATUS_DENIED, STATUS_CODES, [confirm(STATUS_DENIED, DENIED_BX, fact='performed_status',
+                                                          family='gi.colonoscopy', key='sel:0', value='not performed')])
         self.assertEqual([(p.key, p.code, p.bucket, p.status) for p in after.proposals],
                          [('sel:1', '45385', 'selected', 'ready'), ('sel:0', '45380', 'excluded', 'excluded')])
         item = proposal(after, 'sel:0')
         self.assertTrue(item.reinstatable)
         self.assertEqual(item.exclusion_reason, f'Not performed on the date of service (documented as negated): {WORDS} '
-                                                f'(“{UNCLEAR}”). Reinstate if this code is supported.')
+                                                f'(“{DENIED_BX}”). Reinstate if this code is supported.')
         self.assertEqual(check(item, 'service.status').status, 'fail')
         self.assertEqual(check(item, 'review.reinstatement').status, 'pass')
         # the reconciliation as usual: the biopsy code is no longer an active proposal
@@ -316,27 +343,28 @@ class ConfirmedStatusTests(SimpleTestCase):
     def test_a_planned_or_historical_value_is_worded_as_such(self):
         for value, word in (('planned', 'planned'), ('historical', 'historical'), ('cancelled', 'cancelled'),
                             ('not_performed', 'negated')):
-            after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, UNCLEAR, fact='performed_status',
-                                                            family='gi.colonoscopy', key='sel:0', value=value)])
+            text = stating(NOT_DONE[value])  # the passage the readers read with that status
+            after = run(text, STATUS_CODES, [confirm(text, NOT_DONE[value], fact='performed_status',
+                                                     family='gi.colonoscopy', key='sel:0', value=value)])
             self.assertIn(f'(documented as {word})', proposal(after, 'sel:0').exclusion_reason, value)
 
     def test_a_second_confirmation_on_the_confirmed_assessment_is_bound_to_its_proposal(self):
-        excluded = confirm(STATUS_AND_EXTENT, UNCLEAR, fact='performed_status', family='gi.colonoscopy', key='sel:0',
-                           value='not_performed', cid='conf-a')
-        first = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded], participants=CONFIGURED)
+        excluded = confirm(STATUS_AND_EXTENT_DENIED, DENIED_BX, fact='performed_status', family='gi.colonoscopy',
+                           key='sel:0', value='not_performed', cid='conf-a')
+        first = run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, [excluded], participants=CONFIGURED)
         self.assertEqual([(p.key, p.code, p.bucket) for p in first.proposals],
                          [('sel:1', '45385', 'selected'), ('sel:0', '45380', 'excluded')])
         self.assertEqual(questions(proposal(first, 'sel:1')), [('proposal', 'gi.colonoscopy', 'extent')])
         # a reviewer answers 45385's extent question as that assessment asks it: the identity 45385 records there is the
         # one these inputs give it without any confirmation, so the next assessment finds it
-        unconfirmed = run(STATUS_AND_EXTENT, STATUS_CODES, participants=CONFIGURED)
+        unconfirmed = run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, participants=CONFIGURED)
         self.assertEqual(binding(proposal(first, 'sel:1')), binding(proposal(unconfirmed, 'sel:1')))
-        extent = replace(confirm(STATUS_AND_EXTENT, LAND, fact='extent', family='gi.colonoscopy', key='sel:1',
+        extent = replace(confirm(STATUS_AND_EXTENT_DENIED, LAND, fact='extent', family='gi.colonoscopy', key='sel:1',
                                  value='cecum', cid='conf-b'), **binding(proposal(first, 'sel:1')))
-        second = run(STATUS_AND_EXTENT, STATUS_CODES, [excluded, extent], participants=CONFIGURED)
+        second = run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, [excluded, extent], participants=CONFIGURED)
         self.assertEqual((proposal(second, 'sel:1').code, proposal(second, 'sel:1').status), ('45385', 'ready'))
         self.assertEqual(proposal(second, 'sel:0'), proposal(first, 'sel:0'))
-        self.assertEqual(second, run(STATUS_AND_EXTENT, STATUS_CODES, [extent, excluded],
+        self.assertEqual(second, run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, [extent, excluded],
                                      participants=CONFIGURED))  # whatever the order
 
     def test_a_value_that_is_neither_performed_nor_not_performed_is_not_read(self):
@@ -403,8 +431,8 @@ class GuardTests(SimpleTestCase):
                       encounter_check(after, 'confirmations.ignored').detail)
 
     def test_a_confirmation_never_approves_anything(self):
-        after = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, SPECIMEN, fact='performed_status',
-                                                        family='gi.colonoscopy', key='sel:0', value='performed')])
+        after = run(STATUS_STATED, STATUS_CODES, [confirm(STATUS_STATED, DONE_BX, fact='performed_status',
+                                                          family='gi.colonoscopy', key='sel:0', value='performed')])
         self.assertEqual({p.status for p in after.proposals}, {'ready'})
         self.assertTrue({p.status for p in after.proposals} <= {'ready', 'needs_clarification', 'excluded',
                                                                'informational'})
@@ -475,8 +503,11 @@ class GuardTests(SimpleTestCase):
                                                             by=('astra',))])
             self.assertEqual(without_confirmations(after), before, passage)
             self.assertIn(engine.TOO_SHORT, encounter_check(after, 'confirmations.ignored').detail, passage)
-        read_ = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, 'Specimen', fact='performed_status',
-                                                        family='gi.colonoscopy', key='sel:0', value='performed')])
+        # eight characters are read - here "biopsies" in the sentence that states the biopsy done (refutation round 2,
+        # EV2-1: the passage is read in its whole sentence, as the act the code accounts for)
+        read_ = run(STATUS_STATED, STATUS_CODES, [confirm(STATUS_STATED, 'biopsies', fact='performed_status',
+                                                          family='gi.colonoscopy', key='sel:0', value='performed',
+                                                          evidence=(span(STATUS_STATED, 'biopsies', nth=1),))])
         self.assertEqual(proposal(read_, 'sel:0').status, 'ready')
 
     def test_confirmations_of_one_question_that_disagree_are_all_left_unread(self):
@@ -488,11 +519,17 @@ class GuardTests(SimpleTestCase):
         detail = encounter_check(after, 'confirmations.ignored').detail
         self.assertIn('2 confirmations not read', detail)
         self.assertIn(engine.DISAGREEING, detail)
-        status_a = confirm(STATUS_ONLY, SPECIMEN, fact='performed_status', family='gi.colonoscopy', key='sel:0',
+        # two status confirmations each read on its own passage (refutation round 2, EV2-1: the biopsy stated done, and
+        # stated planned), which disagree: neither is read
+        text = STATUS_STATED + NOT_DONE['planned'] + '\n'
+        status_a = confirm(text, DONE_BX, fact='performed_status', family='gi.colonoscopy', key='sel:0',
                            value='performed', cid='a')
-        status_b = replace(status_a, value='planned', confirmation_id='b')
-        self.assertEqual(without_confirmations(run(STATUS_ONLY, STATUS_CODES, [status_a, status_b])),
-                         run(STATUS_ONLY, STATUS_CODES))
+        status_b = confirm(text, NOT_DONE['planned'], fact='performed_status', family='gi.colonoscopy', key='sel:0',
+                           value='planned', cid='b')
+        both = run(text, STATUS_CODES, [status_a, status_b])
+        self.assertEqual(without_confirmations(both), run(text, STATUS_CODES))
+        self.assertEqual(both.completeness['confirmations']['ignored'],
+                         [{'id': 'a', 'why': engine.DISAGREEING}, {'id': 'b', 'why': engine.DISAGREEING}])
 
     def test_confirmations_that_agree_are_read_together(self):
         a = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum', cid='a')
@@ -617,16 +654,20 @@ DOUBTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
 HEDGED_SNARE = 'the sigmoid polyp was removed with a hot snare'
 JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
 UNLOCATED_SNARE = 'hot snare polypectomy of the sigmoid polyp'  # not in the text: never evidence
+# Refutation round 2, EV2-1: the specimen lines name neither act, so a status is confirmed on a sentence that states
+# each act done; the codes cite the hedges, so the two readers disagree and each stays held on its status.
+DONE_SNARE = 'The sigmoid polyp was removed with a hot snare.'
+DOUBTS_STATED = DOUBTS + DONE_BX + '\n' + DONE_SNARE + '\n'
 
 
 def rows(result):
     return [(p.key, p.code, p.status) for p in result.proposals]
 
 
-def made_for(result, key, phrase, cid='conf-1'):
+def made_for(result, key, phrase, cid='conf-1', text=DOUBTS_STATED):
     """A reviewer's confirmation that the code of proposal ``key`` of ``result`` was performed, on ``phrase``, bound to
     that proposal as the confirmation endpoint binds it."""
-    return replace(confirm(DOUBTS, phrase, fact='performed_status', family='gi.colonoscopy', key=key,
+    return replace(confirm(text, phrase, fact='performed_status', family='gi.colonoscopy', key=key,
                            value='performed', by=('astra',), cid=cid), **binding(proposal(result, key)))
 
 
@@ -641,14 +682,16 @@ class BindingTests(SimpleTestCase):
         self.assertNotIn('confirmed from', check(item, 'service.status').detail)
 
     def test_a_peer_review_that_selects_a_first_reading_code_ahead_never_takes_the_confirmation(self):
-        first = [participant_code(DOUBTS, '45385', UNLOCATED_SNARE), participant_code(DOUBTS, '45380', UNCLEAR)]
-        one = run(DOUBTS, (), provider_status='failed', participants=[read('astra', first)])
+        first = [participant_code(DOUBTS_STATED, '45385', UNLOCATED_SNARE),
+                 participant_code(DOUBTS_STATED, '45380', UNCLEAR)]
+        one = run(DOUBTS_STATED, (), provider_status='failed', participants=[read('astra', first)])
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'), ('altp:0', '45385', 'informational')])
-        made = made_for(one, 'sel:0', SPECIMEN)  # on assess #1: 45380's biopsy, on the jar 2 passage
-        later = [reviewed('astra', first, peer('astra', additional=[participant_code(DOUBTS, '45385', HEDGED_SNARE)]))]
-        self.assertEqual(rows(run(DOUBTS, (), provider_status='failed', participants=later)),
+        made = made_for(one, 'sel:0', DONE_BX)  # on assess #1: 45380's biopsy, on the passage stating it done
+        later = [reviewed('astra', first, peer('astra', additional=[
+            participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]))]
+        self.assertEqual(rows(run(DOUBTS_STATED, (), provider_status='failed', participants=later)),
                          [('sel:0', '45385', 'needs_clarification'), ('sel:1', '45380', 'needs_clarification')])
-        two = run(DOUBTS, (), [made], provider_status='failed', participants=later)
+        two = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=later)
         self.assertNeverAnswers(two, 'sel:0', '45385')  # its snare removal is still in doubt
         moved = proposal(two, 'sel:1')
         self.assertEqual((moved.code, moved.status, moved.support['confirmed']), ('45380', 'ready', ['conf-1']))
@@ -658,25 +701,25 @@ class BindingTests(SimpleTestCase):
                       encounter_check(two, 'confirmations.applied').detail)
 
     def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
-        fable = read('fable', [participant_code(DOUBTS, '45380', UNCLEAR)])
+        fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
         early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
-        one = run(DOUBTS, (), provider_status='failed', participants=early)
+        one = run(DOUBTS_STATED, (), provider_status='failed', participants=early)
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification')])
-        made = made_for(one, 'sel:0', SPECIMEN)
-        later = [read('astra', [participant_code(DOUBTS, '45385', HEDGED_SNARE)]), fable]
-        two = run(DOUBTS, (), [made], provider_status='failed', participants=later)
+        made = made_for(one, 'sel:0', DONE_BX)
+        later = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]), fable]
+        two = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=later)
         self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45385'), ('sel:1', '45380')])
         self.assertNeverAnswers(two, 'sel:0', '45385')
         self.assertEqual((proposal(two, 'sel:1').code, proposal(two, 'sel:1').status), ('45380', 'ready'))
 
     def test_a_new_answer_that_selects_a_code_ahead_never_takes_the_confirmation(self):
-        astra = [read('astra', [participant_code(DOUBTS, '45385', HEDGED_SNARE)])]
-        one = run(DOUBTS, (('45380', UNCLEAR),), participants=astra)
+        astra = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)])]
+        one = run(DOUBTS_STATED, (('45380', UNCLEAR),), participants=astra)
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'),
                                      ('sel:1', '45385', 'needs_clarification')])
-        made = made_for(one, 'sel:1', JAR_1)  # 45385's snare removal, on the jar 1 passage
+        made = made_for(one, 'sel:1', DONE_SNARE)  # 45385's snare removal, on the passage stating it done
         # another context: the proposal provider now also selects 45384 on the hedged snare passage
-        two = run(DOUBTS, (('45380', UNCLEAR), ('45384', HEDGED_SNARE)), [made], participants=astra)
+        two = run(DOUBTS_STATED, (('45380', UNCLEAR), ('45384', HEDGED_SNARE)), [made], participants=astra)
         self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('sel:1', '45384'),
                                                                       ('sel:2', '45385')])
         self.assertNeverAnswers(two, 'sel:1', '45384')
@@ -686,12 +729,12 @@ class BindingTests(SimpleTestCase):
     def test_a_proposal_read_from_other_passages_is_another_proposal(self):
         """A confirmation made for 45380 read from one passage is not read for 45380 read from more: the reviewer
         confirmed the question that reading raised (the identity changes with the passages, never with the checks)."""
-        fable = read('fable', [participant_code(DOUBTS, '45380', UNCLEAR)])
-        one = run(DOUBTS, (), provider_status='failed', participants=[fable])
-        made = made_for(one, 'sel:0', SPECIMEN)
-        more = [read('astra', [participant_code(DOUBTS, '45380', 'It is unclear whether biopsies')]), fable]
-        before = run(DOUBTS, (), provider_status='failed', participants=more)
-        after = run(DOUBTS, (), [made], provider_status='failed', participants=more)
+        fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
+        one = run(DOUBTS_STATED, (), provider_status='failed', participants=[fable])
+        made = made_for(one, 'sel:0', DONE_BX)
+        more = [read('astra', [participant_code(DOUBTS_STATED, '45380', 'It is unclear whether biopsies')]), fable]
+        before = run(DOUBTS_STATED, (), provider_status='failed', participants=more)
+        after = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=more)
         self.assertEqual(without_confirmations(after), before)
         self.assertNeverAnswers(after, 'sel:0', '45380')
         self.assertIn(engine.MOVED, encounter_check(after, 'confirmations.ignored').detail)
@@ -708,17 +751,18 @@ class BindingTests(SimpleTestCase):
             self.assertIn(engine.UNBOUND, encounter_check(after, 'confirmations.ignored').detail, c)
 
     def test_the_identity_is_recorded_only_with_a_participant_and_never_moves_with_checks_or_confirmations(self):
-        plain = run(STATUS_ONLY, STATUS_CODES)
+        plain = run(STATUS_STATED, STATUS_CODES)
         self.assertFalse(any('identity' in p.support for p in plain.proposals))  # none configured: unchanged (I1)
-        configured = run(STATUS_ONLY, STATUS_CODES, participants=CONFIGURED)
+        configured = run(STATUS_STATED, STATUS_CODES, participants=CONFIGURED)
         self.assertTrue(all(len(p.support['identity']) == 64 for p in configured.proposals))
-        confirmed = run(STATUS_ONLY, STATUS_CODES, [confirm(STATUS_ONLY, SPECIMEN, fact='performed_status',
-                                                            family='gi.colonoscopy', key='sel:0', value='performed')],
+        confirmed = run(STATUS_STATED, STATUS_CODES, [confirm(STATUS_STATED, DONE_BX, fact='performed_status',
+                                                              family='gi.colonoscopy', key='sel:0', value='performed')],
                         participants=CONFIGURED)
+        self.assertEqual(proposal(confirmed, 'sel:0').status, 'ready')
         self.assertNotEqual(proposal(confirmed, 'sel:0').fingerprint, proposal(configured, 'sel:0').fingerprint)
         self.assertEqual([binding(p) for p in confirmed.proposals], [binding(p) for p in configured.proposals])
         # a code's identity is its own reading: another code beside it changes its checks, never its identity
-        alone = run(STATUS_ONLY, (('45385', SNARE),), participants=CONFIGURED)
+        alone = run(STATUS_STATED, (('45385', SNARE),), participants=CONFIGURED)
         self.assertNotEqual(proposal(alone, 'sel:0').fingerprint, proposal(configured, 'sel:1').fingerprint)
         self.assertEqual(binding(proposal(alone, 'sel:0')), binding(proposal(configured, 'sel:1')))
 
@@ -748,14 +792,15 @@ class DeterminismTests(SimpleTestCase):
                          run(TWO_EXTENTS, provider_status='failed'))
 
     def test_keys_and_fingerprints_are_the_same_whatever_the_order_given(self):
-        given = [confirm(STATUS_AND_EXTENT, UNCLEAR, fact='performed_status', family='gi.colonoscopy', key='sel:0',
-                         value='not_performed', cid='a'),
-                 confirm(STATUS_AND_EXTENT, LAND, fact='extent', family='gi.colonoscopy', key='sel:1', value='cecum',
-                         cid='b'),
-                 confirm(STATUS_AND_EXTENT, LAND, fact='extent', family='gi.egd', key='sel:1', value='cecum', cid='c')]
-        first = run(STATUS_AND_EXTENT, STATUS_CODES, given)
+        given = [confirm(STATUS_AND_EXTENT_DENIED, DENIED_BX, fact='performed_status', family='gi.colonoscopy',
+                         key='sel:0', value='not_performed', cid='a'),
+                 confirm(STATUS_AND_EXTENT_DENIED, LAND, fact='extent', family='gi.colonoscopy', key='sel:1',
+                         value='cecum', cid='b'),
+                 confirm(STATUS_AND_EXTENT_DENIED, LAND, fact='extent', family='gi.egd', key='sel:1', value='cecum',
+                         cid='c')]
+        first = run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, given)
         for order in (given[::-1], [given[1], given[2], given[0]]):
-            again = run(STATUS_AND_EXTENT, STATUS_CODES, order)
+            again = run(STATUS_AND_EXTENT_DENIED, STATUS_CODES, order)
             self.assertEqual(again, first)
             self.assertEqual(sha256_json(again), sha256_json(first))
         self.assertEqual([(p.key, p.code) for p in first.proposals], [('sel:1', '45385'), ('sel:0', '45380')])

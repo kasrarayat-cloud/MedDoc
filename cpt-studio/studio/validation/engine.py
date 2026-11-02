@@ -3566,7 +3566,10 @@ class _Confirmations:
     (_identity: its own reading, whatever else is proposed) are the confirmation's, asking (family, fact) - and never by
     the key it held, which another reading, a peer review or a new answer can give to another code; a service question
     by (family, fact). One whose proposal is not there, or is there twice, or that answers no such question, answers
-    nothing; confirmations of one question that disagree are all left unread. So a confirmation never touches another
+    nothing; so does a status confirmation whose passages CPT Studio's readers do not read as stating its status for
+    the act its proposal's code accounts for, or its service, in the documented service its hold was decided on - the
+    one check every status candidate passes (reconcile.status_stated, refutation round 2, EV2-1), listed with its why;
+    confirmations of one question that disagree are all left unread. So a confirmation never touches another
     question, and none depends on which others are read.
 
     Read, it answers its question and nothing else (apply): a status is decided as performed or not performed on its
@@ -3579,7 +3582,7 @@ class _Confirmations:
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
         confirmed = tuple(confirmed)
-        self.text = text
+        self.text, self.pages = text, pages
         for c in confirmed:
             if not isinstance(c, ConfirmedFinding):
                 raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
@@ -3641,6 +3644,22 @@ class _Confirmations:
             return TOO_SHORT  # as the reading normaliser's Locator counts a quote (refutation round 1, EV-3)
         return ''
 
+    def _status_unstated(self, c: ConfirmedFinding, spans: Sequence[EvidenceSpan], s: _Selection, inventory) -> str:
+        """Why CPT Studio's readers do not read the passages of status confirmation ``c`` as stating its status for the
+        proposal ``s`` it answers - the act its code accounts for, or its service, in the documented service its hold
+        was decided on (reconcile.status_stated: the same check every status candidate passes, HARNESS.md 12.5,
+        refutation round 2, EV2-1); '' when every passage does. So a stored or forged status confirmation is never read
+        on a passage that does not state it (another act, the examination alone, a hedge or a slice of one, a
+        denial)."""
+        match = s.evaluation.match if s.evaluation is not None else None
+        service = match.service.id if match is not None else ''
+        for span in spans:
+            why = reconcile.status_stated(inventory, service, s.code, s.family, c.value, span.start, span.end,
+                                          self.text, self.pages)
+            if why:
+                return why
+        return ''
+
     @staticmethod
     def _words(confirmations: Sequence[ConfirmedFinding]) -> str:
         """The words "confirmed from Fable's located passage by <reviewer>", each confirmation's, joined."""
@@ -3681,10 +3700,15 @@ class _Confirmations:
                 key = bound[0]
             asks = ((key, c.family, c.fact) in asked if c.scope == 'proposal'
                     else (c.family, c.fact) in services)
-            if asks:
-                groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
-            else:
+            if not asks:
                 self.ignored.append((c, NOT_OPEN))
+                continue
+            unstated = self._status_unstated(c, spans, selections[index[key]], inventory) \
+                if c.fact == STATUS_FACT else ''
+            if unstated:  # refutation round 2, EV2-1: a status is read only where the readers read it on its passage
+                self.ignored.append((c, unstated))
+                continue
+            groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
         status: dict[int, _Answer] = {}
         own: dict[int, dict[str, _Answer]] = {}
         family_wide: dict[str, dict[str, _Answer]] = {}

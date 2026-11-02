@@ -1,0 +1,381 @@
+"""Refutation round 2, R2-EV: the evidence checks of the candidates and the confirmations (HARNESS.md 11.3, 12.5).
+
+- EV2-1 (the plan's D1): a status is checked on the act the question asks about. A status candidate, and every status
+  confirmation the engine reads, is verified only where CPT Studio's readers - the documented-service inventory the
+  final assessment recorded - read the passage's whole sentence as stating exactly that status for the act the
+  proposal's code accounts for (or its service) in the documented service its hold was decided on: one function,
+  reconcile.status_stated, decides it for both. The four scenarios of the verifier's probe run end to end - a pasted
+  document through POST /api/encounters, the real pipeline, the served candidates, the confirmation endpoint - and each
+  ends with its snare or biopsy code NOT ready; a status confirmation stored before the repair is listed as not read,
+  with why, and never applied; and a passage that truly states the act is still confirmed (the check is not vacuous).
+
+Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake; Astra and Fable are the real
+replay adapters on the real tool loop (tests.test_harness2_pipeline), and CPT Studio's real CMS tool executor answers
+their tool calls over a synthetic reference store.
+"""
+import json
+from datetime import date
+
+from django.test import SimpleTestCase
+
+from studio import jobs, models, review
+from studio.gi import context as gi_context
+from studio.gi import detect
+from studio.gi import services as gi_services
+from studio.types import ConfirmedFinding, EvidenceSpan, NormalizedResponse, ProviderCode
+from studio.validation import reconcile
+from studio.validation.engine import assess
+from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, Harness2Case, answered, open_questions, peer_answer, reading
+from tests.test_harness_engine_confirmations import CONFIGURED, REFERENCE, REVIEWER, binding, encounter_check, proposal
+from tests.test_participants_support import code as code_item, empty_reading, service as service_item
+from tests.test_pipeline_api import drain
+
+DAY = date(2026, 10, 14)
+CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+NORMAL = 'The mucosa appeared normal throughout. No polyps were seen.'
+HEDGE_BX = 'It is unclear whether biopsies of the ascending colon lesion were taken.'
+HEDGE_SN = 'It is unclear whether the sigmoid polyp was removed with a hot snare.'
+SLICE_BX = 'biopsies of the ascending colon lesion were taken'
+SLICE_SN = 'the sigmoid polyp was removed with a hot snare'
+JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
+JAR_2 = 'Specimen log: jar 2, ascending colon lesion, cold forceps.'
+DONE_BX = 'Cold forceps biopsies of the ascending colon lesion were taken.'
+TOP = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+       'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n')
+# (A) a diagnostic colonoscopy: no polyp, no snare
+DIAGNOSTIC = TOP + CECUM + '\n' + NORMAL + '\n'
+# (B) each act doubted by its own sentence, each with a specimen line (the suite's DOUBTS)
+DOUBTS = TOP + CECUM + '\n' + HEDGE_BX + '\n' + HEDGE_SN + '\n' + JAR_1 + '\n' + JAR_2 + '\n'
+# (C), (D) each act doubted, nothing documents either as done
+UNSETTLED = TOP + CECUM + '\n' + HEDGE_BX + '\n' + HEDGE_SN + '\n'
+# The positive control: the biopsy is stated done, but 45380 cites the hedge, so the two readers disagree and it is
+# held on its status - a passage that truly states the act answers that question.
+DISAGREE = TOP + CECUM + '\n' + HEDGE_BX + '\n' + DONE_BX + '\n'
+NOT_VERIFIED = 'That candidate is not verified, so it cannot be confirmed: '
+
+
+def say(*parts):
+    print('R2EV', *parts, flush=True)
+
+
+class EvidenceCase(Harness2Case):
+    """The pipeline suite's case: Corti's fake and the replay participants on the real loop, the real API and the real
+    confirmation endpoint."""
+    corti_codes = ()
+
+    def first(self, astra, fable=None, astra_peer=EMPTY_PEER):
+        self.adapters['astra'].first = [answered('astra', astra)]
+        self.adapters['fable'].first = [answered('fable', fable if fable is not None else reading())]
+        self.adapters['astra'].peer = [astra_peer if callable(astra_peer) else answered('astra', astra_peer, number=2)]
+        self.adapters['fable'].peer = [answered('fable', EMPTY_PEER, number=2)]
+
+    def final(self, encounter_id):
+        assessment = self.encounter(encounter_id).current_assessment
+        self.assertEqual((jobs.assessment_phase(assessment), review.is_final(assessment)), (2, True))
+        return assessment
+
+    def status_question(self, assessment, code_value):
+        return assessment.clarifications.get(proposal__code=code_value, fact='performed_status',
+                                             state=models.Clarification.OPEN)
+
+    def served(self, encounter_id, question):
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        return next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
+
+    def served_proposal(self, encounter_id, code_value):
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        return next(p for p in detail['assessment']['proposals']
+                    if p['code'] == code_value and p['bucket'] == 'selected')
+
+    def candidate_on(self, encounter_id, question, passage, value='performed'):
+        offered = self.served(encounter_id, question)
+        say(question.proposal.code if question.proposal_id else question.fact,
+            [(c['value'], c['verified'], [s['text'] for s in c['spans']], c['why']) for c in offered])
+        return next(c for c in offered if c['value'] == value and [s['text'] for s in c['spans']] == [passage])
+
+    def confirm(self, encounter_id, question, candidate):
+        """POST the confirmation endpoint with the candidate's id and the attestation a verified candidate carries (an
+        unverified one is served with none: the sentence it would need is sent, so the refusal is the candidate's)."""
+        attestation = candidate['attestation'] or ('I read this passage in the source document; it documents '
+                                                   f'{candidate["value"]} for this encounter.')
+        return self.post(f'/api/encounters/{encounter_id}/clarifications/{question.pk}/confirm',
+                         {'candidate_id': candidate['id'], 'attestation': attestation})
+
+    def assertRefusedNotReady(self, encounter_id, question, candidate, why, code_value):
+        """``candidate`` is served unverified with ``why``; confirming it is refused and records nothing; its code stays
+        held, with nothing but Reject to offer."""
+        self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']), (False, why, ''))
+        response = self.confirm(encounter_id, question, candidate)
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()['error'], NOT_VERIFIED + why)
+        self.assertFalse(models.FindingConfirmation.objects.exists())
+        drain()
+        served = self.served_proposal(encounter_id, code_value)
+        self.assertEqual((served['status'], served['confirmed'], served['allowed_actions']),
+                         ('needs_clarification', [], ['reject']))
+
+    def stored(self, encounter_id, question, passage, value='performed'):
+        """A status confirmation of ``question`` as the round-1 endpoint stored one (refutation round 2, EV2-1: a
+        stored or forged one), then the re-assessment that reads it."""
+        revision = self.encounter(encounter_id).current_revision
+        start = revision.text.index(passage)
+        row = models.FindingConfirmation.objects.create(
+            encounter_id=encounter_id, revision=revision, clarification=question, scope='proposal',
+            fact='performed_status', family='gi.colonoscopy', proposal_key=question.proposal.key, value=value,
+            spans=[{'start': start, 'end': start + len(passage), 'text': passage, 'page': None}],
+            located_by=['astra'], runs=[], confirmed_by=self.reviewer,
+            attestation=f'I read this passage in the source document; it documents {value} for this encounter.')
+        jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        drain()
+        return row
+
+    def assertNotRead(self, encounter_id, row, code_value, why):
+        again = self.encounter(encounter_id).current_assessment
+        item = again.proposals.get(code=code_value, bucket='selected')
+        self.assertEqual(item.status, 'needs_clarification')
+        self.assertNotIn('confirmed', item.support)
+        self.assertNotIn('confirmed from', json.dumps(item.checks))
+        self.assertEqual(again.completeness['confirmations'], {'applied': [], 'ignored': [{'id': str(row.pk),
+                                                                                           'why': why}]})
+        ignored = next(c for c in again.encounter_checks if c['id'] == 'confirmations.ignored')
+        self.assertIn(f'the confirmation of whether it was performed for proposal {item.key} ({code_value}): {why}',
+                      ignored['detail'])
+        served = self.served_proposal(encounter_id, code_value)
+        self.assertEqual((served['status'], served['allowed_actions']), ('needs_clarification', ['reject']))
+
+
+# --- EV2-1: the four scenarios of the verifier's probe, end to end ---------------------------------------------------
+
+class DiagnosticExaminationTests(EvidenceCase):
+    """(A) A diagnostic colonoscopy ("No polyps were seen"): Corti selects 45378 and 45385 on the cecum sentence;
+    Astra reads 45378 and a colonoscopy performed, quoting it. 45385 is held - no snare removal is documented - and the
+    cecum sentence names no snare removal, so it never answers that question."""
+    corti_codes = (('45378', CECUM), ('45385', CECUM))
+
+    def setUp(self):
+        super().setUp()
+        self.first(reading(codes=[('45378', CECUM)], services=[('c1', 'colonoscopy', 'performed', CECUM)]))
+
+    def test_the_examination_sentence_never_verifies_a_snare_removal(self):
+        encounter_id = self.create(DIAGNOSTIC)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45385')
+        self.assertIn('shows no snare removal', question.question)
+        candidate = self.candidate_on(encounter_id, question, CECUM)
+        self.assertRefusedNotReady(encounter_id, question, candidate, 'The passage does not name the snare removal.',
+                                   '45385')
+
+    def test_a_status_confirmation_stored_on_it_is_not_read(self):
+        encounter_id = self.create(DIAGNOSTIC)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45385')
+        row = self.stored(encounter_id, question, CECUM)
+        self.assertNotRead(encounter_id, row, '45385', 'the passage does not name the snare removal')
+
+
+def doubts_reading():
+    return empty_reading(
+        services=[service_item(1, id='c1', family='colonoscopy', status='performed', evidence=[JAR_1, JAR_2])],
+        codes=[code_item('45385', service_ids=[], evidence=['hot snare polypectomy of the sigmoid polyp']),
+               code_item('45380', service_ids=[], evidence=[SLICE_BX])])
+
+
+class SpecimenLineTests(EvidenceCase):
+    """(B) The suite's DOUBTS document: each act is left in doubt, and Astra's colonoscopy service quotes both specimen
+    lines - which the readers read as no snare removal and no biopsy at all. Round 1's EV-1 wrong output (45385 ready on
+    the cold-forceps jar) is unreachable through the endpoint."""
+
+    def setUp(self):
+        super().setUp()
+        self.first(doubts_reading(), astra_peer=peer_answer(codes=[('45385', SLICE_SN)]))
+
+    def test_neither_specimen_line_verifies_the_snare_removal(self):
+        encounter_id = self.create(DOUBTS)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45385')
+        for jar in (JAR_1, JAR_2):
+            candidate = self.candidate_on(encounter_id, question, jar)
+            self.assertEqual((candidate['verified'], candidate['why']),
+                             (False, 'The passage does not name the snare removal.'))
+        self.assertRefusedNotReady(encounter_id, question, self.candidate_on(encounter_id, question, JAR_2),
+                                   'The passage does not name the snare removal.', '45385')
+
+    def test_the_cold_forceps_jar_stored_for_the_snare_is_not_read(self):
+        encounter_id = self.create(DOUBTS)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45385')
+        row = self.stored(encounter_id, question, JAR_2)
+        self.assertNotRead(encounter_id, row, '45385', 'the passage does not name the snare removal')
+
+
+class UnsettledTests(EvidenceCase):
+    """(C) Nothing documents either act as done; Astra reads the colonoscopy as performed, quoting the cecum sentence.
+    Neither 45380 nor 45385 becomes ready on it."""
+
+    def setUp(self):
+        super().setUp()
+        self.first(reading(codes=[('45385', SLICE_SN), ('45380', SLICE_BX)],
+                           services=[('c1', 'colonoscopy', 'performed', CECUM)]))
+
+    def test_the_cecum_sentence_verifies_neither_act(self):
+        encounter_id = self.create(UNSETTLED)
+        drain()
+        final = self.final(encounter_id)
+        for code_value, act in (('45380', 'forceps biopsy'), ('45385', 'snare removal')):
+            question = self.status_question(final, code_value)
+            self.assertIn('in doubt', question.question)
+            candidate = self.candidate_on(encounter_id, question, CECUM)
+            self.assertRefusedNotReady(encounter_id, question, candidate, f'The passage does not name the {act}.',
+                                       code_value)
+
+
+def answers_with_slice(name, number=2):
+    """A peer review answering 45380's open performed-status question 'performed', quoting an exact slice of the hedge
+    (without its "It is unclear whether")."""
+    def answer(body):
+        questions = open_questions(name, body)
+        return answered(name, peer_answer(answers=[(q['question_id'], True, 'performed', SLICE_BX) for q in questions
+                                                   if q['fact'] == 'performed_status'
+                                                   and 'biops' in q['question'].lower()]), number)
+    return answer
+
+
+class HedgeSliceTests(EvidenceCase):
+    """(D) Astra's peer review answers 45380's question 'performed', quoting a slice of the hedge sentence. The readers
+    read the whole sentence, which leaves the biopsy in doubt; the page shows the slice with that whole sentence."""
+
+    def setUp(self):
+        super().setUp()
+        self.first(reading(codes=[('45385', SLICE_SN), ('45380', SLICE_BX)]), astra_peer=answers_with_slice('astra'))
+
+    def test_a_slice_of_the_hedge_never_verifies_the_biopsy(self):
+        encounter_id = self.create(UNSETTLED)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45380')
+        candidate = self.candidate_on(encounter_id, question, SLICE_BX)
+        self.assertEqual(candidate['phase'], 'peer_review')
+        self.assertRefusedNotReady(encounter_id, question, candidate,
+                                   'The passage leaves the forceps biopsy in doubt.', '45380')
+        # the page is served the slice's whole sentence, which it shows with the slice (HARNESS.md 12.5)
+        start = UNSETTLED.index(HEDGE_BX)
+        self.assertEqual(candidate['sentences'], [{'start': start, 'end': start + len(HEDGE_BX), 'text': HEDGE_BX}])
+
+    def test_the_slice_stored_as_a_confirmation_is_not_read(self):
+        encounter_id = self.create(UNSETTLED)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45380')
+        row = self.stored(encounter_id, question, SLICE_BX)
+        self.assertNotRead(encounter_id, row, '45380', 'the passage leaves the forceps biopsy in doubt')
+
+
+class ActStatedTests(EvidenceCase):
+    """The control: a passage that truly states the act answers its question. 45380 cites the hedge while another
+    sentence states the biopsy done, so the readers disagree and hold it on its status; the done sentence is verified,
+    the confirmation is recorded, and the re-assessment makes 45380 ready - never the hedge."""
+    corti_codes = (('45380', SLICE_BX),)
+
+    def setUp(self):
+        super().setUp()
+        self.first(reading(codes=[('45380', SLICE_BX)], services=[('c1', 'colonoscopy', 'performed', DONE_BX)]))
+
+    def test_the_sentence_that_states_the_biopsy_done_is_confirmed(self):
+        encounter_id = self.create(DISAGREE)
+        drain()
+        question = self.status_question(self.final(encounter_id), '45380')
+        self.assertEqual(question.proposal.support['reason'], 'readings_disagree')
+        candidate = self.candidate_on(encounter_id, question, DONE_BX)
+        self.assertEqual((candidate['verified'], candidate['why']), (True, ''))
+        response = self.confirm(encounter_id, question, candidate)
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        served = self.served_proposal(encounter_id, '45380')
+        row = models.FindingConfirmation.objects.get()
+        self.assertEqual((served['status'], served['confirmed'], served['allowed_actions']),
+                         ('ready', [str(row.pk)], ['approve', 'reject']))
+
+
+# --- EV2-1: the one function, read by the engine as by the candidates ------------------------------------------------
+
+def span(text, phrase):
+    start = text.index(phrase)
+    return EvidenceSpan(0, start, start + len(phrase), phrase, True)
+
+
+def engine_run(text, codes, confirmed=()):
+    selected = tuple(ProviderCode('selected', 'cpt', value, 'UNVERIFIED PROVIDER WORDING', (span(text, quote),))
+                     for value, quote in codes)
+    return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, DAY),
+                  normalized=NormalizedResponse('corti', 'test@1', selected), reference=REFERENCE, service_date=DAY,
+                  provider_status='succeeded', participants=CONFIGURED, confirmed=confirmed)
+
+
+class OneCheckTests(SimpleTestCase):
+    """reconcile.status_stated is the one check: every status candidate passes it, and engine._Confirmations applies it
+    to every status confirmation it is given, however it was made."""
+
+    def status(self, text, code_value, value, passage):
+        inventory = gi_services.build(text, service_date=DAY)
+        service = inventory.for_family('gi.colonoscopy')[0]
+        at = span(text, passage)
+        return reconcile.status_stated(inventory, service.id, code_value, 'gi.colonoscopy', value, at.start, at.end,
+                                       text)
+
+    def test_what_the_readers_read_decides_and_the_whole_sentence_is_read(self):
+        text = (TOP + CECUM + '\n' + HEDGE_BX + '\n' + HEDGE_SN + '\n' + JAR_1 + '\n'
+                + 'No biopsies were obtained from the ascending colon lesion.\n'
+                + 'A 6 mm polyp in the ascending colon was removed with a cold snare.\n')
+        cases = [
+            ('45385', 'performed', CECUM, 'the passage does not name the snare removal'),
+            ('45385', 'performed', JAR_1, 'the passage does not name the snare removal'),
+            ('45385', 'performed', HEDGE_BX, 'the passage does not name the snare removal'),  # another act's hedge
+            ('45385', 'performed', SLICE_SN, 'the passage leaves the snare removal in doubt'),
+            ('45380', 'performed', 'No biopsies were obtained from the ascending colon lesion.',
+             'the passage states the forceps biopsy as not performed, not as performed'),
+            ('45380', 'not performed', 'No biopsies were obtained from the ascending colon lesion.', ''),
+            ('45385', 'not performed', JAR_1, 'the passage does not name the snare removal'),
+            ('45385', 'not performed', 'A 6 mm polyp in the ascending colon was removed with a cold snare.',
+             'the passage states the snare removal as performed, not as not performed'),
+            ('45385', 'performed', 'A 6 mm polyp in the ascending colon was removed with a cold snare.', ''),
+            ('45378', 'performed', CECUM, ''),  # a base code asks about its service
+            ('45378', 'performed', HEDGE_BX,
+             "CPT Studio's readers read no statement of the colonoscopy in the passage"),
+        ]
+        for code_value, value, passage, why in cases:
+            with self.subTest(code=code_value, value=value, passage=passage):
+                self.assertEqual(self.status(text, code_value, value, passage), why)
+
+    def test_no_subject_the_readers_can_check_never_verifies(self):
+        text = DISAGREE
+        inventory = gi_services.build(text, service_date=DAY)
+        at = span(text, DONE_BX)
+        for given, service_id in ((None, 'S1'), (inventory, ''), (inventory, 'S9')):
+            self.assertEqual(reconcile.status_stated(given, service_id, '45380', 'gi.colonoscopy', 'performed',
+                                                     at.start, at.end, text), reconcile.NO_SUBJECT)
+        self.assertEqual(reconcile.status_stated(inventory, 'S1', '45380', 'gi.egd', 'performed', at.start, at.end,
+                                                 text), reconcile.NO_SUBJECT)  # a service of another family
+        self.assertEqual(reconcile.status_stated(inventory, 'S1', '45380', 'gi.colonoscopy', 'performed', at.start,
+                                                 at.end, text), '')
+
+    def confirmation(self, text, result, key, passage, value='performed'):
+        return ConfirmedFinding('proposal', 'performed_status', 'gi.colonoscopy', key, value, (span(text, passage),),
+                                ('astra',), REVIEWER, 'conf-1', **binding(proposal(result, key)))
+
+    def test_the_engine_never_reads_a_status_confirmation_its_readers_do_not_read_on_its_passage(self):
+        codes = (('45380', SLICE_BX),)
+        before = engine_run(DISAGREE, codes)
+        held = proposal(before, 'sel:0')
+        self.assertEqual((held.code, held.status, held.support['reason']),
+                         ('45380', 'needs_clarification', 'readings_disagree'))
+        for passage, why in ((SLICE_BX, 'the passage leaves the forceps biopsy in doubt'),
+                             (HEDGE_BX, 'the passage leaves the forceps biopsy in doubt'),
+                             (CECUM, 'the passage does not name the forceps biopsy')):
+            with self.subTest(passage):
+                after = engine_run(DISAGREE, codes, [self.confirmation(DISAGREE, before, 'sel:0', passage)])
+                self.assertEqual(proposal(after, 'sel:0').status, 'needs_clarification')
+                self.assertNotIn('confirmed', proposal(after, 'sel:0').support)
+                self.assertEqual(after.completeness['confirmations'],
+                                 {'applied': [], 'ignored': [{'id': 'conf-1', 'why': why}]})
+                self.assertIn(why, encounter_check(after, 'confirmations.ignored').detail)
+        read_ = engine_run(DISAGREE, codes, [self.confirmation(DISAGREE, before, 'sel:0', DONE_BX)])
+        self.assertEqual((proposal(read_, 'sel:0').status, proposal(read_, 'sel:0').support['confirmed']),
+                         ('ready', ['conf-1']))
