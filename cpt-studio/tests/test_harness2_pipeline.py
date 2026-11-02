@@ -522,6 +522,25 @@ class RecordsTests(Harness2Case):
         self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(final)), (1, 2))
 
 
+    def test_a_peer_review_s_references_are_checked_against_its_own_loop_only(self):
+        self.adapters['astra'].peer = [
+            asks('astra', passages_call('call_peer_1', 'ncci_endoscopy_rules'), number=3),
+            answered('astra', peer_answer(references=[('rule-01', 'Retrieved in this peer review.'),
+                                                      (f'fact:{PFS_KEY}:99213:status',
+                                                       'Retrieved in the first reading, not in this review.')]),
+                     number=4)]
+        encounter_id = self.create()
+        drain()
+        peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        self.assertEqual([(e.turn, [c.tool for c in e.tool_calls.all()]) for e in peer.exchanges.order_by('turn')],
+                         [(1, ['cms_policy_passages']), (2, [])])
+        review_ = jobs.peer_reading(peer)[0]
+        self.assertEqual([(ref.ref, ref.retrieved) for ref in review_.references_used],
+                         [('rule-01', True), (f'fact:{PFS_KEY}:99213:status', False)])
+        record = self.records(self.encounter(encounter_id).current_assessment)['astra']
+        self.assertEqual(record['peer_sha256'], sha256_json(to_jsonable(review_)))
+
+
 # --- the peer stages' gating (HARNESS.md 12.1) ------------------------------------------------------------------------
 
 class PeerGatingTests(Harness2Case):
