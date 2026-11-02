@@ -223,9 +223,13 @@ Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `
 alternatives, and the participants the engine recorded), `reference_check` (`passed`, `attention` or `not_verified`,
 from its CMS checks `pfs.presence`, `mue.units` and `pfs.endoscopic_base`; its detail always says that NCCI PTP edits
 are not connected) and `decision_state` (a member's). `participant_positions` gives each configured participant's
-position on the code - `proposed`, `not_proposed`, `advised_not_to_code` (with its reason) or `not_run` (with why) - and
-the first quote of it that was found verbatim in the document ('' when none was); it is `{}` when no participant was
-configured. A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
+position on the code in its first reading (the only reading harness@1 makes; harness@2's frozen phase-1 reading) -
+`proposed`, `not_proposed`, `advised_not_to_code` (with its reason) or `not_run` (with why) - and the first quote of it
+that was found verbatim in the document ('' when none was); it is `{}` when no participant was configured. A
+participant that first proposed the code after peer review (its `phases` entry is `peer_review`) keeps its first
+reading's position, and its `detail` says both: "Fable did not propose this code in its first reading. It proposed it
+after peer review." (refutation round 2, truth-2), in the encounter view and in the trace's reconciliation rows alike.
+A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
 section ([] for a code that was not looked up: a provider's alternatives never are).
 

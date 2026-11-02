@@ -1188,9 +1188,17 @@ def proposed_by(proposal):
 
 def participant_positions(proposal, records):
     """{name: {position, detail, quote}} for each harness participant the assessment had configured
-    (Assessment.participants; {} when none was): from a reading that was used, 'proposed' (with its first located
-    quote), 'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. Positions are kept
-    beside the proposal and decide nothing (I2, I3)."""
+    (Assessment.participants; {} when none was): its position in the reading the entry records - the frozen first
+    reading (HARNESS.md 12.3) - from a reading that was used, 'proposed' (with its first located quote),
+    'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. A participant that first
+    proposed the code after peer review (the engine's support['phases'], HARNESS.md 11.1) keeps its first reading's
+    position, and its detail says both - that this is its first reading's position, and that it proposed the code after
+    peer review - so a proposer is never said not to have proposed its own code (refutation round 2, truth-2: "Fable did
+    not propose this code." beside proposed_by ['fable']). Positions are kept beside the proposal and decide nothing
+    (I2, I3)."""
+    phases = (proposal.support or {}).get('phases')
+    later = ({name for name, phase in phases.items() if phase == ProviderRun.PEER_REVIEW}
+             if isinstance(phases, dict) else set())
     out = {}
     for record in records or []:
         name = record.get('name') if isinstance(record, dict) else None
@@ -1202,17 +1210,25 @@ def participant_positions(proposal, records):
             continue
         proposed = {item.get('code'): item.get('quote') or '' for item in record.get('codes') or []}
         advised = {item.get('code'): item for item in record.get('not_coded') or []}
+        first = ' in its first reading' if name in later else ''
         if proposal.code in proposed:
             quote = proposed[proposal.code]
             located = (' with evidence located in the document' if quote else
                        '; none of its quotes was found in the document')
-            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{located}.', 'quote': quote}
+            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{first}{located}.',
+                         'quote': quote}
+            again = ' again'
         elif proposal.code in advised:
             item = advised[proposal.code]
             out[name] = {'position': 'advised_not_to_code', 'quote': item.get('quote') or '',
-                         'detail': f'{label} advised not to code it: {_human(item.get("reason") or "other")}.'}
+                         'detail': f'{label} advised not to code it{first}: {_human(item.get("reason") or "other")}.'}
+            again = ''
         else:
-            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code.', 'quote': ''}
+            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code{first}.',
+                         'quote': ''}
+            again = ''
+        if first:
+            out[name]['detail'] += f' It proposed it{again} after peer review.'
     return out
 
 
