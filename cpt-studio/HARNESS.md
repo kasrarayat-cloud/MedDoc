@@ -117,7 +117,11 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
 - **Codes no decidable proposal carries.** A participant code that no decidable proposal carries becomes a proposal of
   its own, with origin `participant` and its proposers named, when it is in scope with exact (located) evidence.
   Otherwise it is listed as informational, with why.
-- **I3: agreement never promotes.** Two or three participants proposing a code changes nothing about its status.
+- **I3: agreement never promotes** (worded, after refutation round 1's EV-5, as the engine guarantees it). A second or
+  third participant proposing a code with the same located quotes changes nothing but the record of who proposed it.
+  Its own other located quotes join the code's evidence and are read with it by the same local readers, exactly as
+  Corti's passages would be (I2), so a passage that hedges holds the code; agreement itself never makes a code READY or
+  approvable. A peer review's `supports` changes nothing.
 - **Contradictions are kept, never voted on** (amended by 11.3: a contradiction offered with a located passage can also become a correction candidate). When a participant says a code should not be coded because its service
   was not performed at this encounter, and gives located evidence, that proposal gets a WARN check
   `participants.disagree` quoting it.
@@ -250,8 +254,11 @@ parsing take away. The image gains no dependency.
   "not configured". Proved by H1/H2/H4 against the round-4 head and by a parity test.
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
-- **I3 Agreement never promotes.** Adding a second or third proposer to a code never changes its status or makes it
-  approvable.
+- **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
+  the same located quotes changes nothing but the record of who proposed it; another proposer's other located quotes
+  join the code's evidence and are read with it by the same local readers, exactly as Corti's passages would be (I2),
+  so a hedging passage holds the code. A peer review's `supports` changes nothing. (Refutation round 1, EV-5: "never
+  changes its status" was wider than the engine's guarantee; a proposer's hedging passage holds a code.)
 - **I4 Proposed, reference-checked and approved are never conflated,** in the UI, the API or either report.
 - **I5 Independence.** No participant request contains another participant's output or any CPT Studio reading. Fable
   never sees Astra's or Corti's conclusions.

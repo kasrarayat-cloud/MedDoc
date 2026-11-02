@@ -45,6 +45,9 @@ BIOPSY = 'was biopsied with cold forceps'
 CECUM = 'The colonoscope was advanced to the cecum'
 PLAN = 'Plan: Surveillance colonoscopy in three years.'
 COLON_PLAN = COLON + PLAN + '\n'
+# A later sentence leaves further biopsies of the same lesion in doubt (refutation round 1, EV-5).
+HEDGE = 'further biopsies were taken from the ascending colon lesion'
+COLON_HEDGE = COLON + 'It is unclear whether ' + HEDGE + '.\n'
 # The GI round 2 regression office note h2-08 (a committed synthetic fixture): its closing charge block asks the date.
 H208 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h2-08.txt').read_text(encoding='utf-8')
 CHARGED = 'a 6 mm polyp in the sigmoid colon was removed with a cold snare'
@@ -400,6 +403,22 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         two = proposal(run(COLON, (), [own, fable], provider_status='failed'), '45378')
         self.assertEqual(decision(two), decision(one))
         self.assertEqual(two.support['proposed_by'], ['astra', 'fable'])
+
+    def test_another_proposer_s_own_passage_can_hold_a_code_and_agreement_never_releases_it(self):
+        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9): another proposer's located
+        quote joins the code's evidence, read with it by the same readers, so a passage that hedges holds the code -
+        and agreement never makes a held code ready, whichever proposer comes first."""
+        codes = corti(('45385', span(COLON_HEDGE, SNARE)))
+        fable, astra = (read('fable', [code(COLON_HEDGE, '45380', BIOPSY)]),
+                        read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
+        self.assertEqual(proposal(run(COLON_HEDGE, codes, [fable]), '45380').status, 'ready')
+        hedged = proposal(run(COLON_HEDGE, codes, [astra]), '45380')
+        self.assertEqual((hedged.status, [(q.scope, q.fact) for q in hedged.clarifications]),
+                         ('needs_clarification', [('proposal', 'performed_status')]))
+        both = proposal(run(COLON_HEDGE, codes, [astra, fable]), '45380')
+        self.assertEqual((both.status, [(q.scope, q.fact) for q in both.clarifications]),
+                         ('needs_clarification', [('proposal', 'performed_status')]))
+        self.assertEqual(decision(proposal(run(COLON_HEDGE, codes, [fable, astra]), '45380')), decision(both))
 
 
 class ContradictionTests(SimpleTestCase):
