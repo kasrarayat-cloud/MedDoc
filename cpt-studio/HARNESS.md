@@ -725,6 +725,24 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
 - **Cost (refutation round 1, FG-3, sends-4).** `estimated_cost_usd` is pricing's `estimated_usd` to four decimals,
   rounded half up. A tool loop is priced per exchange (`pricing.estimate_loop`), never its summed usage as one request,
   and has no estimate when its exchanges do not add up to its usage.
+- **Recording a participant's exchanges (refutation round 2, sends-r2-1, sends-r2-2, sends-r2-4; the session lead's
+  D5: every exchange is recorded truthfully).**
+  - Each exchange of a participant's tool loop and its tool calls are recorded as that exchange ends - its answer read
+    and its tool calls answered, before the next exchange is sent - each in a transaction of its own, committed at once
+    (`loop.recording`, `jobs._record_exchange`); the run's outcome then records any exchange still missing
+    (`jobs._finish_loop`). Before, the loop was written only once it had ended, so a worker that died mid-loop (up to
+    540 s and 4 exchanges) left nothing of exchanges that had been answered and paid for.
+  - The stale sweep settles a run left sending as unknown, as before, and as sent when an exchange of it that may have
+    reached the vendor (any but `not_sent`) is recorded; Corti's runs record no exchange, so theirs are as before.
+  - A tool call whose arguments are missing or null is recorded with JSON null arguments (`jobs._record_exchanges`).
+    SQL NULL, which the column refuses, broke the record, and the whole run - its final answer included - was recorded
+    unknown with nothing of it kept, holding the other participant (I8, I10).
+  - A watched connection whose TCP connect or TLS handshake never completed - refused, cut by the connect timeout or the
+    deadline, a certificate the check refuses - wrote no byte of the request, so it is `not_sent`
+    (`participants.http._Watch.never_connected`: a watched connection began and none handed its socket over), asked
+    before the rules for a request that may have left, which stay `unknown` (section 8's "a connection that was never
+    established"; urllib3 surfaces such a handshake as a read timeout or an SSL error). Corti's identical older rule
+    (`providers/corti.py`) is pinned by I1 and is not changed in this round: open.
 - **Open, recorded here so it is not lost:** refutation round 1's findings (23, all reproduced) and the integration's
   own (a confirmation bound to a proposal key rather than its code - repaired, 12.5's binding; the HTTP read deadline
   checked only between chunks; decisions invalidated when an intermediate assess #1 re-runs without the peer-added

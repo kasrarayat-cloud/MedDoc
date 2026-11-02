@@ -995,13 +995,16 @@ def _check_loop_time(job):
 def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
-    exchange recorded, and blocks every further send until a member reconciles it - never a run left 'sending' that
-    nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's Stop, observed before every later
-    exchange (sends-3)."""
+    exchange recorded but those recorded as they ended, and blocks every further send until a member reconciles it -
+    never a run left 'sending' that nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's
+    Stop, observed before every later exchange (sends-3). Each exchange is recorded as it ends (_record_exchange,
+    refutation round 2, sends-r2-4: they were written only once the whole loop had ended, so a worker that died
+    mid-loop - SIGKILL, an OOM kill, a host reset - left nothing of exchanges that had been answered and paid for)."""
     try:
-        outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
-                                     client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                     execute_tool=execute_tool, should_stop=should_stop)
+        with participant_loop.recording(lambda record: _record_exchange(run, record)):
+            outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
+                                         client_request_id=str(run.run_identity), original_bytes=original_bytes,
+                                         execute_tool=execute_tool, should_stop=should_stop)
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):
@@ -1015,14 +1018,16 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
 
 
 def _finish_loop(run, outcome):
-    """The run's outcome and every exchange and tool call of its loop, exactly as the LoopOutcome carries them, in one
-    transaction (HARNESS.md 12.1): the run's own fields from the loop's final RawExchange (its first request is already
-    the run's request; its final response is the last exchange's). When they cannot all be recorded, the run is recorded
-    as unknown - an exchange may have reached the vendor - unless the loop provably sent nothing."""
+    """The run's outcome and every exchange and tool call of its loop not yet recorded as it ended (_record_exchange),
+    exactly as the LoopOutcome carries them, in one transaction (HARNESS.md 12.1): the run's own fields from the loop's
+    final RawExchange (its first request is already the run's request; its final response is the last exchange's). When
+    they cannot all be recorded, the run is recorded as unknown - an exchange may have reached the vendor - unless the
+    loop provably sent nothing."""
     try:
         with transaction.atomic():
             _finish_run(run, outcome.final)
-            _record_exchanges(run, outcome.exchanges)
+            recorded = set(run.exchanges.values_list('turn', flat=True))
+            _record_exchanges(run, [record for record in outcome.exchanges if record.turn not in recorded])
     except Exception as exc:  # noqa: BLE001 - logged; the run records why, never the internals
         log.exception('the loop outcome of participant run %s could not be recorded', run.pk)
         label = participants.LABELS.get(run.provider, run.provider)
@@ -1032,6 +1037,17 @@ def _finish_loop(run, outcome):
             requested_model=outcome.final.requested_model,
             error=(f'Nothing was sent; its record could not be written ({type(exc).__name__}, logged).' if unsent
                    else UNRECORDED_MESSAGE.format(label=label))))
+
+
+def _record_exchange(run, record):
+    """One exchange of ``run``'s tool loop and its tool calls, recorded as the exchange ends - its answer read and its
+    tool calls answered, before the next exchange is sent - in a transaction of its own, committed at once (refutation
+    round 2, sends-r2-4). One that cannot be recorded is logged and recorded with the run's outcome (_finish_loop)."""
+    try:
+        with transaction.atomic():
+            _record_exchanges(run, (record,))
+    except Exception:  # noqa: BLE001 - logged; the loop goes on, and _finish_loop records what is still missing
+        log.exception('exchange %s of participant run %s could not be recorded as it ended', record.turn, run.pk)
 
 
 def _record_exchanges(run, exchanges):
@@ -2333,7 +2349,10 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
                                                          timezone.now())
-                run.save(update_fields=['state', 'error', 'finished_at'])
+                # a participant's loop records each exchange as it ends: one of them that may have reached the vendor
+                # means the run was sent (refutation round 2, sends-r2-4; Corti's runs record no exchange)
+                run.sent = run.sent or run.exchanges.exclude(state=models.ProviderRun.NOT_SENT).exists()
+                run.save(update_fields=['state', 'error', 'finished_at', 'sent'])
             for run in reserved:
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())

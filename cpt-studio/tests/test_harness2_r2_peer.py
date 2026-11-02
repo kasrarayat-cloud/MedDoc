@@ -9,6 +9,8 @@
   not_sent - a handshake stalled past the deadline or the connect timeout, a certificate the check refuses - while a
   request that was written and got no answer stays unknown; demonstrated against loopback servers (127.0.0.1, ephemeral
   ports) through the real default session, with a throwaway certificate made in memory.
+- sends-r2-4: each exchange of a participant's tool loop and its tool calls are recorded as that exchange ends, so a
+  worker that dies mid-loop leaves the exchanges before it recorded, and the stale sweep marks such a run sent.
 
 Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake. Astra and Fable are the real
 replay adapters on the real tool loop with scripted answers (tests.test_harness2_pipeline), their tool calls answered by
@@ -23,17 +25,20 @@ import ssl
 import tempfile
 import threading
 import time
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
 from django.test import SimpleTestCase
+from django.utils import timezone
 
-from studio import models
+from studio import jobs, models
 from studio.participants import http as participants_http
 from studio.participants import openai_astra
 from studio.participants.openai_astra import AstraParticipant
 from tests.test_harness2_pipeline import (ASTRA_READING, CPT_STUDIO, FABLE_READING, HEAD, LAND, SNARE, ColonCase,
-                                          Harness2Case, answered, asks, document_sections, peer_document)
+                                          Harness2Case, answered, asks, document_sections, facts_call, peer_document)
+from tests.test_harness_pipeline import _WorkerDied
 from tests.test_participants_support import NOTE, PAGES, openai_env, write_file
 from tests.test_pipeline_api import drain
 
@@ -322,3 +327,100 @@ class NeverConnectedTests(SimpleTestCase):
         self.assertEqual((outcome.final.outcome, outcome.final.sent), ('not_sent', False))
         self.assertEqual([(e.turn, e.outcome) for e in outcome.exchanges], [(1, 'not_sent')])
         self.assertFalse(server.request_line_received)
+
+
+# --- sends-r2-4: every exchange is recorded as it ends ----------------------------------------------------------------
+
+class RecordedAsItEndsTests(Harness2Case):
+    """HARNESS.md 11.2 and 12.1: each exchange of the loop is a recorded ProviderExchange with its response bytes, usage
+    and tool calls, and the run records whether it was sent. They were all written only once the whole loop had ended
+    (_finish_loop), so a worker that died mid-loop - up to 540 s and 4 exchanges - left nothing of the exchanges that
+    had been answered and paid for, and the stale sweep settled the run unknown with sent false (sends-r2-4)."""
+
+    def dies_at_exchange_two(self):
+        def dies(body):  # stands in for a SIGKILL or an OOM kill while exchange 2 is in flight
+            raise _WorkerDied()
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), dies]
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        with self.assertRaises(_WorkerDied):
+            jobs.run_job(job)
+        self.assertEqual(len(self.adapters['astra'].loops_of('first')[0]['bodies']), 2)  # exchange 2 was in flight
+        return encounter_id, job
+
+    def test_a_worker_that_dies_mid_loop_leaves_the_exchanges_before_it_recorded(self):
+        encounter_id, job = self.dies_at_exchange_two()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual(run.state, 'sending')
+        self.assertEqual([(e.turn, e.state) for e in run.exchanges.all()], [(1, 'succeeded')])  # kept as it ended
+        (exchange,) = run.exchanges.all()
+        answer = asks('astra', facts_call('call_astra_1', ['99213']))
+        self.assertEqual((exchange.turn, exchange.state, exchange.http_status, bytes(exchange.response_bytes)),
+                         (1, 'succeeded', 200, answer))
+        self.assertEqual(exchange.request_sha256, run.request_sha256)  # the run's own first request
+        self.assertTrue(exchange.usage)
+        (call,) = exchange.tool_calls.all()
+        self.assertEqual((call.call_id, call.tool, call.arguments['codes']), ('call_astra_1', 'cms_code_facts',
+                                                                              ['99213']))
+        self.assertTrue(call.refs)
+        # the stale sweep settles the run unknown - and sent, since an exchange of it reached the vendor
+        models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.sent, run.error),
+                         ('unknown', True, 'The worker stopped while the request was in flight.'))
+        self.assertEqual([(e.turn, e.state) for e in run.exchanges.all()], [(1, 'succeeded')])
+        self.assertEqual(models.ToolCall.objects.filter(exchange__run=run).count(), 1)
+        self.assertEqual(models.Job.objects.get(pk=job.pk).state, 'unknown')
+        # I8 as before: the unknown outcome blocks every further send until a member reconciles it
+        drain()
+        self.assertEqual(self.sent('fable', 'first'), 0)
+
+    def test_control_a_run_swept_before_any_exchange_was_recorded_stays_not_sent(self):
+        def dies(body):
+            raise _WorkerDied()
+        self.adapters['astra'].first = [dies]
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        with self.assertRaises(_WorkerDied):
+            jobs.run_job(job)
+        models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+        jobs.mark_stale()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((run.state, run.sent, run.exchanges.count()), ('unknown', False, 0))
+
+    def test_a_finished_loop_records_each_exchange_once(self):
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])),
+                                        asks('astra', facts_call('call_astra_2', ['99214']), number=2),
+                                        answered('astra', ASTRA_READING)]
+        recorded = []
+        real = jobs._record_exchanges
+
+        def spy(run, exchanges):
+            recorded.append([record.turn for record in exchanges])
+            return real(run, exchanges)
+        with mock.patch('studio.jobs._record_exchanges', side_effect=spy):
+            encounter_id = self.create()
+            drain()
+        run = self.runs_of(encounter_id, 'astra', 'independent')[0]
+        self.assertEqual((run.state, [e.turn for e in run.exchanges.all()]), ('succeeded', [1, 2, 3]))
+        self.assertEqual(models.ToolCall.objects.filter(exchange__run=run).count(), 2)
+        # each as it ended, in its own transaction; the run's outcome then finds nothing more to record
+        self.assertEqual(recorded[:4], [[1], [2], [3], []])
+
+    def test_an_exchange_that_cannot_be_recorded_as_it_ends_is_recorded_with_the_outcome(self):
+        real, calls = jobs._record_exchanges, []
+
+        def fails_once(run, exchanges):
+            calls.append([record.turn for record in exchanges])
+            if len(calls) == 1:
+                raise RuntimeError('synthetic')
+            return real(run, exchanges)
+        with mock.patch('studio.jobs._record_exchanges', side_effect=fails_once), \
+                self.assertLogs('studio.jobs', level='ERROR') as logged:
+            encounter_id = self.create()
+            jobs.run_job(self.run_until('astra'))
+        self.assertIn('exchange 1 of participant run', logged.output[0])
+        run = self.runs_of(encounter_id, 'astra', 'independent')[0]
+        self.assertEqual((run.state, run.sent, [e.turn for e in run.exchanges.all()]), ('succeeded', True, [1, 2]))
+        self.assertEqual(calls, [[1], [2], [1]])
