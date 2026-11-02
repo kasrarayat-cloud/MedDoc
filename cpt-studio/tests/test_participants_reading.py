@@ -9,14 +9,14 @@ import hashlib
 import json
 import time
 
-from studio.participants import anthropic_fable, openai_astra, prompt, reading
+from studio.participants import anthropic_fable, loop, openai_astra, prompt, reading
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, ProviderRequest
 
 from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, PAGE_BREAK, PAGES, OfflineTestCase,
-                                             astra_envelope, astra_with, changed, code, empty_reading, fable_envelope,
-                                             fable_with, fixture_bytes, fixture_reading, service)
+                                             astra_envelope, astra_tool_call, astra_with, changed, code, empty_reading,
+                                             fable_envelope, fable_with, fixture_bytes, fixture_reading, service)
 
 # Model-written text shaped like a descriptor (synthetic placeholder wording, refutation round 1, IND-2): never repeated
 REFUSAL_WORDING = ('I will not code this. 45385 is SYNTHETIC-DESCRIPTOR-WORDING with removal of lesion(s) by snare '
@@ -190,17 +190,24 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
                 self.assertIn('not completed', self.refused(self.envelope(status=status)))
 
     def test_another_model_is_refused_and_never_read(self):
-        """I6. A dated snapshot of gpt-6-astra is the same model; a model whose name merely starts with it is not."""
+        """I6: only the exact model requested, gpt-6-astra. The vendor lists no other snapshot or alias of it, so a
+        dated name - a real calendar date or not - is another model as far as CPT Studio can tell, and its answer,
+        tool calls included, is never read (refutation round 1, EV-6)."""
         for model in ('gpt-6-astra-mini', 'gpt-6-astra-pro-2026-10-01', 'gpt-6', 'gpt-6-astra-2026-10', 'GPT-6-ASTRA',
-                      'gpt-6-astra ', 'gpt-5.5', ''):
+                      'gpt-6-astra ', 'gpt-5.5', '', 'gpt-6-astra-2026-09-15', 'gpt-6-astra-2026-10-15',
+                      'gpt-6-astra-0000-00-00', 'gpt-6-astra-9999-99-99', 'gpt-6-astra-2026-13-45'):
             with self.subTest(model=model):
                 problem = self.refused(self.envelope(model=model))
                 self.assertIn('as the model that answered, not gpt-6-astra', problem)
         self.assertIn('names no model', self.refused(self.envelope(model=None)))
         self.assertIn('names no model', self.refused(self.envelope(model=['gpt-6-astra'])))
         self.assertIn("names model 'gpt-6-astra ' as the model", self.refused(self.envelope(model='gpt-6-astra ')))
-        result = self.read(self.envelope(model='gpt-6-astra-2026-09-15'))
-        self.assertEqual((result.refused, result.returned_model), (False, 'gpt-6-astra-2026-09-15'))
+        refused = self.read(self.envelope(model='gpt-6-astra-2026-09-15'))
+        self.assertEqual(refused.returned_model, 'gpt-6-astra-2026-09-15')  # what answered is kept, never read
+        dated = json.loads(astra_tool_call(('call_dated_1', 'cms_code_facts', {'codes': ['45385'],
+                                                                               'date_of_service': ''})))
+        dated['model'] = 'gpt-6-astra-2026-10-15'
+        self.assertEqual(openai_astra.parse_turn(json.dumps(dated).encode()), loop.FINAL)  # nor its tool calls run
         refused = self.read(self.envelope(model='gpt-6-astra-mini'))
         self.assertEqual(refused.returned_model, 'gpt-6-astra-mini')  # what answered is kept, the answer is not read
 

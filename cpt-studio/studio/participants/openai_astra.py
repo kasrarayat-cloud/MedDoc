@@ -16,8 +16,9 @@ the caller's id on the first exchange and '<id>-<turn>' on each later one. The p
 same shape with PEER_INSTRUCTIONS, the peer schema (named prompt.PEER_SCHEMA_NAME) and two text inputs, the framed text
 and prompt.peer_document; no original file is attached.
 
-An answer is read only when its status is completed, it names gpt-6-astra as the model that answered (or a dated
-snapshot of it, gpt-6-astra-YYYY-MM-DD: never another model; I6), and its message carries output text and no refusal.
+An answer is read only when its status is completed, it names exactly gpt-6-astra as the model that answered (I6: the
+vendor lists no other snapshot or alias of it, so a dated name is another model as far as CPT Studio can tell;
+refutation round 1, EV-6), and its message carries output text and no refusal.
 An incomplete response is refused as truncated, and a harness@2 answer that still asks for tool calls is not a final
 answer. Its output text is then read as the reading (reading.py) or the peer review (peer.py).
 
@@ -57,7 +58,6 @@ BODY_KEYS = frozenset({'model', 'instructions', 'input', 'text', 'reasoning', 'm
 ORIGINAL_PATH = ('input', 0, 'content', 0, 'file_data')  # where a PDF's file data goes
 CLIENT_REQUEST_ID_CHARS = 512  # OpenAI: ASCII, at most 512 characters
 _CLIENT_REQUEST_ID = re.compile(r'[\x21-\x7e]{1,512}')
-_SNAPSHOT = re.compile(re.escape(MODEL) + r'-[0-9]{4}-[0-9]{2}-[0-9]{2}')
 
 
 def tools() -> list:
@@ -105,7 +105,8 @@ def turn_client_request_id(client_request_id: str, turn: int) -> str:
 
 
 def answered_by_astra(model) -> bool:
-    return isinstance(model, str) and (model == MODEL or _SNAPSHOT.fullmatch(model) is not None)
+    """I6: the exact model requested, and nothing else - not a dated name either (EV-6)."""
+    return model == MODEL
 
 
 def _file_data(data: bytes) -> str:
