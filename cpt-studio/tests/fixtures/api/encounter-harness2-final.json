@@ -23,7 +23,7 @@
  "permissions": {
   "can_review": true,
   "is_owner": true,
-  "can_confirm": true
+  "can_confirm": false
  },
  "harness": {
   "participants": [
@@ -465,8 +465,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "263bd8770dc057c9fbf008786f02975473341428c2ce6407d53a0e2ddbd761f9",
-   "response_sha256": "231710fcfa717e0affd7beeab5412814c65a2a8d6723f1abfc7ac982141e04e2",
+   "request_sha256": "9ace2f22bf6d80fe8c89c33c0e192ba1df06df5c12b465558f111e719b658f7b",
+   "response_sha256": "6f0bca849a9c2208e8c054870abbf6963407906834ac2a9f64b159f49073b87c",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -488,8 +488,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "af1442e749ef99d049ba27a91ce240bfb79cac6e66481868b46b6cf03d8137db",
-   "response_sha256": "f0d88a5c1dee104a9f37f2344c0016ec7fdbcceabc54b596cad29bf21d6f8a58",
+   "request_sha256": "5bcff18539b2e6e989770fe02ea2292d1bf2c59374c0ad88fece902bc1c635b4",
+   "response_sha256": "9baafc1a0ae54e14f33b6f920c9a2c1f4e7d58a277c53f1241dcc630730885cd",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -1220,9 +1220,9 @@
        "text": "Technique: The colonoscope was advanced to the cecum."
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents cecum for this encounter."
+     "verified": false,
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
+     "attestation": ""
     },
     {
      "id": "1a7f9a6dea803cb0",
@@ -1258,7 +1258,7 @@
       }
      ],
      "verified": false,
-     "why": "The passage does not name the cecum.",
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
      "attestation": ""
     }
    ],
@@ -1274,40 +1274,6 @@
    "reason": "Whether the biopsy was performed at this encounter is in doubt.",
    "state": "open",
    "candidates": [
-    {
-     "id": "49d6edbf6075364b",
-     "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
-     "fact": "performed_status",
-     "value": "performed",
-     "located_by": [
-      "astra"
-     ],
-     "phase": "peer_review",
-     "phases": {
-      "astra": "peer_review"
-     },
-     "runs": [
-      "e2b00000-0000-4000-8000-000000000004"
-     ],
-     "spans": [
-      {
-       "start": 456,
-       "end": 514,
-       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
-       "page": 2
-      }
-     ],
-     "sentences": [
-      {
-       "start": 456,
-       "end": 514,
-       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
-      }
-     ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents performed for this encounter."
-    },
     {
      "id": "e4f6cdc3a0ec513f",
      "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
@@ -1342,7 +1308,7 @@
       }
      ],
      "verified": false,
-     "why": "The passage does not name the forceps biopsy.",
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
      "attestation": ""
     },
     {
@@ -1379,7 +1345,41 @@
       }
      ],
      "verified": false,
-     "why": "The passage does not name the forceps biopsy.",
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
+     "attestation": ""
+    },
+    {
+     "id": "49d6edbf6075364b",
+     "clarification_id": "e2b00000-0000-4000-8000-00000000000c",
+     "fact": "performed_status",
+     "value": "performed",
+     "located_by": [
+      "astra"
+     ],
+     "phase": "peer_review",
+     "phases": {
+      "astra": "peer_review"
+     },
+     "runs": [
+      "e2b00000-0000-4000-8000-000000000004"
+     ],
+     "spans": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps.",
+       "page": 2
+      }
+     ],
+     "sentences": [
+      {
+       "start": 456,
+       "end": 514,
+       "text": "A 3 mm polyp in the rectum was biopsied with cold forceps."
+      }
+     ],
+     "verified": false,
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
      "attestation": ""
     }
    ],
@@ -1429,9 +1429,9 @@
        "text": "Date of service: 2026-10-21"
       }
      ],
-     "verified": true,
-     "why": "",
-     "attestation": "I read this passage in the source document; it documents 2026-10-21 for this encounter."
+     "verified": false,
+     "why": "CPT Studio does not check what a participant's passage states, and this release offers no confirmation.",
+     "attestation": ""
     }
    ],
    "confirmation": null

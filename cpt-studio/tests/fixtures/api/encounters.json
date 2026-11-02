@@ -1,6 +1,28 @@
 {
  "encounters": [
   {
+   "id": "e2d00000-0000-4000-8000-000000000001",
+   "title": "Colonoscopy after peer review, confirmation offered",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": "2026-10-21",
+   "service_date_conflict": false,
+   "service_date_asked": false,
+   "service_date_evidence": "",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 3,
+   "coding_state": "incomplete",
+   "queue_reasons": [
+    "question",
+    "decision",
+    "incomplete"
+   ],
+   "created_at": "2026-11-01T09:00:58Z"
+  },
+  {
    "id": "e2c00000-0000-4000-8000-000000000001",
    "title": "Colonoscopy with a confirmed finding",
    "state": "needs_clarification",

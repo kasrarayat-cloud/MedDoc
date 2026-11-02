@@ -16,7 +16,7 @@ from dataclasses import replace
 from datetime import date
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from studio.gi import context as gi_context
 from studio.gi import detect
@@ -204,6 +204,9 @@ COLON_CODES = (('45385', SNARE), ('45380', BIOPSY))
 STATUS_CODES = (('45380', UNCLEAR), ('45385', SNARE))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmedFactTests(SimpleTestCase):
     def test_a_proposal_extent_question_takes_the_confirmed_value_on_its_passage(self):
         before = run(TWO_EXTENTS, COLON_CODES)
@@ -301,6 +304,9 @@ class ConfirmedFactTests(SimpleTestCase):
                          ('', 'terminal ileum', f'{WORDS} (“{LAND}”)'))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmedStatusTests(SimpleTestCase):
     def test_a_status_confirmed_performed_is_decided_on_its_passage(self):
         before = run(STATUS_STATED, STATUS_CODES)
@@ -378,6 +384,9 @@ class ConfirmedStatusTests(SimpleTestCase):
                           encounter_check(after, 'confirmations.ignored').detail, value)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class GuardTests(SimpleTestCase):
     def test_a_passage_that_is_not_an_exact_slice_of_the_text_is_not_read(self):
         before = run(TWO_EXTENTS, COLON_CODES)
@@ -563,6 +572,9 @@ EGD_UNREAD = (HEAD + 'Procedure note (fictional)\nDate of service: 2026-10-14\n'
               + '\n')  # an EGD calls for the duodenal bulb
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class IncompleteTests(SimpleTestCase):
     """HARNESS.md 11.3: "the engine reads the confirmed fact as documented by the cited passage" - through the readers'
     own path (I2), so a confirmed fact that they would read as an incomplete procedure gives the proposal their
@@ -672,6 +684,9 @@ def made_for(result, key, phrase, cid='conf-1', text=DOUBTS_STATED):
                            value='performed', by=('astra',), cid=cid), **binding(proposal(result, key)))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class BindingTests(SimpleTestCase):
     """A confirmation answers the proposal it was made for, wherever that proposal's key is later, and never the
     proposal that holds its key afterwards (HARNESS.md 11.3, 12.5)."""
@@ -831,6 +846,9 @@ class BindingTests(SimpleTestCase):
         self.assertEqual(binding(proposal(alone, 'sel:0')), binding(proposal(configured, 'sel:1')))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DeterminismTests(SimpleTestCase):
     def test_none_given_is_the_engine_as_before(self):
         for text, codes in ((TWO_EXTENTS, COLON_CODES), (STATUS_ONLY, STATUS_CODES), (VISIT, (('99213', SEEN),))):

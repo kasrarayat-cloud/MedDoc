@@ -26,10 +26,14 @@ from tests.test_frontend import FIXTURES, HARNESS2_SCENARIOS, HARNESS2_TRACE, _f
 # The encounter-harness2-*.json fixtures and trace-harness2-final.json are made here, by studio.serializers, from the
 # rows harness@2 records (tests/test_harness2_api.py's Harness2Case: the real adapters' stored requests, replayed
 # response bytes the real readers read, exchanges, tool calls, the assessments' participant entries and a confirmation
-# recorded through the real endpoint), never written from API.md's prose. CPT_STUDIO_WRITE_FIXTURES=1 writes them again,
-# with stable ids and times; otherwise the committed files must carry exactly the keys, at every level, that the
-# serializer emits now, so a change to the API that the website was not built for fails here. Hashes over bytes that
-# name a question (a peer request or answer) are kept as generated: the ids they name were made stable after hashing.
+# recorded through the real endpoint), never written from API.md's prose. This release offers no reviewer confirmation
+# (HARNESS.md 12.10): the peer and final fixtures and the trace are what it serves (unchecked candidates, can_confirm
+# false); encounter-harness2-dormant.json and encounter-harness2-confirmed.json are made with
+# STUDIO_OFFER_CONFIRMATIONS=True, as the dormant confirmation path serves them, for that path's rendering tests.
+# CPT_STUDIO_WRITE_FIXTURES=1 writes them again, with stable ids and times; otherwise the committed files must carry
+# exactly the keys, at every level, that the serializer emits now, so a change to the API that the website was not
+# built for fails here. Hashes over bytes that name a question (a peer request or answer) are kept as generated: the ids
+# they name were made stable after hashing.
 
 WRITE_FIXTURES = os.environ.get('CPT_STUDIO_WRITE_FIXTURES') == '1'
 UUID_TEXT = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
@@ -86,9 +90,11 @@ class StableIds:
 
 @override_settings(ASTRA_MODE='replay', FABLE_MODE='replay')
 class Harness2FixtureTests(h2.Harness2Case):
-    """Three encounters as harness@2 records them, serialized: one whose peer reviews are running (assess #1 current,
+    """Four encounters as harness@2 records them, serialized: one whose peer reviews are running (assess #1 current,
     Astra's peer stage in flight, Fable's waiting), one after both peer reviews (assess #2, three open questions with
-    their candidates), and one whose extent question a reviewer confirmed, with the re-assessment that read it."""
+    their candidates, served unchecked: this release offers no confirmation, HARNESS.md 12.10), and - made with the
+    dormant confirmation path on - the same scenario as that path serves it, and one whose extent question a reviewer
+    confirmed, with the re-assessment that read it."""
 
     def setUp(self):  # the parent's builds one encounter; these tests build each scenario as the pipeline records it
         self.ws = f.workspace()
@@ -275,7 +281,10 @@ class Harness2FixtureTests(h2.Harness2Case):
         return serializers.encounter_detail(self.encounter, membership), serializers.encounter_summary(self.encounter)
 
     def scenarios(self):
-        """{fixture: (prefix, detail JSON, list row JSON)} and the final scenario's trace, as the API serves them."""
+        """{fixture: (prefix, detail JSON, list row JSON)} and the final scenario's trace, as the API serves them: the
+        release's (HARNESS.md 12.10: no confirmation is offered), then, with STUDIO_OFFER_CONFIRMATIONS=True, the
+        dormant confirmation path's - a confirmed finding, and the final scenario as that path offers it (made last, so
+        the earlier fixtures' times keep their ranks)."""
         out = {}
         prefix, title = HARNESS2_SCENARIOS['encounter-harness2-peer.json']
         self.phase1(title)
@@ -287,11 +296,16 @@ class Harness2FixtureTests(h2.Harness2Case):
         self.phase2()
         out['encounter-harness2-final.json'] = (prefix, *self.detail(self.owner))
         trace = serializers.trace_json(self.encounter)
-        prefix, title = HARNESS2_SCENARIOS['encounter-harness2-confirmed.json']
-        self.phase1(title)
-        self.phase2()
-        self.confirm_extent()
-        out['encounter-harness2-confirmed.json'] = (prefix, *self.detail(self.reviewer))
+        with override_settings(STUDIO_OFFER_CONFIRMATIONS=True):  # the dormant confirmation path (HARNESS.md 12.10)
+            prefix, title = HARNESS2_SCENARIOS['encounter-harness2-confirmed.json']
+            self.phase1(title)
+            self.phase2()
+            self.confirm_extent()
+            out['encounter-harness2-confirmed.json'] = (prefix, *self.detail(self.reviewer))
+            prefix, title = HARNESS2_SCENARIOS['encounter-harness2-dormant.json']
+            self.phase1(title)
+            self.phase2()
+            out['encounter-harness2-dormant.json'] = (prefix, *self.detail(self.owner))
         return out, trace
 
     def test_the_harness2_fixtures_are_what_the_serializer_emits(self):

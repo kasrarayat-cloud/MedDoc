@@ -1735,13 +1735,72 @@ def on_current_context(assessment):
             and assessment.context_id == encounter.current_context_id)
 
 
+# Release scope after refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer
+# confirmation. Three rounds of refutation each found blocking defects in the check that called a participant's passage
+# "Verified", each in the previous round's repair, and the check cannot converge: a question is asked because CPT
+# Studio's own readers did not establish its answer, so a check of what a passage states is either those readers again
+# or a second, weaker reader. While confirmations_offered() is off (settings.STUDIO_OFFER_CONFIRMATIONS, a code-level
+# False): confirm_finding and jobs.reassess_after_confirmation refuse first with CONFIRMATIONS_NOT_OFFERED and record
+# nothing; jobs.confirmed_findings hands the engine no confirmation, not even a row that exists; and a candidate is
+# served as the participant's located passage only (located_passages), never checked, so CPT Studio claims nothing about
+# what it states. The checks, the engine's _Confirmations and the re-assessment stay, dormant, behind the setting.
+CONFIRMATIONS_NOT_OFFERED = ('This release offers no reviewer confirmation of a candidate answer, so nothing was '
+                             'recorded; a question is answered with an addendum.')
+UNCHECKED_WHY = "CPT Studio does not check what a participant's passage states, and this release offers no confirmation."
+
+
+def confirmations_offered():
+    """Whether reviewer confirmations are offered (HARNESS.md 12.10): only while settings.STUDIO_OFFER_CONFIRMATIONS is
+    the literal True, which this release never is - a code-level False no environment variable, installer file or
+    member action changes; only a test's override_settings turns on the dormant path. Fail closed: anything else is
+    off."""
+    from django.conf import settings  # local import: read where the release scope is decided
+
+    return getattr(settings, 'STUDIO_OFFER_CONFIRMATIONS', False) is True
+
+
+def located_passages(question, text, pages=(), readings=(), answers=()):
+    """The candidates of ``question`` as this release serves them (HARNESS.md 12.10, D7): each participant's passage
+    located for it - read by studio.candidates' own source readers from the frozen first readings and the peer answers,
+    merged as there by (value, spans), in its candidate shape and order - that is an exact slice of the current revision
+    ``text`` (I7), with its whole sentence. None of the checks that decided "verified" runs: the value is the source's
+    own restating, never held against the passage, and every candidate is verified false with UNCHECKED_WHY and no
+    attestation. A source that cites no passage, or one not located as exact slices of this text, is not served (fail
+    closed: what the page quotes as the document's text is the document's)."""
+    from .validation import reconcile  # local import: only the readers' sentence and page spans are read here
+
+    if not candidates.askable(question) or not isinstance(text, str):
+        return []
+    index, spans_of_pages = candidates._page_index(pages), reconcile.page_spans(pages)
+    sources = [source for item in sorted(readings, key=candidates._order)
+               for source in candidates._reading_sources(question, item)]
+    sources += [source for item in sorted(answers, key=candidates._order)
+                for source in candidates._answer_sources(question, item)]
+    merged = {}
+    for source in sources:
+        spans = tuple(sorted(source.quote.spans, key=lambda s: (s.start, s.end))) if source.quote is not None else ()
+        if not spans or len(spans) > candidates.MAX_SPANS or not all(candidates._exact(text, s) for s in spans):
+            continue
+        entry = merged.setdefault((source.value, tuple((s.start, s.end) for s in spans)),
+                                  {'value': source.value, 'spans': spans, 'by': {}, 'runs': [], 'why': UNCHECKED_WHY})
+        entry['by'].setdefault(source.name, set()).add(source.phase)
+        if source.run not in entry['runs']:
+            entry['runs'].append(source.run)
+    out = [candidates._candidate(question, entry, index, text, spans_of_pages) for entry in merged.values()]
+    out.sort(key=lambda c: (not c['verified'], c['spans'][0]['start'], c['value'], c['id']))
+    return out
+
+
 def assessment_candidates(assessment):
     """{clarification id: [candidate]} (studio.candidates) for each OPEN clarification of ``assessment`` when it is the
     final assessment of a chain a model participant took part in, made on the encounter's current revision and context;
     {} otherwise - a Corti-only assessment, an assess #1 whose peer stages follow, no open question, no model
     participant configured now (no assessment would read a confirmation then: the pipeline gives the engine none, I1),
     or an assessment of an earlier context (no confirmation could be read then: refutation round 2, truth-10). A status
-    is read against the documented-service inventory the assessment recorded (recorded_inventory)."""
+    is read against the documented-service inventory the assessment recorded (recorded_inventory). Refutation round 3
+    (HARNESS.md 12.10, D7): while confirmations are not offered - the release default - each candidate is a
+    participant's located passage only (located_passages): no check that decided "verified" runs, and none is
+    verified."""
     if (assessment is None or assessment_phase(assessment) == 0 or not is_final(assessment)
             or not participants.configured() or not on_current_context(assessment)):
         return {}
@@ -1751,6 +1810,10 @@ def assessment_candidates(assessment):
     readings, reviews = frozen_inputs(assessment)
     answers = peer_answers(assessment, questions, reviews) if reviews else {}
     revision = assessment.revision
+    if not confirmations_offered():
+        return {str(question.pk): located_passages(candidate_question(question), revision.text, revision.pages,
+                                                   readings, answers.get(question.pk, ()))
+                for question in questions}
     inventory = (recorded_inventory(assessment)
                  if any(question.fact == candidates.STATUS_FACT for question in questions) else None)
     return {str(question.pk): candidates.candidates(candidate_question(question), revision.text, revision.pages,
@@ -1777,7 +1840,14 @@ def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, u
     'finding.confirmed' are recorded, then a service date enters as the member's date through jobs.change_context
     (every date safeguard and I8 apply; effect 'context') and every other fact is read by the re-assessment
     jobs.reassess_after_confirmation queues (effect 'reassessment'). A refusal from either leaves nothing recorded.
-    Never approves anything: approval stays a separate decision."""
+    Never approves anything: approval stays a separate decision.
+
+    Refutation round 3 (HARNESS.md 12.10, D7): while confirmations are not offered - the release default - it refuses
+    first, before it reads the encounter, the question, the candidate or anything else, with CONFIRMATIONS_NOT_OFFERED
+    (ConfirmationRefused: the endpoint's 409); nothing is recorded: no FindingConfirmation, no audit row, no job, no
+    request."""
+    if not confirmations_offered():
+        raise ConfirmationRefused(CONFIRMATIONS_NOT_OFFERED)
     from . import jobs  # local import: jobs imports this module
 
     with transaction.atomic():

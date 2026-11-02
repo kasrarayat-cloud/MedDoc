@@ -36,7 +36,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models
@@ -565,6 +565,9 @@ PERFORMED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14
              'It is unclear whether biopsies of the ascending colon lesion were taken.\n' + TAKEN + '\n' + LAND + '\n')
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ReviewerIdentityTests(PeerMaterialCase):
     """HARNESS.md 3 and 11.1 list what a peer request holds, and no workspace member's identity is among it; 11.3: a
     reviewer's confirmation is never presented as a reading of CPT Studio's own. A later chain's assess #1 reads the

@@ -1856,7 +1856,11 @@ def confirmed_findings(revision):
     read, with why. A proposal's question is bound to the proposal it was made for: the code and support['identity'] of
     its clarification's own proposal row, which is the question the reviewer answered - never the key alone, which
     a later assessment can give to another code (EV-1); a row whose proposal records no identity binds to nothing, and
-    the engine says so."""
+    the engine says so. Refutation round 3 (HARNESS.md 12.10, D7): while confirmations are not offered - the release
+    default - it hands the engine none, without reading a row: one that exists anyway (a test's, an earlier
+    installation's) is never applied."""
+    if not review.confirmations_offered():
+        return ()
     text = revision.text
     found = []
     for row in (models.FindingConfirmation.objects.filter(revision=revision)
@@ -2811,7 +2815,12 @@ def reassess_after_confirmation(encounter, user):
     every confirmation of the revision, so the same confirmations queue one assess. An earlier re-assessment's ':c:'
     part is left off the final's key first: appended to each other, a run of confirmations would outgrow the
     200-character key column, as chained Resume suffixes once did (refutation gi2), and the new digest already covers
-    every confirmation the earlier one did."""
+    every confirmation the earlier one did.
+
+    Refutation round 3 (HARNESS.md 12.10, D7): while confirmations are not offered - the release default - it refuses
+    first, as review.confirm_finding does, with review.CONFIRMATIONS_NOT_OFFERED; nothing is queued."""
+    if not review.confirmations_offered():
+        raise Refused(review.CONFIRMATIONS_NOT_OFFERED)
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):

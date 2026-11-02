@@ -281,7 +281,10 @@ class FixtureTests(Harness2Case):
         self.assertEqual(used, {FACT_REF: True, PASSAGE_REF: False})
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class CandidateTests(Harness2Case):
     def test_each_open_question_of_the_final_assessment_has_its_candidates(self):
         extent = self.candidates_of('extent')
@@ -334,7 +337,10 @@ class CandidateTests(Harness2Case):
         self.assertEqual(([r.name for r in readings], [name for name, _, _ in reviews]), (['astra'], ['astra']))
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationRefusalTests(Harness2Case):
     def assertRefused(self, response, status, words):
         self.assertEqual(response.status_code, status, response.content)
@@ -421,7 +427,10 @@ class ConfirmationRefusalTests(Harness2Case):
             self.assertRefused(self.confirm('service_date'), 409, 'Synthetic context refusal.')
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationTests(Harness2Case):
     def test_a_required_fact_is_recorded_audited_and_re_assessed_never_approved(self):
         candidate = self.verified('extent')
@@ -512,7 +521,10 @@ class ConfirmationTests(Harness2Case):
         self.assertFalse(models.Decision.objects.exists())
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DetailTests(Harness2Case):
     def detail(self, user=None):
         response = self.client_for(user or self.reviewer).get(f'/api/encounters/{self.encounter.pk}')
@@ -804,6 +816,9 @@ class _Decisions:
         return later
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DecisionCarryTests(_Decisions, PipelineColonCase):
     def confirm_extent(self, encounter_id):
         """A reviewer confirms sel:0's extent (45385) through the endpoint, from the verified candidate Astra's peer

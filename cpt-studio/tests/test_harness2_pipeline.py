@@ -805,6 +805,9 @@ class ColonCase(Harness2Case):
         return assessment.proposals.get(key=key)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class PeerRequestTests(ColonCase):
     def test_the_peer_request_shows_exactly_the_frozen_inputs(self):
         encounter_id = self.create(TWO_EXTENTS)
@@ -980,6 +983,9 @@ class StableQuestionTests(ColonCase):
 
 # --- the re-assessment after a confirmation (HARNESS.md 12.1, 12.5) ---------------------------------------------------
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ReassessTests(ColonCase):
     def test_it_reads_what_the_final_assessment_read_plus_the_confirmations_and_sends_nothing(self):
         encounter_id = self.create(TWO_EXTENTS)
@@ -1406,6 +1412,10 @@ class PeerRunLookupTests(Harness2Case):
         self.assertEqual(jobs._final_key(first), self.jobs_of(encounter_id)[-1].idempotency_key)
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions (the first makes its new peer request by a
+# confirmation the next assess #1 reads).
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class UpgradeChainTests(ColonCase):
     def upgrade(self, encounter_id):
         encounter = self.encounter(encounter_id)

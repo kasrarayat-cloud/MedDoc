@@ -65,7 +65,10 @@ def rows_of(content):
     return data[0], [dict(zip(data[0], row)) for row in data[1:]]
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class SectionTests(Harness2Case):
     def txt(self, kind='draft'):
         return reports.render_txt(reports.snapshot(self.encounter, kind)).decode('utf-8')
@@ -189,7 +192,10 @@ class SectionTests(Harness2Case):
                          '    Reason: It takes no part in peer review: its first reading was not read.')
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class CsvTests(Harness2Case):
     def test_the_rows_beside_the_proposals_never_a_decision(self):
         with mock.patch('studio.jobs.reassess_after_confirmation'):
@@ -262,7 +268,10 @@ class CortiOnlyTests(TestCase):
         self.assertEqual({check for check, status in results.items() if status == 'fail'}, set())
 
 
+# The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
+# run that path with its setting on and keep their assertions.
 @override_settings(**BOTH)
+@override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DownloadVerifierTests(Harness2Case):
     def checked(self, txt=None, csv_text=None):
         self.encounter.refresh_from_db()

@@ -19,7 +19,7 @@
  "permissions": {
   "can_review": true,
   "is_owner": false,
-  "can_confirm": true
+  "can_confirm": false
  },
  "harness": {
   "participants": [
