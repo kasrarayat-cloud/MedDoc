@@ -6,8 +6,8 @@ participant_access_check and access_check_failure; ops/INSTALL.md, the app phase
   --access-check, or install with that participant disabled". The installer knows no cause. Refutation round 4 made the
   check print its receipt when its loop stops at the provider-lock question, and that receipt records that the vendor
   answered (HTTP 200, req_turn_1) and that CPT Studio stopped the loop; the in-flight refusal sends nothing at all, and
-  says so on stderr. Now a non-zero exit's problem is what the check itself said: its receipt's error, or, when its
-  receipt gives none or it wrote none, the last non-empty line it wrote on stderr. Each is repeated only whole and only
+  says so on stderr. Now a non-zero exit's problem is what the check's output says: its receipt's error, or, when its
+  receipt gives none or there is none, the last non-empty line of its stderr. Each is repeated only whole and only
   up to 300 characters, otherwise named and never cut, and only once the credential scan has found no credential value
   in what it wrote. The phase's failure names no cause: the pair stays installed with those participants live, this
   phase's receipt records each check (its JSON receipt, if it wrote one, and the path of its log, where what it wrote
@@ -137,7 +137,9 @@ PAIR_STAYS = 'The pair stays installed with those participants live.'
 RECORDED_WHERE = ("Under access_checks, this phase's receipt records each check and, where what it wrote was recorded, "
                   'its JSON receipt (if it wrote one) and the path of its log.')
 RERUN = 'Once the cause is known, run --phase app again with --access-check, or install with that participant disabled.'
-LINE_SAYS = 'it exited 1, and the last line of text it wrote on stderr says: '
+LINE_SAYS = 'it exited 1, and the last line of text on its stderr says: '
+CUT = ('it exited 1, and only the end of its stderr was kept, with no whole line of text in it, so no line is '
+       'repeated here.')
 
 
 def stdout_of(receipt) -> bytes:
@@ -236,8 +238,8 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
                 if repeated:
                     self.assertEqual(check['problem'], f'{LINE_SAYS}{line}')
                 else:
-                    self.assertEqual(check['problem'], 'it exited 1, and the last line of text it wrote on stderr is '
-                                                       'longer than 300 characters, so it is not repeated here.')
+                    self.assertEqual(check['problem'], 'it exited 1, and the last line of text on its stderr is longer '
+                                                       'than 300 characters, so it is not repeated here.')
                     self.assertNotIn('EEEE', message)  # never cut: no part of it is repeated
                 self.assert_names_no_cause(message)
 
@@ -248,21 +250,18 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
         self.assertEqual(check['problem'], f'{LINE_SAYS}RuntimeError: the last line, whole')
         cut = b'RuntimeError: the start of a long line ' + b'y' * 9000 + b'\n'
         message, check = self.failed(answer(1, b'', cut))
-        self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
-                                           'whole line of text in it, so no line is repeated here.')
+        self.assertEqual(check['problem'], CUT)
         self.assertNotIn('yyyy', message)
         # a short end of a line, then blank lines: it is not the line it ends, so it is not repeated either
         short_end = b'RuntimeError: a line of which only the end ' + b'is kept\n' + b'\n' * (8192 - 8)
         self.assertEqual(len(short_end) - short_end.index(b'is kept'), 8192)
         message, check = self.failed(answer(1, b'', short_end))
-        self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
-                                           'whole line of text in it, so no line is repeated here.')
+        self.assertEqual(check['problem'], CUT)
         self.assertNotIn('is kept', message)
         # a last line followed by 8 KiB of blank lines: the kept end is whole lines with no text, and that is said
         blank_end = b'RuntimeError: written before the kept end\n' + b'\n' * 8192
         message, check = self.failed(answer(1, b'', blank_end))
-        self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
-                                           'whole line of text in it, so no line is repeated here.')
+        self.assertEqual(check['problem'], CUT)
         self.assertNotIn('written before', message)  # never kept, never scanned
         # the kept end starts exactly at a line: that line is whole, and is repeated
         at_a_line = b'w' * 9 + b'\n' + b'RuntimeError: kept whole\n' + b'\n' * (8192 - 25)
@@ -290,10 +289,10 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
 
     def test_an_exit_that_wrote_nothing_says_so(self):
         message, check = self.failed(answer(137))
-        self.assertEqual(check['problem'], 'it exited 137, and it wrote no JSON receipt and no text on stderr.')
+        self.assertEqual(check['problem'], 'it exited 137, and there is no JSON receipt and no text on its stderr.')
         self.assert_names_no_cause(message)
         message, check = self.failed(answer(3, stdout_of({'participant': 'astra', 'http_status': 401}), b' \n'))
-        self.assertEqual(check['problem'], 'it exited 3, and it wrote no text on stderr.')
+        self.assertEqual(check['problem'], 'it exited 3, and there is no text on its stderr.')
 
     def test_a_credential_value_on_stderr_is_never_repeated(self):
         # the scan runs first: what it finds keeps the whole output out of the phase's receipt, the problem included

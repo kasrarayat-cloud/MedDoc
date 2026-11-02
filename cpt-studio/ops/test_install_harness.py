@@ -743,10 +743,11 @@ class AppPhaseParticipantTests(TemporaryDirectoryTest):
         message = str(caught.exception)
         self.assertIn('web and worker running', message)
         # Moved by refutation round 5 (R5-SENDS, sends-1) to what the phase now says: a non-zero exit is reported with
-        # what the check itself said (its receipt's error, else its last line of text on stderr), never as "it exited
-        # 3." alone; this receipt gives no error and nothing was written on stderr, so that is said. No cause is added
+        # what its output says (its receipt's error, else the last line of text on its stderr), never as "it exited 3."
+        # alone; this receipt gives no error and its stderr holds no text, so that is said. No cause is added
         # (test_install_r5_sends pins the access check's real receipts and the remedy).
-        self.assertIn('the access check did not pass for fable (it exited 3, and it wrote no text on stderr.)', message)
+        self.assertIn('the access check did not pass for fable (it exited 3, and there is no text on its stderr.)',
+                      message)
         self.assertIn('The pair stays installed', message)
         self.assertNotIn('fix the credentials or the vendor account', message)
         checks = caught.exception.details['access_checks']

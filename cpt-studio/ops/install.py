@@ -2750,11 +2750,11 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
     container wrote is recorded (its JSON receipt here; its stdout and the last 8 KiB of its stderr in a log) only once
     a root helper found no credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}.
 
-    A check that exits non-zero is reported by what it said itself (refutation round 5, sends-1), never by its exit
+    A check that exits non-zero is reported by what its output says (refutation round 5, sends-1), never by its exit
     status alone and never with a cause the installer does not know: its receipt's error, else the last non-empty line
-    of what it wrote on stderr, each scanned with the rest and repeated only whole and only up to 300 characters
-    (otherwise named, never cut). Only the end of stderr is kept and scanned, so a line that began before it is never
-    taken for a whole one."""
+    of its stderr, each scanned with the rest and repeated only whole and only up to 300 characters (otherwise named,
+    never cut). Only the end of stderr is kept and scanned, so a line that began before it is never taken for a whole
+    one."""
     if name == 'corti':
         environment = runtime_env('live', authorization_ref, credentials=True)
         files = {'credentials': True}
@@ -2790,15 +2790,14 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
             said = (f'its receipt says: {error}' if len(error) <= limit
                     else f"its receipt's error is longer than {limit} characters, so it is not repeated here.")
         elif lines:
-            said = (f'the last line of text it wrote on stderr says: {lines[-1]}' if len(lines[-1]) <= limit
-                    else f'the last line of text it wrote on stderr is longer than {limit} characters, so it is not '
+            said = (f'the last line of text on its stderr says: {lines[-1]}' if len(lines[-1]) <= limit
+                    else f'the last line of text on its stderr is longer than {limit} characters, so it is not '
                          'repeated here.')
         elif cut:
-            said = ('only the end of what it wrote on stderr was kept, with no whole line of text in it, so no '
-                    'line is repeated here.')
+            said = 'only the end of its stderr was kept, with no whole line of text in it, so no line is repeated here.'
         else:
-            said = ('it wrote no text on stderr.' if receipt is not None
-                    else 'it wrote no JSON receipt and no text on stderr.')
+            said = ('there is no text on its stderr.' if receipt is not None
+                    else 'there is no JSON receipt and no text on its stderr.')
         entry['problem'] = f'it exited {result.returncode}, and {said}'
     elif receipt is None:
         entry['problem'] = 'its output was not one JSON receipt.'
@@ -2809,9 +2808,10 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
 
 def access_check_failure(image_id, mode, participants, states, checks, error=None) -> str:
     """The receipt of an app phase whose pair is installed and whose access check did not pass, or stopped. A check
-    that did not pass is named with what it said (participant_access_check's problem), and no cause is added to it
-    (refutation round 5, sends-1: every failure was told to fix the credentials or the vendor account, beside a receipt
-    recording that the vendor had answered and CPT Studio had stopped the loop, or a refusal that sent nothing)."""
+    that did not pass is named with what its output says (participant_access_check's problem), and no cause is added
+    to it (refutation round 5, sends-1: every failure was told to fix the credentials or the vendor account, beside a
+    receipt recording that the vendor had answered and CPT Studio had stopped the loop, or a refusal that sent
+    nothing)."""
     done = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), the stored list states ' \
            f'recomputed ({len((states or {}).get("changed") or {})} changed) and the previous pair removed, but '
     if error is not None:
