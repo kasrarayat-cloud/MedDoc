@@ -582,3 +582,266 @@ class PeerGatingTests(Harness2Case):
         self.assertEqual([(self.sent(n, 'first'), self.sent(n, 'peer')) for n in ('astra', 'fable')], [(1, 1), (1, 1)])
         records = self.records(self.encounter(encounter_id).current_assessment)
         self.assertEqual((records['astra']['state'], 'peer_state' in records['astra']), ('read', False))
+
+
+# --- what a peer request shows, and what assess #2 reads (HARNESS.md 12.1, 12.4, 12.5) ---------------------------------
+
+ASTRA_COLON = reading(codes=[('45385', SNARE), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)])
+FABLE_COLON = reading(codes=[('45385', SNARE)], services=[('c1', 'colonoscopy', 'performed', SNARE)])
+CPT_STUDIO = "== CPT Studio's rule-based reading - it can be wrong =="
+
+
+def open_questions(name, body):
+    return document_sections(peer_document(name, body))[CPT_STUDIO]['open_questions']
+
+
+def answers_extent(name, number=2):
+    """A peer review answering the open extent question of proposal sel:0 with the landmark passage."""
+    def answer(body):
+        question = next(q for q in open_questions(name, body) if q['proposal_key'] == 'sel:0')
+        return answered(name, peer_answer(answers=[(question['question_id'], True, 'cecum', LAND)],
+                                          positions=[('45380', 'supports', BIOPSY)]), number)
+    return answer
+
+
+class ColonCase(Harness2Case):
+    corti_codes = (('45385', SNARE), ('45380', BIOPSY))
+
+    def setUp(self):
+        super().setUp()
+        self.adapters['astra'].first = [answered('astra', ASTRA_COLON)]
+        self.adapters['fable'].first = [answered('fable', FABLE_COLON)]
+        self.adapters['astra'].peer = [answers_extent('astra')]
+        self.adapters['fable'].peer = [answered('fable', peer_answer(codes=[('45378', LAND)]), number=2)]
+
+    def confirm(self, encounter_id, assessment, key, value='cecum', passage=LAND, fact='extent', scope='proposal'):
+        """A reviewer's confirmation as the confirmation endpoint records it (HARNESS.md 12.5)."""
+        revision = self.encounter(encounter_id).current_revision
+        clarification = assessment.clarifications.filter(proposal__key=key).first() or assessment.clarifications.first()
+        start = revision.text.index(passage)
+        return models.FindingConfirmation.objects.create(
+            encounter_id=encounter_id, revision=revision, clarification=clarification, scope=scope, fact=fact,
+            family='' if scope == 'encounter' else 'gi.colonoscopy', proposal_key=key if scope == 'proposal' else '',
+            value=value, spans=[{'start': start, 'end': start + len(passage), 'text': passage, 'page': None}],
+            located_by=['astra'], runs=[], confirmed_by=self.reviewer,
+            attestation=f'I read this passage in the source document; it documents {value} for this encounter.')
+
+    def proposal(self, assessment, key):
+        return assessment.proposals.get(key=key)
+
+
+class PeerRequestTests(ColonCase):
+    def test_the_peer_request_shows_exactly_the_frozen_inputs(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        first, final = self.assessments(encounter_id)
+        records = self.records(first)
+        questions = [{'question_id': str(c.pk), 'scope': c.scope, 'fact': c.fact, 'family': c.family,
+                      'proposal_key': c.proposal.key if c.proposal_id else '', 'question': c.question,
+                      'reason': c.reason} for c in first.clarifications.order_by('created_at', 'pk')]
+        self.assertEqual([(q['proposal_key'], q['fact']) for q in questions], [('sel:0', 'extent'), ('sel:1', 'extent')])
+        held = [{'key': p.key, 'code': p.code, 'status': p.status,
+                 'reasons': [c['detail'] for c in p.checks if c['status'] != 'pass']}
+                for p in first.proposals.filter(status='needs_clarification').order_by('position')]
+        self.assertEqual([h['code'] for h in held], ['45385', '45380'])
+        cpt_studio = {'open_questions': questions, 'held': held, 'excluded': []}
+        readings = {name: jobs.participant_reading(self.runs_of(encounter_id, name, 'independent')[0])[0]
+                    for name in ('astra', 'fable')}
+        for name, other in (('astra', 'fable'), ('fable', 'astra')):
+            with self.subTest(name):
+                run = self.runs_of(encounter_id, name, 'peer_review')[0]
+                document = peer_document(name, run.request_body)
+                sections = document_sections(document)
+                self.assertEqual(sections['== Your frozen first reading =='], prompt.reading_answer(readings[name]))
+                self.assertEqual(sections['corti (another coding system):'],
+                                 {'codes': [{'code': '45385', 'modifiers': [], 'units': 1, 'evidence': [SNARE]},
+                                            {'code': '45380', 'modifiers': [], 'units': 1, 'evidence': [BIOPSY]}]})
+                self.assertEqual(sections[f'{other} (another model):'], prompt.reading_answer(readings[other]))
+                self.assertEqual(sections[CPT_STUDIO], cpt_studio)
+                frozen = records[name]['frozen'] + [['cpt_studio', sha256_json(cpt_studio)]]
+                self.assertEqual(prompt.peer_document_inputs(document),
+                                 (tuple(q['question_id'] for q in questions),
+                                  tuple(sorted((n, s) for n, s in frozen))))
+                # what was shown is recorded with the review, and it never carries Corti's own wording (I9)
+                review_ = jobs.peer_reading(run)[0]
+                self.assertEqual(review_.frozen_inputs, tuple(sorted((n, s) for n, s in frozen)))
+                stored = json.dumps(run.request_body)
+                self.assertNotIn(CORTI_DISPLAY, stored)
+                self.assertNotIn('"display"', stored)
+                self.assertNotIn('$original_sha256', stored)  # a peer review attaches no original file
+                self.assertEqual(run.contexts, [TWO_EXTENTS])
+        # the frozen list: Corti's response, both readings and the revision text
+        corti = self.runs_of(encounter_id, 'corti')[0]
+        self.assertEqual([n for n, _ in records['astra']['frozen']], ['corti', 'astra', 'fable', 'revision'])
+        self.assertEqual(records['astra']['frozen'][0], ['corti', corti.response_sha256])
+        self.assertEqual(final.participants[0]['frozen'], records['astra']['frozen'])
+
+    def test_assess_two_reads_the_peer_reviews_and_a_code_proposed_after_peer_review_keeps_its_phase(self):
+        seen = []
+        real = jobs.prefetched_lookup
+
+        def recording(codes):
+            seen.append(tuple(codes))
+            return real(codes)
+        with mock.patch('studio.jobs.prefetched_lookup', side_effect=recording):
+            encounter_id = self.create(TWO_EXTENTS)
+            drain()
+        self.assertEqual(seen, [('45380', '45385'), ('45378', '45380', '45385')])  # assess #2 adds Fable's code
+        final = self.encounter(encounter_id).current_assessment
+        added = final.proposals.get(code='45378')
+        self.assertEqual((added.support.get('origin'), added.support.get('phases')),
+                         ('participant', {'fable': 'peer_review'}))
+        self.assertIn('Fable after peer review', added.rationale)
+        self.assertIn('Corti did not propose this code', added.rationale)
+        summary = next(c for c in final.encounter_checks if c['id'] == 'participants.summary')
+        self.assertIn('In peer review', summary['detail'])
+        # a peer review's answer is never itself a confirmation: sel:0 stays held until a reviewer confirms (11.3)
+        self.assertEqual(self.proposal(final, 'sel:0').status, 'needs_clarification')
+
+    def test_assess_two_reads_the_revision_s_confirmations_and_never_the_date_s(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        job = self.run_until('astra_peer')
+        first = self.encounter(encounter_id).current_assessment
+        confirmation = self.confirm(encounter_id, first, 'sel:0')
+        self.confirm(encounter_id, first, '', value='2026-10-14', passage='Date of service: 2026-10-14',
+                     fact='service_date', scope='encounter')
+        revision = self.encounter(encounter_id).current_revision
+        (finding,) = jobs.confirmed_findings(revision)  # the service date's enters through the context, never here
+        self.assertEqual((finding.fact, finding.proposal_key, finding.value, finding.confirmation_id, finding.located_by,
+                          finding.confirmed_by), ('extent', 'sel:0', 'cecum', str(confirmation.pk), ('astra',),
+                                                  self.reviewer.label()))
+        self.assertTrue(finding.evidence[0].exact)
+        jobs.run_job(job)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(jobs.assessment_phase(final), 2)
+        item = self.proposal(final, 'sel:0')
+        self.assertEqual((item.code, item.status, item.support['confirmed']), ('45385', 'ready', [str(confirmation.pk)]))
+        ids = [c['id'] for c in final.encounter_checks]
+        self.assertIn('confirmations.applied', ids)
+        self.assertNotIn('confirmations.ignored', ids)  # the date's confirmation was never given to the engine
+        self.assertEqual(self.proposal(final, 'sel:1').status, 'needs_clarification')  # another question: untouched
+
+
+# --- the re-assessment after a confirmation (HARNESS.md 12.1, 12.5) ---------------------------------------------------
+
+class ReassessTests(ColonCase):
+    def test_it_reads_what_the_final_assessment_read_plus_the_confirmations_and_sends_nothing(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        made = models.Job.objects.get(encounter_id=encounter_id, kind='assess', result__assessment=str(final.pk))
+        runs, loops = models.ProviderRun.objects.count(), [len(a.loops) for a in self.adapters.values()]
+        confirmation = self.confirm(encounter_id, final, 'sel:0')
+        job = jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        digest = hashlib.sha256(str(confirmation.pk).encode()).hexdigest()[:12]
+        self.assertEqual((job.kind, job.idempotency_key, job.context_id, job.provider_run_id),
+                         ('assess', f'{made.idempotency_key}:c:{digest}', final.context_id, final.provider_run_id))
+        drain()
+        again = self.encounter(encounter_id).current_assessment
+        self.assertNotEqual(again, final)
+        self.assertEqual((models.ProviderRun.objects.count(), [len(a.loops) for a in self.adapters.values()],
+                          len(self.corti.requests)), (runs, loops, 1))  # nothing is sent
+        self.assertEqual(self.kinds(encounter_id)[-1], 'assess')  # and no peer review is queued
+        item = self.proposal(again, 'sel:0')
+        self.assertEqual((item.status, item.support['confirmed']), ('ready', [str(confirmation.pk)]))
+        before, after = self.records(final), self.records(again)
+        for name in ('astra', 'fable'):
+            for key in ('state', 'run', 'reading_sha256', 'peer_state', 'peer_run', 'peer_sha256'):
+                self.assertEqual(after[name][key], before[name][key])
+            self.assertNotIn('frozen', after[name])  # HARNESS.md 12.3: on assess #1 and #2 only
+        self.assertEqual(jobs.assessment_phase(again), 2)
+        # the same confirmations queue one assess
+        self.assertEqual(jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer), job)
+        # a second confirmation: the earlier ':c:' part is left off, so the key never grows with each one
+        second = self.confirm(encounter_id, again, 'sel:1')
+        later = jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        both = hashlib.sha256(','.join(sorted([str(confirmation.pk), str(second.pk)])).encode()).hexdigest()[:12]
+        self.assertEqual(later.idempotency_key, f'{made.idempotency_key}:c:{both}')
+        drain()
+        self.assertEqual({p.key: p.status for p in self.encounter(encounter_id).current_assessment.proposals.all()
+                          if p.key in ('sel:0', 'sel:1')}, {'sel:0': 'ready', 'sel:1': 'ready'})
+
+    def test_it_is_refused_while_busy_and_without_a_finished_final_assessment(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        with self.assertRaisesMessage(jobs.Refused, jobs.REASSESS_BUSY):
+            jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        drain()
+        final = self.encounter(encounter_id).current_assessment
+        models.Job.objects.filter(result__assessment=str(final.pk)).update(result={})
+        with self.assertRaisesMessage(jobs.Refused, jobs.REASSESS_UNFINISHED):
+            jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        other = self.create(TWO_EXTENTS)
+        models.Job.objects.filter(encounter_id=other).update(state='cancelled')
+        with self.assertRaisesMessage(jobs.Refused, jobs.REASSESS_NONE):
+            jobs.reassess_after_confirmation(self.encounter(other), self.reviewer)
+
+
+# --- the send doors in phase 2: unknown outcomes, failures, reuse, I10 ------------------------------------------------
+
+class PeerSendDoorTests(Harness2Case):
+    def test_an_unknown_peer_outcome_blocks_every_later_send_and_reconcile_runs_phase_two_again(self):
+        self.adapters['astra'].peer_loops = [[unknown()]]
+        encounter_id = self.create()
+        drain()
+        astra, fable = self.runs_of(encounter_id, 'astra', 'peer_review'), self.runs_of(encounter_id, 'fable', 'peer_review')
+        self.assertEqual([(r.state, r.sent) for r in astra], [('unknown', True)])
+        self.assertEqual([(r.state, r.sent, r.scope.get('held'), r.error) for r in fable],
+                         [('not_sent', False, 'unknown_outcome', jobs.PARTICIPANT_BLOCKED_MESSAGE)])
+        self.assertEqual(self.sent('fable', 'peer'), 0)
+        records = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('unknown', 'blocked'))
+        self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        # Corti's and the participants' first requests are answered and reused; phase 2 runs for the new phase-1 set
+        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first')), (1, 1, 1))
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (2, 1))
+        records = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
+        self.assertEqual(reconciled.data, {'run': str(astra[0].pk), 'provider': 'astra'})
+
+    def test_a_peer_request_that_failed_is_never_sent_again_and_an_answered_one_is_reused(self):
+        self.adapters['astra'].peer_loops = [[failed()]]
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10: never provider_failed
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual(len(self.assessments(encounter_id)), 4)  # a new assess #1 and its own peer chain
+        astra = self.runs_of(encounter_id, 'astra', 'peer_review')
+        fable = self.runs_of(encounter_id, 'fable', 'peer_review')
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertEqual([r.state for r in astra], ['failed', 'not_sent'])
+        self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'peer_review'))
+        self.assertEqual([(r.reused_from_id, r.request_sha256) for r in fable[1:]],
+                         [(fable[0].pk, fable[0].request_sha256)])
+        records = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('not_sent', 'read'))
+
+    def test_one_participant_failing_in_phase_two_blocks_only_itself(self):
+        self.adapters['astra'].peer = [failed()]
+        encounter_id = self.create()
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        record = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((record['astra']['peer_state'], record['astra']['peer_reason'], record['fable']['peer_state']),
+                         ('failed', 'Overloaded (synthetic).', 'read'))
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_a_peer_review_another_model_answered_is_refused_and_never_read(self):
+        envelope = json.loads(answered('fable', EMPTY_PEER, number=2))
+        envelope['model'] = 'claude-other-model'
+        self.adapters['fable'].peer = [json.dumps(envelope).encode()]
+        encounter_id = self.create()
+        drain()
+        record = self.records(self.encounter(encounter_id).current_assessment)['fable']
+        self.assertEqual(record['peer_state'], 'refused')
+        self.assertIn('not claude-fable-5-1', record['peer_reason'])
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
