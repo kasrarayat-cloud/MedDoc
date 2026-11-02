@@ -2,11 +2,11 @@
 exchanges and tool calls, assess #1's records, the peer stages and their gating, assess #2, the re-assessment after a
 confirmation, and the stale sweep, Stop, Resume and reconcile across phase 2.
 
-Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake. Astra and Fable are the real replay
-adapters (studio.participants.replay: their requests are built and their answers read by the live adapters' own code)
-whose tool loop is the real loop (studio.participants.loop) with the live vendor halves; each exchange is answered by a
-script instead of a recording, so a test decides what each turn asks for. Their tool calls are answered by CPT Studio's
-real CMS tool executor (studio.reference.tools) over a synthetic reference store and the bundled passage files.
+Synthetic data only; nothing is sent. Corti is the harness@1 suite's in-process fake. Astra and Fable are the real
+replay adapters (studio.participants.replay: their requests are built and their answers read by the live adapters' own
+code) whose tool loop is the real loop (studio.participants.loop) with the live vendor halves; each exchange is answered
+by a script instead of a recording, so a test decides what each turn asks for. Their tool calls are answered by CPT
+Studio's real CMS tool executor (studio.reference.tools) over a synthetic reference store and the bundled passages.
 """
 import hashlib
 import json
@@ -27,7 +27,7 @@ from studio.reference import passages as reference_passages
 from studio.reference import tools
 from studio.types import PeerReview, RawExchange, sha256_json, to_jsonable
 from tests.support import factories as f
-from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti
+from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import (OfflineMixin, astra_tool_call, astra_with, code, empty_reading,
                                              fable_tool_use, fable_with, service)
 from tests.test_pipeline_api import OFFICE_NOTE, drain
@@ -353,7 +353,8 @@ class PhaseOneLoopTests(Harness2Case):
                 for exchange in exchanges:
                     self.assertEqual(exchange.request_sha256,
                                      hashlib.sha256(canonical_body(exchange.request_body)).hexdigest())
-                    self.assertEqual(exchange.response_sha256, hashlib.sha256(bytes(exchange.response_bytes)).hexdigest())
+                    self.assertEqual(exchange.response_sha256,
+                                     hashlib.sha256(bytes(exchange.response_bytes)).hexdigest())
                     self.assertEqual(exchange.provider_request_id, f'req_{name}_{exchange.turn}')
                     self.assertEqual(exchange.latency_ms, 10.0 + exchange.turn)
                     self.assertTrue(exchange.response_id)
@@ -368,7 +369,8 @@ class PhaseOneLoopTests(Harness2Case):
                 self.assertEqual((run.state, run.sent, run.endpoint, run.returned_model, run.requested_model),
                                  ('succeeded', True, LIVE_MODULES[name].ENDPOINT, MODELS[name], MODELS[name]))
                 # one tool loop, given the loop deadline, the run identity and CPT Studio's own executor
-                self.assertEqual((loop_record['deadline_s'], loop_record['client_request_id']), (540, str(run.run_identity)))
+                self.assertEqual((loop_record['deadline_s'], loop_record['client_request_id']),
+                                 (540, str(run.run_identity)))
                 self.assertEqual(loop_record['execute_tool'].__qualname__, 'executor.<locals>.execute_tool')
                 # every tool call as the loop executed it: CPT Studio's executor's result and refs, exactly
                 for exchange, asked in zip(exchanges, calls):
@@ -584,7 +586,7 @@ class PeerGatingTests(Harness2Case):
         self.assertEqual((records['astra']['state'], 'peer_state' in records['astra']), ('read', False))
 
 
-# --- what a peer request shows, and what assess #2 reads (HARNESS.md 12.1, 12.4, 12.5) ---------------------------------
+# --- what a peer request shows, and what assess #2 reads (HARNESS.md 12.1, 12.4, 12.5) -------------------------------
 
 ASTRA_COLON = reading(codes=[('45385', SNARE), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)])
 FABLE_COLON = reading(codes=[('45385', SNARE)], services=[('c1', 'colonoscopy', 'performed', SNARE)])
@@ -639,7 +641,8 @@ class PeerRequestTests(ColonCase):
         questions = [{'question_id': str(c.pk), 'scope': c.scope, 'fact': c.fact, 'family': c.family,
                       'proposal_key': c.proposal.key if c.proposal_id else '', 'question': c.question,
                       'reason': c.reason} for c in first.clarifications.order_by('created_at', 'pk')]
-        self.assertEqual([(q['proposal_key'], q['fact']) for q in questions], [('sel:0', 'extent'), ('sel:1', 'extent')])
+        self.assertEqual([(q['proposal_key'], q['fact']) for q in questions],
+                         [('sel:0', 'extent'), ('sel:1', 'extent')])
         held = [{'key': p.key, 'code': p.code, 'status': p.status,
                  'reasons': [c['detail'] for c in p.checks if c['status'] != 'pass']}
                 for p in first.proposals.filter(status='needs_clarification').order_by('position')]
@@ -707,16 +710,17 @@ class PeerRequestTests(ColonCase):
                      fact='service_date', scope='encounter')
         revision = self.encounter(encounter_id).current_revision
         (finding,) = jobs.confirmed_findings(revision)  # the service date's enters through the context, never here
-        self.assertEqual((finding.fact, finding.proposal_key, finding.value, finding.confirmation_id, finding.located_by,
-                          finding.confirmed_by), ('extent', 'sel:0', 'cecum', str(confirmation.pk), ('astra',),
-                                                  self.reviewer.label()))
+        self.assertEqual((finding.fact, finding.proposal_key, finding.value, finding.confirmation_id,
+                          finding.located_by, finding.confirmed_by),
+                         ('extent', 'sel:0', 'cecum', str(confirmation.pk), ('astra',), self.reviewer.label()))
         self.assertTrue(finding.evidence[0].exact)
         jobs.run_job(job)
         drain()
         final = self.encounter(encounter_id).current_assessment
         self.assertEqual(jobs.assessment_phase(final), 2)
         item = self.proposal(final, 'sel:0')
-        self.assertEqual((item.code, item.status, item.support['confirmed']), ('45385', 'ready', [str(confirmation.pk)]))
+        self.assertEqual((item.code, item.status, item.support['confirmed']),
+                         ('45385', 'ready', [str(confirmation.pk)]))
         ids = [c['id'] for c in final.encounter_checks]
         self.assertIn('confirmations.applied', ids)
         self.assertNotIn('confirmations.ignored', ids)  # the date's confirmation was never given to the engine
@@ -784,7 +788,8 @@ class PeerSendDoorTests(Harness2Case):
         self.adapters['astra'].peer_loops = [[unknown()]]
         encounter_id = self.create()
         drain()
-        astra, fable = self.runs_of(encounter_id, 'astra', 'peer_review'), self.runs_of(encounter_id, 'fable', 'peer_review')
+        astra = self.runs_of(encounter_id, 'astra', 'peer_review')
+        fable = self.runs_of(encounter_id, 'fable', 'peer_review')
         self.assertEqual([(r.state, r.sent) for r in astra], [('unknown', True)])
         self.assertEqual([(r.state, r.sent, r.scope.get('held'), r.error) for r in fable],
                          [('not_sent', False, 'unknown_outcome', jobs.PARTICIPANT_BLOCKED_MESSAGE)])
@@ -797,7 +802,8 @@ class PeerSendDoorTests(Harness2Case):
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         # Corti's and the participants' first requests are answered and reused; phase 2 runs for the new phase-1 set
-        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first')), (1, 1, 1))
+        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first')),
+                         (1, 1, 1))
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (2, 1))
         records = self.records(self.encounter(encounter_id).current_assessment)
         self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
@@ -845,3 +851,271 @@ class PeerSendDoorTests(Harness2Case):
         self.assertEqual(record['peer_state'], 'refused')
         self.assertIn('not claude-fable-5-1', record['peer_reason'])
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+
+# --- the stale sweep, Stop, Resume, reconcile and the upgrade across phase 2 (HARNESS.md 12.1) -----------------------
+
+class SweepStopResumeTests(Harness2Case):
+    def age(self, job):
+        models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+
+    def test_a_peer_stage_whose_outcome_was_recorded_is_settled_and_the_chain_goes_on(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        real = audit.record
+
+        def dies_after_the_outcome(workspace, event, **kwargs):
+            real(workspace, event, **kwargs)
+            if event == 'provider.finished':
+                raise _WorkerDied()
+        with mock.patch('studio.jobs.audit.record', side_effect=dies_after_the_outcome):
+            with self.assertRaises(_WorkerDied):
+                jobs.run_job(job)
+        self.age(job)
+        jobs.mark_stale()
+        job.refresh_from_db()
+        peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        self.assertEqual((job.state, job.result['peer'], job.result['state'], job.result['run']),
+                         ('succeeded', 'astra_peer', 'succeeded', str(peer.pk)))
+        self.assertEqual(peer.exchanges.count(), 1)  # recorded with the outcome, before the worker died
+        queued = self.jobs_of(encounter_id)[-1]
+        self.assertEqual((queued.kind, queued.idempotency_key),
+                         ('fable_peer', 'fable_peer:' + job.idempotency_key.split(':')[1]))
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_a_peer_stage_left_mid_send_is_unknown_and_reconcile_runs_phase_two_again(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        with mock.patch.object(self.adapters['astra'], 'send_loop', side_effect=_WorkerDied()):
+            with self.assertRaises(_WorkerDied):
+                jobs.run_job(job)
+        self.age(job)
+        jobs.mark_stale()
+        job.refresh_from_db()
+        peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        self.assertEqual((job.state, peer.state, peer.exchanges.count()), ('unknown', 'unknown', 0))
+        self.assertIsNone(jobs.claim_next())  # a send in flight settles nothing further: it is reconciled first
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(peer.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual((self.sent('astra', 'first'), self.sent('astra', 'peer'), self.sent('fable', 'peer')),
+                         (1, 1, 1))  # the reconciled request again, once; Fable for the first time
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_a_peer_stage_that_died_with_its_run_only_reserved_is_resumable(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        with mock.patch('studio.jobs.is_stopped', side_effect=_WorkerDied()):  # dies right after reserving
+            with self.assertRaises(_WorkerDied):
+                jobs.run_job(job)
+        self.age(job)
+        jobs.mark_stale()
+        job.refresh_from_db()
+        swept = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        self.assertEqual((job.state, swept.state, swept.started_at), ('cancelled', 'not_sent', None))
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
+        response = self.client.post(f'/api/encounters/{encounter_id}/resume')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json(), {'resumed': 'astra_peer'})
+        resumed = self.jobs_of(encounter_id)[-1]
+        self.assertTrue(resumed.idempotency_key.startswith(f'{job.idempotency_key}:resume:'))
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        # the swept reservation is no outcome: assess #2 reads the run the resumed stage sent
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(self.records(final)['astra']['peer_run'],
+                         str(self.runs_of(encounter_id, 'astra', 'peer_review')[1].pk))
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_a_stop_before_the_peer_stages_and_resume_runs_phase_two_once(self):
+        encounter_id = self.create()
+        job = self.run_until('assess')
+        jobs.run_job(job)  # assess #1: the first peer stage is queued
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        self.assertEqual(self.jobs_of(encounter_id)[-1].kind, 'astra_peer')
+        self.assertEqual((self.jobs_of(encounter_id)[-1].state, self.encounter(encounter_id).state),
+                         ('cancelled', 'stopped'))
+        self.assertEqual(self.sent('astra', 'peer'), 0)
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+        # Stop and Resume again while assess #2 waits
+        other = self.create()
+        jobs.run_job(self.run_until('fable_peer'))
+        self.assertEqual(self.client.post(f'/api/encounters/{other}/stop').status_code, 200)
+        drain()
+        self.assertEqual((self.jobs_of(other)[-1].kind, self.jobs_of(other)[-1].state), ('assess', 'cancelled'))
+        self.assertEqual(self.client.post(f'/api/encounters/{other}/resume').status_code, 201)
+        drain()
+        final = self.encounter(other).current_assessment
+        self.assertEqual((jobs.assessment_phase(final), self.encounter(other).state), (2, 'ready_for_review'))
+        self.assertIn(':q:', self.jobs_of(other)[-1].idempotency_key)
+
+    def test_a_stop_observed_before_the_peer_sends_cancels_it_and_resume_sends_once(self):
+        encounter_id = self.create()
+        job = self.run_until('astra_peer')
+        models.Job.objects.filter(pk=job.pk).update(stop_requested_at=timezone.now())
+        jobs.run_job(job)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'cancelled')
+        self.assertEqual([r.state for r in self.runs_of(encounter_id, 'astra', 'peer_review')], ['cancelled'])
+        self.assertEqual(self.sent('astra', 'peer'), 0)
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_reconcile_runs_phase_two_for_the_new_phase_one_set(self):
+        self.adapters['astra'].first_loops = [[unknown()]]
+        encounter_id = self.create()
+        drain()
+        # Astra's outcome is unknown and Fable was blocked: no first reading was read, so there is no phase 2
+        records = self.records(self.encounter(encounter_id).current_assessment)
+        self.assertEqual((records['astra']['state'], records['fable']['state']), ('unknown', 'blocked'))
+        self.assertEqual(self.runs_of(encounter_id, purpose='peer_review'), [])
+        astra = self.runs_of(encounter_id, 'astra', 'independent')[0]
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual(self.kinds(encounter_id)[-7:], ['predict', 'astra', 'fable', 'assess', 'astra_peer',
+                                                         'fable_peer', 'assess'])
+        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first')),
+                         (1, 2, 1))
+        final = self.encounter(encounter_id).current_assessment
+        new_set = {name: str(self.runs_of(encounter_id, name, 'independent')[-1].pk) for name in ('astra', 'fable')}
+        self.assertEqual({name: record['run'] for name, record in self.records(final).items()}, new_set)
+        self.assertEqual({name: record['peer_state'] for name, record in self.records(final).items()},
+                         {'astra': 'read', 'fable': 'read'})
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+
+    def test_an_assess_a_remake_queued_marks_its_peer_stages_which_stop_where_they_would_send(self):
+        earlier = jobs.EARLIER_CONTEXT_VERSIONS[-1]
+        labels = {'CONTEXT_VERSION': earlier, 'EARLIER_CONTEXT_VERSIONS': jobs.EARLIER_CONTEXT_VERSIONS[:-1]}
+        encounter_id = self.create()
+        with mock.patch.multiple(jobs, **labels):  # recorded by the installed rules, its assess queued, then the swap
+            for kind in ('extract', 'analyze', 'predict', 'astra', 'fable'):
+                job = jobs.claim_next()
+                self.assertEqual(job.kind, kind)
+                jobs.run_job(job)
+        self.assertEqual(self.encounter(encounter_id).current_context.version, earlier)
+        drain()
+        chain = self.jobs_of(encounter_id)
+        self.assertEqual([(j.kind, j.state) for j in chain[-3:]],
+                         [('assess', 'succeeded'), ('assess', 'succeeded'), ('astra_peer', 'cancelled')])
+        self.assertTrue(chain[-2].idempotency_key.endswith(jobs.UPGRADE_MARK))
+        self.assertTrue(chain[-1].idempotency_key.endswith(jobs.UPGRADE_MARK))
+        self.assertEqual(chain[-1].error, jobs.PEER_UPGRADE_MESSAGE.format(label='Astra'))
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 0))  # nobody asked for it
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()  # a member's Resume sends, and the chain it continues is a member's
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        self.assertFalse(self.jobs_of(encounter_id)[-2].idempotency_key.endswith(jobs.UPGRADE_MARK))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+
+
+class PeerRunLookupTests(Harness2Case):
+    def test_assess_two_reads_only_the_peer_runs_made_for_its_assess_one(self):
+        encounter_id = self.create()
+        drain()
+        first, final = self.assessments(encounter_id)
+        revision = self.encounter(encounter_id).current_revision
+        made = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        self.assertEqual(jobs._peer_run(revision, 'astra', first), made)
+        # a newer peer run made for another assessment is never this assess #1's
+        models.ProviderRun.objects.create(
+            encounter=made.encounter, revision=revision, provider='astra', adapter_version=made.adapter_version,
+            request_sha256=made.request_sha256, request_body=made.request_body, contexts=made.contexts,
+            state=models.ProviderRun.FAILED, sent=True, purpose='peer_review',
+            scope={'mode': 'replay', 'assessment': str(final.pk)}, started_at=timezone.now(),
+            finished_at=timezone.now())
+        self.assertEqual(jobs._peer_run(revision, 'astra', first), made)
+        self.assertEqual(jobs._final_key(first), self.jobs_of(encounter_id)[-1].idempotency_key)
+
+
+class UpgradeChainTests(ColonCase):
+    def test_the_upgrade_s_chain_carries_its_mark_to_the_peer_stages(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        sent = (len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
+                self.sent('astra', 'peer'), self.sent('fable', 'peer'))
+        encounter = self.encounter(encounter_id)
+        jobs.enqueue(models.Job.PREDICT, encounter=encounter, revision=encounter.current_revision,
+                     context=encounter.current_context, key=jobs._upgrade_predict_key(encounter.current_context),
+                     requested_by=self.reviewer)
+        drain()
+        chain = self.jobs_of(encounter_id)[-5:]
+        # every first answer is retained and reused; the new assess #1 asks new questions, so the peer request is new
+        self.assertEqual([(j.kind, j.state) for j in chain], [('predict', 'succeeded'), ('astra', 'succeeded'),
+                                                              ('fable', 'succeeded'), ('assess', 'succeeded'),
+                                                              ('astra_peer', 'cancelled')])
+        self.assertTrue(chain[-1].idempotency_key.endswith(jobs.UPGRADE_MARK))
+        self.assertEqual(chain[-1].error, jobs.PEER_UPGRADE_MESSAGE.format(label='Astra'))
+        self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first'),
+                          self.sent('astra', 'peer'), self.sent('fable', 'peer')), sent)
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (sent[3] + 1, sent[4] + 1))
+
+
+# --- I1: no model participant configured ------------------------------------------------------------------------------
+
+REAL_ENGINE = jobs.run_assessment
+
+
+def engine_refusing_harness(**kwargs):
+    """The real engine, failing the assess if it is ever given the participants or the confirmations (I1)."""
+    for keyword in ('participants', 'confirmed'):
+        if keyword in kwargs:
+            raise AssertionError(f'the engine was given {keyword} with no participant configured')
+    return REAL_ENGINE(**kwargs)
+
+
+class CortiOnlyTests(Harness2Case):
+    """I1: with Astra and Fable disabled, nothing of harness@2 runs - no peer stage, no second assess, no exchange, no
+    new record key - and the engine is never given the revision's confirmations."""
+
+    def test_nothing_of_harness_two_runs_and_confirmations_are_never_read(self):
+        with override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled'), \
+                mock.patch('studio.jobs.run_assessment', side_effect=engine_refusing_harness):
+            encounter_id = self.create()
+            drain()
+            encounter = self.encounter(encounter_id)
+            context, corti = encounter.current_context, self.runs_of(encounter_id)[0]
+            self.assertEqual([(j.kind, j.idempotency_key) for j in self.jobs_of(encounter_id)],
+                             [('extract', f'extract:{encounter.current_revision_id}'),
+                              ('analyze', f'analyze:{encounter.current_revision_id}'),
+                              ('predict', f'predict:{context.pk}'), ('assess', f'assess:{context.pk}:{corti.pk}')])
+            (assessment,) = self.assessments(encounter_id)
+            self.assertEqual(assessment.participants, [jobs.not_configured_record('astra'),
+                                                       jobs.not_configured_record('fable')])
+            self.assertEqual(jobs.assessment_phase(assessment), 0)
+            self.assertEqual((models.ProviderExchange.objects.count(), models.ToolCall.objects.count()), (0, 0))
+            # a confirmation recorded for the revision (as when the participants were configured) is never read
+            clarification = models.Clarification.objects.create(
+                encounter=encounter, assessment=assessment, scope='service', family='gi.office_em', fact='em_basis',
+                question='Synthetic question.', reason='Synthetic reason.')
+            start = encounter.current_revision.text.index(TIME_QUOTE)
+            models.FindingConfirmation.objects.create(
+                encounter=encounter, revision=encounter.current_revision, clarification=clarification, scope='service',
+                fact='em_basis', family='gi.office_em', value='total time: 24 minutes',
+                spans=[{'start': start, 'end': start + len(TIME_QUOTE), 'text': TIME_QUOTE, 'page': None}],
+                located_by=['fable'], confirmed_by=self.reviewer, attestation='Synthetic attestation.')
+            response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'})
+            self.assertEqual(response.status_code, 201, response.content)
+            drain()
+            again, last = self.encounter(encounter_id).current_assessment, self.jobs_of(encounter_id)[-1]
+            self.assertEqual((last.kind, last.state, last.idempotency_key),
+                             ('assess', 'succeeded', f'assess:{again.context_id}:{corti.pk}'))
+            self.assertNotEqual((again.pk, again.context_id), (assessment.pk, assessment.context_id))
+            self.assertEqual(again.participants, assessment.participants)
+            self.assertNotIn('confirmations', again.completeness)
+            self.assertFalse(any(c['id'].startswith('confirmations.') for c in again.encounter_checks))
+        self.assertEqual(self.adapters['astra'].loops + self.adapters['fable'].loops, [])
