@@ -1625,7 +1625,7 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(block.includes('<div class="evidence-label">Candidate answers from the participants&#x27; located passages · 2</div>'));
   const [verified, unverified] = extent.candidates;
   assert.ok(block.includes(`<span class="participant-head"><strong>cecum</strong><span class="status green">Verified</span></span><p class="candidate-quote">“The colonoscope was advanced to the cecum.” (page 1)</p><small class="check-source">Located by Astra and Fable in their independent first readings.</small>`), block);
-  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document and it names that landmark. It is still only a candidate: read the passage before confirming it.</small>'));
+  assert.ok(block.includes('<small class="check-source">Verified: its passage is an exact slice of the document, in no history, plan or indication section, and it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt). It is still only a candidate: read the passage before confirming it.</small>'));
   assert.ok(block.includes('<span class="status amber">Not verified</span>'));
   assert.ok(block.includes(`<small class="check-source">Not verified, so it cannot be confirmed: ${app.escapeHtml(unverified.why)}</small>`));
   assert.equal(count(block, 'data-action="confirm-finding"'), 1, 'only the verified candidate can be confirmed');
@@ -1634,8 +1634,12 @@ test('each open question lists its candidate answers: the value, the passage quo
   const status = questionOf(html, clarificationOf(doc, 'performed_status').id);
   assert.ok(status.includes('<p class="candidate-quote">“A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.” (page 2)</p>'));
   assert.ok(status.includes('<small class="check-source">Located by Astra in peer review.</small>'));
-  // what a status check established, and what it did not: the passage need not name this code's own act
-  assert.equal(count(status, 'it lies in no history, plan or indication section (the check does not read whether it names this code&#x27;s own act)'), 3);
+  // what a status check established (refutation round 2, EV2-1): the readers read the code's own act, never the section
+  // alone
+  const statusCandidates = clarificationOf(doc, 'performed_status').candidates;
+  assert.equal(count(status, 'CPT Studio&#x27;s readers read its whole sentence as stating that status for the act this code accounts for'),
+    statusCandidates.filter(candidate => candidate.verified === true).length);
+  assert.equal(status.includes('the check does not read whether it names this code'), false);
   // the date question is the encounter's own card; the others sit with their codes
   assert.ok(html.indexOf(`data-question="${clarificationOf(doc, 'service_date').id}"`) < html.indexOf('<article class="code-card"'));
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
@@ -1986,4 +1990,72 @@ test('a peer-review run is named as one in the Activity tab, on the reconciliati
   const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'cancelled', error: 'The worker stopped before this stage finished (synthetic).', finished_at: null }];
   const stopped = { ...final, state: 'stopped', pipeline: { ...final.pipeline, stopped_by_member: false, can_resume: true, stages } };
   assert.ok(render(stopped).includes('<p>Peer review: Astra (OpenAI GPT-6 Astra): The worker stopped before this stage finished (synthetic).</p>'));
+});
+
+// refutation round 2, R2-EV
+// A candidate's whole sentence (HARNESS.md 12.5, EV2-1): a span that is a slice of a longer sentence is shown with that
+// sentence, so a hedge around it is never hidden behind a Verified badge; and each fact's Verified note says what its
+// check established - a status, on the act the code accounts for, never on the section alone.
+
+function r2evCandidate(doc, quote, sentence, extra = {}) {
+  const text = doc.revision.text;
+  const span = cpSpan(text, quote, 'span');
+  const whole = sentence === null ? null : cpSpan(text, sentence, 'sentence');
+  return {
+    id: 'c0ffee00c0ffee00', clarification_id: 'q', fact: 'extent', value: 'cecum', located_by: ['astra'],
+    phase: 'peer_review', phases: { astra: 'peer_review' }, runs: [UUID],
+    spans: [{ start: span.start, end: span.end, text: span.text, page: 1 }],
+    ...(whole === null ? {} : { sentences: [{ start: whole.start, end: whole.end, text: whole.text }] }),
+    verified: true, why: '', attestation: ATTESTATION('cecum'), ...extra,
+  };
+}
+
+function r2evAnswers(doc, candidate) {
+  return app.candidateAnswers({ id: 'q', candidates: [candidate], confirmation: null }, doc);
+}
+
+test('a candidate span that is a slice of a longer sentence is shown with that whole sentence, and its whole sentence alone is shown as it is', () => {
+  const doc = fixture(H2_FINAL);
+  const slice = 'The colonoscope was advanced to the cecum.';
+  const sentence = 'Technique: The colonoscope was advanced to the cecum.';
+  const html = r2evAnswers(doc, r2evCandidate(doc, slice, sentence));
+  assert.ok(html.includes(`<p class="candidate-quote">“${slice}” (page 1) — a part of the sentence “${sentence}”</p>`), html);
+  assert.equal(count(html, 'data-action="confirm-finding"'), 1, 'a slice shown with its sentence can be confirmed');
+  // a span that is its whole sentence is quoted as it is
+  const whole = r2evAnswers(doc, r2evCandidate(doc, sentence, sentence));
+  assert.ok(whole.includes(`<p class="candidate-quote">“${sentence}” (page 1)</p>`) && !whole.includes('a part of the sentence'), whole);
+});
+
+test('a candidate whose served sentence cannot be shown as its span\'s is marked so and is never confirmed from the page', () => {
+  const doc = fixture(H2_FINAL);
+  const slice = 'The colonoscope was advanced to the cecum.';
+  const good = r2evCandidate(doc, slice, 'Technique: The colonoscope was advanced to the cecum.');
+  const elsewhere = { ...good, sentences: [{ ...good.sentences[0], start: good.sentences[0].start + 1 }] };  // not exact
+  const apart = { ...good, sentences: [r2evCandidate(doc, slice, 'Bowel preparation was good.').sentences[0]] };  // not holding it
+  const missing = { ...good, sentences: [] };
+  for (const candidate of [elsewhere, apart, missing]) {
+    const html = r2evAnswers(doc, candidate);
+    assert.ok(html.includes(`“${slice}” (page 1) — its whole sentence is not shown: read it in the document before confirming</p>`), html);
+    assert.equal(html.includes('data-action="confirm-finding"'), false, 'fail closed: no Confirm without the sentence');
+  }
+  // a payload served before candidates carried sentences is quoted as before
+  const { sentences, ...older } = good;
+  const before = r2evAnswers(doc, older);
+  assert.ok(before.includes(`<p class="candidate-quote">“${slice}” (page 1)</p>`) && count(before, 'data-action="confirm-finding"') === 1);
+});
+
+test('each fact\'s Verified note says what its check established: the section rule for every fact, a status on the code\'s own act', () => {
+  const doc = fixture(H2_FINAL);
+  const sentence = 'Technique: The colonoscope was advanced to the cecum.';
+  const said = {
+    extent: 'it names that landmark, which CPT Studio&#x27;s readers read neither as not reached nor as qualified (a negation, an attempt or a doubt)',
+    performed_status: 'CPT Studio&#x27;s readers read its whole sentence as stating that status for the act this code accounts for (for a code of the whole service, for that service)',
+    service_date: 'it states that calendar date, which CPT Studio&#x27;s readers do not read as a date of birth',
+    target: 'it names that structure, which CPT Studio&#x27;s readers read neither as not seen nor as qualified (a negation, an attempt or a doubt)',
+  };
+  for (const [fact, words] of Object.entries(said)) {
+    const html = r2evAnswers(doc, r2evCandidate(doc, sentence, sentence, { fact }));
+    assert.ok(html.includes(`Verified: its passage is an exact slice of the document, in no history, plan or indication section, and ${words}. It is still only a candidate: read the passage before confirming it.`), `${fact}: ${html}`);
+    assert.equal(html.includes('the check does not read whether it names this code'), false, fact);
+  }
 });

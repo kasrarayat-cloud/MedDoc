@@ -459,6 +459,22 @@ hold raised, never by agreement and never on its own. This is the documented pat
        - status: the passage is not in a history, plan or indication section;
        - E/M basis: the passage states the time or the level.
    - A candidate that fails either check is shown as unverified, with why, and cannot be accepted.
+   - **Amended after refutation round 2 (EV2-1; the round's design decision D1):** the status check above verified a
+     snare code's "performed" on a sentence that names no snare removal, a hedge's slice and a cold-forceps specimen
+     line, and one confirmation then made the code READY. A status is now checked on the act the question asks about:
+     a status candidate, and every status confirmation the engine reads, is verified only when CPT Studio's own readers
+     (the documented-service inventory the assessment recorded, the reading the hold was decided from) read the
+     passage's whole sentence (never a slice of it) as stating exactly that status for the question's subject: the act
+     the proposal's code accounts for in the documented service its hold was decided on, or, for a base code, an E/M or
+     a code whose profile is another family's, that documented service. The history, plan and indication rule stays in
+     front of it; a question whose hold no documented service decided has no status candidate that verifies (12.5).
+   - **Amended after refutation round 2 (EV2-2, EV2-3, truth-1; design decision D2):** a passage about another
+     occasion, or one that denies what it names, verified an extent, a structure, an E/M basis or a date "for this
+     encounter" (an indication line's 2019 colonoscopy, "The cecum was not reached", an earlier visit's time in a
+     history section, a date of birth). So every fact's passage now gets the section rule (no history, plan or
+     indication section); an extent or a structure is never verified where CPT Studio's readers find it not reached,
+     not entered or not seen, or qualified in its clause by a negation, an attempt or a doubt; and a date the context
+     reader takes as a date of birth is never a date of service (rule N2).
 2. **Confirmation.** An owner or reviewer accepts one candidate with an attestation: "I read this passage in the source
    document; it documents <value> for this encounter."
    - The confirmation is an immutable `FindingConfirmation`: the clarification, the revision, the fact, the value, the
@@ -652,6 +668,49 @@ candidate naming all of them. A candidate is `verified` only when:
   outcome.
 Otherwise `verified` is false and `why` says which check failed. Agreement between participants never verifies.
 
+**The status check, amended after refutation round 2 (EV2-1, design decision D1; superseding "status the passage is not
+in a history, plan or indication section" above, which stays as its first step).** One function decides it,
+`reconcile.status_stated`, which `studio.candidates` and the engine's `_Confirmations` both call:
+- the passage is in no history, plan or indication section (`reconcile.held_section`);
+- the subject (`reconcile.status_subject`) is read where the readers decided the hold: the documented service the
+  proposal was matched to (`support['service']`, the `Match.service` of `reconcile.match`) and, for a code that
+  accounts for an act - its catalogue profile of the question's family, neither a base code nor an E/M - the act kinds
+  its profile `covers`, whichever hold raised the question (no act of them documented as done, one left in doubt, or
+  the service itself in doubt: a confirmation decides the code's status, and the code accounts for that act, so an act
+  code is never confirmed on its service alone - a tightening of D1's "service-level hold" for an act code, recorded
+  here); for a base code, an E/M or a code whose profile is another family's (`profile_unknown`), the service itself.
+  With no such service (a hold `checks.performed_clarification` raised, which no documented service decided) or an
+  inventory that was inconsistent, the readers have nothing to check: the candidate is unverified, "CPT Studio's
+  readers cannot tell which act this passage documents.";
+- the passage is read in its WHOLE sentence (`reconcile.whole_sentence`: the documented-service reader's own sentences,
+  on its reflowed view), never as a slice of it; the mentions of the subject the inventory records there - each act of
+  those kinds with its own reading, or the service's own passages (a procedure's title and performed statements, an
+  office visit's mentions with its status) and the acts it documents as performed - must be at least one, and every
+  one must be read with exactly the value's status: 'performed' never beside one read as negated, cancelled, in doubt,
+  planned or historical; 'not performed' (a denial), 'cancelled', 'planned' or 'historical' only where every one is
+  read so;
+- `why` says what the readers read: "The passage does not name the snare removal.", "The passage leaves the forceps
+  biopsy in doubt.", "The passage states the snare removal as performed, not as not performed.".
+The question carries its proposal's code and that service (`review.candidate_question`), and the inventory is the one
+the final assessment recorded, read back (`review.recorded_inventory`: None when it cannot be read back or
+`services.validate` finds it inconsistent). The engine applies the same function to every status confirmation it is
+given, after binding it to its proposal: one that fails is listed in `confirmations.ignored` with that why and never
+read, so a status confirmation stored before this amendment, or forged, never decides a status the readers do not read
+on its passage. Each candidate also carries `sentences`: for each span, in its order, `{start, end, text}` of its whole
+sentence, so the page shows a span that is a slice of a longer sentence with that sentence ("a part of the sentence
+...") and a hedge is never hidden behind a Verified badge; a page that cannot show it offers no Confirm.
+
+**Every fact's check, amended after refutation round 2 (EV2-2, EV2-3, truth-1; design decision D2; the date, extent,
+target and E/M-basis checks above stay as their first steps).** Every passage, whatever its fact, is in no history, plan
+or indication section (`reconcile.held_section`), as the status check's always was. **Date:** a mention the context
+reader takes as a date of birth (`context._is_birth`, rule N2) is never a date of service. **Extent** and **target:**
+around each mention of the landmark or structure, in its clause of the passage's whole sentence (`services.clauses`),
+routing's cue that it was not reached, entered, seen or visualized (`cues.NOT_REACHED_BEFORE`, `NOT_REACHED_AFTER`), or
+a negation, an attempt or a doubt (the `_QUALIFIED` rule a value is read by) that is not about something else - a
+complication, a difficulty, another care step or a finding denied, a measurement's "about" (`candidates._qualified`) -
+leaves it unverified: "The passage states the cecum as not reached or not seen.", "The passage qualifies the cecum (a
+negation, an attempt or a doubt).".
+
 **Confirmation** `POST /api/encounters/<id>/clarifications/<clarification_id>/confirm` with
 `{candidate_id, attestation}`:
 - owner or reviewer only (403 otherwise); the clarification must be open on the current final assessment and the
@@ -679,6 +738,13 @@ Otherwise `verified` is false and `why` says which check failed. Agreement betwe
   `assess(confirmed=...)` and labels it "confirmed from <participant>'s located passage by <reviewer>";
 - nothing is approved; a new revision invalidates every confirmation (the assess stage reads only the current
   revision's).
+- **Amended after refutation round 2 (truth-10, design decision D3):** candidates are offered, and a confirmation is
+  accepted, only while the final assessment's revision AND context are the encounter's current ones - the condition
+  `jobs.reassess_after_confirmation` enforces (`review.on_current_context`). Otherwise no candidate is served, so the
+  page shows no Confirm, and the endpoint refuses first (409) with "The encounter context changed after this
+  assessment; resume processing and confirm on its new assessment." (`review.CONTEXT_CHANGED`; while processing runs,
+  the wait is what it says); nothing is recorded. The re-assessment's own refusals say which it is: no final assessment
+  of the current revision (`jobs.REASSESS_NONE`), or one of an earlier context (`jobs.REASSESS_CONTEXT`).
 
 ### 12.6 API additions (encounter detail and trace)
 

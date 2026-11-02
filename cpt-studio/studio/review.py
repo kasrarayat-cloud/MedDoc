@@ -1550,18 +1550,61 @@ def peer_answers(assessment, questions, reviews):
 
 
 def candidate_question(clarification):
+    """The open question as studio.candidates reads it: with, for a proposal's question, its proposal's code and the
+    documented service the readers decided that proposal's hold on (support['service'], '' when none did), where a
+    status is read (refutation round 2, EV2-1)."""
+    proposal = clarification.proposal if clarification.proposal_id else None
+    service = (proposal.support or {}).get('service') if proposal is not None else ''
     return candidates.Question(id=str(clarification.pk), scope=clarification.scope, fact=clarification.fact,
-                               family=clarification.family,
-                               proposal_key=clarification.proposal.key if clarification.proposal_id else '')
+                               family=clarification.family, proposal_key=proposal.key if proposal is not None else '',
+                               code=proposal.code if proposal is not None else '',
+                               service=service if isinstance(service, str) else '')
+
+
+def recorded_inventory(assessment):
+    """The documented-service inventory ``assessment`` recorded (Assessment.services), read back as the engine read it
+    when it decided the holds - None when it recorded none, one that cannot be read back, or one that was inconsistent
+    with its revision's text (services.validate, as the engine reads it: an inconsistent reading decides no status)."""
+    from .gi import services as gi_services  # local import: read only where a status is checked
+    from .types import from_jsonable
+
+    data = assessment.services
+    if not isinstance(data, dict) or not isinstance(data.get('services'), list):
+        return None
+    try:
+        inventory = from_jsonable(gi_services.ServiceInventory, data)
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return None  # fail closed: a record CPT Studio cannot read back answers no status
+    try:
+        problems = gi_services.validate(inventory, assessment.revision.text)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return None if problems else inventory
+
+
+# The encounter's context changed after the live assessment (refutation round 2, truth-10): no candidate is offered and
+# no confirmation is taken, as jobs.reassess_after_confirmation would refuse it (HARNESS.md 12.5).
+CONTEXT_CHANGED = ('The encounter context changed after this assessment; resume processing and confirm on its new '
+                   'assessment.')
+
+
+def on_current_context(assessment):
+    """Whether ``assessment`` is made on its encounter's current revision AND context: the only assessment a candidate
+    is offered on and a confirmation is accepted for (the condition jobs.reassess_after_confirmation enforces)."""
+    encounter = assessment.encounter
+    return (assessment.revision_id == encounter.current_revision_id
+            and assessment.context_id == encounter.current_context_id)
 
 
 def assessment_candidates(assessment):
     """{clarification id: [candidate]} (studio.candidates) for each OPEN clarification of ``assessment`` when it is the
-    final assessment of a chain a model participant took part in; {} otherwise - a Corti-only assessment, an assess #1
-    whose peer stages follow, no open question, or no model participant configured now (no assessment would read a
-    confirmation then: the pipeline gives the engine none, I1)."""
+    final assessment of a chain a model participant took part in, made on the encounter's current revision and context;
+    {} otherwise - a Corti-only assessment, an assess #1 whose peer stages follow, no open question, no model
+    participant configured now (no assessment would read a confirmation then: the pipeline gives the engine none, I1),
+    or an assessment of an earlier context (no confirmation could be read then: refutation round 2, truth-10). A status
+    is read against the documented-service inventory the assessment recorded (recorded_inventory)."""
     if (assessment is None or assessment_phase(assessment) == 0 or not is_final(assessment)
-            or not participants.configured()):
+            or not participants.configured() or not on_current_context(assessment)):
         return {}
     questions = list(assessment.clarifications.filter(state=Clarification.OPEN).select_related('proposal'))
     if not questions:
@@ -1569,8 +1612,10 @@ def assessment_candidates(assessment):
     readings, reviews = frozen_inputs(assessment)
     answers = peer_answers(assessment, questions, reviews) if reviews else {}
     revision = assessment.revision
+    inventory = (recorded_inventory(assessment)
+                 if any(question.fact == candidates.STATUS_FACT for question in questions) else None)
     return {str(question.pk): candidates.candidates(candidate_question(question), revision.text, revision.pages,
-                                                    readings, answers.get(question.pk, ()))
+                                                    readings, answers.get(question.pk, ()), inventory=inventory)
             for question in questions}
 
 
@@ -1587,8 +1632,9 @@ def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, u
     then act on it; returns (FindingConfirmation, effect).
 
     Under the encounter row lock: an owner or reviewer only; the question open on the current revision's final
-    assessment and confirmed by no one yet; nothing processing; the candidate one of its VERIFIED candidates, recomputed
-    here; the attestation exactly candidates.attestation(value). The immutable FindingConfirmation and its audit event
+    assessment, made on the encounter's current context (CONTEXT_CHANGED otherwise, refutation round 2, truth-10), and
+    confirmed by no one yet; nothing processing; the candidate one of its VERIFIED candidates, recomputed here; the
+    attestation exactly candidates.attestation(value). The immutable FindingConfirmation and its audit event
     'finding.confirmed' are recorded, then a service date enters as the member's date through jobs.change_context
     (every date safeguard and I8 apply; effect 'context') and every other fact is read by the re-assessment
     jobs.reassess_after_confirmation queues (effect 'reassessment'). A refusal from either leaves nothing recorded.
@@ -1607,6 +1653,10 @@ def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, u
         if assessment is None or clarification.assessment_id != assessment.pk:
             raise ConfirmationRefused('That question belongs to an earlier assessment; reload the page and answer the '
                                       'current one.')
+        if assessment.context_id != locked.current_context_id and not jobs.busy(locked):
+            # refutation round 2, truth-10: a confirmation is never taken for an assessment of an earlier context, which
+            # no re-assessment would read; said before anything else is checked (while processing runs, the wait is)
+            raise ConfirmationRefused(CONTEXT_CHANGED)
         if not is_final(assessment):
             raise ConfirmationRefused('The peer reviews of this document have not finished: a finding can be confirmed '
                                       'once its final assessment is recorded.')

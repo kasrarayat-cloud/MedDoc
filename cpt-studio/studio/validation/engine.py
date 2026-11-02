@@ -206,8 +206,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                 second, second_scope or {}, selections, text, pages, routing, reference, date_state.value, usable,
                 procedure_day=primary_day)
         if harness is not None:
+            # the codes the proposal provider only listed (a candidate, an alternative): a participant's own
+            # proposal of one says so, never that Corti did not propose it (refutation round 2, truth-7)
+            listed = tuple(c.code for c in listable if c.role != 'selected')
             selections, participant_alternatives = harness.merge(selections, routing, reference, read_day, usable,
-                                                                 dated=date_state.value is not None)
+                                                                 dated=date_state.value is not None,
+                                                                 corti_listed=listed)
         encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
         procedure_day = encounter.procedure_day
         alternatives = (c for c in listable if c.role != 'selected')
@@ -3038,15 +3042,20 @@ class _Harness:
                             + ([f'{checks._join([PARTICIPANT_LABELS[name] for name in later])} after peer review']
                                if later else []))
 
-    def _lead(self, code: str, proposers: Sequence[str], selections: Sequence[_Selection]) -> str:
-        """The rationale's first sentence of a participant's own proposal (HARNESS.md 11.4): who proposed it, and that
-        Corti did not - or, where Corti selected the code with no passage matching the text exactly, that its selection
-        stands apart; never "Selected by"."""
+    def _lead(self, code: str, proposers: Sequence[str], selections: Sequence[_Selection],
+              listed: Sequence[str] = ()) -> str:
+        """The rationale's first sentence of a participant's own proposal (HARNESS.md 11.4): who proposed it, and what
+        Corti did with the code - selected it with no exact passage (its selection listed apart, excluded), listed it
+        only as a candidate or an alternative (``listed``), or nothing at all; never "Selected by". "Corti did not
+        propose this code." is said only where Corti has no entry for the code (refutation round 2, truth-7: a Corti
+        candidate of the same code was its alternative while this sentence denied it; the page's words are the same)."""
+        who = self._who(code, proposers)
         if any(s.code == code and s.origin == 'primary' for s in selections):
-            return (f'Proposed by {self._who(code, proposers)}; Corti also selected this code, but with no passage '
-                    'matching the document text exactly, so its selection is listed apart, excluded, and does not '
-                    'carry this proposal.')
-        return f'Proposed by {self._who(code, proposers)}; Corti did not propose this code.'
+            return (f'Proposed by {who}; Corti also selected this code, with no exact passage; it is listed apart, '
+                    'excluded.')
+        if code in listed:
+            return f'Proposed by {who}; Corti listed this code only as a candidate, not selected; see Alternatives.'
+        return f'Proposed by {who}; Corti did not propose this code.'
 
     def _good(self, code: str, names: Sequence[str]) -> tuple[EvidenceSpan, ...]:
         """The exact spans ``names`` quoted for ``code``, each once, in the order of the document: the same quotes give
@@ -3065,8 +3074,11 @@ class _Harness:
                                                for span in said.bad)
 
     def merge(self, selections: list, routing: RoutingResult, reference: ReferenceLookup, day: Optional[date],
-              inventory, *, dated: bool) -> tuple[list, tuple[ProposalAssessment, ...]]:
-        """(``selections`` with the participants' own proposals after them, the participants' alternatives)."""
+              inventory, *, dated: bool,
+              corti_listed: Sequence[str] = ()) -> tuple[list, tuple[ProposalAssessment, ...]]:
+        """(``selections`` with the participants' own proposals after them, the participants' alternatives).
+        ``corti_listed``: the codes the proposal provider listed without selecting them (its candidates and
+        alternatives), which a participant's own proposal of one names (_lead)."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
         added, listed = [], []
         for code, by in self.codes.items():
@@ -3083,7 +3095,7 @@ class _Harness:
                 candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
                 if candidate.evaluation is not None:
                     added.append(replace(candidate, origin='participant', proposers=proposers,
-                                         lead=self._lead(code, proposers, selections)))
+                                         lead=self._lead(code, proposers, selections, corti_listed)))
                     continue
                 why = candidate.scope_reason or NO_EVIDENCE
             listed.append(self._alternative(len(listed), code, tuple(n for n in PARTICIPANT_ORDER if n in by), why))
@@ -3566,7 +3578,10 @@ class _Confirmations:
     (_identity: its own reading, whatever else is proposed) are the confirmation's, asking (family, fact) - and never by
     the key it held, which another reading, a peer review or a new answer can give to another code; a service question
     by (family, fact). One whose proposal is not there, or is there twice, or that answers no such question, answers
-    nothing; confirmations of one question that disagree are all left unread. So a confirmation never touches another
+    nothing; so does a status confirmation whose passages CPT Studio's readers do not read as stating its status for
+    the act its proposal's code accounts for, or its service, in the documented service its hold was decided on - the
+    one check every status candidate passes (reconcile.status_stated, refutation round 2, EV2-1), listed with its why;
+    confirmations of one question that disagree are all left unread. So a confirmation never touches another
     question, and none depends on which others are read.
 
     Read, it answers its question and nothing else (apply): a status is decided as performed or not performed on its
@@ -3579,7 +3594,7 @@ class _Confirmations:
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
         confirmed = tuple(confirmed)
-        self.text = text
+        self.text, self.pages = text, pages
         for c in confirmed:
             if not isinstance(c, ConfirmedFinding):
                 raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
@@ -3641,6 +3656,22 @@ class _Confirmations:
             return TOO_SHORT  # as the reading normaliser's Locator counts a quote (refutation round 1, EV-3)
         return ''
 
+    def _status_unstated(self, c: ConfirmedFinding, spans: Sequence[EvidenceSpan], s: _Selection, inventory) -> str:
+        """Why CPT Studio's readers do not read the passages of status confirmation ``c`` as stating its status for the
+        proposal ``s`` it answers - the act its code accounts for, or its service, in the documented service its hold
+        was decided on (reconcile.status_stated: the same check every status candidate passes, HARNESS.md 12.5,
+        refutation round 2, EV2-1); '' when every passage does. So a stored or forged status confirmation is never read
+        on a passage that does not state it (another act, the examination alone, a hedge or a slice of one, a
+        denial)."""
+        match = s.evaluation.match if s.evaluation is not None else None
+        service = match.service.id if match is not None else ''
+        for span in spans:
+            why = reconcile.status_stated(inventory, service, s.code, s.family, c.value, span.start, span.end,
+                                          self.text, self.pages)
+            if why:
+                return why
+        return ''
+
     @staticmethod
     def _words(confirmations: Sequence[ConfirmedFinding]) -> str:
         """The words "confirmed from Fable's located passage by <reviewer>", each confirmation's, joined."""
@@ -3681,10 +3712,15 @@ class _Confirmations:
                 key = bound[0]
             asks = ((key, c.family, c.fact) in asked if c.scope == 'proposal'
                     else (c.family, c.fact) in services)
-            if asks:
-                groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
-            else:
+            if not asks:
                 self.ignored.append((c, NOT_OPEN))
+                continue
+            unstated = self._status_unstated(c, spans, selections[index[key]], inventory) \
+                if c.fact == STATUS_FACT else ''
+            if unstated:  # refutation round 2, EV2-1: a status is read only where the readers read it on its passage
+                self.ignored.append((c, unstated))
+                continue
+            groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
         status: dict[int, _Answer] = {}
         own: dict[int, dict[str, _Answer]] = {}
         family_wide: dict[str, dict[str, _Answer]] = {}

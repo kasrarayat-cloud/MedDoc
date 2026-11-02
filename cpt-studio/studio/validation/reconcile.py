@@ -14,16 +14,18 @@ Three questions, kept apart on purpose:
 """
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, replace
 from typing import Optional, Sequence
 
 from studio.gi import catalogue
+from studio.gi import sections as gi_sections
 from studio.gi.context import is_member_conflict
-from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, ROUTING_CONTRARY_CUE,
-                                 ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService, ServiceInventory,
-                                 act_regions, examined_regions)
-from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
+from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
+                                 ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService,
+                                 ServiceInventory, _sentences, act_regions, examined_regions, reflow)
+from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
@@ -272,6 +274,141 @@ def match_check(m: Match) -> Check:
 
 def support_check(s: Support) -> Check:
     return Check('evidence.support', 'Passages show the coded act', s.status, s.detail, INVENTORY_SOURCE)
+
+
+# --- a status, as the readers read the passage a reviewer confirms it on (HARNESS.md 11.3, 12.5) -------------------
+# Refutation round 2, EV2-1: a status candidate, and every status confirmation the engine reads, is checked on the act
+# the question asks about. One function decides it (status_stated), which studio.candidates and engine._Confirmations
+# both call, on the documented-service inventory the engine decided the hold from.
+
+# A status a confirmation carries, as the inventory reads a mention's status (services.ACT_STATUSES): 'not performed' is
+# a denial.
+STATUS_READS = {'performed': 'performed', 'not_performed': 'negated', 'negated': 'negated', 'cancelled': 'cancelled',
+                'canceled': 'cancelled', 'planned': 'planned', 'historical': 'historical'}
+# How the readers' reading of a mention is said: the status words a confirmation carries, and a doubt.
+STATUS_SAID = {'performed': 'performed', 'incomplete': 'performed', 'negated': 'not performed',
+               'cancelled': 'cancelled', 'planned': 'planned', 'historical': 'historical', 'uncertain': 'in doubt'}
+HELD_SECTIONS = ('history', 'plan', 'indication')  # never documents a service at this encounter (HARNESS.md 11.3)
+NO_SUBJECT = "CPT Studio's readers cannot tell which act this passage documents"
+NOT_A_STATUS = ('the value is neither performed nor a status of a service not performed at this encounter (not '
+                'performed, cancelled, planned, historical)')
+
+
+def held_why(kind: str) -> str:
+    """Why a passage in a ``kind`` section (HELD_SECTIONS) documents nothing at this encounter, in CPT Studio's
+    words."""
+    article = 'an' if kind[:1] in 'aeiou' else 'a'
+    return f'the passage is in {article} {kind} section, which never documents a service at this encounter'
+
+
+def held_section(text: str, start: int, end: int) -> str:
+    """The first history, plan or indication section (gi.sections, the routing sections reader) the passage [start, end)
+    lies in, or '' - a passage there never documents a service at this encounter."""
+    lay = gi_sections.layout(text)
+    kinds = [section.kind for section in lay.sections if section.start < end and start < section.end]
+    return next((kind for kind in kinds or [lay.section_at(start).kind] if kind in HELD_SECTIONS), '')
+
+
+def page_spans(pages) -> tuple[PageSpan, ...]:
+    """``pages`` (PageSpan, or {page, start, end} as a revision stores them) as PageSpans, each well-formed one once."""
+    out = []
+    for page in pages or ():
+        values = ([page.get(name) for name in ('page', 'start', 'end')] if isinstance(page, dict)
+                  else [getattr(page, name, None) for name in ('page', 'start', 'end')])
+        if all(type(value) is int for value in values) and 0 <= values[1] <= values[2]:
+            out.append(PageSpan(*values))
+    return tuple(sorted(set(out), key=lambda p: (p.start, p.end, p.page)))
+
+
+@functools.lru_cache(maxsize=4)
+def _reader_sentences(text: str, pages: tuple[PageSpan, ...]) -> tuple[tuple[int, int], ...]:
+    return tuple(_sentences(reflow(text, pages)))
+
+
+def whole_sentence(text: str, start: int, end: int, pages=()) -> tuple[int, int]:
+    """The whole sentence (or run of whole sentences) the passage [start, end) lies in, as the documented-service reader
+    cuts the text into sentences - on the same reflowed view, a soft line break inside a sentence read as a space
+    (services.build) - so a slice is never read apart from the words around it ("biopsies of the ascending colon lesion
+    were taken" inside "It is unclear whether biopsies of the ascending colon lesion were taken.")."""
+    met = [(s, e) for s, e in _reader_sentences(text, page_spans(pages)) if s < end and start < e]
+    if not met:
+        return start, end
+    return min(start, met[0][0]), max(end, met[-1][1])
+
+
+def status_subject(inventory: Optional[ServiceInventory], service_id: str, code: str,
+                   family: str) -> Optional[tuple[DocumentedService, tuple[str, ...]]]:
+    """What a status question of proposal ``code`` (family ``family``) asks about, read where the readers decided its
+    hold: the documented service it was matched to (``service_id``: match's Match.service, recorded as
+    support['service']) and the act kinds its code accounts for there (the code profile's ``covers``) - or () for the
+    service itself: a base code, an E/M, or a code whose profile is of another family (profile_unknown). A code that
+    accounts for an act asks about that act whichever hold raised its question (no act documented as done, one left in
+    doubt, or the service itself in doubt): a confirmation decides the code's status, and the code accounts for the act.
+    None when the readers have nothing to check it against: no consistent inventory, no service of that id and family
+    (a hold no documented service decided: checks.performed_clarification)."""
+    if not isinstance(inventory, ServiceInventory) or not isinstance(service_id, str) or not service_id:
+        return None
+    service = inventory.service(service_id)
+    if service is None or service.family != family:
+        return None
+    profile = catalogue.code_profile(code) if isinstance(code, str) else None
+    if profile is None or profile.family != family or profile.base or 'em_visit' in profile.covers \
+            or not profile.covers:
+        return service, ()
+    return service, tuple(profile.covers)
+
+
+def _status_mentions(service: DocumentedService, kinds: tuple[str, ...]) -> list[tuple[int, int, str]]:
+    """(start, end, status) of every mention of the subject the inventory records, in text order: each act of those
+    kinds in the service with its own reading; for the service itself, each passage that establishes it - read with
+    its status for an office visit (services._em_service keeps the mentions of its own status), as performed for a
+    procedure (services._finish keeps its report title and its performed statements) - and each act it documents as
+    performed (an act done in a service documents the service)."""
+    if kinds:
+        found = [(ev.start, ev.end, act.status) for act in service.acts if act.kind in kinds for ev in act.evidence]
+    else:
+        said = service.status if service.family == 'gi.office_em' and service.status not in POSITIVE else 'performed'
+        found = [(ev.start, ev.end, said) for ev in service.evidence]
+        found += [(ev.start, ev.end, 'performed') for act in service.acts if act.status == 'performed'
+                  for ev in act.evidence]
+    return sorted(found)
+
+
+def status_stated(inventory: Optional[ServiceInventory], service_id: str, code: str, family: str, value: str,
+                  start: int, end: int, text: str, pages=()) -> str:
+    """'' when CPT Studio's readers - the documented-service inventory the engine decided the hold from - read the
+    passage [start, end) of ``text`` as stating exactly ``value`` for the question's subject (status_subject); otherwise
+    why, a clause in CPT Studio's words. In this order: ``value`` is a status a confirmation carries; the passage lies
+    in no history, plan or indication section; the readers can tell the subject; and every mention of the subject in
+    the passage's WHOLE sentence (whole_sentence, never a slice of it) - at least one - is read with exactly that
+    status: 'performed' never beside a mention read as negated, cancelled, in doubt, planned or historical, and a
+    not-performed status (a denial for 'not performed', cancelled, planned, historical) only where every mention is read
+    so."""
+    wanted = STATUS_READS.get(re.sub(r'[\s-]+', '_', value.strip().lower())) if isinstance(value, str) else None
+    if wanted is None:
+        return NOT_A_STATUS
+    held = held_section(text, start, end)
+    if held:
+        return held_why(held)
+    subject = status_subject(inventory, service_id, code, family)
+    if subject is None:
+        return NO_SUBJECT
+    service, kinds = subject
+    name = ' or '.join(act_label(kind) for kind in kinds) if kinds else service_label(service)
+    lo, hi = whole_sentence(text, start, end, pages)
+    read = [STATUS_SAID.get(status, status) for s, e, status in _status_mentions(service, kinds) if s < hi and lo < e]
+    if not read:
+        return (f'the passage does not name the {name}' if kinds
+                else f"CPT Studio's readers read no statement of the {name} in the passage")
+    if 'in doubt' in read:
+        return f'the passage leaves the {name} in doubt'
+    said = STATUS_SAID[wanted]
+    other = next((status for status in read if status != said), None)
+    if other is None:
+        return ''
+    if said in read:
+        return f'the passage states the {name} both as {said} and as {other}'
+    return f'the passage states the {name} as {other}, not as {said}'
 
 
 def elsewhere(code: str, inventory: ServiceInventory) -> Optional[Match]:
