@@ -779,6 +779,35 @@ class PeerReviewTests(SimpleTestCase):
         self.assertIn('in its independent reading and again in peer review',
                       proposal(again, '45380').support['participants']['astra']['detail'])
 
+    def test_a_first_reading_quote_that_was_not_found_never_makes_a_peer_review_code_independent(self):
+        """11.1 and 11.4 (refutation round 1, EV-2 = IND-3): a participant's phase is the phase of its LOCATED evidence.
+        A code its first reading listed with a quote not found in the text - no proposal in phase 1 - that its peer
+        review then quotes verbatim was proposed after peer review, exactly as if the first reading had not listed it."""
+        unlocated = code(COLON, '45380', 'a 12 mm flat lesion was sampled with forceps')  # not in the text
+        added = peer('astra', additional=[code(COLON, '45380', BIOPSY)])
+        first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [unlocated])])
+        self.assertEqual((proposal(first, '45380').bucket, proposal(first, '45380').support['phases']),
+                         ('alternative', {'astra': 'independent'}))  # what it did in its first reading
+        result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added)])
+        control = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', review=added)])
+        item = proposal(result, '45380')
+        self.assertEqual(decision(item), decision(proposal(control, '45380')))
+        self.assertEqual(item.support['phases'], {'astra': 'peer_review'})
+        self.assertTrue(item.rationale.startswith('Proposed by Astra after peer review; Corti did not propose this '
+                                                  'code.'), item.rationale)
+        self.assertEqual(item.rationale, proposal(control, '45380').rationale)
+        # Corti's own code, listed by Astra with a quote not found and then quoted in peer review: the same rule
+        snare = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed(
+            'astra', [code(COLON, '45385', 'hot snare polypectomy of the sigmoid polyp')],
+            peer('astra', additional=[code(COLON, '45385', SNARE)]))])
+        self.assertEqual(proposal(snare, '45385').support['phases'], {'astra': 'peer_review'})
+        # beside a participant whose first reading located it: each named in its own phase
+        both = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added),
+                                                                  read('fable', [code(COLON, '45380', BIOPSY)])])
+        self.assertEqual(proposal(both, '45380').support['phases'], {'astra': 'peer_review', 'fable': 'independent'})
+        self.assertTrue(proposal(both, '45380').rationale.startswith(
+            'Proposed by Fable (independent participant) and Astra after peer review;'), proposal(both, '45380').rationale)
+
     def test_an_additional_code_a_decidable_proposal_carries_only_adds_to_its_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
         result = run(COLON, corti(('45385', span(COLON, SNARE))),

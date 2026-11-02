@@ -3008,8 +3008,13 @@ class _Harness:
         return tuple(name for name in PARTICIPANT_ORDER if any(s.good for s in by.get(name, ())))
 
     def phase(self, code: str, name: str) -> str:
-        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review."""
-        return INDEPENDENT if any(s.phase == INDEPENDENT for s in self.codes[code][name]) else PEER_REVIEW
+        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read from its
+        entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a first
+        reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
+        proposed after peer review); from all its entries only when none does (an alternative it never located)."""
+        said = self.codes[code][name]
+        counted = [s for s in said if s.good] or said
+        return INDEPENDENT if any(s.phase == INDEPENDENT for s in counted) else PEER_REVIEW
 
     def _who(self, code: str, names: Sequence[str]) -> str:
         """'Astra (independent participant)', 'Fable after peer review', 'Astra (independent participant) and Fable
