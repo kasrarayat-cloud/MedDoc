@@ -632,6 +632,24 @@ class FableLoopTests(_LoopContract, OfflineTestCase):
             self.assertEqual({name.lower() for name in call['headers']}, {'x-api-key', 'anthropic-version',
                                                                           'content-type'})
 
+    def test_a_model_written_placeholder_is_never_expanded_and_nothing_more_is_sent(self):
+        """A tool_use input is model-written, so a document could steer it into naming the original file. The
+        placeholder rule (exactly one, exactly where this adapter puts it) refuses the next exchange instead: the
+        original is never expanded anywhere the model chose, and the run fails with nothing more sent."""
+        forged = {'$original_sha256': ORIGINAL['sha256'], '$original_bytes': ORIGINAL['bytes']}
+        for kind, original_bytes in (('pdf', PDF), ('paste', None)):
+            with self.subTest(kind=kind):
+                answer = self.tool_answer(('toolu_forged', 'cms_code_facts', forged))
+                outcome, session, _, _, executor = self.run_loop(self.ok(answer), kind=kind,
+                                                                 original_bytes=original_bytes)
+                self.assertEqual((len(session.calls), executor.calls), (1, []))
+                self.assertEqual(outcome.exchanges[0].tool_calls[0].result['error'][:30],
+                                 'The arguments do not fit cms_c')
+                self.assertEqual(outcome.exchanges[1].outcome, 'not_sent')
+                self.assertIn('names an original file where this adapter never puts one',
+                              outcome.exchanges[1].error)
+                self.assertEqual((outcome.final.outcome, outcome.final.sent), ('failed', True))
+
     def test_tool_input_that_is_not_an_object_is_answered_with_an_error(self):
         answer = self.tool_answer(('toolu_list', 'cms_code_facts', ['45385']), ('toolu_text', 'cms_code_facts', 'x'))
         outcome, _, _, _, executor = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2))

@@ -543,12 +543,12 @@ class PromptConstantTests(OfflineTestCase):
 
     def test_a_document_that_does_not_end_as_a_peer_document_lists_nothing(self):
         frozen = [['a', '0' * 64]]
+        listed = json.dumps(frozen, separators=(',', ':'))
         good = '\n'.join(['x', '== question_ids ==', '["q1"]', '',
-                          '== Frozen inputs: the sha256 of each frozen output shown above ==', json.dumps(frozen,
-                                                                                                         separators=(',', ':'))])
+                          '== Frozen inputs: the sha256 of each frozen output shown above ==', listed])
         self.assertEqual(prompt.peer_document_inputs(good), (('q1',), (('a', '0' * 64),)))
         for broken in (good.replace('["q1"]', '["q1", "q1"]'), good.replace('["q1"]', '[ "q1"]'),
-                       good.replace('== question_ids ==', '== question ids =='), good + '\n', good.replace('0' * 64, 'A' * 64),
-                       good.replace(json.dumps(frozen, separators=(',', ':')), '[]'), None, 7, ''):
+                       good.replace('== question_ids ==', '== question ids =='), good + '\n',
+                       good.replace('0' * 64, 'A' * 64), good.replace(listed, '[]'), None, 7, ''):
             with self.subTest(broken=broken if not isinstance(broken, str) else broken[-60:]):
                 self.assertIsNone(prompt.peer_document_inputs(broken))

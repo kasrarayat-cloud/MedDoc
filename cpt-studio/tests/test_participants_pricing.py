@@ -100,7 +100,8 @@ class LoopEstimateTests(SimpleTestCase):
     def test_each_exchange_is_priced_on_its_own_never_as_one_long_request(self):
         each = astra(200_000, 1_000, cached=0)
         loop = pricing.estimate_loop('gpt-6-astra', [each, each])
-        self.assertEqual(Decimal(loop['estimated_usd']), 2 * Decimal(pricing.estimate('gpt-6-astra', each)['estimated_usd']))
+        single = Decimal(pricing.estimate('gpt-6-astra', each)['estimated_usd'])
+        self.assertEqual(Decimal(loop['estimated_usd']), 2 * single)
         self.assertEqual(loop['estimated_usd'], '4.100000')
         summed = pricing.estimate('gpt-6-astra', astra(400_000, 2_000, cached=0))  # what pricing the sum would claim
         self.assertEqual(summed['estimated_usd'], '8.150000')

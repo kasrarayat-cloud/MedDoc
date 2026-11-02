@@ -322,8 +322,8 @@ def _answer(response_bytes) -> tuple[str, str, str]:
             else 'no category was given'
         return '', returned, f'the model refused ({named})'
     if stop != 'end_turn':
-        return '', returned, (f'it stopped for {reading.quoted(stop, 40) if isinstance(stop, str) else "no stated reason"}, '
-                              'not at the end of its turn')
+        reason = reading.quoted(stop, 40) if isinstance(stop, str) else 'no stated reason'
+        return '', returned, f'it stopped for {reason}, not at the end of its turn'
     texts = []
     for block in content:
         if isinstance(block, dict) and block.get('type') == 'text':
