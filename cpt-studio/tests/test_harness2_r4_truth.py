@@ -377,3 +377,167 @@ class SecondReviewUnlistedTests(TestCase):
         self.assertEqual(serializers.corti_unlisted_counts(unread), (0, 0))
         self.assertEqual(serializers.corti_unlisted(unread), 0)
 
+
+# --- truth-5: the retrieval-failure note says what failed - loading the stored passages, or the retrieval itself ----
+
+# Where the stored CMS passages cannot be loaded (a passage changed after import), the retrieval never runs: nothing is
+# retrieved, so the note never says CPT Studio could not record which facts and passages it retrieved (refutation
+# round 4, truth-5). One sentence for each kind of failure, with what it leaves of the checks: where an installed CMS
+# reference file applied, the checks read the CMS facts before that; where none did, none was checked, and why.
+LOAD_APPLIED = ("Reference validation failed: CPT Studio could not load the stored CMS reference passages ({error}, "
+                "logged), so the retrieval for this assessment's codes did not run and no CMS reference fact or "
+                "passage is listed here. Each code's checks read the CMS facts before that and stand as shown; "
+                "retrieval only informs the reviewer and decides no status, so the assessment stands as made.")
+LOAD_UNCHECKED = ("Reference validation failed: CPT Studio could not load the stored CMS reference passages ({error}, "
+                  "logged), so the retrieval for this assessment's codes did not run and no CMS reference fact or "
+                  "passage is listed here. {why} Retrieval only informs the reviewer and decides no status, so the "
+                  "assessment stands as made.")
+RETRIEVE_APPLIED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed "
+                    "({error}, logged), so no CMS reference fact or passage is listed here. Each code's checks read "
+                    "the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides no "
+                    "status, so the assessment stands as made.")
+RETRIEVE_UNCHECKED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed "
+                      "({error}, logged), so no CMS reference fact or passage is listed here. {why} Retrieval only "
+                      "informs the reviewer and decides no status, so the assessment stands as made.")
+NO_DATE_WHY = ('No code was checked against the CMS reference files: no service date is established for this '
+               'encounter, so no dated CMS reference file applies.')
+# The words that claim something was retrieved before the failure, or recorded: false where the retrieval never ran.
+RETRIEVED_CLAIMS = ('could not record', 'it retrieved', 'were retrieved', 'was retrieved')
+
+
+class RetrievalFailureStepMixin:
+    """The assess stage's retrieval: the stored passages are loaded, then the facts and passages are retrieved for the
+    codes. A stored passage changed after import fails the load (its sha256 check), so the retrieval never runs - and
+    the note, the API's reference validation, the page's row and the TXT said "CPT Studio could not record which CMS
+    reference facts and passages it retrieved", while every card pointed to that row for what failed (refutation round
+    4, truth-5). Each now says the failure it is."""
+
+    def run_failing(self, text, *, retrieve_raises=False):
+        from unittest import mock
+
+        from studio import jobs
+        from tests.test_harness2_r2_truth import tamper_one_passage
+
+        if not retrieve_raises:
+            tamper_one_passage()
+        loads = mock.patch.object(jobs.reference_passages, 'load_passages',
+                                  wraps=jobs.reference_passages.load_passages)
+        retrieves = mock.patch.object(jobs.reference_passages, 'retrieve',
+                                      **({'side_effect': RuntimeError('synthetic retrieval defect')}
+                                         if retrieve_raises else {'wraps': jobs.reference_passages.retrieve}))
+        encounter_id = self.create(text)
+        with loads as load, retrieves as retrieve, self.assertLogs('studio.jobs', level='ERROR') as caught:
+            drain()
+        self.assertTrue(load.called)
+        self.calls = (load.call_count, retrieve.call_count)
+        self.logged = caught.output
+        return encounter_id
+
+    def assertSaysWhatFailed(self, encounter_id, note, day):
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(final.retrieval, [{'code': '', 'service_date': day, 'facts': [], 'passages': [],
+                                            'lookups': [], 'notes': [note], 'failed': True}])
+        detail = self.detail(encounter_id)
+        block = detail['harness']['reference_validation']
+        self.assertEqual((block['state'], block['detail'], block['codes_checked'], block['passages']),
+                         ('failed', note, 0, 0))
+        row = browser('rowOf(page(), "data-participant", "reference_validation")', detail)
+        self.assertIn(note, row)
+        retrieval = _section(_txt(self.encounter(encounter_id)), 'REFERENCE RETRIEVAL')
+        self.assertIn(f'  - {note}', retrieval)
+        # every card points to the row for what failed, and the row says it
+        cards = browser('cards(page()).map(card => visible(card))', detail)
+        self.assertTrue(cards)
+        pointer = browser('app.RETRIEVAL_FAILED', {})
+        self.assertTrue(pointer.endswith('the Reference validation row says what failed.'), pointer)
+        for card in cards:
+            self.assertIn(pointer, card)
+        return final, detail, row, retrieval
+
+    def assertTheChecksReadTheCmsFacts(self, final):
+        decidable = list(final.proposals.exclude(bucket='alternative'))
+        self.assertTrue(decidable)
+        for proposal in decidable:  # what the note's second sentence says: each code's checks read the CMS facts
+            statuses = {check['id']: check['status'] for check in proposal.checks}
+            self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('pass', 'pass'), proposal.code)
+
+    def test_a_passage_that_cannot_be_loaded_is_said_so_where_a_cms_file_applied(self):
+        encounter_id = self.run_failing(TWO_EXTENTS)
+        self.assertTrue(any('does not match its sha256' in line for line in self.logged), self.logged)
+        self.assertEqual(self.calls[1], 0)  # the retrieval never ran
+        final, detail, row, retrieval = self.assertSaysWhatFailed(encounter_id, LOAD_APPLIED.format(error='ValueError'),
+                                                                  '2026-10-14')
+        self.assertTrue([source['key'] for source in final.reference_sources if source.get('applies')])
+        self.assertTheChecksReadTheCmsFacts(final)
+        for said in (detail['harness']['reference_validation']['detail'], row, '\n'.join(retrieval)):
+            for claim in RETRIEVED_CLAIMS:
+                self.assertNotIn(claim, said)
+
+    def test_a_passage_that_cannot_be_loaded_is_said_so_where_no_cms_file_applied(self):
+        from tests.test_harness2_r2_truth import NO_DATE
+
+        encounter_id = self.run_failing(NO_DATE)
+        self.assertEqual(self.calls[1], 0)
+        final, detail, row, retrieval = self.assertSaysWhatFailed(
+            encounter_id, LOAD_UNCHECKED.format(error='ValueError', why=NO_DATE_WHY), None)
+        self.assertFalse([source['key'] for source in final.reference_sources if source.get('applies')])
+        for said in (detail['harness']['reference_validation']['detail'], row, '\n'.join(retrieval)):
+            for claim in RETRIEVED_CLAIMS + ('read the CMS facts', 'read the facts'):
+                self.assertNotIn(claim, said)
+
+    def test_a_retrieval_that_fails_after_the_passages_loaded_is_said_so(self):
+        encounter_id = self.run_failing(TWO_EXTENTS, retrieve_raises=True)
+        self.assertEqual(self.calls, (self.calls[0], self.calls[0]))  # loaded, then the retrieval ran and raised
+        self.assertGreater(self.calls[0], 0)
+        final, _, _, _ = self.assertSaysWhatFailed(encounter_id, RETRIEVE_APPLIED.format(error='RuntimeError'),
+                                                   '2026-10-14')
+        self.assertTheChecksReadTheCmsFacts(final)
+        self.assertNotIn('synthetic retrieval defect', json.dumps(final.retrieval))  # logged, never recorded
+
+
+class RetrievalFailureStepTests(RetrievalFailureStepMixin, R2WordingCase):
+    pass
+
+
+@override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
+class CortiOnlyRetrievalFailureStepTests(RetrievalFailureStepMixin, R2WordingCase):
+    def test_the_chain_is_i1_s(self):
+        encounter_id = self.run_failing(TWO_EXTENTS)
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+
+
+class RetrievalFailureEntryStepTests(TestCase):
+    """jobs.retrieval_failure words the step that failed - loading the stored passages, or the retrieval - and what it
+    leaves of the checks; a caller that names no step, or one it does not know, is given the retrieval's own sentence,
+    which claims nothing was loaded or read (fail closed)."""
+
+    def test_one_sentence_for_each_step_and_each_reading_of_the_checks(self):
+        from datetime import date
+
+        from studio import jobs
+
+        day = date(2026, 10, 21)
+        why = ('No code was checked against the CMS reference files: no installed CMS reference file applies to the '
+               'service date, 2026-10-21.')
+        cases = [((jobs.RETRIEVAL_STEP_LOAD, True), LOAD_APPLIED.format(error='ValueError')),
+                 ((jobs.RETRIEVAL_STEP_LOAD, False), LOAD_UNCHECKED.format(error='ValueError', why=why)),
+                 ((jobs.RETRIEVAL_STEP_RETRIEVE, True), RETRIEVE_APPLIED.format(error='ValueError')),
+                 ((jobs.RETRIEVAL_STEP_RETRIEVE, False), RETRIEVE_UNCHECKED.format(error='ValueError', why=why))]
+        for (step, applied), note in cases:
+            with self.subTest(step=step, applied=applied):
+                entry = jobs.retrieval_failure(day, 'ValueError', applied=applied, step=step)
+                self.assertEqual(entry, {'code': '', 'service_date': '2026-10-21', 'facts': [], 'passages': [],
+                                         'lookups': [], 'notes': [note], 'failed': True})
+        self.assertEqual(len({note for _, note in cases}), 4)
+        self.assertEqual((jobs.RETRIEVAL_LOAD_FAILED, jobs.RETRIEVAL_LOAD_FAILED_UNCHECKED, jobs.RETRIEVAL_FAILED,
+                          jobs.RETRIEVAL_FAILED_UNCHECKED),
+                         (LOAD_APPLIED, LOAD_UNCHECKED, RETRIEVE_APPLIED, RETRIEVE_UNCHECKED))
+        # fail closed: no step named, or one not known, is the retrieval's own sentence
+        for kwargs in ({}, {'step': 'unknown'}):
+            for applied in (True, False):
+                self.assertEqual(jobs.retrieval_failure(day, 'ValueError', applied=applied, **kwargs),
+                                 jobs.retrieval_failure(day, 'ValueError', applied=applied,
+                                                        step=jobs.RETRIEVAL_STEP_RETRIEVE))
+        for note in (RETRIEVE_APPLIED, RETRIEVE_UNCHECKED, LOAD_APPLIED, LOAD_UNCHECKED):
+            for claim in RETRIEVED_CLAIMS:
+                self.assertNotIn(claim, note)

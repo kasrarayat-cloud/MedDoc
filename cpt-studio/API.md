@@ -202,11 +202,17 @@ member reconciles it (`POST reconcile` takes any participant's run). `codes` are
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
 counts those (0 wherever none was returned), so the page says the reading proposed no code "that can be listed", never
-that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers selected that the engine
-cannot list (its primary answer and any bounded second review, read again as the engine read them), and its `detail`
-then says that only its codes that can be listed were checked, or that none can be listed, so none was checked, before
-the same count sentence; the reports' REVIEW PARTICIPANTS says the same (refutation round 3, truth-3: "Answered; its
-codes were checked." and "It proposed no code." beside a code it selected that cannot be listed);
+that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers returned that the engine
+cannot list - every code of an answer, whatever its role (selected, a candidate, an alternative), read again as the
+engine read it: its primary answer as the engine's `provider.unlisted` check counts it, and a bounded second review as
+its `provider.second_review` check counts it, only where the engine read that review - so `unlisted_codes` is their
+total, and its `detail` then says that only its codes that can be listed were checked, that it proposed no code that
+can be listed (beside a code it listed apart, as its Alternatives list shows), or that none of its codes can be listed,
+so none was checked, before each answer's own count sentence: "It returned 2 codes that cannot be listed: ..." and
+"Its second review returned 1 code that cannot be listed: ...", the numbers those checks say. The reports' REVIEW
+PARTICIPANTS says the same (refutation round 3, truth-3: "Answered; its codes were checked." and "It proposed no code."
+beside a code it selected that cannot be listed; round 4, truth-4: it counted the selected codes alone, "It returned 1
+code" beside the engine's "The provider returned 2 codes" for a candidate it returned too);
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
@@ -231,12 +237,14 @@ reference file applies." or "... no installed CMS reference file applies to the 
 (refutation round 2, truth-3: this was `done`, its codes counted as checked). A retrieval that fails never stops the
 assessment, which stands as made (HARNESS.md 5): its retrieval is recorded as one entry `{"code": "", "failed": true,
 "notes": ["Reference validation failed: ..."]}` (no fact, no passage), and the state is then `failed` - never
-`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`. It says what failed and what that
-leaves of the codes' checks, by the engine's record of the lookup (`reference_sources[].applies`): where an installed
-CMS reference file applied to the service date, that CPT Studio could not record which CMS reference facts and passages
-it retrieved, so none is listed, and that each code's checks, which read the CMS facts before that, stand as shown
-(refutation round 2, truth-4: it said no proposal was checked); where none applied, that CPT Studio's retrieval for the
-codes failed, so no CMS reference fact or passage is listed, and that no code was checked against the CMS reference
+`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`. It says which step failed: that
+CPT Studio could not load the stored CMS reference passages, so the retrieval for the codes did not run (a stored
+passage changed after import fails its sha256 check), or that its retrieval for the codes failed; either way no CMS
+reference fact or passage is listed (refutation round 4, truth-5: a failed load read "could not record which CMS
+reference facts and passages it retrieved", when nothing was retrieved). Then what that leaves of the codes' checks,
+by the engine's record of the lookup (`reference_sources[].applies`): where an installed CMS reference file applied to
+the service date, that each code's checks, which read the CMS facts before that, stand as shown (refutation round 2,
+truth-4: it said no proposal was checked); where none applied, that no code was checked against the CMS reference
 files, with `not_verified`'s own reason ("... no service date is established for this encounter, so no dated CMS
 reference file applies." or "... no installed CMS reference file applies to the service date, 2025-03-02."; refutation
 round 3, truth-1: it said the checks read the CMS facts beside checks that all read "not verified"). A failed entry
@@ -257,10 +265,12 @@ participant that first proposed the code after peer review (its `phases` entry i
 reading's position, and its `detail` says both: "Fable did not propose this code in its first reading. It proposed it
 after peer review." (refutation round 2, truth-2), in the encounter view and in the trace's reconciliation rows alike.
 A first reading that listed the code with no quote found in the document proposed nothing (the engine counts no such
-entry), so where that participant then proposed the code after peer review its position is `not_proposed`: "Astra
-listed this code in its first reading, but none of its quotes was found in the document, so that reading did not
-propose it. It proposed it after peer review." (refutation round 3, truth-2: it said Astra proposed it in its first
-reading and "again" after peer review, beside `phases` and the peer row's "never independent").
+entry), so that participant's position is `not_proposed`, whether or not it then proposed the code after peer review:
+"Astra listed this code in its first reading, but none of its quotes was found in the document, so that reading did
+not propose it.", and only where it did, "It proposed it after peer review." after it (refutation round 3, truth-2: it
+said Astra proposed it in its first reading and "again" after peer review, beside `phases` and the peer row's "never
+independent"; round 4, truth-2: where peer review did not propose it, the same frozen reading was `proposed`, "Astra
+proposed this code; none of its quotes was found in the document.", beside `proposed_by`).
 A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
 section ([] for a code that was not looked up: a provider's alternatives never are).
