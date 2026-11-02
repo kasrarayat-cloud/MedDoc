@@ -10,15 +10,24 @@ Only the current assessment of the current revision can be decided on.
 """
 from __future__ import annotations
 
+import importlib
+import json
+import logging
+import uuid
+from decimal import Decimal
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.http import Http404
 from django.utils import timezone
 
-from . import audit
+from . import audit, candidates, participants
 from .gi.context import charge_date_problem
-from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, Job, Proposal,
-                     ProviderRun, SourceRevision)
+from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
+                     Proposal, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
+
+log = logging.getLogger(__name__)
 
 
 class AttestationRefused(ValidationError):
@@ -363,11 +372,15 @@ def _check_result(result, text):
                              'revision; it was not recorded.')
 
 
-def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None):
+def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None, participants=None,
+                     retrieval=None):
+    """``participants`` and ``retrieval`` (HARNESS.md 6) are recorded beside the result, outside its sha256: an
+    assessment that read other participant runs or retrieved other passages is another assessment."""
     return (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
             and previous.provider_run_id == (provider_run.pk if provider_run else None)
-            and previous.second_run_id == (second_run.pk if second_run else None))
+            and previous.second_run_id == (second_run.pk if second_run else None)
+            and previous.participants == (participants or []) and previous.retrieval == (retrieval or []))
 
 
 def _clarification(encounter, assessment, spec, proposal):
@@ -551,22 +564,27 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     return carried, len(ordered) - carried
 
 
-def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None):
+def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None,
+                       participants=(), retrieval=()):
     """Record an AssessmentResult as the encounter's current assessment, in one transaction.
 
     Creates the immutable Assessment and Proposal rows and the Clarification
     rows, withdraws earlier open clarifications that were not raised again,
     then carries or invalidates the previous assessment's current decisions.
     Re-persisting an identical result on identical inputs returns the current
-    assessment unchanged.
+    assessment unchanged. ``participants`` (one entry per harness participant,
+    its state and run) and ``retrieval`` (the reference retrieval traces) are
+    recorded beside the result, outside its sha256 (HARNESS.md 6, I1).
     """
     digest = sha256_json(result)
+    participants, retrieval = to_jsonable(list(participants)), to_jsonable(list(retrieval))
     with transaction.atomic():
         locked = _lock(encounter)
         revision = SourceRevision.objects.get(pk=revision.pk)
         _check_inputs(locked, revision, context, routing_run, provider_run)
         previous = locked.current_assessment
-        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run):
+        if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run, participants,
+                            retrieval):
             encounter.state = refresh_state(locked)
             return previous
         _check_result(result, revision.text)
@@ -576,7 +594,8 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
             reference_sources=to_jsonable(result.reference_sources),
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
             summary=to_jsonable(result.summary), services=to_jsonable(result.services),
-            completeness=to_jsonable(result.completeness), sha256=digest)
+            completeness=to_jsonable(result.completeness), participants=participants, retrieval=retrieval,
+            sha256=digest)
         # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
         rows = Proposal.objects.bulk_create([
             Proposal(
@@ -859,6 +878,12 @@ def _failed_stage_state(encounter, revision, job):
     provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
         return 'extraction_failed', None
+    if job.kind in Job.PARTICIPANT_KINDS + Job.PEER_KINDS:
+        # A harness participant's stage - its first reading's or its peer review's (HARNESS.md 12.1) - never makes the
+        # encounter provider_failed, which is Corti's state: its own failures are runs of its own, and the chain goes on
+        # (I10). One its worker left mid-send is the encounter-wide unknown outcome every further send waits on
+        # (HARNESS.md 2); any other failure is the stage's.
+        return ('provider_unknown' if job.state == Job.UNKNOWN else 'processing_failed'), None
     if job.kind not in (Job.PREDICT, Job.REVIEW2):
         return 'processing_failed', None
     if job.state == Job.UNKNOWN:
@@ -1003,3 +1028,518 @@ def refresh_state(encounter):
             Encounter.objects.filter(pk=locked.pk).update(state=state, updated_at=timezone.now())
     encounter.state = state
     return state
+
+
+# --- the harness record, as the screen and the reports state it (HARNESS.md 5-7) --------------------------------------
+#
+# Read-only, from the rows. Three kinds of status are never conflated (I4): who PROPOSED a code (proposed_by), what the
+# CMS reference checks found (reference_check), and a member's decision (current_decisions). None of them decides
+# another: agreement between participants and passing checks approve nothing (I3).
+
+CORTI = 'corti'
+# (name, label, vendor, model requested), in harness order: the models are HARNESS.md 1's code constants (Corti's API
+# takes no model identifier); the adapters own them, and a run records what it actually requested and got back.
+HARNESS_PARTICIPANTS = ((CORTI, 'Corti', 'Corti', ''),
+                        ('astra', participants.LABELS['astra'], participants.VENDORS['astra'], 'gpt-6-astra'),
+                        ('fable', participants.LABELS['fable'], participants.VENDORS['fable'], 'claude-fable-5-1'))
+CORTI_PROVIDERS = ('corti', 'replay')  # Corti's runs, live or replayed from its recordings
+CMS_CHECKS = ('pfs.presence', 'mue.units', 'pfs.endoscopic_base')
+CHECK_WORDS = {'pass': 'passed', 'warn': 'needs attention', 'fail': 'failed', 'not_verified': 'not verified',
+               'info': 'noted', 'not_applicable': 'not applicable'}
+PTP_NOT_CONNECTED = ('NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not '
+                     'verified.')
+# What is not connected, stated on every proposal and the encounter (HARNESS.md 5).
+NOT_CONNECTED = ('NCCI procedure-to-procedure edits (AMA licence agreement not accepted)',
+                 'AMA CPT descriptors and guidelines (no licence)', 'Payer policies')
+COST_BASIS = 'estimated from published rates, not reconciled to an invoice'
+PRICING_MODULE = 'studio.participants.pricing'
+# A participant's state in Assessment.participants (types.PARTICIPANT_STATES), in words.
+RECORD_WORDS = {
+    'read': 'answered; the reading was used',
+    'refused': 'answered; the reading was not used',
+    'failed': 'the request failed',
+    'unknown': 'the outcome is unknown: no complete response was recorded',
+    'not_sent': 'nothing was sent',
+    'blocked': 'nothing was sent: a previous request has an unknown outcome',
+    'not_configured': 'not configured on this installation',
+    'not_run': 'no request was made for this revision',
+}
+
+
+def participant_of(run):
+    """The harness participant a provider run belongs to: Corti for its live or replayed runs, else its provider."""
+    return CORTI if run.provider in CORTI_PROVIDERS else run.provider
+
+
+def run_mode(run):
+    """'replay' for a recorded response, which never presents as live output: Corti's replay provider, or a harness
+    participant whose adapter ran in replay mode (its run's scope records the mode), in either phase; 'live'
+    otherwise."""
+    if run.provider == 'replay':
+        return 'replay'
+    if run.purpose in (ProviderRun.INDEPENDENT, ProviderRun.PEER_REVIEW) and (run.scope or {}).get('mode') == 'replay':
+        return 'replay'
+    return 'live'
+
+
+# The participant states whose recorded reason can say more than the state does (a refusal reason, an error, why
+# nothing was sent or no request was made).
+REASONED_STATES = ('refused', 'failed', 'not_sent', 'unknown', 'not_run')
+
+
+def record_reason(record):
+    """The reason a participant's Assessment.participants entry recorded, where it says more than its state's words
+    (RECORD_WORDS); '' otherwise."""
+    state = record.get('state')
+    reason = str(record.get('reason') or '').strip()
+    words = RECORD_WORDS.get(state, '')
+    if state not in REASONED_STATES or reason.rstrip('.').lower() == words.lower():
+        return ''
+    return reason
+
+
+def record_words(record):
+    """A participant's Assessment.participants entry in one plain clause, with the reason it recorded where that says
+    more than the state (a refusal reason, an error, why nothing was sent)."""
+    state = record.get('state')
+    words = RECORD_WORDS.get(state, str(state or 'unknown state'))
+    reason = record_reason(record).rstrip('.')
+    if not reason:
+        return words
+    if state in ('not_sent', 'not_run') and reason.lower().startswith('nothing was sent'):
+        return 'n' + reason[1:]  # the reason already says so: "Nothing was sent: ..."
+    return f'{words}: {reason}'
+
+
+def proposed_by(proposal):
+    """Who proposed the code, in harness order (I4: a proposal, never an approval): Corti for its own proposals and
+    alternatives (origin primary or second_review), and each participant the engine named in support['proposed_by'] -
+    the proposers of a participant's own proposal (origin participant), or a participant that also proposed Corti's."""
+    support = proposal.support or {}
+    named = {name for name in support.get('proposed_by') or [] if isinstance(name, str)}
+    corti = (support.get('origin') or 'primary') in ('primary', 'second_review') or CORTI in named
+    return ([CORTI] if corti else []) + [name for name in participants.PARTICIPANTS if name in named]
+
+
+def participant_positions(proposal, records):
+    """{name: {position, detail, quote}} for each harness participant the assessment had configured
+    (Assessment.participants; {} when none was): from a reading that was used, 'proposed' (with its first located
+    quote), 'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. Positions are kept
+    beside the proposal and decide nothing (I2, I3)."""
+    out = {}
+    for record in records or []:
+        name = record.get('name') if isinstance(record, dict) else None
+        if name not in participants.PARTICIPANTS or record.get('state') == 'not_configured':
+            continue
+        label = participants.LABELS[name]
+        if record.get('state') != 'read':
+            out[name] = {'position': 'not_run', 'detail': f'{label}: {record_words(record)}.', 'quote': ''}
+            continue
+        proposed = {item.get('code'): item.get('quote') or '' for item in record.get('codes') or []}
+        advised = {item.get('code'): item for item in record.get('not_coded') or []}
+        if proposal.code in proposed:
+            quote = proposed[proposal.code]
+            located = (' with evidence located in the document' if quote else
+                       '; none of its quotes was found in the document')
+            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{located}.', 'quote': quote}
+        elif proposal.code in advised:
+            item = advised[proposal.code]
+            out[name] = {'position': 'advised_not_to_code', 'quote': item.get('quote') or '',
+                         'detail': f'{label} advised not to code it: {_human(item.get("reason") or "other")}.'}
+        else:
+            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code.', 'quote': ''}
+    return out
+
+
+def reference_check(proposal):
+    """The proposal's CMS reference check (I4: apart from who proposed it and from any decision), from its pfs.presence,
+    mue.units and pfs.endoscopic_base checks: 'attention' when one warns or fails, 'not_verified' when none ran or one
+    could not be verified, else 'passed'. Its detail always says that PTP edits are not connected."""
+    checks = [check for check in proposal.checks or [] if check.get('id') in CMS_CHECKS]
+    statuses = {check.get('status') for check in checks}
+    if statuses & {'warn', 'fail'}:
+        state = 'attention'
+    elif not checks or 'not_verified' in statuses:
+        state = 'not_verified'
+    else:
+        state = 'passed'
+    ran = '; '.join(f'{check.get("label") or check.get("id")}: '
+                    f'{CHECK_WORDS.get(check.get("status"), str(check.get("status")))}' for check in checks)
+    return {'state': state, 'detail': (f'{ran}. ' if ran else 'No CMS reference check ran for this code. ')
+            + PTP_NOT_CONNECTED}
+
+
+def _shown(value):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return '' if value is None else str(value)
+
+
+def retrieved(entry, field):
+    """An Assessment.retrieval entry's facts or passages: the dict items of that list, [] for anything else (the entries
+    come from the passages package; a malformed one shows nothing rather than failing the page or the report)."""
+    items = entry.get(field) if isinstance(entry, dict) else None
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def proposal_retrieval(proposal, retrieval):
+    """The retrieval trace of the proposal's code (Assessment.retrieval) as one list: each fact the checks' lookup read,
+    then each CMS passage retrieved for it, with its source key, release and page or section."""
+    out = []
+    for entry in retrieval or []:
+        if not isinstance(entry, dict) or entry.get('code') != proposal.code:
+            continue
+        for fact in retrieved(entry, 'facts'):
+            out.append({'kind': 'fact', 'source_key': _shown(fact.get('source_key')),
+                        'release': _shown(fact.get('release')), 'label': _shown(fact.get('field')),
+                        'value': _shown(fact.get('value')), 'page': '', 'section': '', 'text': ''})
+        for passage in retrieved(entry, 'passages'):
+            topic = _shown(passage.get('topic')) + (f' {_shown(passage.get("topic_value"))}'
+                                                    if passage.get('topic_value') else '')
+            out.append({'kind': 'passage', 'source_key': _shown(passage.get('source_key')),
+                        'release': _shown(passage.get('release')), 'label': topic, 'value': '',
+                        'page': _shown(passage.get('page')), 'section': _shown(passage.get('section')),
+                        'text': _shown(passage.get('text'))})
+    return out
+
+
+def _usd(value):
+    """An estimate as USD text with four decimals; None for no estimate."""
+    if isinstance(value, dict):
+        value = value.get('usd')
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (Decimal, int, float)):
+        return f'{Decimal(str(value)):.4f}'
+    return str(value)
+
+
+def estimated_cost(run):
+    """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
+    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). None for Corti (its usage is in
+    credits, not USD), for a run that reported no usage (a reuse, a request not sent), where the pricing module is not
+    installed, and where it cannot price the usage: an estimate is informational, so it never fails the page or a
+    report (its error is logged)."""
+    if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
+        return None
+    try:
+        pricing = importlib.import_module(PRICING_MODULE)
+    except ModuleNotFoundError as exc:
+        if exc.name != PRICING_MODULE:
+            raise
+        return None
+    try:
+        return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+    except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
+        log.exception('the usage of run %s could not be priced', run.pk)
+        return None
+
+
+# --- harness@2: phases, frozen records, the participants' references, candidates, confirmations (HARNESS.md 11-12) --
+#
+# Read-only from the rows, except confirm_finding. Assessment.participants carries each model participant's frozen
+# phase-1 record and, on assess #2 and its re-assessments, its peer review (12.3). A stored run is read again as the
+# adapter version that recorded it, with the refs its own tool calls returned (12.1), so its references used are
+# checked against those exactly as when it was first read. Three kinds of reference are never merged (11.2): what each
+# participant retrieved (its tool calls), what it says it used (its references_used, each checked against its own
+# run's), and what the reconciliation retrieved (Assessment.retrieval). A confirmation is a fact a reviewer confirmed
+# from a participant's located passage, never a decision: it approves nothing (I3, I4).
+
+MODEL_PARTICIPANTS = participants.PARTICIPANTS
+REF_FACT = 'fact:'  # 'fact:<source_key>:<code>:<field>' (studio/reference/tools.py); any other ref is a passage key
+# what a participant's retrieved reference states of its source (studio.reference.tools.retrieved_references)
+REFERENCE_DATES = ('source_key', 'release', 'effective_start', 'effective_end')
+EFFECT_CONTEXT, EFFECT_REASSESSMENT = 'context', 'reassessment'
+
+
+class ConfirmationRefused(ValidationError):
+    """A confirmation the encounter's state does not allow (409, as API.md documents): the question is not open on the
+    final assessment, it was confirmed already, processing is under way, or the candidate is not one of its verified
+    candidates."""
+
+
+def model_records(assessment):
+    """name -> the assessment's Assessment.participants entry of each model participant (Astra, Fable)."""
+    return {record.get('name'): record for record in (assessment.participants or [])
+            if isinstance(record, dict) and record.get('name') in MODEL_PARTICIPANTS}
+
+
+def assessment_phase(assessment):
+    """HARNESS.md 12.3: 0 when no model participant was configured for the assessment (today's record, I1) or there is
+    no assessment; otherwise 2 when an entry carries its peer review (assess #2 and its re-assessments) and 1 when none
+    does. The pipeline's own reading (jobs.assessment_phase), so the API, the trace and the reports state the phase the
+    pipeline acts on."""
+    from .jobs import assessment_phase as phase  # local import: jobs imports this module
+
+    return phase(assessment)
+
+
+def is_final(assessment):
+    """Whether ``assessment`` is its chain's final assessment (12.1): assess #2 or a re-assessment of it, or one that
+    owes no peer stage - no model participant's first reading was read, or a member date conflict holds it, while
+    which nothing is sent. The pipeline's own rule (jobs.owed_peer_stages): an assess #1 that owes a peer stage queued
+    it, and assess #2 follows it."""
+    if assessment is None:
+        return False
+    return assessment_phase(assessment) == 2 or not owed_peer_stages(assessment)
+
+
+def owed_peer_stages(assessment):
+    """The peer stages assess #1 ``assessment`` owes, by the pipeline's own rule (jobs.owed_peer_stages)."""
+    from .jobs import owed_peer_stages as owed  # local import: jobs imports this module
+
+    return owed(assessment)
+
+
+def peer_review_held(assessment):
+    """Whether a member date conflict holds ``assessment``, while which no peer review is sent (jobs.peer_review_held).
+    """
+    from .jobs import peer_review_held as held  # local import: jobs imports this module
+
+    return held(assessment)
+
+
+def recorded_peer_review(assessment, record):
+    """The peer review an assess #2 entry ``record`` names, read back exactly as the assessment recorded it, or None
+    (jobs.recorded_peer_review: the same re-read and the same sha256 the pipeline checks)."""
+    from .jobs import recorded_peer_review as recorded  # local import: jobs imports this module
+
+    return recorded(assessment.revision, record)[1]
+
+
+def _uuid(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
+def record_run(assessment, record, field='run'):
+    """The run an entry names - its phase-1 'run' or its 'peer_run' - when it is that participant's run of the
+    assessment's revision with that phase's purpose; None otherwise (jobs.entry_run, which the pipeline reads an entry's
+    runs by)."""
+    from .jobs import entry_run  # local import: jobs imports this module
+
+    purpose = ProviderRun.PEER_REVIEW if field == 'peer_run' else ProviderRun.INDEPENDENT
+    return entry_run(assessment.revision, record, purpose)
+
+
+def run_tool_calls(run):
+    """The tool calls (models.ToolCall) of the loop that answered ``run`` - itself, or for a reuse the retained run it
+    reuses (jobs.loop_run, HARNESS.md 12.1) - in exchange turn and call order; [] for a run with none."""
+    from .jobs import loop_run  # local import: jobs imports this module
+
+    if run is None:
+        return []
+    return list(ToolCall.objects.filter(exchange__run=loop_run(run)).select_related('exchange')
+                .order_by('exchange__turn', 'id'))
+
+
+def run_refs(run):
+    """Every ref the tool calls of ``run``'s own loop returned (jobs.run_refs): what its references used are checked
+    against, exactly as when the pipeline read it."""
+    from .jobs import run_refs as refs  # local import: jobs imports this module
+
+    return refs(run)
+
+
+def stored_reading(run):
+    """(reading, '') of participant run ``run``'s stored first reading, or (None, why): the pipeline's own read
+    (jobs.participant_reading) - as the adapter version that recorded it, its bytes checked against their sha256, with
+    the refs of its own loop - so every page and report reads exactly what the assessments read."""
+    from .jobs import participant_reading  # local import: jobs imports this module
+
+    return participant_reading(run)
+
+
+def stored_peer_review(run):
+    """(PeerReview, '') of peer-review run ``run``, or (None, why): the pipeline's own read (jobs.peer_reading)."""
+    from .jobs import peer_reading  # local import: jobs imports this module
+
+    return peer_reading(run)
+
+
+def participant_references(run, review=None):
+    """{'retrieved', 'used'} of one participant run (HARNESS.md 11.2, 12.6): each ref the tool calls of its own loop
+    returned (run_tool_calls: a reuse's are the run's it reuses), once, with its kind (fact or passage), the source,
+    release and effective window its tool result stated - read by the executor's own reader of a stored result,
+    studio.reference.tools.retrieved_references, '' where it states none - and the tool; then each reference the run's
+    answer says it used, with ``retrieved``: the reader's own check against those refs (ReferenceUse.retrieved), never
+    the participant's claim (``used`` with retrieved false is cited_not_retrieved). ``review``: the run's reading or
+    peer review when already read. Empty lists for no run."""
+    from .reference.tools import retrieved_references  # local import: the tools module reads the reference store
+
+    out = {'retrieved': [], 'used': []}
+    if run is None:
+        return out
+    seen = set()
+    for call in run_tool_calls(run):
+        stated = {}
+        for item in retrieved_references(call.result):
+            stated.setdefault(item['ref'], item)
+        for ref in call.refs or []:
+            if not isinstance(ref, str) or ref in seen:
+                continue
+            seen.add(ref)
+            dated = stated.get(ref, {})
+            out['retrieved'].append({'ref': ref, 'kind': 'fact' if ref.startswith(REF_FACT) else 'passage',
+                                     **{name: _shown(dated.get(name)) for name in REFERENCE_DATES},
+                                     'tool': call.tool})
+    if review is None and run.state == ProviderRun.SUCCEEDED:
+        review, _ = (stored_peer_review if run.purpose == ProviderRun.PEER_REVIEW else stored_reading)(run)
+    if review is not None and not review.refused:
+        out['used'] = [{'ref': item.ref, 'use': item.use, 'retrieved': bool(item.retrieved)}
+                       for item in review.references_used]
+    return out
+
+
+def frozen_inputs(assessment):
+    """(readings, peer reviews): the frozen phase-1 readings (candidates.FrozenReading) and the peer reviews ((name, run
+    id, PeerReview)) ``assessment`` read, each read again from its run and used only when it matches the sha256 the
+    assessment recorded for it (12.3: reading_sha256, peer_sha256) - anything else is not what was frozen (logged). The
+    pipeline's own re-reads (jobs.recorded_reading, jobs.recorded_peer_review), which its peer stage builds from."""
+    from .jobs import recorded_peer_review as recorded, recorded_reading  # local import: jobs imports this module
+
+    readings, reviews = [], []
+    for name, record in sorted(model_records(assessment).items(), key=lambda item: MODEL_PARTICIPANTS.index(item[0])):
+        if record.get('state') != 'read':
+            continue
+        run, reading = recorded_reading(assessment.revision, record)
+        if reading is None:
+            log.warning('the frozen reading of %s on assessment %s could not be read as recorded', name, assessment.pk)
+            continue
+        readings.append(candidates.FrozenReading(name=name, run=str(run.pk), reading=reading))
+        if record.get('peer_state') != 'read':
+            continue
+        peer_run, review = recorded(assessment.revision, record)
+        if review is None:
+            log.warning('the peer review of %s on assessment %s could not be read as recorded', name, assessment.pk)
+            continue
+        reviews.append((name, str(peer_run.pk), review))
+    return readings, reviews
+
+
+def question_identity(clarification):
+    """What a question asks, whichever assessment raised it: (scope, family, fact, the key and code of its proposal). A
+    proposal's key counts within its list in selection order, and assess #2 can select a code assess #1 did not (a
+    participant's code that peer review located) ahead of later ones, so the same key may name another code there: the
+    code is part of the match, and a question whose proposal changed takes no peer answer (fail closed)."""
+    proposal = clarification.proposal if clarification.proposal_id else None
+    return (clarification.scope, clarification.family, clarification.fact, proposal.key if proposal else '',
+            proposal.code if proposal else '')
+
+
+def peer_answers(assessment, questions, reviews):
+    """{clarification pk: [candidates.PeerAnswer]} for ``questions`` of ``assessment``. A peer request named the open
+    questions of the assess #1 it read by their clarification ids (12.4: "QuestionAnswer.value for its id"); assess #2
+    raised its own rows, so each answer is matched to the question of this assessment that asks the same thing
+    (question_identity) as the clarification of this revision its id names."""
+    named = {_uuid(answer.question_id) for _, _, review in reviews for answer in review.answers} - {None}
+    asked = {str(item.pk): question_identity(item) for item in Clarification.objects.select_related('proposal').filter(
+        pk__in=named, encounter_id=assessment.encounter_id, assessment__revision_id=assessment.revision_id)}
+    by_identity = {}
+    for name, run_id, review in reviews:
+        for answer in review.answers:
+            identity = asked.get(_uuid(answer.question_id))
+            if identity is not None:
+                by_identity.setdefault(identity, []).append(candidates.PeerAnswer(name=name, run=run_id,
+                                                                                  answer=answer))
+    return {question.pk: by_identity.get(question_identity(question), []) for question in questions}
+
+
+def candidate_question(clarification):
+    return candidates.Question(id=str(clarification.pk), scope=clarification.scope, fact=clarification.fact,
+                               family=clarification.family,
+                               proposal_key=clarification.proposal.key if clarification.proposal_id else '')
+
+
+def assessment_candidates(assessment):
+    """{clarification id: [candidate]} (studio.candidates) for each OPEN clarification of ``assessment`` when it is the
+    final assessment of a chain a model participant took part in; {} otherwise - a Corti-only assessment, an assess #1
+    whose peer stages follow, no open question, or no model participant configured now (no assessment would read a
+    confirmation then: the pipeline gives the engine none, I1)."""
+    if (assessment is None or assessment_phase(assessment) == 0 or not is_final(assessment)
+            or not participants.configured()):
+        return {}
+    questions = list(assessment.clarifications.filter(state=Clarification.OPEN).select_related('proposal'))
+    if not questions:
+        return {}
+    readings, reviews = frozen_inputs(assessment)
+    answers = peer_answers(assessment, questions, reviews) if reviews else {}
+    revision = assessment.revision
+    return {str(question.pk): candidates.candidates(candidate_question(question), revision.text, revision.pages,
+                                                    readings, answers.get(question.pk, ()))
+            for question in questions}
+
+
+def revision_confirmations(revision):
+    """The FindingConfirmations of ``revision``, oldest first (a new revision's assessments never read them)."""
+    if revision is None:
+        return []
+    return list(FindingConfirmation.objects.filter(revision=revision).select_related(
+        'confirmed_by', 'revision', 'clarification', 'clarification__proposal').order_by('created_at', 'pk'))
+
+
+def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, user, membership):
+    """Record a reviewer's confirmation of one verified candidate answer to an open question (HARNESS.md 11.3, 12.5),
+    then act on it; returns (FindingConfirmation, effect).
+
+    Under the encounter row lock: an owner or reviewer only; the question open on the current revision's final
+    assessment and confirmed by no one yet; nothing processing; the candidate one of its VERIFIED candidates, recomputed
+    here; the attestation exactly candidates.attestation(value). The immutable FindingConfirmation and its audit event
+    'finding.confirmed' are recorded, then a service date enters as the member's date through jobs.change_context
+    (every date safeguard and I8 apply; effect 'context') and every other fact is read by the re-assessment
+    jobs.reassess_after_confirmation queues (effect 'reassessment'). A refusal from either leaves nothing recorded.
+    Never approves anything: approval stays a separate decision."""
+    from . import jobs  # local import: jobs imports this module
+
+    with transaction.atomic():
+        locked = _lock(encounter)
+        if not (_is_reviewer(membership, locked) and membership.user_id == user.pk and user.is_active):
+            raise PermissionDenied('Your role in this workspace cannot confirm findings.')
+        clarification = (Clarification.objects.select_related('proposal')
+                         .filter(pk=clarification_id, encounter=locked).first())
+        if clarification is None:
+            raise Http404()
+        assessment = live_assessment(locked)
+        if assessment is None or clarification.assessment_id != assessment.pk:
+            raise ConfirmationRefused('That question belongs to an earlier assessment; reload the page and answer the '
+                                      'current one.')
+        if not is_final(assessment):
+            raise ConfirmationRefused('The peer reviews of this document have not finished: a finding can be confirmed '
+                                      'once its final assessment is recorded.')
+        if clarification.state != Clarification.OPEN:
+            raise ConfirmationRefused('That question is not open.')
+        if FindingConfirmation.objects.filter(clarification=clarification).exists():
+            raise ConfirmationRefused('That question was confirmed already; a question takes one confirmation.')
+        if jobs.busy(locked):
+            raise ConfirmationRefused('Wait for processing to finish (or stop it) before confirming a finding.')
+        offered = assessment_candidates(assessment).get(str(clarification.pk), [])
+        candidate = next((item for item in offered if item['id'] == candidate_id), None)
+        if candidate is None:
+            raise ConfirmationRefused("That candidate is not one of this question's candidates; reload the page.")
+        if not candidate['verified']:
+            raise ConfirmationRefused(f'That candidate is not verified, so it cannot be confirmed: {candidate["why"]}')
+        expected = candidates.attestation(candidate['value'])
+        if attestation != expected:
+            raise AttestationRefused(f'The attestation must read exactly: {expected}')
+        confirmation = FindingConfirmation.objects.create(
+            encounter=locked, revision=assessment.revision, clarification=clarification, scope=clarification.scope,
+            fact=clarification.fact, family=clarification.family,
+            proposal_key=clarification.proposal.key if clarification.proposal_id else '', value=candidate['value'],
+            spans=candidate['spans'], located_by=list(candidate['located_by']), runs=list(candidate['runs']),
+            confirmed_by=user, attestation=attestation)
+        effect = EFFECT_CONTEXT if clarification.fact == candidates.DATE_FACT else EFFECT_REASSESSMENT
+        audit.record(locked.workspace, 'finding.confirmed', encounter=locked, actor=user,
+                     confirmation=str(confirmation.pk), clarification=str(clarification.pk),
+                     assessment=str(assessment.pk), revision=assessment.revision.number, fact=clarification.fact,
+                     candidate=candidate_id, located_by=list(candidate['located_by']), runs=list(candidate['runs']),
+                     effect=effect)
+        if effect == EFFECT_CONTEXT:
+            jobs.change_context(locked, user, {'service_date': candidate['value']}, confirmation=confirmation)
+        else:
+            jobs.reassess_after_confirmation(locked, user)
+        encounter.state = refresh_state(locked)
+    return confirmation, effect

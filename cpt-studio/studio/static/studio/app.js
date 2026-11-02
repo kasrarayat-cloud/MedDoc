@@ -31,17 +31,58 @@ const PATIENT_LABELS = { new: 'New patient', established: 'Established patient' 
 const SOURCE_KINDS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', paste: 'Pasted text', addendum: 'Addendum' };
 const METHOD_LABELS = { txt: 'Text file', docx: 'Word document', 'pdf-text': 'PDF text layer', 'pdf-ocr': 'PDF read with OCR', 'pdf-mixed': 'PDF text layer and OCR', paste: 'Pasted text', addendum: 'Text with addendum' };
 const STATE_TONES = { ready_for_review: 'green', reviewed: 'green', needs_clarification: 'amber', provider_unknown: 'amber', provider_failed: 'amber', extraction_failed: 'amber' };
-const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify documented services and context'], ['predict', 'Request CPT proposals from the provider'], ['assess', 'Check proposals against references and rules']];
+const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify documented services and context'], ['predict', 'Corti: request CPT proposals'], ['astra', 'Independent review: Astra (OpenAI GPT-6 Astra)'], ['fable', 'Independent review: Fable (Anthropic Claude Fable 5.1)'], ['assess', 'Check proposals against references and reconcile']];
+// Astra's and Fable's own stages (HARNESS.md 2): a row once the stage exists or the API's harness lists the participant.
+const PARTICIPANT_STAGES = new Set(['astra', 'fable']);
 const SECOND_REVIEW_STAGE = ['review2', 'Second provider review (asked for by a reviewer)'];
 const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
 const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
+// The harness participants (HARNESS.md 1), keyed as the API names them in harness.participants, proposed_by,
+// participant_positions and the provider runs.
+const PARTICIPANT_TITLES = { corti: 'Corti (Corti coding tool)', astra: 'Astra (OpenAI GPT-6 Astra)', fable: 'Fable (Anthropic Claude Fable 5.1)' };
+const PARTICIPANT_LABELS = { corti: 'Corti', astra: 'Astra', fable: 'Fable' };
+// How a participant stands on this revision (harness.participants[].state): the row's look, from the progress card's
+// own STAGE_LOOKS, its short label, the plain sentence said when the API gives none, and - for a state that must be
+// said plainly - the words the API's own sentence has to contain for the plain one to be left out.
+const PARTICIPANT_STATES = {
+  not_configured: [['muted', 'info'], 'Not configured', 'Not configured on this installation.', 'not configured'],
+  waiting: [STAGE_LOOKS.queued, 'Waiting', 'Waiting for its turn; nothing has been sent yet.'],
+  running: [STAGE_LOOKS.running, 'In progress', 'Reading the document now.'],
+  done: [STAGE_LOOKS.succeeded, 'Done', 'Answered, and the answer was read.'],
+  refused: [STAGE_LOOKS.unknown, 'Reading not used', 'Answered; the reading was not used.', 'not used'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'The request failed and is not sent again for this revision; an addendum makes a new request.', 'not sent again'],
+  unknown: [STAGE_LOOKS.unknown, 'Outcome unknown', 'Outcome unknown — reconcile before sending again.', 'reconcile'],
+  not_sent: [['muted', 'info'], 'Not sent', 'Nothing was sent.'],
+  blocked: [['pending', 'clock'], 'Blocked', 'Not sent: an unknown outcome must be reconciled before anything is sent again.', 'reconcile'],
+  stopped: [STAGE_LOOKS.cancelled, 'Stopped', 'Stopped; nothing was sent for it.'],
+};
+const REFERENCE_STATES = {
+  waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
+  done: [STAGE_LOOKS.succeeded, 'Done', ''],
+  not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
+};
+// A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
+const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
+const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };
+const DECISION_WORDS = { approved: 'approved{by}', rejected: 'rejected{by}', reinstated: 'reinstated for review{by}; not approved', exclusion_confirmed: 'exclusion confirmed{by}', undecided: 'not decided yet' };
+const NOT_CODED_WORDS = { not_performed_at_this_encounter: 'not performed at this encounter', included_in_another_code: 'included in another code', insufficient_documentation: 'insufficient documentation', outside_gi_scope: 'outside the GI scope', other: 'another reason' };
+const RUN_PROVIDERS = { corti: 'Corti', replay: 'Replay', astra: 'Astra', fable: 'Fable' };
+const RUN_PURPOSES = { primary: 'Primary request', second_review: 'Second review', independent: 'Independent review' };
+// Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
+// the AMA's plural marks ("polyp(s)"), "; with", "single or multiple", "when performed", "(separate procedure)", "list
+// separately" - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a model can write one.
+// The document's own text and the retrieved CMS passages are shown as they are.
+const DESCRIPTOR_LIKE = /\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|initial)\b|\bsingle or multiple\b|\bwhen performed\b|\(separate procedure\)|\blist separately\b/i;
+const DESCRIPTOR_WITHHELD = 'Withheld: this text reads like a CPT descriptor, which CPT Studio never shows.';
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
 const CHECK_LOOKS = { pass: ['', 'circle-check'], info: ['muted', 'info'], not_applicable: ['muted', 'info'], warn: ['pending', 'info'], fail: ['pending', 'close'], not_verified: ['pending', 'clock'] };
 const RUN_STATES = { reserved: 'Reserved', sending: 'Sending', succeeded: 'Succeeded', failed: 'Failed', unknown: 'Outcome unknown', not_sent: 'Not sent', cancelled: 'Cancelled' };
 const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', confirm: 'Exclusion confirmed', revoke: 'Revoked the decision on' };
 const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['confirm', 'secondary', 'Confirm exclusion', ''], ['revoke', 'secondary', 'Undo decision', '']];
 const TABS = [['codes', 'Suggestions'], ['checks', 'Checks'], ['timeline', 'Activity']];
-const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
+const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review', trace: 'Document trace' };
+// The owner's trace of one document (HARNESS.md 7): #/encounters/<id>/trace.
+const TRACE_ROUTE = /^\/encounters\/([^/]+)\/trace$/;
 const ACKNOWLEDGEMENTS = {
   human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
   agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
@@ -137,7 +178,9 @@ function pollDelay(count, errors) {
 function parseRoute(hash) {
   const path = String(hash || '').replace(/^#/, '');
   if (path.startsWith('doc/')) return { name: 'doc', id: path.slice(4) };
-  return { name: lookup(ROUTE_TITLES, path, null) && path !== 'doc' ? path : 'workspace' };
+  const trace = TRACE_ROUTE.exec(path);
+  if (trace) return { name: 'trace', id: trace[1] };
+  return { name: lookup(ROUTE_TITLES, path, null) && path !== 'doc' && path !== 'trace' ? path : 'workspace' };
 }
 
 function codePoints(text) {
@@ -273,6 +316,12 @@ function excerpt(text, limit = EXCERPT_POINTS) {
   const flat = String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
   const points = [...flat];
   return points.length <= limit ? flat : `${points.slice(0, limit - 1).join('').trimEnd()}…`;
+}
+
+// What a participant wrote, trimmed - unless it reads like a CPT descriptor (DESCRIPTOR_LIKE), which is never shown.
+function participantText(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return DESCRIPTOR_LIKE.test(text) ? DESCRIPTOR_WITHHELD : text;
 }
 
 // The documented text the reader kept as the evidence of a service date it could not use (an unread date form, another
@@ -633,11 +682,90 @@ function clarificationQuestion(clarification, doc) {
   return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(lead)}${details}${answer}</div>`;
 }
 
+function referenceCheckText(check) {
+  const said = lookup(REFERENCE_CHECK_LABELS, check?.state, 'not verified');
+  const detail = typeof check?.detail === 'string' && check.detail.trim() ? ` — ${check.detail.trim()}` : '';
+  return `${said}${detail} (NCCI procedure-to-procedure edits not verified: not connected)`;
+}
+
+function decisionWords(proposal) {
+  const stateName = lookup(DECISION_WORDS, proposal.decision_state, null) ? proposal.decision_state : 'undecided';
+  const decision = stateName === 'undecided' ? null : proposal.decision;
+  const by = decision?.reviewer ? ` by ${decision.reviewer}` : '';
+  const agent = decision?.reviewer_kind === 'agent' ? ' (agent-executed synthetic review — not clinical approval)' : '';
+  return DECISION_WORDS[stateName].replace('{by}', () => by) + agent;
+}
+
+// A code's three statuses, kept apart (HARNESS.md I4): who proposed it, what the CMS reference checks found (the
+// procedure-to-procedure edits are not connected, so never verified) and the reviewer's decision. Agreement between
+// participants and passing checks approve nothing. '' for a proposal served before the harness existed.
+function codeStatusLines(proposal) {
+  const proposers = Array.isArray(proposal.proposed_by) ? proposal.proposed_by.filter(name => typeof name === 'string' && name) : null;
+  const check = proposal.reference_check && typeof proposal.reference_check === 'object' ? proposal.reference_check : null;
+  if (!proposers && !check) return '';
+  const lines = [
+    ['Proposed by', proposers?.length ? proposers.map(name => lookup(PARTICIPANT_LABELS, name, name)).join(', ') : 'not recorded'],
+    ['CMS reference checks', referenceCheckText(check)],
+    ['Reviewer decision', decisionWords(proposal)],
+  ];
+  return `<ul class="code-status-lines" aria-label="Status of this code">${lines.map(([name, value]) => `<li><b>${escapeHtml(name)}:</b> ${escapeHtml(value)}</li>`).join('')}</ul>`;
+}
+
+function positionText(name, position) {
+  const detail = participantText(position?.detail);
+  const quote = typeof position?.quote === 'string' ? position.quote.trim() : '';
+  const said = `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, position?.position, 'took a position that was not recorded')}${detail ? `: ${detail}` : ''}`;
+  if (!quote) return sentence(said);
+  return DESCRIPTOR_LIKE.test(quote) ? `${said} — its quote is withheld: it reads like a CPT descriptor.` : `${said} — “${quote}”`;
+}
+
+// What Astra and Fable each said about this code (participant_positions; {} when none is configured): proposed it, did
+// not, advised not to code it (with its reason and the passage it quoted), or gave no reading. A position never decides
+// the code's status (I2), agreement never promotes it (I3), and a contradiction is shown, never voted on.
+function participantPositions(proposal) {
+  const positions = proposal.participant_positions;
+  if (!positions || typeof positions !== 'object' || Array.isArray(positions)) return '';
+  const rank = name => (Object.hasOwn(PARTICIPANT_LABELS, name) ? Object.keys(PARTICIPANT_LABELS).indexOf(name) : 99);
+  const names = Object.keys(positions).filter(name => positions[name] && typeof positions[name] === 'object').sort((a, b) => rank(a) - rank(b));
+  if (!names.length) return '';
+  return `<div class="evidence-section participant-positions">${groupLabel('What the participants said')}${names.map(name => `<p class="harness-note">${escapeHtml(positionText(name, positions[name]))}</p>`).join('')}</div>`;
+}
+
+function textValue(value) {
+  if (typeof value === 'string') return value;
+  return typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
+}
+
+// Where a retrieved fact or passage comes from: its source key, release, section and page.
+function retrievedFrom(item) {
+  const page = textValue(item.page);
+  return [textValue(item.source_key), textValue(item.release), textValue(item.section), page ? `page ${page}` : ''].filter(Boolean).join(' · ');
+}
+
+// The CMS reference facts and passages retrieved for this code (proposal.retrieval, HARNESS.md 5): each fact with its
+// source and release, and each passage - verbatim CMS text - behind its own disclosure. '' for a proposal served before
+// the harness existed.
+function retrievalSection(proposal) {
+  if (!Array.isArray(proposal.retrieval)) return '';
+  const items = proposal.retrieval.filter(item => item && typeof item === 'object');
+  const facts = items.filter(item => item.kind === 'fact');
+  const passages = items.filter(item => item.kind === 'passage');
+  const heading = groupLabel('CMS reference facts and passages');
+  if (!facts.length && !passages.length) return `<div class="evidence-section reference-retrieval">${heading}<p class="harness-note">No CMS reference fact or passage was retrieved for this code.</p></div>`;
+  const factList = facts.length ? `<ul class="reference-facts">${facts.map(fact => `<li><b>${escapeHtml(textValue(fact.label) || textValue(fact.field) || 'Fact')}:</b> ${escapeHtml(textValue(fact.value) || 'not recorded')}<small class="check-source">${escapeHtml(retrievedFrom(fact))}</small></li>`).join('')}</ul>` : '';
+  const passageList = passages.map(passage => {
+    const page = textValue(passage.page);
+    const title = [textValue(passage.label) || textValue(passage.section) || 'CMS passage', page ? `page ${page}` : ''].filter(Boolean).join(' · ');
+    return `<details class="reference-passage"><summary>${escapeHtml(title)}</summary><p>${escapeHtml(textValue(passage.text))}</p><small class="check-source">${escapeHtml(retrievedFrom(passage))}</small></details>`;
+  }).join('');
+  return `<div class="evidence-section reference-retrieval">${heading}${factList}${passageList}</div>`;
+}
+
 function codeCard(proposal, doc, layout) {
   const count = (proposal.evidence || []).length;
   const units = Number.isInteger(proposal.units) && proposal.units > 1 ? `Units: ${proposal.units} · ` : '';
   const second = proposal.support?.origin === 'second_review' ? `<span class="small-badge">Second review</span>` : '';
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
+  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${codeStatusLines(proposal)}${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${participantPositions(proposal)}${retrievalSection(proposal)}${decisionLine(proposal)}${cardActions(proposal)}</article>`;
 }
 
 function clarificationCard(clarification, doc) {
@@ -960,10 +1088,14 @@ function timelineEntry(title, lines, struck = false) {
   return `<div class="timeline-entry"><span class="timeline-dot"></span><div><strong>${struck ? `<s>${escapeHtml(title)}</s>` : escapeHtml(title)}</strong>${lines.filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div></div>`;
 }
 
+// Corti reports credits; Astra and Fable report tokens, each exactly as its vendor reported them.
 function usageText(run) {
   const credits = run.usage?.creditsConsumed;
-  if (typeof credits !== 'number') return 'Usage not reported';
-  return run.usage_basis === 'provider_reported_credits_not_usd' ? `${credits} provider-reported credits (not USD)` : `${credits} credits (basis: ${run.usage_basis || 'not recorded'})`;
+  if (typeof credits === 'number') {
+    return run.usage_basis === 'provider_reported_credits_not_usd' ? `${credits} provider-reported credits (not USD)` : `${credits} credits (basis: ${run.usage_basis || 'not recorded'})`;
+  }
+  const tokens = [['input_tokens', 'input'], ['output_tokens', 'output']].filter(([key]) => Number.isInteger(run.usage?.[key])).map(([key, word]) => `${run.usage[key]} ${word} tokens`);
+  return tokens.length ? `${tokens.join(', ')} (vendor-reported; basis: ${run.usage_basis || 'not recorded'})` : 'Usage not reported';
 }
 
 function activityPanel(doc) {
@@ -977,9 +1109,11 @@ function activityPanel(doc) {
   });
   // A second review is named on its row, with what it asked about, as both reports name it (refutation r1, report-10:
   // the primary request and the second review read as two identical rows).
+  // An independent participant's run (Astra, Fable) is named as one, with the model it asked for and the one that answered.
   const runEntries = runs.map(run => timelineEntry(
-    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' ? 'Second review' : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
+    [lookup(RUN_PROVIDERS, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' || run.purpose === 'independent' ? RUN_PURPOSES[run.purpose] : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
     [[run.http_status ? `HTTP ${run.http_status}` : 'No HTTP response recorded', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : '', usageText(run)].filter(Boolean).join(' · '),
+      typeof run.requested_model === 'string' && run.requested_model ? `Model requested: ${run.requested_model}${typeof run.returned_model === 'string' && run.returned_model ? `; answered by ${run.returned_model}` : ''}.` : '',
       run.purpose === 'second_review' && Array.isArray(run.scope_items) && run.scope_items.length ? `Asked about: ${run.scope_items.join('; ')}.` : '',
       run.reused_from ? 'Reused the stored response of an identical earlier request; no new provider call was made.' : '',
       run.reconciled ? 'Unknown outcome reconciled by a member.' : '', run.error ? `Error: ${run.error}` : '', formatTimestamp(run.created_at)]));
@@ -988,19 +1122,117 @@ function activityPanel(doc) {
   return `<div class="card-stack">${card('Decisions', decisions, 'No decisions recorded yet.')}${card('Provider runs', runEntries, 'No provider request has been made for this document.')}${card('Activity', eventEntries, 'No activity recorded.')}</div>`;
 }
 
+// The participant the API's harness reports under this name (corti, astra, fable), or null.
+function harnessParticipant(doc, name) {
+  const participants = Array.isArray(doc?.harness?.participants) ? doc.harness.participants : [];
+  return participants.find(item => item && typeof item === 'object' && item.name === name) || null;
+}
+
 // Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
 // first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
+// Astra's and Fable's rows appear once their stage exists or the API's harness lists them; one not configured on this
+// installation says so, never "Not started".
 function progressCard(doc) {
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
-  const rows = stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES;
+  const listed = kind => !PARTICIPANT_STAGES.has(kind) || stages.some(item => item?.kind === kind) || Boolean(harnessParticipant(doc, kind));
+  const rows = (stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES).filter(([kind]) => listed(kind));
   const items = rows.map(([kind, label]) => {
     const stage = [...stages].reverse().find(item => item?.kind === kind);
+    const participant = harnessParticipant(doc, kind === 'predict' ? 'corti' : kind);
+    if (!stage && participant?.state === 'not_configured') return checkItem('muted', 'info', label, 'Not configured on this installation');
     if (!stage) return checkItem('muted', 'clock', label, 'Not started');
     const [tone, iconName] = lookup(STAGE_LOOKS, stage.state, ['pending', 'info']);
     return checkItem(tone, iconName, label, `${lookup(STAGE_STATES, stage.state, stage.state || 'Unknown')}${stage.error ? ` — ${stage.error}` : ''}`);
   }).join('');
   const stop = doc.pipeline?.can_stop && doc.permissions?.can_review ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="stop">${icon('stop')}Stop</button><p>Stop cancels queued stages and prevents an unsent provider request.</p></div>` : '';
   return `<div class="check-list-card progress-card" aria-live="polite"><div class="panel-heading">${icon('clock')}<h2>Processing this document</h2><span class="small-badge">Updates automatically</span></div>${items}${stop}</div>`;
+}
+
+// One row of the Review participants card: what it reports and its short state label, then plain sentences and small
+// notes. The row names what it reports (data-participant) and the state the API gave (data-state), so the browser walk
+// can hold the page to the API.
+function harnessRow(key, rowState, [look, label, labelTone], title, lines, notes = []) {
+  const [tone, iconName] = look;
+  const status = badge(labelTone || (tone === '' ? 'green' : tone.startsWith('pending') ? 'amber' : 'gray'), label);
+  const said = lines.filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('');
+  const small = notes.filter(Boolean).map(note => `<small class="check-source">${escapeHtml(note)}</small>`).join('');
+  return `<div class="check-item${tone ? ` ${tone}` : ''}" data-participant="${escapeHtml(key)}" data-state="${escapeHtml(rowState)}">${icon(iconName)}<div><span class="participant-head"><strong>${escapeHtml(title)}</strong>${status}</span>${said}${small}</div></div>`;
+}
+
+// A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
+// none, or when the state must be said plainly (not configured, not used, unknown, blocked, failed) and its sentence
+// does not say so - and what it proposed, how many of its quotes the document does not contain, whether its answer was
+// reused, and the model asked for and the one that answered.
+function participantRow(participant) {
+  const name = typeof participant.name === 'string' ? participant.name : '';
+  const [look, label, plain, required] = lookup(PARTICIPANT_STATES, participant.state, [['pending', 'info'], 'State not recorded', 'The state of this participant was not recorded.', 'not recorded']);
+  const said = typeof participant.detail === 'string' ? participant.detail.trim() : '';
+  const lines = !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
+  const codes = (Array.isArray(participant.codes) ? participant.codes : []).filter(code => typeof code === 'string' && code);
+  const unverified = Number.isInteger(participant.unverified_quotes) && participant.unverified_quotes > 0 ? participant.unverified_quotes : 0;
+  const model = textValue(participant.model);
+  const returned = textValue(participant.returned_model);
+  const notes = [
+    participant.state === 'done' ? (codes.length ? `Codes it proposed: ${codes.join(', ')}.` : 'It proposed no code.') : '',
+    unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
+    participant.reused === true ? 'Reused the stored answer to an identical request; nothing new was sent.' : '',
+    model && returned ? `Model requested: ${model}; answered by ${returned}.` : model ? `Model: ${model}.` : '',
+  ];
+  const title = lookup(PARTICIPANT_TITLES, name, [textValue(participant.label), textValue(participant.vendor)].filter(Boolean).join(' · ') || 'Participant');
+  return harnessRow(name || 'participant', textValue(participant.state), [look, label], title, lines, notes);
+}
+
+function referenceRow(reference) {
+  const served = reference && typeof reference === 'object' ? reference : {};
+  const [look, label, plain] = lookup(REFERENCE_STATES, served.state, REFERENCE_STATES.not_run);
+  const counted = name => (Number.isInteger(served[name]) && served[name] >= 0 ? served[name] : 0);
+  const lines = served.state === 'done' ? [`${plural(counted('codes_checked'), 'code', 'codes')} checked against the CMS reference files; ${plural(counted('passages'), 'passage', 'passages')} of verbatim CMS text retrieved.`] : [plain];
+  const sources = (Array.isArray(served.sources) ? served.sources : []).filter(source => source && typeof source === 'object').map(source => {
+    const window = textValue(source.effective_start) && textValue(source.effective_end) ? `effective ${formatDate(source.effective_start) || source.effective_start} – ${formatDate(source.effective_end) || source.effective_end}` : '';
+    return [`${textValue(source.title) || textValue(source.key) || 'CMS source'}${textValue(source.release) ? ` (${source.release})` : ''}`, window].filter(Boolean).join(' · ');
+  });
+  const missing = (Array.isArray(served.not_connected) ? served.not_connected : []).filter(item => typeof item === 'string' && item);
+  return harnessRow('reference_validation', textValue(served.state) || 'not_run', [look, label], 'Reference validation', lines, [...sources, missing.length ? `Not connected: ${missing.join('; ')}.` : '']);
+}
+
+// Questions are asked only by CPT Studio's own readers, where the documentation leaves open something that changes the
+// coding; a participant's own questions never hold the reviewed report (HARNESS.md 5).
+function clarificationRow(doc) {
+  const served = doc.harness?.clarification?.open;
+  const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
+  const note = 'A participant\'s own questions never hold the reviewed report.';
+  // No assessment: one is coming while a stage runs; otherwise none was made (the text could not be read, processing
+  // stopped, the outcome is unknown), and nothing asks a question until one is.
+  if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked: a question is asked only where the documentation leaves open something that changes the coding.']);
+  if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
+  if (open > 0) return harnessRow('clarification', 'open', [['pending', 'help'], `${open} open`], 'Clarification', [`${open === 1 ? 'One question needs' : `${open} questions need`} an answer before the reviewed report; each is answered with an addendum.`], [note]);
+  return harnessRow('clarification', 'none', [STAGE_LOOKS.succeeded, 'None open'], 'Clarification', ['No question is open for this revision.'], [note]);
+}
+
+// The encounter's own state, labelled as the documents list labels it (harness.final), and what approval takes.
+function finalRow(doc) {
+  const served = doc.harness?.final && typeof doc.harness.final === 'object' ? doc.harness.final : {};
+  const stateName = textValue(served.state) || textValue(doc.state);
+  const label = textValue(served.label) || textValue(doc.state_label) || 'State not recorded';
+  const incomplete = reviewedIncomplete({ state: stateName, coding_state: doc.coding_state });
+  const tone = incomplete ? 'amber' : lookup(STATE_TONES, stateName, 'gray');
+  const look = stateName === 'processing' ? STAGE_LOOKS.running : { green: STAGE_LOOKS.succeeded, amber: ['pending', 'info'] }[tone] || ['muted', 'info'];
+  const said = doc.readiness?.reviewed === true
+    ? `Every selected code has a reviewer's decision.${hasAgentDecision(doc) ? ' Includes agent-executed synthetic review — not clinical approval.' : ''}`
+    : 'A code is approved only by a workspace member\'s decision; agreement between participants approves nothing.';
+  return harnessRow('final', stateName, [look, incomplete ? `${label} · coding incomplete` : label, tone], 'Final status', [said]);
+}
+
+// The Review participants card (HARNESS.md 7) heads the review column in every state, processing included: Corti, Astra,
+// Fable, reference validation, clarification and the final status, each as the API's harness reports it, and the owner's
+// way to the trace. A payload served before the harness existed has none, and the page is drawn as before.
+function participantsCard(doc) {
+  const harness = doc?.harness;
+  if (!harness || typeof harness !== 'object' || !Array.isArray(harness.participants)) return '';
+  const rows = harness.participants.filter(item => item && typeof item === 'object').map(participantRow);
+  rows.push(referenceRow(harness.reference_validation), clarificationRow(doc), finalRow(doc));
+  const trace = doc.permissions?.is_owner === true ? `<div class="progress-actions"><a class="button secondary" href="#/encounters/${escapeHtml(encodeURIComponent(doc.id))}/trace">${icon('file')}Open the trace</a><p>Owner only: every request with its endpoint, models, usage and estimated cost, each reading in full, the retrieved references and the reconciliation.</p></div>` : '';
+  return `<div class="check-list-card participants-card"><div class="panel-heading">${icon('shield')}<h2>Review participants</h2><span class="small-badge">Approval stays with a reviewer</span></div>${rows.join('')}${trace}</div>`;
 }
 
 function infoCard(titleHtml, lines, actions = '') {
@@ -1010,7 +1242,9 @@ function infoCard(titleHtml, lines, actions = '') {
 function reconcileCard(doc) {
   const run = (doc.provider_runs || []).filter(item => item.state === 'unknown' && !item.reconciled).pop();
   const canReview = doc.permissions?.can_review;
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
+  // An independent participant's request is named: its unknown outcome blocks every send for the encounter too.
+  const participant = PARTICIPANT_STAGES.has(run?.provider) ? PARTICIPANT_TITLES[run.provider] : '';
+  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([participant, run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
   const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
   const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
@@ -1071,7 +1305,7 @@ function reviewView(doc, layout, tab, entrance) {
   const selected = proposalsIn(doc.assessment, 'selected');
   const tabs = doc.assessment ? `<div class="result-tabs" role="tablist" aria-label="Review details">${TABS.map(([id, label]) => `<button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="resultContent" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}">${label}${id === 'codes' ? ` <span class="tab-count">${selected.length}</span>` : ''}</button>`).join('')}</div><div id="resultContent" role="tabpanel" tabindex="0" aria-labelledby="tab-${tab}">${tabContent(doc, tab, layout)}</div>` : '';
   const exportButton = doc.assessment ? `<button type="button" class="button primary" data-action="export">${icon('download')}Export</button>` : '';
-  return `<section${entrance ? ' class="view-entrance"' : ''}><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="heading-row review-heading"><div><span class="eyebrow">CPT REVIEW · SYNTHETIC</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}New document</button>${exportButton}</div></div><div class="review-layout">${sourcePanel(doc, layout)}<section class="review-column" aria-label="Coding review"><div class="results-topline"><h2>Coding review</h2><span class="small-badge">CPT only</span></div>${stateCards(doc)}${tabs}</section></div><div class="sample-strip"><span>SYNTHETIC DEMONSTRATION · Not clinical approval, coding advice or billing.</span><a href="#how-it-works">About the workflow ${icon('arrow')}</a></div></section>`;
+  return `<section${entrance ? ' class="view-entrance"' : ''}><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="heading-row review-heading"><div><span class="eyebrow">CPT REVIEW · SYNTHETIC</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}New document</button>${exportButton}</div></div><div class="review-layout">${sourcePanel(doc, layout)}<section class="review-column" aria-label="Coding review"><div class="results-topline"><h2>Coding review</h2><span class="small-badge">CPT only</span></div>${participantsCard(doc)}${stateCards(doc)}${tabs}</section></div><div class="sample-strip"><span>SYNTHETIC DEMONSTRATION · Not clinical approval, coding advice or billing.</span><a href="#how-it-works">About the workflow ${icon('arrow')}</a></div></section>`;
 }
 
 function exportOption(kind, fmt, title, detail) {
@@ -1082,6 +1316,188 @@ function exportOptions(readiness) {
   const draft = readiness.draft === true ? `<div class="export-group">${groupLabel('Draft — not reviewed')}${exportOption('draft', 'txt', 'Coding report (TXT)', 'Codes, evidence, checks and open questions')}${exportOption('draft', 'csv', 'Structured CSV', 'One row per code with its review state')}</div>` : '';
   const reviewed = readiness.reviewed === true ? `<div class="export-group">${groupLabel('Reviewed')}${exportOption('reviewed', 'txt', 'Coding report (TXT)', 'Approved selections, rejections and reviewers')}${exportOption('reviewed', 'csv', 'Structured CSV', 'One row per item, with decisions')}</div>` : '';
   return draft + reviewed;
+}
+
+// --- the owner's trace (HARNESS.md 7) --------------------------------------------------------------------------------
+
+function objects(value) {
+  return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [];
+}
+
+function strings(value) {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string' && item) : [];
+}
+
+function shownOr(value, fallback = 'None recorded') {
+  return textValue(value) || fallback;
+}
+
+// A vendor's usage object exactly as it reported it, flattened to "key value" pairs ("input_tokens_details.cached_tokens 0").
+function usagePairs(value, prefix = '', depth = 0) {
+  if (value === null || typeof value !== 'object') return prefix ? [`${prefix} ${textValue(value) || 'not reported'}`] : [];
+  if (depth > 4) return [`${prefix} …`];
+  return Object.keys(value).flatMap(key => usagePairs(value[key], prefix ? `${prefix}.${key}` : key, depth + 1));
+}
+
+function traceFields(pairs) {
+  return `<dl class="trace-fields">${pairs.map(([name, value]) => `<dt>${escapeHtml(name)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl>`;
+}
+
+// A quote a participant gave: one it wrote that reads like a CPT descriptor is withheld (DESCRIPTOR_LIKE).
+function quoteOf(text) {
+  return DESCRIPTOR_LIKE.test(text) ? '(a quote withheld: it reads like a CPT descriptor)' : `“${text}”`;
+}
+
+// The quotes a participant gave as evidence: one located in the document is the document's own text; one that is not
+// is listed as unverified, and never used as evidence (HARNESS.md 4, I7).
+function traceQuotes(evidence) {
+  const items = (Array.isArray(evidence) ? evidence : []).map(item => {
+    if (typeof item === 'string') return item.trim() ? quoteOf(item.trim()) : '';
+    if (!item || typeof item !== 'object') return '';
+    const quote = textValue(item.quote).trim();
+    const found = Array.isArray(item.spans) ? item.spans.length : 0;
+    if (found) return `“${quote}” — found in the document (${plural(found, 'place', 'places')})`;
+    return `${quoteOf(quote)} — unverified${textValue(item.reason) ? ` (${item.reason})` : ''}; never used as evidence`;
+  }).filter(Boolean);
+  return items.length ? `<ul class="trace-quotes">${items.map(text => `<li>${escapeHtml(text)}</li>`).join('')}</ul>` : '';
+}
+
+// A participant's normalized reading in full (HARNESS.md 4): refused whole or read, its problems, the date and services it
+// read, the codes it proposed and those it considered and did not, its questions and the places it says the extraction
+// misreads. Its free text is a model's, so anything in it that reads like a CPT descriptor is withheld.
+function traceReading(reading) {
+  if (!reading || typeof reading !== 'object') return '<div class="trace-reading"><p class="harness-note">No participant reading is recorded for this request.</p></div>';
+  const ids = value => strings(value).join(', ');
+  const date = reading.date_of_service && typeof reading.date_of_service === 'object' ? textValue(reading.date_of_service.value) : textValue(reading.date_of_service);
+  const fields = traceFields([
+    ['Reading', reading.refused === true ? 'Refused whole: none of it was read or used' : 'Read'],
+    ['Unverified quotes', `${Number.isInteger(reading.unverified_quotes) ? reading.unverified_quotes : 0} (never used as evidence)`],
+    ['Date of service as read', date || 'None read'],
+  ]);
+  const problems = strings(reading.problems).map(problem => `<li>${escapeHtml(problem)}</li>`);
+  const services = objects(reading.services).map(service => {
+    const head = [textValue(service.id), textValue(service.family).replace(/_/g, ' '), textValue(service.status).replace(/_/g, ' ')].filter(Boolean).join(' · ');
+    const lines = [['Description', service.description], ['Anatomy', service.anatomy], ['Extent', service.extent], ['Technique', service.technique], ['Provider role', service.provider_role]]
+      .map(([name, value]) => (participantText(value) ? `${name}: ${participantText(value)}` : ''));
+    const lesions = objects(service.lesions).map(lesion => `Lesion: ${['site', 'size', 'morphology', 'action', 'specimen'].map(key => (participantText(lesion[key]) ? `${key} ${participantText(lesion[key])}` : '')).filter(Boolean).join(', ') || 'nothing recorded'}`);
+    return `<li><b>${escapeHtml(head || 'Service')}</b>${[...lines, ...lesions].filter(Boolean).map(line => `<br>${escapeHtml(line)}`).join('')}${traceQuotes(service.evidence)}</li>`;
+  });
+  const codes = objects(reading.codes).map(code => {
+    const head = [`${textValue(code.code) || 'No code'}${ids(code.modifiers) ? ` (modifiers ${ids(code.modifiers)})` : ''}`, Number.isInteger(code.units) ? `units ${code.units}` : '', textValue(code.confidence) ? `confidence ${code.confidence}` : '', ids(code.service_ids) ? `services ${ids(code.service_ids)}` : ''].filter(Boolean).join(' · ');
+    const basis = participantText(code.basis);
+    return `<li><b>${escapeHtml(head)}</b>${basis ? `<br>${escapeHtml(`Basis: ${basis}`)}` : ''}${traceQuotes(code.evidence)}</li>`;
+  });
+  const notCoded = objects(reading.not_coded).map(item => `<li><b>${escapeHtml([textValue(item.code) || 'No code named', lookup(NOT_CODED_WORDS, item.reason, textValue(item.reason) || 'reason not recorded'), ids(item.service_ids) ? `services ${ids(item.service_ids)}` : ''].filter(Boolean).join(' · '))}</b>${traceQuotes(item.evidence)}</li>`);
+  const questions = objects(reading.questions).map(item => `<li><b>${escapeHtml(participantText(item.question) || 'Question not recorded')}</b>${participantText(item.why) ? `<br>${escapeHtml(`Why: ${participantText(item.why)}`)}` : ''}${ids(item.service_ids) ? `<br>${escapeHtml(`Services: ${ids(item.service_ids)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
+  const issues = objects(reading.extraction_issues).map(item => `<li>${escapeHtml(`Page ${textValue(item.page) || 'not given'}: ${participantText(item.issue) || 'no issue recorded'}`)}</li>`);
+  const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
+  return `<div class="trace-reading">${fields}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Services', services, 'No service listed.')}${group('Codes proposed', codes, 'No code proposed.')}${group('Considered and not coded', notCoded, 'Nothing listed.')}${group('Questions (notes; they never hold the report)', questions, 'No question.')}${group('Extraction issues', issues, 'None reported.')}</div>`;
+}
+
+// One request of one participant, with every field its run records (HARNESS.md 6), then the reading made of it.
+function traceRun(run) {
+  const usage = usagePairs(run.usage && typeof run.usage === 'object' ? run.usage : {});
+  const cost = textValue(run.estimated_cost_usd);
+  const fields = [
+    ['Run', shownOr(run.id)],
+    ['State', lookup(RUN_STATES, run.state, shownOr(run.state))],
+    ['Purpose', lookup(RUN_PURPOSES, run.purpose, shownOr(run.purpose))],
+    ['Adapter version', shownOr(run.adapter_version)],
+    ['Endpoint', shownOr(run.endpoint)],
+    ['Model requested', shownOr(run.requested_model, 'None named')],
+    ['Model that answered', shownOr(run.returned_model, 'None named')],
+    ['Vendor request id', shownOr(run.request_id)],
+    ['Response id', shownOr(run.response_id)],
+    ['HTTP status', Number.isInteger(run.http_status) ? String(run.http_status) : 'No HTTP response recorded'],
+    ['Latency', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : 'Not recorded'],
+    ['Usage', usage.length ? usage.join(' · ') : 'Not reported'],
+    ['Usage basis', shownOr(run.usage_basis)],
+    ['Estimated cost', cost ? `$${cost} (estimated from published rates, not reconciled to an invoice)` : 'Not estimated'],
+    ['Request sha256', shownOr(run.request_sha256)],
+    ['Response sha256', shownOr(run.response_sha256)],
+    ['Response bytes', Number.isInteger(run.response_bytes) ? String(run.response_bytes) : 'None recorded'],
+    ['Created', formatTimestamp(run.created_at) || 'Not recorded'],
+    ['Finished', formatTimestamp(run.finished_at) || 'Not recorded'],
+    ['Reused from', shownOr(run.reused_from, 'Not reused')],
+    ['Error', shownOr(run.error, 'None')],
+  ];
+  const title = [lookup(RUN_PURPOSES, run.purpose, ''), lookup(RUN_STATES, run.state, shownOr(run.state, 'State not recorded'))].filter(Boolean).join(' · ');
+  return `<div class="check-list-card trace-run">${groupLabel(title)}${traceFields(fields)}${traceReading(run.reading)}</div>`;
+}
+
+// The retrieval traces (Assessment.retrieval, HARNESS.md 5): per code, each fact looked up and each CMS passage retrieved,
+// with its source, release, effective dates and sha256, then the lookups made and the notes recorded.
+function retrievalTraces(entries) {
+  const list = objects(entries);
+  if (!list.length) return '<div class="check-list-card"><p class="harness-note">No retrieval trace is recorded for this assessment.</p></div>';
+  const known = new Set(['source_key', 'release', 'effective', 'sha256', 'field', 'value']);
+  return list.map(entry => {
+    const facts = objects(entry.facts).map(fact => {
+      const effective = Array.isArray(fact.effective) ? fact.effective.map(value => formatDate(value) || textValue(value)).filter(Boolean).join(' – ') : '';
+      const extra = Object.keys(fact).filter(key => !known.has(key)).map(key => `${key} ${textValue(fact[key]) || (fact[key] == null ? 'none' : JSON.stringify(fact[key]))}`);
+      const where = [textValue(fact.source_key), textValue(fact.release), effective ? `effective ${effective}` : '', textValue(fact.sha256) ? `sha256 ${fact.sha256}` : '', ...extra].filter(Boolean).join(' · ');
+      return `<li><b>${escapeHtml(`${textValue(fact.field) || 'Fact'}: ${textValue(fact.value) || 'not recorded'}`)}</b><small class="check-source">${escapeHtml(where)}</small></li>`;
+    });
+    const passages = objects(entry.passages).map(passage => {
+      const page = textValue(passage.page);
+      const title = [textValue(passage.section) || 'CMS passage', page ? `page ${page}` : '', [textValue(passage.source_key), textValue(passage.release)].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+      const where = [textValue(passage.passage_key) ? `passage ${passage.passage_key}` : '', textValue(passage.topic) ? `topic ${passage.topic}${textValue(passage.topic_value) ? ` = ${passage.topic_value}` : ''}` : '', textValue(passage.sha256) ? `sha256 ${passage.sha256}` : ''].filter(Boolean).join(' · ');
+      return `<details class="reference-passage"><summary>${escapeHtml(title)}</summary><p>${escapeHtml(textValue(passage.text))}</p><small class="check-source">${escapeHtml(where)}</small></details>`;
+    });
+    const listed = (title, items) => (items.length ? `${groupLabel(title)}<ul class="trace-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '');
+    const date = textValue(entry.service_date);
+    return `<div class="check-list-card">${groupLabel(`${textValue(entry.code) || 'Code'} · service date ${formatDate(date) || date || 'not established'}`)}${facts.length ? `<ul class="trace-list">${facts.join('')}</ul>` : '<p class="harness-note">No fact was found for this code.</p>'}${passages.join('')}${listed('Lookups', strings(entry.lookups))}${listed('Notes', strings(entry.notes))}</div>`;
+  }).join('');
+}
+
+// The reconciliation table (HARNESS.md 5): per code, who proposed it, each participant's position, the CMS reference
+// checks and whether a member approved it - four statements, never merged into one (I4).
+function traceReconciliation(rows) {
+  const list = objects(rows);
+  if (!list.length) return '<div class="check-list-card"><p class="harness-note">No reconciliation is recorded for this assessment.</p></div>';
+  return `<div class="check-list-card">${list.map(row => {
+    const proposers = strings(row.proposed_by).map(name => lookup(PARTICIPANT_LABELS, name, name));
+    const positions = row.positions && typeof row.positions === 'object' && !Array.isArray(row.positions) ? Object.keys(row.positions).map(name => {
+      const value = row.positions[name];
+      return value && typeof value === 'object' ? positionText(name, value) : `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, value, 'took a position that was not recorded')}`;
+    }) : [];
+    const check = row.reference_check;
+    const reference = check && typeof check === 'object' ? referenceCheckText(check) : referenceCheckText({ state: check });
+    const approved = row.approved === true ? 'approved by a workspace member' : row.approved === false ? 'not approved' : 'not recorded';
+    const lines = [`Proposed by: ${proposers.join(', ') || 'not recorded'}`, ...(positions.length ? positions : ['Positions: none recorded']), `CMS reference checks: ${reference}`, `Reviewer approval: ${approved}`];
+    const title = [textValue(row.code) || 'Code', textValue(row.family), textValue(row.status).replace(/_/g, ' ')].filter(Boolean).join(' · ');
+    return checkItem(row.approved === true ? '' : 'muted', row.approved === true ? 'circle-check' : 'info', title, '', lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
+  }).join('')}</div>`;
+}
+
+// The owner's trace of one document (GET /api/encounters/<id>/trace, which answers the workspace owner only): each
+// participant's requests with their identity, endpoint, models, usage, estimated cost and hashes, each reading in full,
+// the retrieval traces and the reconciliation table.
+function traceView(trace, id) {
+  const data = trace && typeof trace === 'object' ? trace : {};
+  const encounter = data.encounter && typeof data.encounter === 'object' ? data.encounter : {};
+  const revision = data.revision && typeof data.revision === 'object' ? data.revision.number : data.revision;
+  const meta = [Number.isInteger(revision) ? `Revision ${revision}` : '', 'Owner only', 'Synthetic documents only'].filter(Boolean).map(item => `<span>${escapeHtml(item)}</span>`).join('');
+  const participants = objects(data.participants).map(participant => {
+    const runs = objects(participant.runs);
+    const name = textValue(participant.name);
+    const title = lookup(PARTICIPANT_TITLES, name, [textValue(participant.label), textValue(participant.vendor)].filter(Boolean).join(' · ') || 'Participant');
+    const model = textValue(participant.model);
+    const about = [textValue(participant.vendor), model ? `model ${model}` : 'no model named (its API takes none)'].filter(Boolean).join(' · ');
+    return `${sectionHeading(title, plural(runs.length, 'request', 'requests'))}<p class="section-description">${escapeHtml(about)}</p><div class="card-stack">${runs.length ? runs.map(traceRun).join('') : '<div class="check-list-card"><p class="harness-note">No request is recorded for this participant on this revision.</p></div>'}</div>`;
+  }).join('');
+  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="heading-row review-heading"><div><span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span><h1>${escapeHtml(textValue(encounter.title) || 'Document trace')}</h1><div class="review-meta">${meta}</div></div></div><p class="checks-disclaimer">Costs are estimated from fixed, dated vendor rates and are not reconciled to an invoice; Corti reports credits, not USD. Each hash names the exact stored request or raw response.</p>${participants}${sectionHeading('Reference retrieval', objects(data.retrieval).length)}<div class="card-stack">${retrievalTraces(data.retrieval)}</div>${sectionHeading('Reconciliation', objects(data.reconciliation).length)}${traceReconciliation(data.reconciliation)}</section>`;
+}
+
+// What the trace page says when the API refuses it: a 403 plainly (the trace is the owner's), never as an error to retry.
+function traceFailure(id, error) {
+  const status = error?.status;
+  const [title, detail, retry] = status === 403
+    ? ['The trace is for the workspace owner.', 'Only the owner of this workspace can open the trace of a document, with each request, its usage and its estimated cost. The review itself is open to every member.', false]
+    : status === 404
+      ? ['This document is not available.', 'It does not exist, or it is not in your workspace.', false]
+      : ['The trace could not be loaded.', textValue(error?.message) || 'Try again.', true];
+  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="retry">Try again</button></p>' : ''}</div></section>`;
 }
 
 // --- browser wiring ------------------------------------------------------------------
@@ -1225,7 +1641,7 @@ async function loadSession() {
 }
 
 function setActiveNav(name) {
-  const active = name === 'doc' ? 'documents' : name;
+  const active = name === 'doc' || name === 'trace' ? 'documents' : name;
   $$('[data-nav]').forEach(link => {
     link.classList.toggle('active', link.dataset.nav === active);
     if (link.dataset.nav === active) link.setAttribute('aria-current', 'page');
@@ -1255,6 +1671,7 @@ function route() {
   closeNavigation();
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (next.name === 'doc') return showDocument(next.id, token);
+  if (next.name === 'trace') return showTrace(next.id, token);
   if (next.name === 'how-it-works') {
     $('#main').innerHTML = howItWorksView();
     return undefined;
@@ -1309,6 +1726,24 @@ function showDocument(id, token) {
   }
   $('#main').innerHTML = '<section class="view-entrance"><p class="empty-state">Loading the review…</p></section>';
   return loadDocument(id, token, false);
+}
+
+// The owner's trace page: drawn once from GET /api/encounters/<id>/trace, never polled. The link to it is shown to the
+// owner only, and the API refuses every other role (403), which the page says plainly.
+async function showTrace(id, token) {
+  if (!UUID.test(id)) {
+    $('#main').innerHTML = messageView('This document is not available.', 'The address does not name a document in this workspace.');
+    return;
+  }
+  $('#main').innerHTML = '<section class="view-entrance"><p class="empty-state">Loading the trace…</p></section>';
+  let trace;
+  try {
+    trace = await api(`/api/encounters/${encodeURIComponent(id)}/trace`);
+  } catch (error) {
+    if (token === state.routeToken) $('#main').innerHTML = traceFailure(id, error);
+    return;
+  }
+  if (token === state.routeToken) $('#main').innerHTML = traceView(trace, id);
 }
 
 async function loadDocument(id, token, silent) {
@@ -1979,7 +2414,8 @@ if (typeof module === 'object' && module.exports) {
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
     hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
     codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,
-    serviceDateMeta,
+    serviceDateMeta, participantsCard, codeStatusLines, participantPositions, retrievalSection, participantText, traceView,
+    traceFailure, showTrace, STAGES, PARTICIPANT_STATES, DESCRIPTOR_LIKE, DESCRIPTOR_WITHHELD,
   };
 }
 if (typeof document !== 'undefined') boot();

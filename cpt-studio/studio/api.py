@@ -25,6 +25,7 @@ BILLING_CHOICES = {'professional', 'facility'}
 MAX_NOTE_CHARS = 2000
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
+CANDIDATE_ID = re.compile(r'[0-9a-f]{16}')  # studio.candidates: 16 hex of a sha256
 
 
 def _storable(value, label):
@@ -192,6 +193,18 @@ def encounter_detail(request, encounter_id):
     return JsonResponse(serializers.encounter_detail(encounter, membership))
 
 
+@require_GET
+@api_view
+def trace(request, encounter_id):
+    """The administrative trace of the current revision (HARNESS.md 7): each participant's runs and full readings, the
+    retrieval traces and the reconciliation table. A workspace owner's alone: 403 for a reviewer or a viewer (404, as
+    everywhere, outside the caller's workspaces)."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    if not serializers.is_owner(membership):
+        raise PermissionDenied('Only a workspace owner can open the administrative trace.')
+    return JsonResponse(serializers.trace_json(encounter))
+
+
 @require_POST
 @api_view
 def decisions(request, encounter_id):
@@ -213,6 +226,34 @@ def decisions(request, encounter_id):
             membership=membership, note=_text_field(data, 'note', 'The note'),
             acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'))
     return JsonResponse(serializers._decision_json(decision), status=201)
+
+
+@require_POST
+@api_view
+def confirm_finding(request, encounter_id, clarification_id):
+    """A reviewer's confirmation of one verified candidate answer to an open question (HARNESS.md 11.3, 12.5):
+    ``{"candidate_id", "attestation"}``. An owner or reviewer only (403); the question must be open on the current
+    final assessment, unconfirmed, and the candidate one of its verified candidates, recomputed server-side (409 with
+    why); the attestation exactly the candidate's (400). A service date then enters as the member's date through the
+    context path; any other fact is read by a re-assessment. Nothing is approved."""
+    data = _payload(request)
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    if not encounter.clarifications.filter(pk=clarification_id).exists():
+        raise ApiError(404, 'That question is not part of this document.')
+    candidate_id = data.get('candidate_id')
+    if not isinstance(candidate_id, str) or not CANDIDATE_ID.fullmatch(candidate_id):
+        raise ApiError(400, "Choose one of the question's candidates (candidate_id).")
+    attestation = _storable(_text_value(data, 'attestation', 'The attestation'), 'The attestation')
+    if len(attestation) > MAX_NOTE_CHARS:
+        raise ApiError(400, f'The attestation can be at most {MAX_NOTE_CHARS} characters.')
+    try:
+        confirmation, effect = review.confirm_finding(
+            encounter=encounter, clarification_id=clarification_id, candidate_id=candidate_id,
+            attestation=attestation, user=request.user, membership=membership)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    return JsonResponse({**serializers.confirmation_json(confirmation), 'effect': effect}, status=201)
 
 
 @require_POST

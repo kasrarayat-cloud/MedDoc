@@ -149,6 +149,16 @@ CORTI_CREDENTIALS_FILE = _env('CORTI_CREDENTIALS_FILE', '')
 REPLAY_DIR = _env('REPLAY_DIR', '')
 # The recorded owner authority a live send is bound to (ruling file path or id).
 AUTHORIZATION_REF = _env('AUTHORIZATION_REF', '')
+# The harness's independent participants (HARNESS.md 8), each configured on its own: one unavailable blocks only its own
+# stage. Their models and endpoints are code constants (studio/participants/), never settings.
+ASTRA_MODE = _env('ASTRA_MODE', 'disabled')
+FABLE_MODE = _env('FABLE_MODE', 'disabled')
+for _name, _mode in (('ASTRA', ASTRA_MODE), ('FABLE', FABLE_MODE)):
+    if _mode not in {'disabled', 'replay', 'live'}:
+        raise RuntimeError(f'CPT_STUDIO_{_name}_MODE must be disabled, replay or live.')
+OPENAI_CREDENTIALS_FILE = _env('OPENAI_CREDENTIALS_FILE', '')
+ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
+PARTICIPANT_REPLAY_DIR = _env('PARTICIPANT_REPLAY_DIR', '')
 
 # Bounded execution.
 EXTRACTION_TIMEOUT_SECONDS = int(_env('EXTRACTION_TIMEOUT_SECONDS', '240'))
@@ -157,10 +167,32 @@ PROVIDER_CONNECT_TIMEOUT_SECONDS = 10
 PROVIDER_READ_TIMEOUT_SECONDS = 120
 PROVIDER_MAX_REQUEST_BYTES = 512_000
 PROVIDER_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# A participant reads the whole document and writes a structured reading, so it is given longer than Corti; the send
+# deadline stays below STALE_RUNNING_SECONDS and the worker's stop timeout (ops/install.py) stays above it. A request
+# may carry a PDF original (base64) beside the text: at most the 15 MiB upload limit, so 24 MiB bounds the body.
+PARTICIPANT_CONNECT_TIMEOUT_SECONDS = 10
+PARTICIPANT_READ_TIMEOUT_SECONDS = 300
+PARTICIPANT_SEND_DEADLINE_SECONDS = 330
+PARTICIPANT_MAX_REQUEST_BYTES = 24 * 1024 * 1024
+PARTICIPANT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# harness@2 (HARNESS.md 11.2): a participant phase may call CPT Studio's reference tools, so one run is a loop of at
+# most PARTICIPANT_MAX_EXCHANGES HTTP exchanges, each read within PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS, the whole
+# loop within PARTICIPANT_LOOP_DEADLINE_SECONDS - below STALE_RUNNING_SECONDS, so a live loop is never swept as dead.
+PARTICIPANT_MAX_EXCHANGES = 4
+PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS = 240
+PARTICIPANT_LOOP_DEADLINE_SECONDS = 540
+PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned to the participant
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
-JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180}
+# A participant's stage - its first reading's or its peer review's - is one tool loop (HARNESS.md 12.1): its deadline
+# covers the loop's 540 s (PARTICIPANT_LOOP_DEADLINE_SECONDS) and the 15 s kept for recording its outcome
+# (jobs.LOOP_RECORDING_SECONDS), with 25 s for the stage's own work before the loop - a stage that has used more
+# reserves and sends nothing and is queued again (jobs._check_loop_time) - and it ends 20 s before
+# STALE_RUNNING_SECONDS (600), where the stale-stage sweep takes a stage for dead, so a live stage is never swept. The
+# worker's stop timeout (ops/install.py, 600 s) outlasts it.
+JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
+                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

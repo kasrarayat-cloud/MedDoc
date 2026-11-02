@@ -322,7 +322,7 @@ test('state fixtures: processing, provider_unknown and extraction_failed show th
     stages: stopped.pipeline.stages.map(stage => (stage.kind === 'predict' ? { ...stage, error: cause } : stage)) } };
   const sweptHtml = render(swept);
   assert.ok(sweptHtml.includes('Processing did<br>not finish.'));
-  assert.ok(sweptHtml.includes(`Request CPT proposals from the provider: ${cause}`));
+  assert.ok(sweptHtml.includes(`Corti: request CPT proposals: ${cause}`));
   assert.equal(sweptHtml.includes('Queued stages were cancelled'), false);
   assert.equal(sweptHtml.includes('Processing was<br>stopped.'), false);
   assert.ok(sweptHtml.includes('data-action="resume"'));
@@ -679,11 +679,11 @@ test('progress rows show the latest job of each stage, and the second review onc
   const stages = [...['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' })),
     { kind: 'review2', state: 'succeeded', error: '' }, { kind: 'assess', state: 'queued', error: '' }];
   const html = render({ ...processing, pipeline: { ...processing.pipeline, stages } });
-  assert.ok(html.includes('<strong>Check proposals against references and rules</strong><p>Waiting</p>'));
+  assert.ok(html.includes('<strong>Check proposals against references and reconcile</strong><p>Waiting</p>'));
   assert.ok(html.includes('<strong>Second provider review (asked for by a reviewer)</strong><p>Done</p>'));
   const redated = [...stages.slice(0, 4), { kind: 'predict', state: 'running', error: '' }];
   assert.ok(render({ ...processing, pipeline: { ...processing.pipeline, stages: redated } })
-    .includes('<strong>Request CPT proposals from the provider</strong><p>In progress</p>'));
+    .includes('<strong>Corti: request CPT proposals</strong><p>In progress</p>'));
 });
 
 test('the provider-not-run card gives the reason of the latest predict, not of one that ran before it', () => {
@@ -1006,4 +1006,443 @@ test('candidate grouping reads only served fields, and keeps the flat list when 
   assert.equal(app.candidateGroups({ proposals: [] }), null);
   // excluded candidates are not regrouped
   assert.ok(render(excludedDoc({})).includes('Excluded candidates'));
+});
+
+// --- harness@1 (HARNESS.md 7): the Review participants card, a code card's three statuses, the owner's trace ---------
+
+const HARNESS_READY = 'encounter-harness-ready.json';
+const HARNESS_DEGRADED = 'encounter-harness-degraded.json';
+const HARNESS_TRACE = 'trace-harness-ready.json';
+const XSS = '<img src=x onerror="window.__xss=11">';
+const XSS_ESCAPED = '&lt;img src=x onerror=&quot;window.__xss=11&quot;&gt;';
+// Descriptor-like wording made up for these tests (never an AMA descriptor): the plural mark and "; with".
+const DESCRIPTOR = 'Fixture endoscopy, flexible; with removal of lesion(s) by fixture technique';
+
+// The Review participants card of a rendered page, from its opening tag to the first element after it.
+function participantsCard(html) {
+  const start = html.indexOf('<div class="check-list-card participants-card">');
+  assert.ok(start >= 0, 'no Review participants card');
+  const end = [html.indexOf('<div class="check-list-card progress-card"', start), html.indexOf('<div class="clarification-card">', start),
+    html.indexOf('<div class="result-tabs"', start), html.indexOf('</section>', start)].filter(at => at > start);
+  return html.slice(start, Math.min(...end));
+}
+
+// One row of the card: the check-item whose data-participant is key.
+function harnessRow(html, key) {
+  const card = participantsCard(html);
+  const start = card.indexOf(`data-participant="${key}"`);
+  assert.ok(start >= 0, `no ${key} row`);
+  const from = card.lastIndexOf('<div class="check-item', start);
+  const next = card.indexOf('<div class="check-item', start);
+  return card.slice(from, next > 0 ? next : card.length);
+}
+
+function withParticipant(doc, name, fields) {
+  const participants = doc.harness.participants.map(item => (item.name === name ? { ...item, ...fields } : item));
+  return { ...doc, harness: { ...doc.harness, participants } };
+}
+
+function codeCardOf(html, code) {
+  const cards = [...html.matchAll(/<article class="code-card"[\s\S]*?<\/article>/g)].map(match => match[0]);
+  const card = cards.find(item => item.includes(`<strong class="code-number">${code}</strong>`));
+  assert.ok(card, `no code card for ${code}`);
+  return card;
+}
+
+const textOf = html => html.replace(/<[^>]*>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+test('the progress card names Corti\'s stage and each participant\'s, and says when a participant is not configured', () => {
+  const processing = fixture('encounter-processing.json');
+  const html = render(processing);
+  const labels = ['Read the original document', 'Identify documented services and context', 'Corti: request CPT proposals',
+    'Independent review: Astra (OpenAI GPT-6 Astra)', 'Independent review: Fable (Anthropic Claude Fable 5.1)',
+    'Check proposals against references and reconcile'];
+  assert.deepEqual(app.STAGES.map(([, label]) => label), labels);
+  const at = labels.map(label => html.indexOf(`<strong>${label}</strong>`));
+  assert.ok(at.every(index => index > 0) && at.every((index, i) => i === 0 || index > at[i - 1]), JSON.stringify(at));
+  assert.ok(html.includes('<strong>Corti: request CPT proposals</strong><p>In progress</p>'));
+  assert.ok(html.includes('<strong>Independent review: Astra (OpenAI GPT-6 Astra)</strong><p>Not started</p>'));
+  // a participant not configured on this installation never reads "Not started"
+  const off = withParticipant(processing, 'fable', { state: 'not_configured', detail: '' });
+  assert.ok(render(off).includes('<strong>Independent review: Fable (Anthropic Claude Fable 5.1)</strong><p>Not configured on this installation</p>'));
+  // the latest job of a participant stage is shown as any other stage's
+  const running = { ...processing, pipeline: { ...processing.pipeline, stages: [...processing.pipeline.stages.slice(0, 2),
+    { kind: 'predict', state: 'succeeded', error: '' }, { kind: 'astra', state: 'failed', error: 'HTTP 429 from OpenAI (synthetic).' }] } };
+  assert.ok(render(running).includes('<strong>Independent review: Astra (OpenAI GPT-6 Astra)</strong><p>Failed — HTTP 429 from OpenAI (synthetic).</p>'));
+  // a payload served before the harness has no participant rows, unless such a stage ran
+  const { harness, ...legacy } = processing;
+  assert.equal(render(legacy).includes('Independent review'), false);
+  const legacyStage = { ...legacy, pipeline: { ...legacy.pipeline, stages: [...legacy.pipeline.stages, { kind: 'fable', state: 'queued', error: '' }] } };
+  assert.ok(render(legacyStage).includes('<strong>Independent review: Fable (Anthropic Claude Fable 5.1)</strong><p>Waiting</p>'));
+  assert.equal(render(legacyStage).includes('Independent review: Astra'), false);
+});
+
+test('the Review participants card heads the review column while processing, before any assessment', () => {
+  const processing = fixture('encounter-processing.json');
+  assert.equal(processing.assessment, null);
+  const html = render(processing);
+  const card = participantsCard(html);
+  const column = html.indexOf('<section class="review-column"');
+  assert.ok(column < html.indexOf(card) && html.indexOf(card) < html.indexOf('class="check-list-card progress-card"'), 'the card heads the column');
+  assert.ok(card.includes('<h2>Review participants</h2>'));
+  // the classes the walk and the other cards are found by are never the card's own
+  for (const name of ['progress-card', 'clarification-card', 'card-empty']) assert.equal(card.includes(name), false, name);
+  assert.deepEqual([...card.matchAll(/data-participant="([^"]+)" data-state="([^"]*)"/g)].map(match => [match[1], match[2]]),
+    [['corti', 'running'], ['astra', 'waiting'], ['fable', 'waiting'], ['reference_validation', 'waiting'], ['clarification', 'waiting'], ['final', 'processing']]);
+  assert.ok(harnessRow(html, 'corti').includes('<span class="status amber">In progress</span>'));
+  assert.ok(harnessRow(html, 'astra').includes('<p>Waiting for its turn; nothing has been sent yet.</p>'));
+  assert.ok(harnessRow(html, 'reference_validation').includes('Runs once the participants have answered'));
+  assert.ok(harnessRow(html, 'clarification').includes('<span class="status gray">Waiting</span>'));
+  assert.ok(harnessRow(html, 'final').includes('<span class="status gray">Processing</span>'));
+  // persistent: the same card heads a finished review, a degraded one and a stopped one
+  for (const doc of [fixture(HARNESS_READY), fixture(HARNESS_DEGRADED), { ...fixture(HARNESS_READY), state: 'stopped', pipeline: { ...fixture(HARNESS_READY).pipeline, can_resume: true } }]) {
+    const page = render(doc);
+    assert.equal(count(page, 'class="check-list-card participants-card"'), 1, doc.id);
+    assert.ok(page.indexOf('participants-card') < page.indexOf('role="tablist"'), doc.id);
+  }
+});
+
+test('every participant state has its label and plain sentence; the API\'s own sentence is kept, after the plain one only where it does not say it', () => {
+  const ready = fixture(HARNESS_READY);
+  const states = Object.entries(app.PARTICIPANT_STATES);
+  assert.deepEqual(states.map(([name]) => name).sort(),
+    ['blocked', 'done', 'failed', 'not_configured', 'not_sent', 'refused', 'running', 'stopped', 'unknown', 'waiting']);
+  for (const [name, [[tone], label, plain, required]] of states) {
+    const row = detail => harnessRow(render(withParticipant(ready, 'astra', { state: name, detail })), 'astra');
+    const bare = row('');
+    assert.ok(bare.includes(`data-state="${name}"`), name);
+    assert.ok(bare.includes(`>${app.escapeHtml(label)}</span>`), `${name}: label`);
+    assert.ok(bare.includes(`<p>${app.escapeHtml(plain)}</p>`), `${name}: plain sentence`);
+    assert.ok(bare.startsWith(`<div class="check-item${tone ? ` ${tone}` : ''}"`), `${name}: tone`);
+    const other = row('A sentence of the API\'s own.');
+    assert.ok(other.includes('<p>A sentence of the API&#x27;s own.</p>'), name);
+    assert.equal(other.includes(`<p>${app.escapeHtml(plain)}</p>`), Boolean(required), `${name}: plain kept only where it must be said`);
+    if (required) assert.equal(row(`Something ${required} here.`).includes(`<p>${app.escapeHtml(plain)}</p>`), false, `${name}: said already`);
+  }
+  // the three the directive names, as they read
+  const names = render(withParticipant(ready, 'fable', { state: 'not_configured', detail: '' }));
+  assert.ok(harnessRow(names, 'fable').includes('<p>Not configured on this installation.</p>'));
+  const unknown = harnessRow(render(withParticipant(ready, 'fable', { state: 'unknown', detail: 'Sent; no response was recorded.' })), 'fable');
+  assert.ok(unknown.includes('<p>Outcome unknown — reconcile before sending again.</p><p>Sent; no response was recorded.</p>'), unknown);
+  const refused = harnessRow(render(fixture(HARNESS_DEGRADED)), 'astra');
+  assert.ok(refused.includes('<p>Answered; the reading was not used: the response was cut off at the output limit.</p>'), refused);
+  assert.equal(count(refused, '<p>'), 1, 'said once');
+  assert.ok(refused.includes('<span class="status amber">Reading not used</span>'));
+  // a state the page does not know is never drawn as one it knows
+  const odd = harnessRow(render(withParticipant(ready, 'astra', { state: 'exploded', detail: '' })), 'astra');
+  assert.ok(odd.includes('State not recorded') && odd.includes('data-state="exploded"'));
+});
+
+test('a participant row says what it proposed, its unfound quotes, a reused answer and the model asked for and the one that answered', () => {
+  const ready = fixture(HARNESS_READY);
+  const html = render(ready);
+  assert.ok(harnessRow(html, 'corti').includes('<small class="check-source">Codes it proposed: 45385, 45380.</small>'));
+  const astra = harnessRow(html, 'astra');
+  assert.ok(astra.includes('1 quote it gave was not found in the document text, so never used as evidence.'));
+  assert.ok(astra.includes('Model requested: gpt-6-astra; answered by gpt-6-astra.'));
+  assert.equal(harnessRow(html, 'corti').includes('Model'), false, 'Corti\'s API names no model');
+  const reused = harnessRow(render(withParticipant(ready, 'fable', { reused: true, unverified_quotes: 2 })), 'fable');
+  assert.ok(reused.includes('Reused the stored answer to an identical request; nothing new was sent.'));
+  assert.ok(reused.includes('2 quotes it gave were not found in the document text'));
+  // codes are listed only for a reading that was used; a waiting participant names its model, not a request
+  const refused = harnessRow(render(withParticipant(ready, 'astra', { state: 'refused', codes: ['45385'], returned_model: '' })), 'astra');
+  assert.equal(refused.includes('Codes it proposed'), false);
+  assert.ok(refused.includes('Model: gpt-6-astra.'));
+  assert.ok(harnessRow(render(withParticipant(ready, 'fable', { state: 'done', codes: [] })), 'fable').includes('It proposed no code.'));
+});
+
+test('the reference validation, clarification and final status rows say what the API reports', () => {
+  const ready = fixture(HARNESS_READY);
+  const html = render(ready);
+  const reference = harnessRow(html, 'reference_validation');
+  assert.ok(reference.includes('<p>2 codes checked against the CMS reference files; 3 passages of verbatim CMS text retrieved.</p>'));
+  assert.ok(reference.includes('CMS NCCI Policy Manual 2026, Chapter VI (fixture) (Revision 1/1/2026) · effective 1 Jan 2026 – 31 Dec 2026'));
+  assert.ok(reference.includes('Not connected: NCCI procedure-to-procedure edits (AMA licence agreement not accepted); AMA CPT descriptors and guidelines (no licence); Payer policies.'));
+  const notRun = harnessRow(render({ ...ready, harness: { ...ready.harness, reference_validation: { state: 'not_run' } } }), 'reference_validation');
+  assert.ok(notRun.includes('<span class="status gray">Not run</span>') && notRun.includes('No proposal was checked against the CMS references for this revision.'));
+  assert.ok(harnessRow(render({ ...ready, harness: { ...ready.harness, reference_validation: null } }), 'reference_validation').includes('data-state="not_run"'));
+  // clarification: the API's count of open questions; with no assessment, waiting only while a stage runs
+  assert.ok(harnessRow(html, 'clarification').includes('<span class="status green">None open</span>'));
+  const failed = fixture('encounter-extraction-failed.json');
+  const unread = harnessRow(render({ ...failed, harness: { ...ready.harness, reference_validation: { state: 'not_run' }, final: { state: failed.state, label: failed.state_label } } }), 'clarification');
+  assert.ok(unread.includes('data-state="not_run"') && unread.includes('<span class="status gray">Not asked</span>'), unread);
+  assert.ok(unread.includes('No question was asked: the proposals were not checked for this revision.'));
+  assert.equal(unread.includes('Waiting'), false);
+  const asked = harnessRow(render({ ...ready, harness: { ...ready.harness, clarification: { open: 2 } } }), 'clarification');
+  assert.ok(asked.includes('<span class="status amber">2 open</span>') && asked.includes('2 questions need an answer before the reviewed report'));
+  assert.ok(asked.includes('A participant&#x27;s own questions never hold the reviewed report.'));
+  // final: the list's own label and tone, approval kept apart from agreement
+  const final = harnessRow(html, 'final');
+  assert.ok(final.includes('<span class="status green">Ready for review</span>'));
+  assert.ok(final.includes('A code is approved only by a workspace member&#x27;s decision; agreement between participants approves nothing.'));
+  assert.ok(harnessRow(render(fixture(HARNESS_DEGRADED)), 'final').includes('<span class="status amber">Provider outcome unknown</span>'));
+  const reviewed = { ...ready, coding_state: 'incomplete', readiness: { draft: true, reviewed: true, blockers: [] },
+    harness: { ...ready.harness, final: { state: 'reviewed', label: 'Reviewed' } },
+    assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(p => ({ ...p, decision_state: 'approved', decision: { action: 'approve', reviewer: 'Review Agent', reviewer_kind: 'agent' } })) } };
+  const done = harnessRow(render(reviewed), 'final');
+  assert.ok(done.includes('<span class="status amber">Reviewed · coding incomplete</span>'), done);
+  assert.ok(done.includes('Every selected code has a reviewer&#x27;s decision. Includes agent-executed synthetic review — not clinical approval.'));
+});
+
+test('the trace link is shown to the owner only, and a payload served before the harness draws no card', () => {
+  const ready = fixture(HARNESS_READY);
+  const link = `href="#/encounters/${ready.id}/trace"`;
+  assert.equal(count(render(ready), link), 1);
+  for (const permissions of [{ can_review: true, is_owner: false }, { can_review: true }, { can_review: false, is_owner: 'yes' }]) {
+    assert.equal(render({ ...ready, permissions }).includes('/trace"'), false, JSON.stringify(permissions));
+  }
+  assert.equal(render(fixture(HARNESS_DEGRADED)).includes('/trace"'), false, 'a reviewer is not the owner');
+  for (const name of ['encounter-ready.json', 'encounter-reviewed.json', 'encounter-clarification.json', 'encounter-adversarial.json', 'encounter-stopped.json']) {
+    const html = render(fixture(name));
+    assert.equal(html.includes('participants-card') || html.includes('data-participant='), false, name);
+  }
+  for (const harness of [null, {}, { participants: 'all' }]) assert.equal(app.participantsCard({ ...ready, harness }), '', JSON.stringify(harness));
+});
+
+test('a code card keeps who proposed it, the CMS reference checks and the reviewer decision as three separate lines', () => {
+  const ready = fixture(HARNESS_READY);
+  const html = render(ready);
+  const snare = codeCardOf(html, '45385');
+  const lines = /<ul class="code-status-lines" aria-label="Status of this code">([\s\S]*?)<\/ul>/.exec(snare);
+  assert.ok(lines, snare.slice(0, 1500));
+  assert.deepEqual([...lines[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map(match => textOf(match[1]).replace(/\s+/g, ' ').trim()), [
+    'Proposed by: Corti, Astra, Fable',
+    'CMS reference checks: passed — Present in the fee schedule for the service date; 1 unit is within the MUE. (NCCI procedure-to-procedure edits not verified: not connected)',
+    'Reviewer decision: not decided yet',
+  ]);
+  assert.ok(codeCardOf(html, '45380').includes('<li><b>CMS reference checks:</b> needs attention — Shares the endoscopic base 45378'));
+  // agreement of all three never approves: the badge and the actions are the code's own
+  assert.ok(snare.includes('<span class="status green">Ready for review</span>') && snare.includes('data-decision="approve"'));
+  const decided = (fields, check = {}) => app.codeStatusLines({ ...ready.assessment.proposals[0], ...fields, reference_check: { state: 'not_verified', ...check } });
+  assert.ok(decided({}).includes('<li><b>CMS reference checks:</b> not verified (NCCI procedure-to-procedure edits not verified: not connected)</li>'));
+  assert.ok(decided({ decision_state: 'approved', decision: { reviewer: 'Review Agent', reviewer_kind: 'agent' } })
+    .includes('<li><b>Reviewer decision:</b> approved by Review Agent (agent-executed synthetic review — not clinical approval)</li>'));
+  assert.ok(decided({ decision_state: 'reinstated', decision: { reviewer: 'Reviewer One', reviewer_kind: 'human' } })
+    .includes('<li><b>Reviewer decision:</b> reinstated for review by Reviewer One; not approved</li>'));
+  // a reviewer's name is text: never a replacement pattern, never markup
+  const named = decided({ decision_state: 'rejected', decision: { reviewer: `$& $' ${XSS}`, reviewer_kind: 'human' } });
+  assert.ok(named.includes(`rejected by $&amp; $&#x27; ${XSS_ESCAPED}</li>`), named);
+  assert.ok(decided({ decision_state: 'undecided', decision: { reviewer: 'Stale' } }).includes('not decided yet</li>'));
+  assert.equal(count(decided({}), '<li>'), 3);
+  assert.ok(app.codeStatusLines({ proposed_by: [] }).includes('Proposed by:</b> not recorded'));
+  // a proposal served before the harness keeps its card as it was
+  assert.equal(app.codeStatusLines(fixture('encounter-ready.json').assessment.proposals[0]), '');
+  assert.equal(render(fixture('encounter-ready.json')).includes('code-status-lines'), false);
+});
+
+test('a code card says what each participant said, with Fable\'s advice not to code and the passage it quoted', () => {
+  const html = render(fixture(HARNESS_READY));
+  const biopsy = codeCardOf(html, '45380');
+  assert.ok(biopsy.includes('<div class="evidence-section participant-positions"><div class="evidence-label">What the participants said</div>'
+    + '<p class="harness-note">Astra proposed it.</p><p class="harness-note">Fable advised not to code it: not performed at this encounter — '
+    + '“Biopsies of the sigmoid colon are planned at the next colonoscopy.”</p></div>'), biopsy);
+  // the contradiction is shown, never voted on: the code stays ready, with its warning check
+  assert.ok(biopsy.includes('Ready for review') && biopsy.includes('A participant disagrees'));
+  const degraded = codeCardOf(render(fixture(HARNESS_DEGRADED)), '43239');
+  assert.ok(degraded.includes('<p class="harness-note">Astra gave no reading: Answered; the reading was not used: the response was cut off at the output limit.</p>'));
+  assert.ok(degraded.includes('<p class="harness-note">Fable gave no reading: Outcome unknown — reconcile before sending again.</p>'));
+  const positions = participant_positions => app.participantPositions({ participant_positions });
+  assert.equal(positions({}), '', 'no participant configured');
+  assert.equal(positions(undefined), '');
+  const ordered = positions({ fable: { position: 'not_proposed', detail: '', quote: '' }, astra: { position: 'proposed', detail: '', quote: '' } });
+  assert.ok(ordered.indexOf('Astra proposed it.') < ordered.indexOf('Fable did not propose it.'), ordered);
+});
+
+test('a code card lists the CMS facts and passages retrieved for it, each passage behind its own disclosure', () => {
+  const html = render(fixture(HARNESS_READY));
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>PFS status:</b> A<small class="check-source">cms-pfs-rvu26d · RVU26D</small></li>'));
+  assert.ok(snare.includes('<li><b>Practitioner MUE:</b> 1 (MAI 2)<small class="check-source">cms-mue-practitioner-2026q4 · 2026-Q4</small></li>'));
+  assert.ok(snare.includes('<details class="reference-passage"><summary>Multiple procedure indicator 3 · page 12</summary><p>SYNTHETIC FIXTURE TEXT, not CMS text:'));
+  assert.ok(snare.includes('<small class="check-source">cms-ncci-policy-manual-2026-ch6 · Revision 1/1/2026 · Chapter VI, section C: Endoscopic Services · page VI-14</small></details>'));
+  assert.equal(count(snare, '<details class="reference-passage">'), 2);
+  assert.equal(/<details[^>]* open/.test(snare), false, 'collapsed by default');
+  assert.ok(app.retrievalSection({ retrieval: [] }).includes('No CMS reference fact or passage was retrieved for this code.'));
+  assert.equal(app.retrievalSection({}), '');
+  // never marked in the source and never an evidence chip: the walk's DOM checks stay as they were
+  const layout = app.documentLayout(fixture(HARNESS_READY));
+  const keys = layout.pages.flatMap(page => page.paragraphs.flat()).filter(piece => piece.keys).flatMap(piece => piece.keys);
+  assert.deepEqual(keys.sort(), ['d0000000-0000-4000-8000-000000000901:0', 'd0000000-0000-4000-8000-000000000902:0']);
+  assert.equal(count(snare, 'evidence-chip'), 1);
+  assert.equal(snare.includes('review-insight'), false, 'no decision line before a decision');
+});
+
+test('no descriptor-like text is rendered: not the provider\'s display, not a participant\'s free text that reads like a CPT descriptor', () => {
+  assert.ok(app.DESCRIPTOR_LIKE.test(DESCRIPTOR));
+  for (const plain of ['The rectal polyp was removed with a cold snare.', 'Answered; the reading was not used: the response was cut off at the output limit.',
+    'Fable advised not to code it: not performed at this encounter', 'Multiple procedure indicator 3']) {
+    assert.equal(app.DESCRIPTOR_LIKE.test(plain), false, plain);
+  }
+  const ready = fixture(HARNESS_READY);
+  const proposals = ready.assessment.proposals.map((proposal, index) => ({ ...proposal, provider_display: `${DESCRIPTOR} ${index}`,
+    participant_positions: { astra: { position: 'advised_not_to_code', detail: DESCRIPTOR, quote: '' },
+      fable: { position: 'advised_not_to_code', detail: 'not performed at this encounter', quote: `${DESCRIPTOR}.` } } }));
+  const doc = { ...ready, assessment: { ...ready.assessment, proposals } };
+  const pages = ['codes', 'checks', 'timeline'].map(tab => render(doc, tab)).join('\n');
+  assert.equal(pages.includes('lesion(s)') || pages.includes(app.escapeHtml(DESCRIPTOR)), false);
+  assert.ok(pages.includes(`Astra advised not to code it: ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}`));
+  assert.ok(pages.includes('Fable advised not to code it: not performed at this encounter — its quote is withheld: it reads like a CPT descriptor.'));
+  assert.equal(count(pages, '<h3>Description withheld</h3>'), 2);
+  // the trace: every free-text field of a reading, and an unlocated quote
+  const trace = fixture(HARNESS_TRACE);
+  const reading = trace.participants[1].runs[0].reading;
+  const hostile = { ...reading,
+    services: reading.services.map(service => ({ ...service, description: DESCRIPTOR, technique: DESCRIPTOR,
+      lesions: [{ site: 'rectum', size: '', morphology: '', action: DESCRIPTOR, specimen: '' }] })),
+    codes: reading.codes.map(code => ({ ...code, basis: DESCRIPTOR, evidence: [{ quote: DESCRIPTOR, spans: [], reason: 'not found' }] })),
+    questions: [{ question: DESCRIPTOR, why: DESCRIPTOR, service_ids: [], evidence: [DESCRIPTOR] }],
+    extraction_issues: [{ page: 1, issue: DESCRIPTOR }] };
+  const shown = app.traceView({ ...trace, participants: [{ ...trace.participants[1], runs: [{ ...trace.participants[1].runs[0], reading: hostile }] }] }, ready.id);
+  assert.equal(shown.includes('lesion(s)'), false, 'a participant\'s descriptor-like text reached the trace');
+  assert.ok(count(shown, app.escapeHtml(app.DESCRIPTOR_WITHHELD)) >= 6, shown);
+  assert.ok(shown.includes('(a quote withheld: it reads like a CPT descriptor) — unverified (not found); never used as evidence'));
+  // every harness surface the fixtures draw: no descriptor-like text at all
+  const surfaces = [HARNESS_READY, HARNESS_DEGRADED, 'encounter-processing.json'].flatMap(name => ['codes', 'checks', 'timeline'].map(tab => render(fixture(name), tab)));
+  for (const html of [...surfaces, app.traceView(trace, ready.id)]) assert.equal(app.DESCRIPTOR_LIKE.test(textOf(html)), false, textOf(html).match(app.DESCRIPTOR_LIKE)?.[0]);
+});
+
+test('the owner\'s trace shows each request in full, each reading, the retrieval traces and the reconciliation', () => {
+  const trace = fixture(HARNESS_TRACE);
+  const id = trace.encounter.id;
+  const html = app.traceView(trace, id);
+  assert.ok(html.includes(`<a class="back-link" href="#doc/${id}">`));
+  assert.ok(html.includes('<h1>Colonoscopy with polypectomy and biopsy</h1>') && html.includes('<span>Revision 1</span><span>Owner only</span>'));
+  for (const field of ['<dt>Endpoint</dt><dd>https://api.openai.com/v1/responses</dd>', '<dt>Model requested</dt><dd>gpt-6-astra</dd>',
+    '<dt>Model that answered</dt><dd>gpt-6-astra</dd>', '<dt>Vendor request id</dt><dd>req_fixture0102</dd>', '<dt>Response id</dt><dd>resp_fixture0102</dd>',
+    '<dt>HTTP status</dt><dd>200</dd>', '<dt>Latency</dt><dd>41.3 s</dd>',
+    '<dt>Usage</dt><dd>input_tokens 4120 · input_tokens_details.cached_tokens 0 · output_tokens 1630 · output_tokens_details.reasoning_tokens 910 · total_tokens 5750</dd>',
+    '<dt>Estimated cost</dt><dd>$0.1227 (estimated from published rates, not reconciled to an invoice)</dd>',
+    `<dt>Request sha256</dt><dd>${trace.participants[1].runs[0].request_sha256}</dd>`, `<dt>Response sha256</dt><dd>${trace.participants[1].runs[0].response_sha256}</dd>`,
+    '<dt>Response bytes</dt><dd>6904</dd>', '<dt>Error</dt><dd>None</dd>', '<dt>Endpoint</dt><dd>https://api.anthropic.com/v1/messages</dd>',
+    '<dt>Response id</dt><dd>msg_fixture0103</dd>', '<dt>Usage</dt><dd>creditsConsumed 0.0312</dd>', '<dt>Estimated cost</dt><dd>Not estimated</dd>',
+    '<dt>Model requested</dt><dd>None named</dd>']) {
+    assert.ok(html.includes(field), field);
+  }
+  // each normalized reading, its unverified quotes included
+  assert.ok(html.includes('<dt>Unverified quotes</dt><dd>1 (never used as evidence)</dd>'));
+  assert.ok(html.includes('<dt>Date of service as read</dt><dd>2026-10-28</dd>'));
+  assert.ok(html.includes('<li><b>s1 · colonoscopy · performed</b><br>Description: Colonoscopy to the cecum, completed'));
+  assert.ok(html.includes('<li><b>45380 · units 1 · confidence medium · services s1</b><br>Basis: The transverse colon lesion was sampled with biopsy forceps.'));
+  assert.ok(html.includes('<li>“Two biopsies were taken from the lesion.” — unverified (not found in the document text); never used as evidence</li>'));
+  assert.ok(html.includes('<li>“A 6 mm sessile polyp in the rectum was removed with a cold snare.” — found in the document (1 place)</li>'));
+  assert.ok(html.includes('<li><b>45380 · not performed at this encounter · services s1</b>'));
+  assert.ok(html.includes('<li><b>Was the transverse colon lesion sampled at this encounter, or is that planned too?</b><br>Why: '));
+  assert.ok(html.includes('Extraction issues · 0') && html.includes('No participant reading is recorded for this request.'));
+  // the retrieval traces
+  assert.ok(html.includes('<div class="evidence-label">45385 · service date 28 Oct 2026</div>'));
+  assert.ok(html.includes(`<li><b>mult_proc: 3</b><small class="check-source">cms-pfs-rvu26d · RVU26D · effective 1 Oct 2026 – 31 Dec 2026 · sha256 ${trace.retrieval[0].facts[0].sha256}</small></li>`));
+  assert.ok(html.includes(' · mai 2</small>'), 'a field the trace adds is shown, not dropped');
+  assert.ok(html.includes(`passage mult-proc-3 · topic pfs.mult_proc = 3 · sha256 ${trace.retrieval[0].passages[0].sha256}`));
+  assert.ok(html.includes('<li>pfs 45385 2026-10-28</li>') && html.includes('<li>NCCI procedure-to-procedure edits are not connected, so code pairs are not verified.</li>'));
+  // the reconciliation: four statements per code, never one
+  const reconciliation = html.slice(html.indexOf('<h2>Reconciliation</h2>'));
+  for (const line of ['<p>Proposed by: Corti, Astra</p>', '<p>Astra proposed it.</p>',
+    '<p>Fable advised not to code it: not performed at this encounter — “Biopsies of the sigmoid colon are planned at the next colonoscopy.”</p>',
+    '<p>CMS reference checks: needs attention — Shares the endoscopic base 45378', '<p>Reviewer approval: not approved</p>']) {
+    assert.ok(reconciliation.includes(line), line);
+  }
+  const approved = app.traceView({ ...trace, reconciliation: [{ ...trace.reconciliation[0], approved: true, positions: { astra: 'proposed' }, reference_check: 'passed' }] }, id);
+  assert.ok(approved.includes('<p>Reviewer approval: approved by a workspace member</p>') && approved.includes('<p>Astra proposed it</p>'));
+  assert.ok(approved.includes('<p>CMS reference checks: passed (NCCI procedure-to-procedure edits not verified: not connected)</p>'));
+  // a reading refused whole says so, with its problems
+  const refused = { ...trace.participants[1].runs[0], reading: { refused: true, problems: ['The response was cut off at the output limit (max_output_tokens).'], unverified_quotes: 0 } };
+  const shown = app.traceView({ ...trace, participants: [{ ...trace.participants[1], runs: [refused] }] }, id);
+  assert.ok(shown.includes('<dt>Reading</dt><dd>Refused whole: none of it was read or used</dd>') && shown.includes('<li>The response was cut off at the output limit (max_output_tokens).</li>'));
+  // whatever the payload, the page is drawn and says what is missing
+  for (const payload of [{}, null, { participants: 'x', retrieval: {}, reconciliation: [null] }]) {
+    const empty = app.traceView(payload, id);
+    assert.ok(empty.includes('No retrieval trace is recorded for this assessment.') && empty.includes('No reconciliation is recorded for this assessment.'), JSON.stringify(payload));
+  }
+  assert.ok(app.traceView({ ...trace, participants: [{ ...trace.participants[2], runs: [] }] }, id).includes('No request is recorded for this participant on this revision.'));
+});
+
+test('every harness value the page draws is escaped', () => {
+  const ready = fixture(HARNESS_READY);
+  // a participant the page does not know is titled from what the API serves for it
+  const stranger = { ...ready.harness.participants[1], name: XSS, label: XSS, vendor: XSS, state: XSS, detail: XSS, run_id: XSS };
+  const harness = { ...ready.harness,
+    participants: [...ready.harness.participants.map(item => ({ ...item, detail: XSS, model: XSS, returned_model: XSS, codes: [XSS], label: XSS, name: item.name })), stranger],
+    reference_validation: { ...ready.harness.reference_validation, sources: [{ key: XSS, title: XSS, release: XSS, effective_start: XSS, effective_end: XSS }], not_connected: [XSS] },
+    final: { state: XSS, label: XSS } };
+  const proposals = ready.assessment.proposals.map(proposal => ({ ...proposal, proposed_by: [XSS, 'corti'],
+    participant_positions: { [XSS]: { position: XSS, detail: XSS, quote: XSS } }, reference_check: { state: XSS, detail: XSS },
+    retrieval: [{ kind: 'fact', source_key: XSS, release: XSS, label: XSS, value: XSS, page: XSS, section: XSS, text: XSS },
+      { kind: 'passage', source_key: XSS, release: XSS, label: XSS, value: XSS, page: XSS, section: XSS, text: XSS }] }));
+  const doc = { ...ready, id: XSS, harness, assessment: { ...ready.assessment, proposals }, provider_runs: ready.provider_runs.map(run => ({ ...run, requested_model: XSS, returned_model: XSS })) };
+  const trace = fixture(HARNESS_TRACE);
+  const run = { ...trace.participants[1].runs[0], endpoint: XSS, request_id: XSS, error: XSS, usage: { [XSS]: XSS } };
+  const html = [render(doc, 'codes'), render(doc, 'timeline'),
+    app.traceView({ encounter: { title: XSS }, revision: 1, participants: [{ name: XSS, label: XSS, vendor: XSS, model: XSS, runs: [run] }],
+      retrieval: [{ code: XSS, service_date: XSS, facts: [{ field: XSS, value: XSS, [XSS]: XSS }], passages: [{ section: XSS, text: XSS, topic: XSS }], lookups: [XSS], notes: [XSS] }],
+      reconciliation: [{ code: XSS, family: XSS, status: XSS, proposed_by: [XSS], positions: { [XSS]: XSS }, reference_check: { state: XSS, detail: XSS } }] }, XSS),
+    app.traceFailure(XSS, { status: 500, message: XSS })].join('\n');
+  assert.equal(html.includes('<img'), false);
+  assert.ok(count(html, XSS_ESCAPED) > 20);
+  assert.ok(render(doc).includes(`href="#/encounters/${app.escapeHtml(encodeURIComponent(XSS))}/trace"`));
+});
+
+test('the trace refuses plainly: a 403 says the trace is the owner\'s, with nothing to retry', async () => {
+  const id = fixture(HARNESS_READY).id;
+  const refused = app.traceFailure(id, { status: 403, message: 'The request was refused. Reload the page and try again.' });
+  assert.ok(refused.includes('<strong>The trace is for the workspace owner.</strong><br>Only the owner of this workspace can open the trace of a document'));
+  assert.ok(refused.includes(`href="#doc/${id}"`));
+  assert.equal(refused.includes('data-action="retry"') || refused.includes('Reload the page'), false);
+  assert.ok(app.traceFailure(id, { status: 404 }).includes('This document is not available.'));
+  const broken = app.traceFailure(id, { status: 500, message: 'The request failed (HTTP 500).' });
+  assert.ok(broken.includes('The request failed (HTTP 500).') && broken.includes('data-action="retry"'));
+  // through the page's own api() client and route token, with a stubbed fetch and #main
+  const main = { innerHTML: '' };
+  const saved = { document: global.document, fetch: global.fetch };
+  const reply = (status, body) => ({ status, ok: status >= 200 && status < 300, redirected: false, url: `http://127.0.0.1/api/encounters/${id}/trace`,
+    headers: { get: () => 'application/json' }, json: async () => body });
+  const asked = [];
+  try {
+    global.document = { querySelector: selector => (selector === '#main' ? main : null), cookie: '' };
+    global.fetch = async (url, init) => { asked.push([url, init.method]); return reply(403, { error: 'Only the workspace owner can open the trace.' }); };
+    app.state.routeToken = 41;
+    await app.showTrace(id, 41);
+    assert.deepEqual(asked, [[`/api/encounters/${id}/trace`, 'GET']]);
+    assert.ok(main.innerHTML.includes('The trace is for the workspace owner.'), main.innerHTML);
+    global.fetch = async () => reply(200, fixture(HARNESS_TRACE));
+    await app.showTrace(id, 41);
+    assert.ok(main.innerHTML.includes('<span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span>'));
+    // a page the member left while the request was out is never drawn over
+    let answer;
+    global.fetch = () => new Promise(resolve => { answer = resolve; });
+    const pending = app.showTrace(id, 41);
+    app.state.routeToken = 42;
+    main.innerHTML = 'another page';
+    answer(reply(200, fixture(HARNESS_TRACE)));
+    await pending;
+    assert.equal(main.innerHTML, 'another page');
+    await app.showTrace('not-a-document', 42);
+    assert.ok(main.innerHTML.includes('The address does not name a document in this workspace.'));
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.routeToken = 0;
+  }
+});
+
+test('#/encounters/<id>/trace routes to the trace; any other path keeps the existing routes', () => {
+  assert.deepEqual(app.parseRoute(`#/encounters/${UUID}/trace`), { name: 'trace', id: UUID });
+  for (const hash of ['#trace', '#/encounters//trace', `#/encounters/${UUID}/trace/x`, `#encounters/${UUID}/trace`, `#/encounters/${UUID}`]) {
+    assert.deepEqual(app.parseRoute(hash), { name: 'workspace' }, hash);
+  }
+  assert.deepEqual(app.parseRoute(`#doc/${UUID}`), { name: 'doc', id: UUID });
+});
+
+test('a participant\'s requests are named in the Activity tab with the tokens its vendor reported, and on the reconciliation card', () => {
+  const degraded = fixture(HARNESS_DEGRADED);
+  const timeline = render(degraded, 'timeline');
+  assert.ok(timeline.includes('<strong>Corti · live · Succeeded</strong><p>HTTP 200 · 4.4 s · 0.0174 provider-reported credits (not USD)</p>'));
+  assert.ok(timeline.includes('<strong>Astra · live · Independent review · Succeeded</strong><p>HTTP 200 · 118.2 s · 3876 input tokens, 16000 output tokens (vendor-reported; basis: vendor_reported_tokens)</p>'));
+  assert.ok(timeline.includes('<strong>Fable · live · Independent review · Outcome unknown</strong><p>No HTTP response recorded · Usage not reported</p>'));
+  const named = render({ ...degraded, provider_runs: degraded.provider_runs.map(run => ({ ...run, requested_model: run.provider === 'astra' ? 'gpt-6-astra' : '', returned_model: run.provider === 'astra' ? 'gpt-6-astra' : '' })) }, 'timeline');
+  assert.equal(count(named, '<p>Model requested: gpt-6-astra; answered by gpt-6-astra.</p>'), 1);
+  // the unknown outcome blocks every send for the encounter, and the card names whose it is
+  const codes = render(degraded);
+  assert.ok(codes.includes('<strong>Unreconciled request</strong><br>Fable (Anthropic Claude Fable 5.1) · 30 Oct 2026, 09:12 UTC · Read timed out after the request was sent.'));
+  assert.ok(codes.includes(`id="reconcileForm" data-run="${degraded.provider_runs[2].id}"`));
 });

@@ -1326,6 +1326,53 @@ before the code that depends on it.
       encrypted backup and an isolated restore check first. Repairing the schedule is outside this round and goes to the
       owner.
 
+### Session interpretation, 2026-11-01 (1bf3b49c, fourth round, after the round-4 refutations) — recorded, not owner-ruled
+
+68. **CPT Studio's pypdf move is deferred from this round, and the trade-off goes to the owner.** Four repair rounds of
+    the CPT Studio reader on pypdf 6.21.4 (branch `fix/cpt-studio-pypdf-6.21.4-20261031`, head `6134dc7cf`) did not
+    converge. Round 4's three-lens refutation filed 13 findings, 6 major:
+    - **Meaning, R4M-1 to R4M-5 (4 major), all in round 4's new checklist-row rules.** A bulleted procedure list next
+      to one boxed row becomes a checklist and every procedure is held, where installed reads them right (R4M-1). An
+      unchecked check box in another column holds a procedure on the same baseline (R4M-2). In a two-column procedure
+      checklist drawn row by row, procedures whose boxes are empty read performed, as installed reads them, where round
+      3 held them (R4M-3; reproduced by the integration owner on `b6/t6_proc_twocol_typed_euc.pdf`: "Biopsy of the
+      cecum" and "Tattoo injection" performed on round 4 and on installed). R4M-4 and R4M-5 likewise turn round 3's
+      holds back into installed's readings.
+    - **Cost, 2 major and 1 minor.** A 164 KB, 12-page file and a 62 KB page of 10,000 check boxes pass the 240 s
+      deadline (R4-COST-CODESPACE-1, which also refutes the 4 MiB CMap cap's repair, and R4-COST-LEFTLABEL-1).
+    - **Capability, 5 minor.** Each needs an unusual font structure; 200 new ordinary files read identically or better.
+
+    Item 2 says to repair and verify the regressions *before* deploying the dependency update. They are not verified
+    repaired, so CPT Studio installs this round on pypdf 6.21.2, exactly as round 3 did (interpretation 61), and its
+    dependency audit stays red and is declared, not concealed. The branch is kept unmerged with its rounds' records.
+    **For the owner (class b):** stay on 6.21.2 with seven known advisories, or accept round 4's false holds on some
+    glyph-index and EUC-H checklist layouts to clear the audit, or fund further rounds. Nothing here changes what the
+    installed reader does.
+
+69. **A stated own date of service is held, not taken, when the entered date differs (h4-03).** PD's cycle 1 returned
+    h4-03 to installed's behaviour: an entered date matching neither date the report states for its own case
+    ("Exam date: 10/06/2026", ledger "Service date logged for this case: 10/08/2026", signed 10/09) was taken and sent,
+    and 4 of 17 HARD states failed. "Unchanged from installed" is insufficient when installed is known to be wrong, so
+    the integration owner directed a strong-head hold, declared in `pd.json` (`amendment_20261101_integration`) before
+    its code: when the head is a procedure report's own head (PI+PE's predicate, imported) with exactly one own date, a
+    member date that differs is held for a question quoting the stated date lines; it is never narrowed, taken or sent.
+    The integration added two declared conditions (no hold on a note written around a procedure, or one mentioning a
+    call or message) and a rewritten note. h4-03 goes to 17/17; NEW-SEND and NEW-TAKE stay 0. Recorded for the owner:
+    with the relabelled ledger no answer is taken any more, and a consultation whose head carries proceduralist and
+    sedation fields and the planned day would have its own date held (no such text is in the corpus).
+
+70. **The rebuild release carries P1 and nothing of item 2.**
+    - **P1's fifth round** repaired GR1-EXPORT-OPEN in `documents.check_original` only, not in `_run`: preparation
+      records an unlisted code as `provider_unknown`, which would be false. PG-1 (a stop landing as a PDF-form
+      transcription starts can leave it for reconciliation; unreachable with no PDF templates) and the pre-existing
+      GR1-UPLOAD-FILL are recorded limits. P1 merged as `797199c7` after CI on its round-5 head.
+    - **The rebuild's pypdf 6.21.4 compatibility repair** (`fix/rebuild-pypdf-6214-compat-20261101`) is not in this
+      release: its refutation died with the previous account's weekly usage limit and was not re-run. D1b's act code is
+      not built. The live venv keeps pypdf 6.21.1, filelock 4.0.0 and msgpack 1.2.2, declared.
+    - **The usage limit.** At about 11:20Z the previous account's weekly limit stopped every running agent: P1 round
+      4's last gate, both rebuild-compatibility lenses and two of three CPT Studio reader lenses. The owner switched
+      accounts at about 16:45Z. Only commits survived; every lost run was re-run or is named above as not re-run.
+
 ## Owner directive, 2026-11-01 — the CPT Studio GI coding harness (Corti, Astra, Fable, references, reconciliation)
 
 Received directly from the owner in session 1bf3b49c on 1 November 2026 (about 21:00Z), as pasted instruction text,
@@ -1427,3 +1474,4 @@ acceptance checklist it requires (`CPT-HARNESS-CHECKLIST.md`), before the work t
 > 6. Two separate verdicts: functional synthetic-demo readiness and independently established clinical accuracy.
 >
 > Do not declare the full harness complete while required participants or reference validation are missing. Do not stop at a plan, local preview or installation report. Deliver and verify the actual website workflow within the authorized scope.
+
