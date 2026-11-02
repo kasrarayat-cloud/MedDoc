@@ -2090,9 +2090,13 @@ test('R2-TRUTH truth-3: reference validation that no CMS reference file applied 
 test('R2-TRUTH truth-4: a failed retrieval says what failed and that each code\'s CMS checks stand, never that no proposal was checked', () => {
   // the plan's shared wording (jobs.RETRIEVAL_FAILED), as the API serves it for a passage load that raised
   const note = 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved for this assessment\'s codes (ValueError, logged), so none is listed here. Each code\'s checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides no status, so the assessment stands as made.';
+  // the page's own sentences, said of every failed retrieval: moved by refutation round 3, R3-TRUTH truth-1, to what the
+  // page now says - where no CMS reference file applied no code's checks read a CMS fact, so these claim neither that
+  // they did ("read the CMS facts before that") nor that none did; each says what failed, and that the checks stand as
+  // the card shows them (the API's own sentence, the note above, says which)
   for (const said of [app.REFERENCE_STATES.failed[2], app.RETRIEVAL_FAILED]) {
-    assert.equal(/no proposal was checked|no CMS reference fact or passage was retrieved/.test(said), false, said);
-    assert.ok(said.includes('could not record which CMS reference facts and passages it retrieved') && said.includes('stand as shown'), said);
+    assert.equal(/no proposal was checked|no CMS reference fact or passage was retrieved|read the (CMS )?facts|could not record which/.test(said), false, said);
+    assert.ok(said.startsWith('Reference validation failed') && said.includes('no CMS reference fact or passage is listed') && said.includes('stand as its status line shows them'), said);
   }
   const ready = fixture(HARNESS_READY);
   const failed = { ...ready.harness.reference_validation, state: 'failed', detail: note, codes_checked: 0, passages: 0, sources: [] };

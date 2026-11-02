@@ -158,9 +158,13 @@ RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record wh
                     "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
                     "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
                     "and decides no status, so the assessment stands as made.")
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
-                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
-                    "CMS facts before that and stand as shown.")
+# The fallback for a failed entry with no note. Moved by refutation round 3, R3-TRUTH truth-1, to what the serializer
+# now serves: it is said of any assessment, and where no CMS reference file applied no code's checks read a CMS fact,
+# so it claims neither that they did nor that none did (tests/test_harness2_r3_truth.py pins both notes the assess
+# stage records).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed, so no CMS "
+                    "reference fact or passage is listed here; each code's CMS reference checks stand as shown for "
+                    "that code.")
 
 
 def tamper_one_passage():

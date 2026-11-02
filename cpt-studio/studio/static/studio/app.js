@@ -90,19 +90,23 @@ const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was us
 // for 'failed' and 'not_verified', which must be said plainly - the words the API's own sentence (its detail) has to
 // contain for the plain one to be left out. A retrieval that failed is shown as failed, never as not run or done
 // (refutation round 1, parity-1); one no installed CMS reference file applied to checked no code, and says so, never
-// done (refutation round 2, truth-3).
+// done (refutation round 2, truth-3). The plain sentence for a failure is said of any assessment, so it claims neither
+// that the codes' checks read the CMS facts nor that none was checked: the API's own sentence says which (refutation
+// round 3, truth-1).
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
   not_verified: [STAGE_LOOKS.unknown, 'Not verified', 'No code was checked against the CMS reference files: no installed CMS reference file applies to the service date.', 'no code was checked'],
-  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed here; each code\'s checks read the CMS facts before that and stand as shown.', 'failed'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio\'s retrieval for this assessment\'s codes failed, so no CMS reference fact or passage is listed here; each code\'s CMS reference checks stand as its status line shows them.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
-// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no record of the
-// reference facts and passages retrieved is listed for any code - never to be read as a lookup that found nothing for
-// this one, nor as checks that did not run: the code's CMS reference checks read the facts first, and stand as its
-// status lines show them (refutation round 2, truth-4).
-const RETRIEVAL_FAILED = 'Reference validation failed for this assessment: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed for this code. Its CMS reference checks read the facts before that and stand as shown.';
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no CMS reference
+// fact or passage is listed for any code - never to be read as a lookup that found nothing for this one - and the code's
+// CMS reference checks stand as its status line shows them (refutation round 2, truth-4). Said of every card, so it
+// claims neither that the checks read the CMS facts - where no CMS reference file applied to the service date none did,
+// and each reads "not verified" - nor that none did: the Reference validation row's own sentence says which
+// (refutation round 3, truth-1).
+const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage is listed for this code. Its CMS reference checks stand as its status line shows them; the Reference validation row says what failed.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };

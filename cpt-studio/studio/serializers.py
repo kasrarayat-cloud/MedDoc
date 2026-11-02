@@ -655,10 +655,13 @@ def _reference_sources(keys):
     return found
 
 
-# A failed entry's note where it carries none: the facts jobs.RETRIEVAL_FAILED states (refutation round 2, truth-4).
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
-                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
-                    "CMS facts before that and stand as shown.")
+# A failed entry's note where it carries none (refutation round 2, truth-4). It is said of any assessment, so it claims
+# neither that the codes' checks read the CMS facts (jobs.RETRIEVAL_FAILED, true only where a CMS reference file
+# applied) nor that none was checked (jobs.RETRIEVAL_FAILED_UNCHECKED): each code's checks stand as they are shown
+# (refutation round 3, truth-1).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio's retrieval for this assessment's codes failed, so no CMS "
+                    "reference fact or passage is listed here; each code's CMS reference checks stand as shown for "
+                    "that code.")
 
 
 def retrieval_failed(entry) -> bool:
@@ -683,19 +686,31 @@ NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no i
                       'to the service date, {date}.')
 
 
+def source_applied(reference_sources) -> bool:
+    """Whether an installed CMS reference file applied to the service date, so the codes were looked up in one: the
+    engine's own record of the lookup the checks read and the retrieval traced (AssessmentResult.reference_sources, kept
+    as Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date). The
+    assess stage reads it to word a retrieval that failed (jobs.retrieval_failure), and reference validation here."""
+    return any(isinstance(source, dict) and source.get('applies') is True for source in reference_sources or [])
+
+
 def _source_applied(assessment) -> bool:
-    """Whether an installed CMS reference file applied to the assessment's service date, so its codes were looked up
-    in one: the engine's own record of the lookup the checks read and the retrieval traced
-    (Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date)."""
-    return any(isinstance(source, dict) and source.get('applies') is True
-               for source in assessment.reference_sources or [])
+    """Whether an installed CMS reference file applied to the assessment's service date (source_applied)."""
+    return source_applied(assessment.reference_sources)
+
+
+def no_source_sentence(service_date) -> str:
+    """Why no code was checked against the CMS reference files: no service date was established (None or ''), or no
+    installed CMS reference file applies to ``service_date`` (an ISO date) - one sentence for reference validation and
+    for a retrieval that failed (jobs.RETRIEVAL_FAILED_UNCHECKED)."""
+    return NO_SOURCE_FOR_DATE.format(date=service_date) if service_date else NO_SOURCE_NO_DATE
 
 
 def _no_source(retrieval) -> str:
     """Why no code was checked: no service date was established (the traces record none), or none applies to it."""
     dates = sorted({entry.get('service_date') for entry in retrieval if isinstance(entry.get('service_date'), str)
                     and entry.get('service_date')})
-    return NO_SOURCE_FOR_DATE.format(date=dates[0]) if dates else NO_SOURCE_NO_DATE
+    return no_source_sentence(dates[0] if dates else None)
 
 
 def _reference_validation(assessment, active):
