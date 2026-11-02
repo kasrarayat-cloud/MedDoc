@@ -20,7 +20,7 @@ default, settings.STUDIO_OFFER_CONFIRMATIONS (a code-level False):
   that code, which can still be rejected; a question about a documented service no code carries holds neither.
   (Superseded, round 5: the row only counts - how many questions are open and what each is about, the session's D11,
   tests/test_harness2_r5_row.py - so the row pins below are moved to that; what each question holds is pinned on
-  review.readiness and review._review_state, which say it, as before.)
+  review.readiness and review._review_state, as before.)
 - d7-4: the reports print CONFIRMED FINDINGS only while confirmations are offered.
 - d7-5: the engine's participants.summary says of a participant's peer answers what is true in both modes.
 - falsegreen-7 and falsegreen-4: tests/test_harness2_api.py's Harness2Case - whose rows the API tests pin and the

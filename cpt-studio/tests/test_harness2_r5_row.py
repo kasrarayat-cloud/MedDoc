@@ -60,8 +60,8 @@ class RowMixin:
                       for item in detail['clarifications'] if item['state'] == 'open')
 
     def still_needed(self, detail):
-        """What readiness says on the page (exportStatusText, from review.readiness): the one place that says what holds
-        the reviewed report."""
+        """What readiness says on the page (exportStatusText, from review.readiness's blockers): what holds the reviewed
+        report, which the row restates none of."""
         return browser('app.exportStatusText(data)', detail)
 
     def assert_counts(self, detail, lines):

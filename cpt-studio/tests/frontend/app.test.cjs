@@ -2779,15 +2779,16 @@ test('R5-ROW D11: every branch of the Clarification row says how many questions 
   assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification: { open: 0 } } }),
     { state: 'none', badge: 'None open', lines: ['No question is open for this revision.'], notes: [R5_NOTE] });
   // no assessment: waiting while a stage runs, otherwise not asked; neither has a note. Waiting says only when the
-  // questions are known: not why one is asked (a member's entry that conflicts with the document, and a diagnostic code
-  // beside its interventions, are asked where the documentation leaves nothing open)
+  // questions are known, no longer why one is asked ("only where the documentation leaves open something that changes
+  // the coding" did not fit a member's entry that conflicts with the document, or a diagnostic code asked about beside
+  // its interventions)
   assert.deepEqual(r5Row({ ...doc, assessment: null, pipeline: { ...doc.pipeline, busy: true } }),
     { state: 'waiting', badge: 'Waiting', lines: ['Known once the proposals are checked.'], notes: [] });
   assert.deepEqual(r5Row({ ...doc, assessment: null }),
     { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] });
 });
 
-test('R5-ROW D11: the row says the same of the same open questions whatever their codes\' decisions, whether the assessment is final, and with Corti alone; readiness alone says what holds', () => {
+test('R5-ROW D11: the row says the same of the same open questions whatever their codes\' decisions, whether the assessment is final, and with Corti alone; what holds is readiness\'s to say, and the row restates none of it', () => {
   const doc = fixture(H2_FINAL);
   // the fixture's three questions about its two codes, its date question left out, and readiness as it then reads
   const codes = { ...r5Asked(doc, doc.clarifications.filter(item => item.proposal_id).map(({ id, ...item }) => item)),
