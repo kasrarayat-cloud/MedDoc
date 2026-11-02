@@ -28,7 +28,7 @@ APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
 # What node evaluates an expression over: app.js's exports, the payload, and the page's visible text and parts.
 PRELUDE = r"""
 const app = require(process.argv[1]);
-const data = JSON.parse(process.argv[2]);
+const data = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
 const BREAKS = new RegExp('<(br|/p|/li|/div|/h[1-6]|/summary|/small|/strong|/article|/section|/ul|/details|/dd|/dt)'
   + '\\b[^>]*>', 'gi');
 const visible = html => html.replace(BREAKS, '\n').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -53,13 +53,14 @@ const rowOf = (html, attribute, key) => {
 
 def browser(expression, data):
     """The value of a JavaScript ``expression`` over PRELUDE's names, as the page computes it from ``data``: node runs
-    app.js itself, so a screen is checked as it renders."""
+    app.js itself, so a screen is checked as it renders. The payload goes on standard input (an argument is bounded
+    in size)."""
     node = shutil.which('node')
     if node is None:
         raise AssertionError('node is not installed; the screen checks need it')
     script = f'{PRELUDE}\nprocess.stdout.write(JSON.stringify({expression}));'
-    done = subprocess.run([node, '-e', script, str(APP), json.dumps(data)], capture_output=True, text=True, timeout=60,
-                          check=False)
+    done = subprocess.run([node, '-e', script, str(APP)], input=json.dumps(data), capture_output=True, text=True,
+                          timeout=60, check=False)
     if done.returncode:
         raise AssertionError(done.stderr[-2000:])
     return json.loads(done.stdout)
