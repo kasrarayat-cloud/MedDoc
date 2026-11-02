@@ -477,7 +477,10 @@ def _endoscopy_rules(references: Mapping[str, CodeReference]) -> dict[str, dict[
         if not others:
             continue
         with_endoscopy = f'with {others}, of multiple procedure indicator 3'
-        if code.isdigit() and any(low <= int(code) <= high for low, high in RULE_4_RANGES):
+        # Only ASCII digits are a code number: str.isdigit() is also true of superscript, subscript and circled digits,
+        # which int() refuses, and of other scripts' digits, which int() reads as a number no CPT code string is
+        # (refutation round 1, parity-1: a Corti code ending in '²' stopped the whole assessment).
+        if code.isascii() and code.isdigit() and any(low <= int(code) <= high for low, high in RULE_4_RANGES):
             add(code, 'ncci.endoscopy', '4', f'{code} is in rule 4\'s ranges, {with_endoscopy}')
         if code in RULE_7_CODES:
             add(code, 'ncci.endoscopy', '7', f'{code} is one of rule 7\'s codes, {with_endoscopy}')

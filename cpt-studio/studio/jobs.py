@@ -1705,16 +1705,38 @@ def _confirmed_span(span, text):
                         quoted if isinstance(quoted, str) else '', exact, page if type(page) is int else None)
 
 
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this "
+                    "assessment's codes ({error}, logged), so none is recorded here and no proposal was checked "
+                    'against them. Retrieval only informs the reviewer and decides no status, so the assessment stands '
+                    'as made.')
+
+
 def _retrieval(result, service_date, reference, prefetched):
     """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that the
     checks' own lookup holds - every code a proposal can be decided on; a provider's informational alternatives were
     never looked up - from that same lookup, with the CMS passages that govern its facts, read here in the parent, which
-    has the database. [] only when no proposal has a looked-up code."""
+    has the database. [] only when no proposal has a looked-up code.
+
+    A retrieval that fails never stops the assessment (I1, I10; refutation round 1, parity-1: a Corti code ending in a
+    superscript digit raised here and the encounter was left with no assessment at all). Retrieval only informs the
+    reviewer, so the assessment is recorded as made and its retrieval is one entry marked 'failed' whose note says that
+    reference validation failed (retrieval_failure): never a trace that reads as a code checked."""
     codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
     if not codes:
         return []
-    return to_jsonable(list(reference_passages.retrieve(codes, service_date, reference,
-                                                        reference_passages.load_passages())))
+    try:
+        return to_jsonable(list(reference_passages.retrieve(codes, service_date, reference,
+                                                            reference_passages.load_passages())))
+    except Exception as exc:  # noqa: BLE001 - logged; the record says reference validation failed, never the internals
+        log.exception('reference retrieval failed for %d code(s) of an assessment', len(codes))
+        return [retrieval_failure(service_date, type(exc).__name__)]
+
+
+def retrieval_failure(service_date, error):
+    """The one Assessment.retrieval entry of a retrieval that failed: no code, no fact, no passage, and CPT Studio's own
+    sentence saying reference validation failed. Marked 'failed', so no reader counts it as a code checked."""
+    return {'code': '', 'service_date': service_date.isoformat() if service_date else None, 'facts': [],
+            'passages': [], 'lookups': [], 'notes': [RETRIEVAL_FAILED.format(error=error)], 'failed': True}
 
 
 def _provider_inputs(run):

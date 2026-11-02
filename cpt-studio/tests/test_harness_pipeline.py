@@ -1220,6 +1220,118 @@ class AssessReadsTests(HarnessCase):
         self.assertFalse(review._same_assessment(*common, assessment.participants, [{'code': '99213'}]))
 
 
+# --- a retrieval that fails never stops the assessment (refutation round 1, parity-1; I1, I10) -----------------------
+
+COLON = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+         'Colonoscopy report (fictional)\nDate of service: 2026-10-21\nPlace of service: Ambulatory surgery center\n'
+         'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\n'
+         'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
+REACHED = 'The colonoscope was advanced to the cecum and the examination was completed.'
+HOT_SNARE = 'was removed with a hot snare'
+# The round-4 head's (80f2f2dc8) assessment sha256 of COLON with Corti selecting 45378 and '4538²' beside the PFS
+# source install_endoscopy_pfs installs: the lens's and the verifier's measurement, which no step outside Corti may
+# change (I1).
+ROUND_4_SUPERSCRIPT_SHA256 = 'b8bdc979057dabb198705218517faa79612f9ed5bd43108a8f6946aa55f099be'
+
+
+def install_endoscopy_pfs():
+    """One CMS PFS source covering 2026-10-21 in which 45378 and 45385 have multiple procedure indicator 3 (synthetic
+    values, exactly the refutation lens's)."""
+    from datetime import datetime, timezone as tz
+
+    source = models.ReferenceSource.objects.create(
+        key='cms-pfs-rvu26d', kind='cms-pfs', title='RVU26D synthetic', release='RVU26D', sha256='b' * 64, row_count=2,
+        publisher='CMS', url='https://www.cms.gov/synthetic', retrieved_at=datetime(2026, 10, 23, tzinfo=tz.utc),
+        effective_start=date(2026, 10, 1), effective_end=date(2026, 12, 31), license_note='synthetic',
+        scope_note='synthetic')
+    for code in ('45378', '45385'):
+        models.ReferenceCodeFact.objects.create(source=source, code=code, facts={
+            'status': 'A', 'global_days': '000', 'mult_proc': '3', 'endo_base': '45378', 'pctc': '0'})
+
+
+@override_settings(**LIVE)
+class RetrievalFailureTests(HarnessCase):
+    """With Astra and Fable disabled (I1): nothing retrieval meets stops the assessment Corti's answer makes."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('studio.jobs.run_assessment', side_effect=engine_refusing_participants)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def engine_sha256(self, encounter_id):
+        """The engine's result recomputed from the same inputs exactly as the round-4 head called it."""
+        encounter = self.encounter(encounter_id)
+        revision, context, run = encounter.current_revision, encounter.current_context, self.runs_of(encounter_id)[0]
+        provider_status, normalized = jobs._provider_inputs(run)
+        service_date = jobs.context_service_date(context)
+        reference = prefetched_lookup(tuple(sorted(set(selected_codes(normalized)))))
+        routing = from_jsonable(RoutingResult, jobs.to_jsonable(gi_detect.route(revision.text, service_date)))
+        return sha256_json(engine.assess(
+            text=revision.text, pages=tuple(PageSpan(**p) for p in revision.pages), context=jobs.context_facts(context),
+            routing=routing, normalized=normalized, reference=reference, service_date=service_date,
+            provider_status=provider_status, extraction_status=revision.extraction_status,
+            extraction_messages=tuple(revision.messages), second=None, second_scope=None))
+
+    def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
+        self.corti.selections = [('45378', REACHED), ('4538²', HOT_SNARE)]
+        install_endoscopy_pfs()
+        encounter_id = self.create(COLON)
+        drain()
+        self.assertEqual([(j.kind, j.state, j.error) for j in self.jobs_of(encounter_id)],
+                         [('extract', 'succeeded', ''), ('analyze', 'succeeded', ''), ('predict', 'succeeded', ''),
+                          ('assess', 'succeeded', '')])
+        encounter = self.encounter(encounter_id)
+        assessment = encounter.current_assessment
+        self.assertEqual(encounter.state, 'needs_clarification')
+        self.assertEqual(sorted((p.code, p.bucket, p.status) for p in assessment.proposals.all()),
+                         [('45378', 'selected', 'needs_clarification'), ('4538²', 'excluded', 'excluded')])
+        self.assertEqual(assessment.sha256, ROUND_4_SUPERSCRIPT_SHA256)
+        self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))
+        # retrieval ran for both codes; the superscript one is traced as given and meets no code-range rule
+        self.assertEqual([entry['code'] for entry in assessment.retrieval], ['45378', '4538²'])
+        self.assertEqual([entry.get('failed') for entry in assessment.retrieval], [None, None])
+        self.assertEqual(assessment.retrieval[1]['passages'], [])
+
+    def test_a_retrieval_that_raises_leaves_the_assessment_as_made_and_says_reference_validation_failed(self):
+        with mock.patch('studio.jobs.reference_passages.retrieve', side_effect=RuntimeError('synthetic defect')), \
+                self.assertLogs('studio.jobs', level='ERROR') as logged:
+            encounter_id = self.create()
+            drain()
+        self.assertIn('reference retrieval failed', logged.output[0])
+        self.assertEqual([(j.kind, j.state) for j in self.jobs_of(encounter_id)][-1], ('assess', 'succeeded'))
+        encounter = self.encounter(encounter_id)
+        assessment = encounter.current_assessment
+        self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))  # the engine's result, untouched (I1)
+        self.assertEqual(encounter.state, 'ready_for_review')
+        self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'RuntimeError')])
+        (note,) = assessment.retrieval[0]['notes']
+        self.assertTrue(note.startswith('Reference validation failed: '))
+        self.assertNotIn('synthetic defect', note)  # the exception's text is logged, never recorded
+        # no reader takes the failure for a code checked: the page never says reference validation is done
+        harness = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']
+        self.assertNotEqual(harness['reference_validation']['state'], 'done')
+
+
+@override_settings(**LIVE, **BOTH)
+class RetrievalFailureChainTests(HarnessCase):
+    def test_both_assessments_of_the_chain_are_recorded_and_say_reference_validation_failed(self):
+        tampered = ValueError('changed after import')
+        with mock.patch('studio.jobs.reference_passages.load_passages', side_effect=tampered), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            encounter_id = self.create()
+            drain()
+        chain = self.jobs_of(encounter_id)
+        self.assertEqual([(j.kind, j.state) for j in chain][-4:],
+                         [('assess', 'succeeded'), ('astra_peer', 'succeeded'), ('fable_peer', 'succeeded'),
+                          ('assess', 'succeeded')])
+        first, final = self.assessments(encounter_id)
+        for assessment in (first, final):
+            self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'ValueError')])
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.peer_sends(), (1, 1))
+
+
 # --- what a participant is given --------------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
