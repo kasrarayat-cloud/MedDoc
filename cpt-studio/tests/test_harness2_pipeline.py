@@ -849,6 +849,26 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(records['astra']['frozen'][0], ['corti', corti.response_sha256])
         self.assertEqual(final.participants[0]['frozen'], records['astra']['frozen'])
 
+    def test_a_frozen_output_that_is_not_shown_is_not_listed_as_shown(self):
+        # Refutation round 1, IND-5: assess #1 records every frozen phase-1 output - Corti's response bytes even when
+        # its answer failed - but a peer request lists only what it shows, under "the sha256 of each frozen output
+        # shown above"
+        self.corti.outcomes = ['failed']
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        first = self.assessments(encounter_id)[0]
+        self.assertEqual([name for name, _ in self.records(first)['astra']['frozen']],
+                         ['corti', 'astra', 'fable', 'revision'])
+        for name, other in (('astra', 'fable'), ('fable', 'astra')):
+            with self.subTest(name):
+                run = self.runs_of(encounter_id, name, 'peer_review')[0]
+                document = peer_document(name, run.request_body)
+                self.assertNotIn('corti (another coding system):', document)
+                listed = prompt.peer_document_inputs(document)[1]
+                self.assertEqual(sorted(n for n, _ in listed), sorted([name, other, 'revision', 'cpt_studio']))
+                self.assertEqual(jobs.peer_reading(run)[0].frozen_inputs, listed)
+                self.assertEqual(run.state, 'succeeded')
+
     def test_corti_is_shown_only_its_exact_passages_of_the_document(self):
         real = self.corti.send
 

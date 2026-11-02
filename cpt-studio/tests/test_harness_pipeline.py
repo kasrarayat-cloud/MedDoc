@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from studio import audit, jobs, models, review, storage
 from studio.gi import detect as gi_detect
-from studio.participants import loop, prompt
+from studio.participants import loop, peer, prompt
 from studio.providers.base import ProviderUnavailable, canonical_body
 from studio.reference.store import prefetched_lookup, selected_codes
 from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantCode, ParticipantNotCoded,
@@ -63,6 +63,11 @@ class ScriptedCorti(FakeProvider):
             if self.outcome == 'not_sent':
                 return RawExchange(outcome='not_sent', sent=False, error='The Corti coding service could not be '
                                                                          'reached (ConnectTimeout); nothing was sent.')
+            if self.outcome == 'failed':  # a non-200: its body is kept, so the run has response bytes
+                data = b'{"error": "synthetic overload"}'
+                return RawExchange(outcome='failed', sent=True, http_status=503, response_bytes=data,
+                                   response_sha256=hashlib.sha256(data).hexdigest(),
+                                   error='Corti answered HTTP 503; the response body is retained. (synthetic)')
             return super().send(request, deadline_s=deadline_s)
         finally:
             self.outcome = saved
@@ -110,6 +115,7 @@ class FakeParticipant:
             raise ProviderUnavailable('The document could not be framed; nothing was sent.')
         body = {'model': self.requested_model, 'instructions': prompt.PEER_INSTRUCTIONS, 'input': framed,
                 'peer': prompt.peer_document(own, peers, cpt_studio, frozen)}
+        peer.check_frozen(text, own, peers, cpt_studio, [tuple(pair) for pair in frozen])  # as the real builder does
         return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
                                canonical_sha256=hashlib.sha256(canonical_body(body)).hexdigest(), contexts=(text,))
 

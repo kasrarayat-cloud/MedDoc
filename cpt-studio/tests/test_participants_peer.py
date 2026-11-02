@@ -93,14 +93,29 @@ class _PeerContract:
         self.other = other.read(other.build_request(NOTE, PAGES, 'pdf', ORIGINAL), fixture_bytes(self.other_fixture))
         self.assertFalse(self.own.refused or self.other.refused)
         self.peers = {'corti': copy.deepcopy(CORTI), other.name: prompt.reading_answer(self.other)}
-        self.frozen = [(f'{other.name}_reading', sha256_json(self.other)), ('corti_response', CORTI_SHA256),
-                       (f'{self.adapter.name}_reading', sha256_json(self.own))]
+        self.frozen = self.frozen_for(self.own, self.peers)
         self.request = self.build()
+
+    def frozen_for(self, own, peers, cpt_studio=CPT_STUDIO):
+        """The frozen list of exactly what a request shows (HARNESS.md 12.3-12.4; IND-5): the own reading under its
+        name, each peer shown (Corti's response bytes, the other model's reading), the revision text and CPT Studio's
+        reading, as the pipeline records them."""
+        known = {'corti': CORTI_SHA256, self.other.provider: sha256_json(self.other)}
+        frozen = [(own.provider, sha256_json(own)), ('revision', hashlib.sha256(NOTE.encode()).hexdigest())]
+        frozen += [(name, known.get(name, '0' * 64)) for name in peers]
+        try:
+            frozen.append(('cpt_studio', sha256_json(cpt_studio)))
+        except (TypeError, ValueError):  # a shape the builder refuses before it reads the frozen list
+            frozen.append(('cpt_studio', '0' * 64))
+        return frozen
 
     def build(self, **changes):
         arguments = {'text': NOTE, 'pages': PAGES, 'kind': 'pdf', 'own': self.own, 'peers': self.peers,
-                     'cpt_studio': copy.deepcopy(CPT_STUDIO), 'frozen': self.frozen}
+                     'cpt_studio': copy.deepcopy(CPT_STUDIO)}
         arguments.update(changes)
+        if 'frozen' not in changes:
+            peers = arguments['peers'] if isinstance(arguments['peers'], dict) else {}
+            arguments['frozen'] = self.frozen_for(self.own, peers, arguments['cpt_studio'])
         return self.adapter.build_peer_request(**arguments)
 
     def document(self, request=None):
@@ -221,7 +236,7 @@ class _PeerContract:
             'a refused first reading': ({'own': refused}, ValueError),
             "another participant's reading": ({'own': foreign}, ValueError),
             'a reading that is not one': ({'own': to_jsonable(self.own)}, TypeError),
-            'an own reading not among the frozen inputs': ({'frozen': [('corti_response', CORTI_SHA256)]}, ValueError),
+            'an own reading not among the frozen inputs': ({'frozen': [('corti', CORTI_SHA256)]}, ValueError),
             "Corti's display text": ({'peers': {'corti': {'selected': [{'code': '45385', 'display': 'x'}]}}},
                                      ValueError),
             'a provider_display field': ({'peers': {other: {'items': [[{'provider_display': 'x'}]]}}}, ValueError),
@@ -246,12 +261,42 @@ class _PeerContract:
             'two frozen inputs with one name': ({'frozen': self.frozen + [(self.frozen[0][0], CORTI_SHA256)]},
                                                 ValueError),
             'no frozen input': ({'frozen': []}, ValueError),
-            'frozen inputs that are not pairs': ({'frozen': 'corti_response'}, TypeError),
+            'frozen inputs that are not pairs': ({'frozen': 'corti'}, TypeError),
             'a frozen input that is not a pair': ({'frozen': self.frozen + [('only-a-name',)]}, TypeError),
         }
         for label, (changes, error) in cases.items():
             with self.subTest(label), self.assertRaises(error):
                 self.build(**changes)
+
+    def test_the_frozen_inputs_name_exactly_what_the_request_shows(self):
+        # Refutation round 1, IND-5: the stored list heads "the sha256 of each frozen output shown above", so it may
+        # list no input that is not shown, must list every one that is, and never files the own reading under another
+        # name
+        other, own = self.other.provider, self.own.provider
+        with_peers = self.frozen_for(self.own, self.peers)
+        cases = {
+            'peers listed that are not shown': ({'peers': {}, 'frozen': with_peers},
+                                                f'listed but not shown: {", ".join(sorted(["corti", other]))}'),
+            'a peer shown that is not listed': ({'frozen': [pair for pair in with_peers if pair[0] != other]},
+                                                f'not listed: {other}'),
+            "the own reading's sha256 under another's name": (
+                {'peers': {}, 'frozen': [(other, sha256_json(self.own)), *[
+                    pair for pair in self.frozen_for(self.own, {}) if pair[0] != own]]},
+                f'not listed: {own}; listed but not shown: {other}'),
+            'an own reading that is not the one shown': ({'frozen': [(own, sha256_json(self.other)), *[
+                pair for pair in with_peers if pair[0] != own]]}, f'shows for {own}'),
+            'a text that is not the one shown': ({'frozen': [('revision', '1' * 64), *[
+                pair for pair in with_peers if pair[0] != 'revision']]}, 'shows for revision'),
+            "a CPT Studio reading that is not the one shown": ({'frozen': [('cpt_studio', '1' * 64), *[
+                pair for pair in with_peers if pair[0] != 'cpt_studio']]}, 'shows for cpt_studio'),
+        }
+        for label, (changes, message) in cases.items():
+            with self.subTest(label), self.assertRaisesMessage(ValueError, message):
+                self.build(**changes)
+        # what is shown, and only that, is what the review records
+        alone = self.build(peers={})
+        self.assertEqual([name for name, _ in prompt.peer_document_inputs(self.document(alone))[1]],
+                         sorted([own, 'revision', 'cpt_studio']))
 
     def test_content_that_cannot_be_sent_is_unavailable(self):
         cases = {'pages that leave a gap': {'pages': (PageSpan(1, 0, 10), PageSpan(2, 11, len(NOTE)))},
@@ -400,7 +445,8 @@ class _PeerContract:
                                 body=self.request.body, canonical_sha256=self.request.canonical_sha256,
                                 contexts=self.request.contexts)
         other = self.other_class(self.tmp / 'x.env')
-        foreign = other.build_peer_request(NOTE, PAGES, 'pdf', self.other, {'corti': CORTI}, CPT_STUDIO, self.frozen)
+        foreign = other.build_peer_request(NOTE, PAGES, 'pdf', self.other, {'corti': CORTI}, CPT_STUDIO,
+                                           self.frozen_for(self.other, {'corti': CORTI}))
         cases = ((phase_one, 'the request is not a peer review this adapter builds'),
                  (altered, 'the request does not match its recorded hash'),
                  (rehashed, 'the request is not a peer review this adapter builds'),

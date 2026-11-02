@@ -4,9 +4,13 @@ The request (build_request) is the participant's own: PEER_INSTRUCTIONS, the sam
 file attached (prompt.peer_framed_document), and one text block (prompt.peer_document) holding its own frozen first
 reading, the frozen peer conclusions and CPT Studio's rule-based reading, each labelled for what it is, then the open
 questions' ids and the sha256 of every frozen input shown. The own reading must be one that was read (a participant whose
-first assessment failed never gets a first look that has already seen its peers) and one of the frozen inputs: its
-studio.types.sha256_json is among those listed. The answer is the peer-review schema (prompt.PEER_SCHEMA), and the tools
-are the same as in phase 1, through the same loop.
+first assessment failed never gets a first look that has already seen its peers). The frozen inputs listed are exactly
+what the request shows (refutation round 1, IND-5; check_frozen): the participant's own reading under its own name,
+each peer shown under the peer's name ('corti', or the other model's), 'revision' (the text) and 'cpt_studio' (CPT
+Studio's reading), every sha256 CPT Studio can compute from what is shown being that one - the own reading's
+studio.types.sha256_json, the text's UTF-8 sha256 and CPT Studio's reading's sha256_json - so the record never lists an
+input that was not shown, never shows one it does not list, and never files the own reading under another name. The
+answer is the peer-review schema (prompt.PEER_SCHEMA), and the tools are the same as in phase 1, through the same loop.
 
 The answer (read) is checked as a reading is (reading.py): strict JSON, CPT Studio's own schema validation, bounds that
 refuse it whole (more than 64 question answers, 128 code positions, 64 additional codes or 64 references used, more than
@@ -25,14 +29,16 @@ never replaces it; a code it adds is proposed after peer review, never independe
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Callable, Optional, Sequence
 
 from studio.participants import http, prompt, reading
-from studio.providers.base import request_sha256
+from studio.providers.base import ProviderUnavailable, request_sha256
 from studio.types import (CodePosition, PageSpan, ParticipantCode, ParticipantReading, PeerReview, ProviderRequest,
                           QuestionAnswer, ReferenceUse, sha256_json)
 
 REFUSED = 'The peer review was not used: '  # every refusal problem starts so; the reason follows
+REVISION, CPT_STUDIO = 'revision', 'cpt_studio'  # the frozen inputs every peer request shows besides the readings
 MAX_ANSWERS = 64
 MAX_POSITIONS = 128
 MAX_ADDITIONAL_CODES = 64
@@ -61,9 +67,31 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
     listed = prompt.peer_document_inputs(document)
     if listed is None:  # peer_document writes what peer_document_inputs reads; anything else is a defect here
         raise RuntimeError('The peer document does not read back as one.')
-    if sha256_json(own) not in {sha256 for _, sha256 in listed[1]}:
-        raise ValueError('The own reading is not among the frozen inputs: its studio.types.sha256_json must be listed.')
+    check_frozen(text, own, peers, cpt_studio, listed[1])
     return http.finished_request(name, adapter_version, make_body(framed, document), text, max_bytes=max_bytes)
+
+
+def check_frozen(text: str, own: ParticipantReading, peers: dict, cpt_studio: dict, frozen: Sequence) -> None:
+    """Refuse (ValueError) a frozen list that is not exactly what a peer request shows (refutation round 1, IND-5): the
+    own reading under ``own.provider``, each peer in ``peers`` under its name, REVISION and CPT_STUDIO - no other name,
+    none missing - and the sha256 of each input CPT Studio can compute from what it shows equal to that one. A peer's
+    sha256 (Corti's response bytes, the other model's frozen reading) is the caller's, from the first assessment's
+    record. ``frozen``: (name, sha256) pairs, as prompt.peer_document validates them."""
+    listed = {name: sha256 for name, sha256 in frozen}
+    shown = {own.provider, *peers, REVISION, CPT_STUDIO}
+    if set(listed) != shown or len(listed) != len(frozen):
+        missing, extra = sorted(shown - set(listed)), sorted(set(listed) - shown)
+        raise ValueError('The frozen inputs must name exactly what the request shows'
+                         + (f'; not listed: {", ".join(missing)}' if missing else '')
+                         + (f'; listed but not shown: {", ".join(extra)}' if extra else '') + '.')
+    try:
+        revision = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    except UnicodeEncodeError:
+        raise ProviderUnavailable('The document text cannot be encoded as UTF-8; nothing was sent.') from None
+    computed = {own.provider: sha256_json(own), REVISION: revision, CPT_STUDIO: sha256_json(cpt_studio)}
+    wrong = sorted(name for name, sha256 in computed.items() if listed[name] != sha256)
+    if wrong:
+        raise ValueError(f'The frozen inputs do not carry the sha256 of what the request shows for {", ".join(wrong)}.')
 
 
 def request_inputs(request: ProviderRequest, document_of: Callable[[dict], Optional[str]]):

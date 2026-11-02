@@ -1431,7 +1431,9 @@ def _peer_material(revision, first, name, records):
     the other model's frozen reading, when it has one, in the reading schema's shape; CPT Studio's rule-based reading
     after assess #1 (_cpt_studio_reading); and assess #1's frozen list with that reading's sha256 added. A frozen
     reading that no longer reads back as assess #1 recorded it refuses the request (_PeerUnbuilt): the record shows
-    exactly what was shown."""
+    exactly what was shown. Of assess #1's frozen list, only what this request shows is listed (refutation round 1,
+    IND-5): a Corti answer or another model's reading that is not shown - not read, or refused - is not listed under
+    "shown above"; the peer builder refuses any other list (peer.check_frozen)."""
     peers = {}
     corti = _corti_conclusions(first.provider_run)
     if corti is not None:
@@ -1440,7 +1442,9 @@ def _peer_material(revision, first, name, records):
         if other != name and (records.get(other) or {}).get('state') == 'read':
             peers[other] = participant_prompt.reading_answer(_frozen_reading(revision, other, records))
     cpt_studio = _cpt_studio_reading(first)
-    frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []]
+    shown = {name, *peers, 'revision'}
+    frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []
+              if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[0] in shown]
     return (_frozen_reading(revision, name, records), peers, cpt_studio,
             frozen + [['cpt_studio', sha256_json(cpt_studio)]])
 
