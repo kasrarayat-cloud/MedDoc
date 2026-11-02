@@ -3202,7 +3202,13 @@ class _Harness:
                 if phases == {PEER_REVIEW}:
                     detail += ' after peer review, not in its independent reading'
                 elif PEER_REVIEW in phases:
-                    detail += ', in its independent reading and again in peer review'
+                    # a first reading whose quotes were not found proposed nothing there (11.1: a phase is the phase of
+                    # the located evidence), so its listing is not called a proposal (refutation round 3, R3-TRUTH's
+                    # note on truth-2: the API serves this detail in the proposal's support)
+                    located_first = any(x.good for x in said if x.phase != PEER_REVIEW)
+                    detail += (', in its independent reading and again in peer review' if located_first else
+                               ', listed in its independent reading with no quote found verbatim there, and proposed '
+                               'after peer review')
                 detail += f' ({self._stated([x.entry for x in said])})'
                 detail += (f', quoting the document verbatim in {checks.plural(len(good), "passage")}.' if good
                            else '; none of its quotes was found verbatim in the document, so it is not counted as a '

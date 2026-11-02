@@ -1577,3 +1577,44 @@ participant's own proposal now names a code Corti's bounded second review listed
 "Corti did not propose this code."; it is mutation-proved. Next: the full CI-like run and the Corti-only parity replay
 on the merged head, a push, and a focused third refutation of the round-2 repair diff before the PR is made ready (each
 round attacks the last round's repair).
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's third refutation) — recorded, not owner-ruled
+
+(a) **The third refutation, focused on round 2's repairs (`cdc41dfa2..624754eb1`), filed 35 findings through seven
+lenses, and independent verifiers reproduced every one they checked.** Three were blocking, all in the status check
+round 2 had built (D1): a readings-disagree hold was "verified" by the reader on one side of the disagreement ("The
+sigmoid polyp was reportedly removed with a hot snare."), a denial in another clause of the sentence was not read ("A
+hot snare was placed around the sigmoid polyp, but the polyp was not removed."), and a report title verified a
+colonoscopy the document says was not performed; each time one reviewer confirmation made the code ready. Eleven more
+majors were the same check's siblings for extent, cannulation, the E/M basis and the date (a hedge, a denial, a plan,
+another occasion, a date of birth or a signature date written in a sentence, the last two sending Corti a request with
+that date), a reviewer's confirmed conclusion shown to a peer as CPT Studio's own reading, and four gaps in the tests of
+the confirmation path. The parity lens found nothing: I1 and D6 hold across the whole round-2 diff. Records:
+`$S4/refute-harness-r3/findings.json`, `$S4/verify-harness-r3/results.json`, `$S4/verify-harness-r3/REPAIR-PLAN.md`.
+
+(b) **Decision D7, taken by the session: this release offers no reviewer confirmation.** The confirmation endpoint
+refuses and records nothing; the participants' located passages for an open question are still shown, with no claim
+about what they state; the confirmation code stays, dormant, behind a code-level setting that defaults off and that no
+installer, environment variable or member action can change (HARNESS.md 12.10). The reason is structural, not a matter
+of one more repair: a fact is asked because CPT Studio's own readers did not establish it, and the three retained false
+holds checklist 4.6 names (h4-01 99204, h4-03 43244, h4-06 45385) are all holds where the readers read nothing at all. A
+check that verifies a passage only where the readers read its value can never verify those; a check that verifies more
+is a second, weaker reader, and three rounds each found its next misreading in the previous round's repair.
+
+(c) **Why the session may take D7, and what it leaves to the owner.** It is the fail-closed choice (hold, never offer);
+harness@2 has never been installed, so no member loses anything they can do on the live site; the owner's completion
+criteria (genuine Corti, Astra and Fable responses, traced references, a saved synthetic review, persistence after
+reload, a reviewed download) do not need a confirmation; and it narrows a release after non-converging refutation, as
+the owner's own decision of 2026-10-30 did. What checklist 4.6 becomes is the owner's question (class a), put to him
+with two options and not decided here: (i) a human-override confirmation that claims nothing CPT Studio cannot check -
+the reviewer's reading of the passage decides, the page says so, and approval stays a separate act; or (ii) no override,
+with the false holds repaired at the readers themselves (the planned Wave 2: framed time, instrument reach), which also
+improves Corti-only coding and is an I1-declared change.
+
+(d) **Repaired in round 3 besides D7:** what a peer request shows of another model's codes, modifiers and ids (strict
+shapes only); the retrieval-failure note, the positions and phase wording, Corti's unlisted codes, a reuse's counts,
+Corti's alternatives and the one procedure-to-procedure statement per card; and the exchange records (a loop that lost
+its database session sends nothing more, the installer's undo settles a run as the sweep does, a replayed exchange marks
+nothing sent). At integration the session also made the owner's trace and a participant's problems show a model-written
+code, modifier or id only in those strict shapes (I9). Each repair carries its tests and its mutation proofs; the
+measurements on the integrated head are in its commit and in PR #1459.

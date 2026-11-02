@@ -75,7 +75,7 @@ Item 1.3 per participant (documented / implemented / verified live):
 | [ ] | 4.3 The complete service inventory reconciled against all three outputs, including services Corti omitted | NOT RUN | — | — | — |
 | [ ] | 4.4 Disagreements resolved by source evidence and rules, not majority; contradictions kept; focused questions only where needed | NOT RUN | — | — | — |
 | [ ] | 4.5 Proposed, reference-supported and reviewer-approved codes kept distinct; no automatic approval from agreement | NOT RUN | — | — | — |
-| [ ] | 4.6 A documented path by which a source-supported finding corrects the shared date, status or extent interpretation, so that a false hold changes instead of gaining commentary; no promotion by agreement; clinical safeguards kept (owner, 2026-11-01) | NOT RUN | — | — | design (harness@2: a participant's located passage offered as the answer to the open question; a reviewer accepts it with an attestation; the assessment re-runs); build; prove on the retained false holds (h4-01 99204, h4-03, h4-06 45385) |
+| [ ] | 4.6 A documented path by which a source-supported finding corrects the shared date, status or extent interpretation, so that a false hold changes instead of gaining commentary; no promotion by agreement; clinical safeguards kept (owner, 2026-11-01) | NOT DONE in this release (D7, HARNESS.md 12.10) | — | built as harness@2's reviewer confirmation (11.3/12.5); three refutation rounds each found blocking defects in its "Verified" check, which cannot converge: the three retained false holds (h4-01 99204, h4-03 43244, h4-06 45385) are all "not documented" holds the readers read nothing for | OWNER QUESTION (class a): (i) a human-override confirmation that claims nothing CPT Studio cannot check, or (ii) no override, the false holds repaired at the readers (Wave 2; an I1-declared change) |
 
 ## Stage 5: verify generalization before deployment
 
@@ -265,3 +265,13 @@ requested in chat.
     pins both digests, and pins the re-persist rule on the round-4 head's paths (14 tests). The I1 pins
     (`tests/test_harness_engine_parity.py`, `CortiOnlyParityTests`) pass unchanged. Against `80f2f2dc8` on
     `05860513b`: H1 replay base to head EQUAL; H4 battery 0 movements, 0 undeclared, 0 new violations.
+- **2026-11-02 ~16:30Z (session cd048041): refutation rounds 2 and 3 repaired; checklist 4.6 not done in this release.**
+  - Round 2 (32 findings, 31 reproduced, 1 blocking) was repaired by five agents and merged (HARNESS.md 12.9). Round 3
+    attacked those repairs: 35 findings, all reproduced (3 blocking, 13 major), every blocking and eleven of the
+    twelve majors in the reviewer-confirmation path's "Verified" check; the parity lens found nothing.
+  - The session decided D7 (fail closed): this release offers no reviewer confirmation; the participants' located
+    passages are still shown, with no verification claim (HARNESS.md 12.10). Item 4.6 is NOT DONE in this release; what
+    it becomes is the owner's question, with options (i) and (ii) in its row.
+  - Round 3's other repairs (peer shapes, wording, the exchange records) and the integration's trace and problem
+    quoting are indexed in HARNESS.md 12.11. A focused fourth refutation of round 3's diff comes before the PR is made
+    ready.

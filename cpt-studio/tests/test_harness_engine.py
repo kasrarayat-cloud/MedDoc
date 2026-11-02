@@ -844,6 +844,11 @@ class PeerReviewTests(SimpleTestCase):
         item = proposal(result, '45380')
         self.assertEqual(decision(item), decision(proposal(control, '45380')))
         self.assertEqual(item.support['phases'], {'astra': 'peer_review'})
+        # and the detail the API serves in support never calls that first listing a proposal (refutation round 3)
+        detail = item.support['participants']['astra']['detail']
+        self.assertIn(', listed in its independent reading with no quote found verbatim there, and proposed after peer '
+                      'review', detail)
+        self.assertNotIn('in its independent reading and again in peer review', detail)
         self.assertTrue(item.rationale.startswith('Proposed by Astra after peer review; Corti did not propose this '
                                                   'code.'), item.rationale)
         self.assertEqual(item.rationale, proposal(control, '45380').rationale)

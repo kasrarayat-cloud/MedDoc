@@ -201,16 +201,19 @@ async function handleApi(req, res, url) {
   return apiError(res, 404, 'Not found.');
 }
 
-// POST /api/encounters/<id>/clarifications/<question id>/confirm, as API.md describes it (HARNESS.md 12.5): a member
-// the fixture allows (permissions.can_confirm), an open question of the document not confirmed yet, one of its VERIFIED
-// candidates, and the attestation exactly the candidate's served one. The confirmation is then shown on the question;
-// nothing is approved.
+// POST /api/encounters/<id>/clarifications/<question id>/confirm, as API.md describes it (HARNESS.md 12.5, 12.10): this
+// release offers no confirmation, so a fixture that does not allow one (permissions.can_confirm) is refused as the server
+// refuses it (409, review.CONFIRMATIONS_NOT_OFFERED), before anything else is read. A fixture of the dormant path that does
+// allow one: an open question of the document not confirmed yet, one of its VERIFIED candidates, and the attestation
+// exactly the candidate's served one. The confirmation is then shown on the question; nothing is approved.
+const CONFIRMATIONS_NOT_OFFERED = 'This release offers no reviewer confirmation of a candidate answer, so nothing was '
+  + 'recorded; a question is answered with an addendum.';
 function confirmFinding(req, res, id, questionId, body) {
   const doc = encounterFor(id, false);
   if (!doc) return apiError(res, 404, 'Not found.');
+  if (doc.permissions?.can_confirm !== true) return apiError(res, 409, CONFIRMATIONS_NOT_OFFERED);
   const question = (doc.clarifications || []).find(item => item.id === questionId);
   if (!question) return apiError(res, 404, 'That question is not part of this document.');
-  if (doc.permissions?.can_confirm !== true) return apiError(res, 403, 'Your role in this workspace cannot confirm findings.');
   if (typeof body.candidate_id !== 'string' || !CANDIDATE_ID.test(body.candidate_id)) return apiError(res, 400, "Choose one of the question's candidates (candidate_id).");
   if (typeof body.attestation !== 'string') return apiError(res, 400, 'The attestation must be text.');
   if (doc.pipeline?.busy) return apiError(res, 409, 'Wait for processing to finish (or stop it) before confirming a finding.');

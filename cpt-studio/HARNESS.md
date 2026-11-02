@@ -1197,3 +1197,44 @@ from it and every pin moved to what they serve, saying so.
 ruled precedent), with two options: (i) a human-override confirmation that claims nothing CPT Studio cannot check - the
 reviewer's reading decides, and the page says so; or (ii) no override, with the false holds repaired at the readers
 (the second wave: framed time, instrument reach), which also helps Corti-only coding but is a change I1 must declare.
+
+### 12.11 Refutation round 3 (2026-11-02): what changed, and where it is recorded
+
+The third refutation (seven lenses on round 2's repairs, `cdc41dfa2..624754eb1`) filed 35 findings; independent
+verifiers reproduced all 35 (3 blocking, 13 major, 19 minor). The parity lens found nothing: I1 and D6 hold across round
+2's diff (replay, battery and freeze gate with their controls, and a full-suite differential against `80f2f2dc8`). Round
+3's decision D7 and the findings it leaves dormant are 12.10. The rest:
+
+| finding | repair | recorded in |
+|---|---|---|
+| peer-1 | a peer request shows another model's or Corti's codes, modifiers and ids only in strict shapes (`participants.peer.shown_code`, `shown_modifier`, `ShownIds`, `shown_ref`), CPT Studio's own held and excluded codes too | 12.4 (amendment) |
+| peer-2 | dormant under D7 | 12.4, 12.10 |
+| truth-1 | where no installed CMS file applied, the retrieval-failure note says no code was checked against the CMS files, never that the checks read the CMS facts (`jobs.retrieval_failure`, `serializers.REFERENCE_FAILED`, the page) | here (amends 5 and 12.9 truth-4) |
+| truth-2 | a code a first reading listed with no quote found verbatim is "not proposed" there, and the detail says peer review proposed it (`review.participant_positions`; the engine's `support['participants']` detail likewise) | here (amends 12.9 truth-2) |
+| truth-3 | Corti's row and REVIEW PARTICIPANTS count the codes Corti selected that cannot be listed | here (amends 12.9 truth-11) |
+| truth-4 | a reuse's REVIEW PARTICIPANTS gives its own counts (none) and names the retained run's | here (amends 12.9 truth-13) |
+| truth-5 | one role-neutral sentence for a code Corti listed without selecting it, in the engine's lead, `review.corti_relation` and the page: "Corti listed this code as a candidate or an alternative, not selected; see Alternatives.", and for its bounded second review "Corti's second review also listed this code without adding it as a proposal; see Alternatives." | here (amends 12.9 truth-6/7) |
+| truth-6 | one NCCI procedure-to-procedure statement per code card, across the status line, the Not-verified note and the modifier line | here (amends 12.9 FG2-5) |
+| sends-1 | before each later exchange the loop reads the member's Stop and then whether this session still holds the provider lock; when it does not, nothing more is sent and the run is recorded failed and sent | 12.7 |
+| sends-3, sends-4, falsegreen-5 | one rule (`jobs.may_have_reached_vendor`) settles a swept run's sent flag in the stale sweep and in the installer's `CLOSE_STAGES`; a replayed exchange marks nothing sent | 12.7 |
+| sends-2 | known limit: a final answer recorded and then swept reads unknown, and a reconciliation pays for the identical request again | 12.7 |
+| falsegreen-9, -10, -11 | tests (no partial cost estimate for a failed exchange; `corti_relation` 'second_review' and 'selected_apart' made by the serializer; the harness@2 case and fixtures from the pipeline's own rows) | here, 12.10 |
+
+**At integration (the session):** the owner's trace now shows a participant's codes, modifiers and ids in the same
+strict shapes a peer request does (`serializers._code_entry` with one `ShownIds` per served reading: R3-PEER's note
+that the trace still used the 20-character rule, I9), and a participant's problems quote a model-written value only as a
+CPT or HCPCS code, a short id of letters and digits, a date or time in digits and date punctuation, or a question's
+UUID, naming anything else by its length (`participants.reading._token`: the mutation proof of the trace change showed
+'SYNTH;WITH-POLYP(S)' still quoted inside a problem, which a refused reading's reason carries to the page and the
+reports). The dev preview server refuses a confirmation as the release does. Each change has its test and a mutation
+proof (applied, failing, restored by sha256).
+
+**Open, recorded:**
+- The 45378 card can still state the procedure-to-procedure limit beyond once, through the engine's own
+  `services.base_included` detail ("internal profile rule; NCCI procedure-to-procedure edits are not connected"), which
+  is Corti-only output I1 pins: it waits for a round that declares that change.
+- A shape is not a meaning: a model could write one word of up to eight letters as each id a peer request or the trace
+  shows (12.4).
+- The provider lock belongs to a database session: a session that ends while an exchange is in flight, or between the
+  last check and the send, ends the lock while that exchange may still reach the vendor (12.7).
+- What checklist 4.6 becomes is the owner's question (12.10).
