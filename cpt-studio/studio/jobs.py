@@ -21,6 +21,7 @@ from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import connection, transaction
+from django.db.models import JSONField, Value
 from django.utils import timezone
 
 from . import audit, bounded, models, participants, review
@@ -1034,7 +1035,10 @@ def _finish_loop(run, outcome):
 
 
 def _record_exchanges(run, exchanges):
-    """One ProviderExchange per loop exchange (turn 1..n) and one ToolCall per tool call it answered."""
+    """One ProviderExchange per loop exchange (turn 1..n) and one ToolCall per tool call it answered. A tool call whose
+    arguments were missing or null (None: the loop answered it with CPT Studio's own sentence) is recorded with JSON
+    null arguments - never SQL NULL, which the column refuses, so the record failed and the whole run, its answer
+    included, was recorded unknown with nothing of it kept (refutation round 2, sends-r2-1)."""
     for record in exchanges:
         data = record.response_bytes or b''
         exchange = models.ProviderExchange.objects.create(
@@ -1045,7 +1049,8 @@ def _record_exchanges(run, exchanges):
             provider_request_id=(record.provider_request_id or '')[:120], response_id=(record.response_id or '')[:140],
             error=record.error or '', started_at=record.started_at, finished_at=record.finished_at)
         models.ToolCall.objects.bulk_create([models.ToolCall(
-            exchange=exchange, call_id=call.call_id, tool=call.tool, arguments=call.arguments, result=call.result,
+            exchange=exchange, call_id=call.call_id, tool=call.tool,
+            arguments=Value(None, JSONField()) if call.arguments is None else call.arguments, result=call.result,
             result_sha256=call.result_sha256, refs=list(call.refs), executed_at=call.executed_at or timezone.now())
             for call in record.tool_calls])
 
