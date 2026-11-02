@@ -1222,7 +1222,11 @@ and the page draws a question's candidate block only for such a member (`candida
 it. `review.located_passages`, `review.UNCHECKED_WHY` and the page's located-passage rendering (`locatedPassage`,
 `LOCATED_LABEL`, `LOCATED_NOTE`) are removed, so falsegreen-5 (located_passages' unpinned copy of the candidates' merge)
 is moot. A participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its
-own words, and the reports' PEER REVIEW lists each with its value in CPT Studio's words. The bullets above (candidates
+own words, and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the
+session's D10, d8-2 - that value was CPT Studio's own reading of the participant's words, `candidates.canonical_value`,
+and it printed 'Cannulation of the bile duct was not successful.' as "successful"; the reports now list each answer only
+as the participant's claim, that the document settles the question or that its answer is read as not settling it, with
+the passages it located, and print no value). The bullets above (candidates
 served unchecked, their fixed why, the page's located passages and its note) are superseded, kept so the change can be
 seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4-CONF` block of
 `tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`

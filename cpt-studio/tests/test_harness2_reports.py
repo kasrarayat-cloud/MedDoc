@@ -84,11 +84,15 @@ class SectionTests(Harness2Case):
             '  - Astra · answered in peer review; the review was used',
             f'    Run: {self.peer_runs["astra"].pk} · REPLAY (recorded response, not live output)',
             f'    Frozen inputs shown: {frozen}',
-            f'    Answer to "{first["extent"].question}" (extent reached): cecum',
+            # moved by refutation round 5 (R5-ACCOUNT, the session's D10): an answer is printed as the participant's
+            # claim, that the document settles the question, with its passages - never a value, which was CPT Studio's
+            # reading of the participant's words ('cecum', '2026-10-21', 'performed' here; an inverted one elsewhere)
+            f'    Answer to "{first["extent"].question}" (extent reached): Astra says the document settles it',
             f'      {at(LANDMARK_QUOTE, 1)}',
-            f'    Answer to "{first["service_date"].question}" (service date): 2026-10-21',
+            f'    Answer to "{first["service_date"].question}" (service date): Astra says the document settles it',
             f'      {at(DATE_QUOTE, 1)}',
-            f'    Answer to "{first["performed_status"].question}" (performed status): performed',
+            f'    Answer to "{first["performed_status"].question}" (performed status): Astra says the document '
+            'settles it',
             f'      {at(RECTUM_QUOTE, 2)}',
             '    Position on 45380: supports',
             f'      {at(RECTUM_QUOTE, 2)}',
@@ -98,9 +102,11 @@ class SectionTests(Harness2Case):
         self.assertEqual(lines[12], '    Unverified quotes: 1 (not found in the document; never used as evidence)')
         self.assertNotIn(UNLOCATED_QUOTE, self.txt())
         fable = lines.index('  - Fable · answered in peer review; the review was used')
-        # its answer is stated in CPT Studio's words (the landmark its value names), never its own
+        # moved by refutation round 5 (R5-ACCOUNT, D10): its answer was stated in CPT Studio's words (the landmark its
+        # value names), never its own; it is now its claim alone, with its passage, and neither value is printed
         self.assertEqual(lines[fable + 3:fable + 5], [
-            f'    Answer to "{first["extent"].question}" (extent reached): cecum', f'      {at(LANDMARK_QUOTE, 1)}'])
+            f'    Answer to "{first["extent"].question}" (extent reached): Fable says the document settles it',
+            f'      {at(LANDMARK_QUOTE, 1)}'])
         text = self.txt()
         for words in WORDING:  # a participant's own wording never reaches a report
             self.assertNotIn(words, text)
@@ -223,9 +229,14 @@ class CsvTests(Harness2Case):
                           'checks': f'confirmation={confirmation.pk};clarification={self.questions["extent"].pk};'
                                     'scope=proposal'})
         answers = by_list['peer_answer']
+        # moved by refutation round 5 (R5-ACCOUNT, the session's D10): a peer answer's row carries the participant's
+        # claim (status) and its passages, and no value - the value was CPT Studio's reading of the participant's words
+        # ('2026-10-21', 'cecum', 'performed')
         self.assertEqual(sorted((r['proposed_by'], r['status'], r['exclusion_reason']) for r in answers),
-                         [('astra', 'settled', '2026-10-21'), ('astra', 'settled', 'cecum'),
-                          ('astra', 'settled', 'performed'), ('fable', 'settled', 'cecum')])
+                         [('astra', 'settled', ''), ('astra', 'settled', ''), ('astra', 'settled', ''),
+                          ('fable', 'settled', '')])
+        self.assertEqual(sorted(r['checks'].split(';')[1] for r in answers),
+                         ['fact=extent', 'fact=extent', 'fact=performed_status', 'fact=service_date'])
         self.assertTrue(all(r['proposal_origin'] == 'peer_review' for r in answers))
         (position,) = by_list['peer_position']
         self.assertEqual((position['code'], position['status'], position['proposed_by']),

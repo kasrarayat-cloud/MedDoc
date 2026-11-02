@@ -572,10 +572,14 @@ def _peer_items(assessment, peer_review, text, index, name='', record=None):
     for answer in peer_review.answers:
         question = asked.get(review._uuid(answer.question_id))
         fact, family = (question.fact, question.family) if question is not None else ('', '')
-        value = candidates.canonical_value(fact, family, answer.value)[0] if answer.settled else ''
+        # no value (refutation round 5, the session's D10, as D8 for the page): a participant's value is its own free
+        # text, which only the owner's trace serves, and CPT Studio's reading of it (candidates.canonical_value, an
+        # inference no release-default path makes) printed 'Cannulation of the bile duct was not successful.' as
+        # "successful"; an answer is the participant's claim, whether the document settles the question, with the
+        # passages it located
         answers.append({'question_id': str(answer.question_id) if question is not None else '',
                         'question': question.question if question is not None else '', 'fact': fact,
-                        'family': family, 'settled': bool(answer.settled), 'value': value,
+                        'family': family, 'settled': bool(answer.settled),
                         'evidence': _located(answer.evidence, text, index)})
     positions = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '', 'position': item.position,
                   'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
@@ -1178,8 +1182,10 @@ def _peer_evidence(spans):
 
 
 def _peer_section(snap):
-    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions (in CPT Studio's
-    words), its positions on codes and the codes it proposed after peer review, each with its located passages."""
+    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions - each only as the
+    participant's claim, that the document settles the question, or its answer read as not settling it, never a value
+    (refutation round 5, the session's D10) - its positions on codes and the codes it proposed after peer review, each
+    with its located passages."""
     data = snap.get('peer_review') or {}
     if data.get('predates'):
         return ['  - none: this assessment was recorded before peer review existed']
@@ -1203,8 +1209,11 @@ def _peer_section(snap):
         for answer in entry['answers']:
             asked = f'"{answer["question"]}"' if answer['question'] else 'a question no longer recorded'
             fact = f' ({fact_label(answer["fact"])})' if answer['fact'] else ''
-            said = ((answer['value'] or 'a value CPT Studio cannot state in its own words') if answer['settled']
-                    else 'not settled by the document')
+            # its claim, never a value (D10); an answer read as not settled may be one that said it settles the
+            # question and gave no value (participants.peer), so "not settled" is said of its answer, not of the
+            # document and not as the participant's own words
+            said = (f'{entry["label"]} says the document settles it' if answer['settled']
+                    else f"{entry['label']}'s answer is read as not settling it")
             lines.append(f'    Answer to {_indent(asked, "      ")}{fact}: {said}')
             lines += _peer_evidence(answer['evidence'])
         for position in entry['positions']:
@@ -1626,11 +1635,11 @@ def _harness2_rows(snap):
     participant (for a confirmed finding, the participants that located its passage) and ``proposal_origin`` its phase.
     The other columns they fill: a confirmed finding's fact (``status``), value (``exclusion_reason``), passages
     (``evidence``), reviewer, kind and time (``reviewer``, ``reviewer_kind``, ``decided_at``), attestation
-    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``), value in CPT
-    Studio's words (``exclusion_reason``), passages and question (``checks``); a position's code, position and
-    passages; an additional code's code, units and passages; a reference's ref (``exclusion_reason``), retrieved, used
-    or cited_not_retrieved (``status``), source (``documented_service``) and kind, release and window
-    (``evidence_support``)."""
+    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``: the participant's
+    claim; no value is printed, refutation round 5, the session's D10), passages and question (``checks``); a position's
+    code, position and passages; an additional code's code, units and passages; a reference's ref
+    (``exclusion_reason``), retrieved, used or cited_not_retrieved (``status``), source (``documented_service``) and
+    kind, release and window (``evidence_support``)."""
     base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}
     rows = []
     for item in snap.get('confirmed_findings') or []:
@@ -1648,7 +1657,7 @@ def _harness2_rows(snap):
             rows.append({**peer, 'item_list': 'peer_answer', 'family': answer['family'],
                          'family_label': _family_label(answer['family']) if answer['family'] else '',
                          'status': 'settled' if answer['settled'] else 'not_settled',
-                         'exclusion_reason': answer['value'], 'evidence': _csv_spans(answer['evidence']),
+                         'evidence': _csv_spans(answer['evidence']),
                          'checks': f'question={answer["question_id"]};fact={answer["fact"]}'})
         for position in entry['positions']:
             rows.append({**peer, 'item_list': 'peer_position', 'code': position['code'],

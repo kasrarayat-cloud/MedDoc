@@ -414,7 +414,10 @@ the participant's answer. Now every clarification's `candidates` is `[]` for eve
 offered, and on the dormant path candidates are served only to a member who may confirm one (`permissions.can_confirm`
 true); no `why` "CPT Studio does not check what a participant's passage states, ..." is served any more. A
 participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its own words,
-and the reports' PEER REVIEW lists each with its value in CPT Studio's words.
+and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the session's D10 -
+that value was CPT Studio's own reading of the participant's words, which printed 'Cannulation of the bile duct was not
+successful.' as "successful"; each answer is now listed only as the participant's claim, that the document settles the
+question or that its answer is read as not settling it, with the passages it located, and no value is printed).
 
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
@@ -754,8 +757,10 @@ FINDINGS after OPEN CLARIFICATIONS (each reviewer-confirmed finding of the revis
 who confirmed it and when, the confirmation and question ids, its passage with offsets and page, the participants that
 located it, the attestation, and what became of it - the service date through the encounter context, any other fact
 read by the assessment or not, with why), and after REVIEW PARTICIPANTS a PEER REVIEW section (each participant's peer
-review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions with the value in CPT
-Studio's own words, its positions on codes and the codes it proposed "after peer review, never independent", each with
+review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions "with the value in CPT
+Studio's own words" (superseded, round 5, D10: each only as the participant's claim, "Astra says the document settles
+it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the codes it proposed
+"after peer review, never independent", each with
 its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
 no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
 and a PARTICIPANT REFERENCES section (by
@@ -765,12 +770,14 @@ gives a tool loop's exchanges and tool calls - for a run that reused a retained 
 the retained run, named as that run's ("Exchanges: 0 · tool calls: 0 (this run reuses the retained answer of run
 <id>, which made 2 exchanges and 1 tool call)"; refutation round 3, truth-4: the retained run's were printed as the
 reuse's own) - and PROVIDER USAGE lists a peer-review run as a "peer review". No
-participant's own wording is printed: questions are CPT Studio's, values CPT Studio's words, passages the revision's
+participant's own wording is printed: questions are CPT Studio's, "values CPT Studio's words" (superseded, round 5, D10:
+no peer answer's value is printed), passages the revision's
 own slices, codes and references only in their shapes. The CSV keeps its columns and adds rows that are not proposals,
 after the encounter rows: `confirmed_finding` (fact in `status`, value in `exclusion_reason`, passages in `evidence`,
 the locating participants in `proposed_by`, the reviewer in `reviewer`/`reviewer_kind`/`decided_at`, the attestation
 in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `checks`), `peer_answer` (`settled` or
-`not_settled`, the value, passages, `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
+`not_settled`, "the value" (superseded, round 5, D10: no value, so `exclusion_reason` stays empty), passages,
+`question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
 `peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
 window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a
