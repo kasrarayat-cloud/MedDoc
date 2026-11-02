@@ -10,16 +10,18 @@ participant_access_check and access_check_failure; ops/INSTALL.md, the app phase
   receipt gives none or it wrote none, the last non-empty line it wrote on stderr. Each is repeated only whole and only
   up to 300 characters, otherwise named and never cut, and only once the credential scan has found no credential value
   in what it wrote. The phase's failure names no cause: the pair stays installed with those participants live, this
-  phase's receipt records each check (its JSON receipt and the path of its log, where what it wrote was recorded), and
-  the operator runs --phase app again with --access-check once the cause is known, or installs with that participant
-  disabled.
+  phase's receipt records each check (its JSON receipt, if it wrote one, and the path of its log, where what it wrote
+  was recorded), and the operator runs --phase app again with --access-check once the cause is known, or installs with
+  that participant disabled.
 
 The inputs are the access check's own output, as the round-5 refutation lens and its verifier captured it at
 0ca5e6623 from `manage.py participant_access_check --participant astra` (the command as the one-shot runs it, through
-BaseCommand.run_from_argv), with the suite's synthetic key and a fake vendor session, the check's database session
-ended after exchange 1 (tests.test_harness2_r4_sends AccessCheckLockTests' path): the receipts below are its stdout,
-the stderr lines are what it wrote there. A guard reads their sentences back from the command and from studio/jobs.py,
-so they stay the command's. Run from cpt-studio/ (no Docker, sudo, network or database):
+BaseCommand.run_from_argv), with the suite's synthetic key and a fake vendor session: the lock-stop receipt as printed
+(the check's database session ended after exchange 1, tests.test_harness2_r4_sends AccessCheckLockTests' path), the
+lock-lost, vendor-refusal and passing receipts but for the times and client request ids each run makes afresh, and
+what it wrote on stderr. Every other input (a refused reading's receipt, a long error, a traceback, a long line, a
+long stderr, nothing at all) is written here. A guard reads the captured sentences back from the command and from
+studio/jobs.py, so they stay the command's. Run from cpt-studio/ (no Docker, sudo, network or database):
 
     python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 """
@@ -55,8 +57,11 @@ LOCK_LOST_ERROR = ('The database session that held the provider lock, which keep
                    'no final answer.')
 VENDOR_401_ERROR = 'OpenAI answered HTTP 401; the response body is retained.'
 
-# The lens's capture (refute-harness-r5/sends/logs/access-receipt-capture.json): the access check's session ended right
-# after its executor answered exchange 1's tool call, so the lock question failed; it exited 1 with DID_NOT_PASS.
+# The lens's capture (refute-harness-r5/sends/logs/access-receipt-capture.json), as the command printed it: the access
+# check's session ended right after its executor answered exchange 1's tool call, so the lock question failed; it
+# exited 1 with DID_NOT_PASS. The three receipts after it are the verifier's captures of their cases
+# (verify-harness-r5/v3-sends-rest/logs/access-captures.json), written as this one with every field that differs
+# replaced, but for the times and client request ids each run makes afresh (checked_at, latency_ms, client_request_id).
 LOCK_STOP_RECEIPT = {
     'adapter_version': 'openai-responses@cptstudio-harness-2',
     'authorization_ref': 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md',
@@ -107,8 +112,21 @@ VENDOR_401_RECEIPT = {
 # The verifier's 'control_ok' capture: the loop's two exchanges answered and its reading used; it exited 0, no stderr.
 PASSING_RECEIPT = {
     **LOCK_STOP_RECEIPT, 'error': '', 'outcome': 'succeeded', 'exchange_count': 2, 'request_id': 'req_turn_2',
-    'response_id': 'resp_synthetic_fixture_0001', 'latency_ms': 0.219,
+    'response_id': 'resp_synthetic_fixture_0001',
     'response_sha256': 'f544bc0a2b76299c4f9b367d028411f3cc2b710c75daa17d43e59f7451a781e1',
+    'estimated_cost': {'basis': 'estimated from published rates as of 2026-11-01; not reconciled to an invoice',
+                       'estimated_usd': '0.100670',
+                       'rates': {'as_of': '2026-11-01', 'exchanges': 2, 'exchanges_priced': 2,
+                                 'long_context_exchanges': 0, 'model': 'gpt-6-astra',
+                                 'priced_tokens': {'cached_input': 0, 'input': 4912, 'output': 1031},
+                                 'usd_per_million_tokens': {'cached_input': '1', 'input': '10', 'output': '50'}}},
+    'exchanges': [LOCK_STOP_RECEIPT['exchanges'][0],
+                  {'client_request_id': 'cptstudio-access-check-c1e01153-831e-4b1f-a525-0328b82c056c-2',
+                   'http_status': 200, 'latency_ms': 0.158, 'outcome': 'succeeded', 'request_id': 'req_turn_2',
+                   'request_sha256': '1285fb77c3370980618c8c9ad4adcf2daf0370c05d40e482a9da944ea5cce602',
+                   'response_id': 'resp_synthetic_fixture_0001',
+                   'response_sha256': 'f544bc0a2b76299c4f9b367d028411f3cc2b710c75daa17d43e59f7451a781e1',
+                   'tool_calls': [], 'turn': 2}],
     'reading': {'codes': ['45385', '45380'], 'problems': [], 'refused': False, 'unverified_quotes': 4},
     'usage': {'input_tokens': 4912, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens': 1031,
               'output_tokens_details': {'reasoning_tokens': 512}, 'total_tokens': 5943},
@@ -119,6 +137,7 @@ PAIR_STAYS = 'The pair stays installed with those participants live.'
 RECORDED_WHERE = ("Under access_checks, this phase's receipt records each check and, where what it wrote was recorded, "
                   'its JSON receipt (if it wrote one) and the path of its log.')
 RERUN = 'Once the cause is known, run --phase app again with --access-check, or install with that participant disabled.'
+LINE_SAYS = 'it exited 1, and the last line of text it wrote on stderr says: '
 
 
 def stdout_of(receipt) -> bytes:
@@ -197,8 +216,7 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
     def test_the_in_flight_refusal_gives_its_own_sentence(self):
         # pin (b): it sent nothing and wrote no receipt; its stderr says why
         message, check = self.failed(answer(1, b'', IN_FLIGHT))
-        self.assertEqual(check['problem'], f'it exited 1, and the last line it wrote on stderr says: CommandError: '
-                                           f'{IN_FLIGHT_SENTENCE}')
+        self.assertEqual(check['problem'], f'{LINE_SAYS}CommandError: {IN_FLIGHT_SENTENCE}')
         self.assertEqual((check['ok'], check['exit'], check['recorded'], check['receipt']), (False, 1, True, None))
         self.assertEqual(Path(check['log']).read_bytes(), IN_FLIGHT)
         self.assertIn('Another provider request is in flight; nothing was sent.', message)
@@ -210,8 +228,7 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
                      b'RuntimeError: the synthetic check ended here\n\n   \n')
         message, check = self.failed(answer(1, b'', traceback))
         self.assertEqual(check['problem'],
-                         'it exited 1, and the last line it wrote on stderr says: RuntimeError: the synthetic check '
-                         'ended here')
+                         f'{LINE_SAYS}RuntimeError: the synthetic check ended here')
         self.assert_names_no_cause(message)
         for size, repeated in ((300, True), (301, False)):
             line = 'E' * (size - 4) + ' end'
@@ -219,10 +236,10 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
                 message, check = self.failed(answer(1, b'not a receipt\n', b'first line\n' + line.encode() + b'\n'))
                 if repeated:
                     self.assertEqual(check['problem'],
-                                     f'it exited 1, and the last line it wrote on stderr says: {line}')
+                                     f'{LINE_SAYS}{line}')
                 else:
-                    self.assertEqual(check['problem'], 'it exited 1, and the last line it wrote on stderr is longer '
-                                                       'than 300 characters, so it is not repeated here.')
+                    self.assertEqual(check['problem'], 'it exited 1, and the last line of text it wrote on stderr is '
+                                                       'longer than 300 characters, so it is not repeated here.')
                     self.assertNotIn('EEEE', message)  # never cut: no part of it is repeated
                 self.assert_names_no_cause(message)
 
@@ -230,34 +247,37 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
         # the installer keeps (and scans) only stderr's last 8,192 bytes: a line that began before them is not whole
         whole = b'x' * 9000 + b'\nRuntimeError: the last line, whole\n'
         message, check = self.failed(answer(1, b'', whole))
-        self.assertEqual(check['problem'], 'it exited 1, and the last line it wrote on stderr says: RuntimeError: the '
-                                           'last line, whole')
+        self.assertEqual(check['problem'], f'{LINE_SAYS}RuntimeError: the last line, whole')
         cut = b'RuntimeError: the start of a long line ' + b'y' * 9000 + b'\n'
         message, check = self.failed(answer(1, b'', cut))
         self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
-                                           'whole line in it, so no line is repeated here.')
+                                           'whole line of text in it, so no line is repeated here.')
         self.assertNotIn('yyyy', message)
         # a short end of a line, then blank lines: it is not the line it ends, so it is not repeated either
         short_end = b'RuntimeError: a line of which only the end ' + b'is kept\n' + b'\n' * (8192 - 8)
         self.assertEqual(len(short_end) - short_end.index(b'is kept'), 8192)
         message, check = self.failed(answer(1, b'', short_end))
         self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
-                                           'whole line in it, so no line is repeated here.')
+                                           'whole line of text in it, so no line is repeated here.')
         self.assertNotIn('is kept', message)
+        # a last line followed by 8 KiB of blank lines: the kept end is whole lines with no text, and that is said
+        blank_end = b'RuntimeError: written before the kept end\n' + b'\n' * 8192
+        message, check = self.failed(answer(1, b'', blank_end))
+        self.assertEqual(check['problem'], 'it exited 1, and only the end of what it wrote on stderr was kept, with no '
+                                           'whole line of text in it, so no line is repeated here.')
+        self.assertNotIn('written before', message)  # never kept, never scanned
         # the kept end starts exactly at a line: that line is whole, and is repeated
         at_a_line = b'w' * 9 + b'\n' + b'RuntimeError: kept whole\n' + b'\n' * (8192 - 25)
         self.assertEqual(len(at_a_line) - at_a_line.index(b'RuntimeError'), 8192)
         message, check = self.failed(answer(1, b'', at_a_line))
-        self.assertEqual(check['problem'], 'it exited 1, and the last line it wrote on stderr says: RuntimeError: kept '
-                                           'whole')
+        self.assertEqual(check['problem'], f'{LINE_SAYS}RuntimeError: kept whole')
 
     def test_a_receipt_without_an_error_gives_the_stderr_line(self):
         # a refused reading: its exchange succeeded, so the receipt's error is '' and its reading says why
         refused = {**PASSING_RECEIPT, 'reading': {'codes': [], 'problems': ['The reading was refused: synthetic.'],
                                                   'refused': True, 'unverified_quotes': 0}}
         message, check = self.failed(answer(1, stdout_of(refused), DID_NOT_PASS))
-        self.assertEqual(check['problem'], 'it exited 1, and the last line it wrote on stderr says: CommandError: The '
-                                           'Astra access check did not pass: see the receipt.')
+        self.assertEqual(check['problem'], LINE_SAYS + DID_NOT_PASS.decode().strip())
         self.assertEqual(check['receipt'], refused)
         self.assert_names_no_cause(message)
 
@@ -339,8 +359,7 @@ class WhatTheOperatorSeesTests(TemporaryDirectoryTest):
         self.assertTrue(Path(astra['log']).exists())
         self.assertEqual(record['error'], printed['summary'])
         code, printed, record = self.run_main(answer(1, b'', IN_FLIGHT))
-        self.assertIn(f'(it exited 1, and the last line it wrote on stderr says: CommandError: {IN_FLIGHT_SENTENCE})',
-                      printed['summary'])
+        self.assertIn(f'({LINE_SAYS}CommandError: {IN_FLIGHT_SENTENCE})', printed['summary'])
 
 
 class TheInputsAreTheCommandsOwnTests(unittest.TestCase):

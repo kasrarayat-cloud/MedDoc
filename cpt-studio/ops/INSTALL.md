@@ -229,13 +229,14 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   then not known) or writes no JSON receipt fails the phase. For a non-zero
   exit the phase says what the check itself said: the error its JSON receipt
   gives, else the last non-empty line of what it wrote on stderr, each repeated
-  only whole and only up to 300 characters and otherwise named, never cut; or
-  that it wrote neither. The installer adds no cause of its own. The phase then
-  says that the pair stays installed with those participants live, that this
-  phase's receipt records each check under `access_checks` (its JSON receipt,
-  if it wrote one, and the path of its log, where what it wrote was recorded),
-  and to run `app` again with `--access-check` once the cause is known, or
-  install that participant disabled.
+  only whole and only up to 300 characters and otherwise named, never cut; with
+  neither, it says that it wrote no text on stderr, and no JSON receipt when it
+  wrote none. The installer adds no cause of its own. The phase then says that
+  the pair stays installed with those participants live, that this phase's
+  receipt records each check under `access_checks` (its JSON receipt, if it
+  wrote one, and the path of its log, where what it wrote was recorded), and to
+  run `app` again with `--access-check` once the cause is known, or install
+  that participant disabled.
   On any failure before the new pair runs, the recompute does not run: the new
   pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the

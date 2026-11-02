@@ -2790,12 +2790,12 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
             said = (f'its receipt says: {error}' if len(error) <= limit
                     else f"its receipt's error is longer than {limit} characters, so it is not repeated here.")
         elif lines:
-            said = (f'the last line it wrote on stderr says: {lines[-1]}' if len(lines[-1]) <= limit
-                    else f'the last line it wrote on stderr is longer than {limit} characters, so it is not repeated '
-                         'here.')
+            said = (f'the last line of text it wrote on stderr says: {lines[-1]}' if len(lines[-1]) <= limit
+                    else f'the last line of text it wrote on stderr is longer than {limit} characters, so it is not '
+                         'repeated here.')
         elif cut:
-            said = ('only the end of what it wrote on stderr was kept, with no whole line in it, so no line is '
-                    'repeated here.')
+            said = ('only the end of what it wrote on stderr was kept, with no whole line of text in it, so no '
+                    'line is repeated here.')
         else:
             said = ('it wrote no text on stderr.' if receipt is not None
                     else 'it wrote no JSON receipt and no text on stderr.')
