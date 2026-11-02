@@ -292,6 +292,9 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
+        # how Corti stands to the code where it is not among the proposers (HARNESS.md 11.4; refutation round 2,
+        # truth-6): the page says "Corti did not propose this code" only when Corti has no entry for it at all
+        'corti_relation': review.corti_relation(proposal),
         'participant_positions': review.participant_positions(proposal, assessment.participants),
         'reference_check': review.reference_check(proposal),
         'retrieval': review.proposal_retrieval(proposal, assessment.retrieval),

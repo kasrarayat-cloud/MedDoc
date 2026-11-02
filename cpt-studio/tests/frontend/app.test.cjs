@@ -1795,7 +1795,7 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
   const later = codeCardOf(render(peerOnly), '45380');
   assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
-  assert.ok(app.codeStatusLines({ proposed_by: ['fable'], reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
+  assert.ok(app.codeStatusLines({ proposed_by: ['fable'], corti_relation: 'none', reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
   assert.ok(html.includes('<strong>45381 · Colonoscopy · proposed after peer review</strong>'), 'the alternative a peer review proposed');
   // the first readings' positions are named as such
   assert.ok(biopsy.includes('<div class="evidence-label">What the participants said in their first readings</div>'));
@@ -1986,4 +1986,31 @@ test('a peer-review run is named as one in the Activity tab, on the reconciliati
   const stages = [...final.pipeline.stages.slice(0, 6), { kind: 'astra_peer', state: 'cancelled', error: 'The worker stopped before this stage finished (synthetic).', finished_at: null }];
   const stopped = { ...final, state: 'stopped', pipeline: { ...final.pipeline, stopped_by_member: false, can_resume: true, stages } };
   assert.ok(render(stopped).includes('<p>Peer review: Astra (OpenAI GPT-6 Astra): The worker stopped before this stage finished (synthetic).</p>'));
+});
+
+// refutation round 2, R2-WORDING
+// How the page names proposers, phases and participant text: every sentence true of the record the API serves.
+
+test('R2-WORDING truth-6: a card says "Corti did not propose this code" only when Corti has no entry for it', () => {
+  const final = fixture(H2_FINAL);
+  const biopsy = final.assessment.proposals.find(p => p.code === '45380');
+  assert.equal(biopsy.corti_relation, 'none', 'the serializer serves the relation');
+  const line = relation => app.codeStatusLines({ ...biopsy, corti_relation: relation });
+  const named = '<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review)';
+  const said = {
+    none: '; Corti did not propose this code.',
+    selected_without_exact_passage: '; Corti also selected this code, with no exact passage; it is listed apart, excluded.',
+    selected_apart: '; Corti also selected this code; its selection is listed apart.',
+    candidate: '; Corti listed this code only as a candidate, not selected; see Alternatives.',
+    second_review: '; Corti&#x27;s second review also listed this code, as an alternative; see Alternatives.',
+  };
+  for (const [relation, words] of Object.entries(said)) assert.ok(line(relation).includes(`${named}${words}</li>`), relation);
+  // a relation the page does not know, or none served, says nothing of Corti that the record would have to support
+  for (const relation of [undefined, '', 'proposer', 'exploded', 3]) {
+    assert.ok(line(relation).includes(`${named}</li>`), String(relation));
+    assert.equal(line(relation).includes('Corti'), false, String(relation));
+  }
+  // Corti among the proposers: named first, and no sentence about it
+  assert.ok(app.codeStatusLines({ proposed_by: ['corti', 'astra'], corti_relation: 'none', reference_check: { state: 'passed' } })
+    .includes('<li><b>Proposed by:</b> Corti, Astra</li>'));
 });

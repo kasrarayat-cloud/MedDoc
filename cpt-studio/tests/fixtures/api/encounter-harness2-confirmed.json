@@ -468,8 +468,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "5aaa7c3700fdd32b914748a5948383fcecda2ad038f026c47589425fdd454594",
-   "response_sha256": "ee12c454bcbfd11e83faf4206f3d9fce6521bbec4421dbec1236cbc5d8c31d97",
+   "request_sha256": "04150bde2ac1674ce5c9110486f12a4a1b6540ae4e2072e7ae84e870c2277c4a",
+   "response_sha256": "73905fdecb49f8e870f20cb58d964003410f385ca19d15d37c5a87dd66bee134",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -491,8 +491,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "fb6435fb289278ce0b8e6ff4bc46b1d4d9f89f2ea8c3704c687ad685370ba6c1",
-   "response_sha256": "f24bd20e7dd953ded86a864f750e97f8e3e1a6b2307eb6266be8df9d5ab0df9e",
+   "request_sha256": "cc61ebc9c3d118923f53821812510e2c70b621d84dcda35227c2e3adf4f4516c",
+   "response_sha256": "531313980cc425afdfc5754267ce66c8053936607b0a9e1033870fb3409297cb",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -630,6 +630,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -805,6 +806,7 @@
      "astra",
      "fable"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "proposed",
@@ -911,6 +913,7 @@
     "proposed_by": [
      "astra"
     ],
+    "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "not_proposed",

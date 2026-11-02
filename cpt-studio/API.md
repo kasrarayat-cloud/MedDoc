@@ -268,7 +268,8 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                      "located_by": ["astra", "fable"], "runs": ["uuid"], "confirmed_by": "label",
                      "confirmed_by_kind": "human", "attestation": "I read this passage ...", "created_at": "...",
                      "revision_number": 1}],
-  "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"]}]}
+  "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"],
+                                "corti_relation": "none"}]}
 }
 ```
 
@@ -317,7 +318,17 @@ revision, oldest first, also after its question has gone (a re-assessment that r
 Each proposal gains `phases` (from its support record: the phase each participant first proposed the code in; a code
 first proposed in peer review is `peer_review`, never independent) and `confirmed` (the ids of the confirmations its
 checks read). Its `rationale` and `proposed_by` keep the origin (11.4: "Proposed by Fable; Corti did not propose this
-code."). A candidate, a confirmation and a peer position never decide a status or approve anything: `decision_state`
+code."). Every proposal carries `corti_relation` (refutation round 2, truth-6), how Corti stands to its code, read from
+the assessment's own proposals of that code (Corti's are those of origin primary or second_review): `proposer` (Corti
+is among `proposed_by`); `selected_without_exact_passage` (Corti's response selected the code and that selection is
+excluded because none of its passages matches the document text exactly: listed apart, carrying no proposal);
+`selected_apart` (Corti selected it and that selection is another entry, excluded for another reason); `candidate`
+(Corti's response listed it only as a candidate or an alternative, not selected); `second_review` (only Corti's bounded
+second review listed it, as an alternative); `none` (Corti has no entry for the code). The page says "Corti did not
+propose this code." only for `none`, words the others as the engine's rationale does ("Corti also selected this code,
+with no exact passage; it is listed apart, excluded."; "Corti listed this code only as a candidate, not selected; see
+Alternatives."), and says nothing of Corti for a proposal served without the field. A candidate, a confirmation and a
+peer position never decide a status or approve anything: `decision_state`
 stays a member's decision (I2-I4). `pipeline.stages` includes the peer stages (`astra_peer`, `fable_peer`); a
 replayed peer-review run reads `mode` `replay`. The Activity tab reads "Finding confirmed from a participant's located
 passage (not a decision)" for a confirmation, with its `fact` and `effect`.

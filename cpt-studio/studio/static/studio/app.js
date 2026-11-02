@@ -918,15 +918,28 @@ function codeStatusLines(proposal) {
   return `<ul class="code-status-lines" aria-label="Status of this code">${lines.map(([name, value]) => `<li><b>${escapeHtml(name)}:</b> ${escapeHtml(value)}</li>`).join('')}</ul>`;
 }
 
+// How Corti stands to a code it is not a proposer of (proposal.corti_relation, HARNESS.md 11.4), in the engine's own
+// words: "Corti did not propose this code" only when Corti has no entry for the code at all (refutation round 2,
+// truth-6: it was said whenever Corti was not a proposer, beside Corti's own excluded selection of the code).
+const CORTI_RELATIONS = {
+  selected_without_exact_passage: 'Corti also selected this code, with no exact passage; it is listed apart, excluded.',
+  selected_apart: 'Corti also selected this code; its selection is listed apart.',
+  candidate: 'Corti listed this code only as a candidate, not selected; see Alternatives.',
+  second_review: 'Corti\'s second review also listed this code, as an alternative; see Alternatives.',
+  none: 'Corti did not propose this code.',
+};
+
 // Who proposed a code, each participant with the phase it first proposed it in where the API serves one (HARNESS.md
-// 11.1: after peer review is never called independent); a code Corti did not propose says so (11.4).
+// 11.1: after peer review is never called independent), then how Corti stands to a code it did not propose (11.4) -
+// nothing about Corti where the API serves no relation, since the record would have to support it.
 function proposerText(proposal, proposers) {
   const phases = proposalPhases(proposal);
   const named = proposers.map(name => {
     const phase = Object.hasOwn(phases, name) ? lookup(PROPOSED_PHASES, phases[name], '') : '';
     return `${lookup(PARTICIPANT_LABELS, name, name)}${phase ? ` (${phase})` : ''}`;
   }).join(', ');
-  return proposers.includes('corti') ? named : `${named}; Corti did not propose this code.`;
+  const corti = proposers.includes('corti') ? '' : lookup(CORTI_RELATIONS, proposal.corti_relation, '');
+  return corti ? `${named}; ${corti}` : named;
 }
 
 // The reviewer-confirmed findings this code's checks read (proposal.confirmed, HARNESS.md 11.3): each a fact a reviewer
