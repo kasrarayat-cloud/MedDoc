@@ -214,6 +214,27 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.assertIn(f'  - {LES} · ', txt)  # Corti's excluded proposal, as harness@1 prints it
 
 
+class TraceIdsTests(ShapesCase):
+    """shapes-2, truth-3: one name per withheld id for a participant across its reading and its peer review."""
+
+    def test_a_peer_review_s_service_id_has_the_name_its_first_reading_gave_it(self):
+        _, trace, _, _, _ = self.run_chain()
+        first, peer_run = self.astra_runs(trace)
+        snare, biopsy = named(1, 'colon-a'), named(2, 'colon-b')
+        self.assertEqual([item['id'] for item in first['reading']['services']], [snare, biopsy])
+        self.assertEqual([(item['code'], item['service_ids']) for item in first['reading']['codes']],
+                         [('45385', [snare]), (length(LES), [biopsy])])
+        # the biopsy code the peer review added is on the biopsy service, under the biopsy service's own name; an id the
+        # reading never named gets a name no service carries
+        self.assertEqual([(item['code'], item['service_ids'], item['phase'])
+                          for item in peer_run['review']['additional_codes']],
+                         [('45380', [biopsy], 'peer_review'),
+                          (length(ADDED_TOKEN), [named(3, SID_TOKEN), snare], '')])
+        names = [*[item['id'] for item in first['reading']['services']],
+                 *[sid for item in peer_run['review']['additional_codes'] for sid in item['service_ids']]]
+        self.assertEqual(len({name: None for name in names}), 3)  # three ids, three names, never one for two
+
+
 # --- the engine, pure (tests.test_harness_engine's document and helpers) ----------------------------------------------
 
 class EngineListingTests(OfflineTestCase):

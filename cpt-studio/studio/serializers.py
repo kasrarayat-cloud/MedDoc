@@ -1028,8 +1028,8 @@ def encounter_detail(encounter, membership):
 # --- the administrative trace (HARNESS.md 7; owner only, api.trace) ---------------------------------------------------
 
 def _ids(values, ids):
-    """A list of service ids a participant wrote, each as ``ids`` (one participants.peer.ShownIds per served reading)
-    serves it; anything that is not a list is returned as it is."""
+    """A list of service ids a participant wrote, each as ``ids`` (the participant's one participants.peer.ShownIds for
+    the whole trace, _trace_runs) serves it; anything that is not a list is returned as it is."""
     return [ids(value) for value in values] if isinstance(values, list) else values
 
 
@@ -1038,9 +1038,10 @@ def _code_entry(item, ids):
     strict shapes a peer request shows them in (HARNESS.md 12.4 after refutation round 3, peer-1; I9): the code only in
     a code's shape (participants.peer.shown_code), each modifier only as two capital letters or digits (shown_modifier),
     each service id only as letters and digits of at most 8 characters, any other under one name of CPT Studio's own for
-    the whole reading (``ids``); otherwise only by its length. The 20-character token rule the trace used before passed
-    descriptor-like text such as 'SYNTH;WITH-POLYP(S)' verbatim (refutation round 3, R3-PEER's display note). Its free
-    text is left for the page, which withholds what reads like a descriptor."""
+    the participant's whole trace (``ids``: its reading and its peer review alike, _trace_runs); otherwise only by its
+    length. The 20-character token rule the trace used before passed descriptor-like text such as 'SYNTH;WITH-POLYP(S)'
+    verbatim (refutation round 3, R3-PEER's display note). Its free text is left for the page, which withholds what
+    reads like a descriptor."""
     if not isinstance(item, dict):
         return item
     out = dict(item)
@@ -1054,11 +1055,12 @@ def _code_entry(item, ids):
     return out
 
 
-def _trace_reading(run):
+def _trace_reading(run, ids=None):
     """A participant's first-reading run's full normalized reading - the quotes CPT Studio could not locate included,
     and each reference it says it used with CPT Studio's check against that run's own tool results - read as the
     adapter version that recorded it; None for Corti's runs, a peer-review run (its ``review``) and a run with no
-    answer."""
+    answer. ``ids``: the participant's one participants.peer.ShownIds for the whole trace (_trace_runs; a new one when
+    none is given), which names its services first."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.INDEPENDENT
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1068,7 +1070,7 @@ def _trace_reading(run):
                 'services': [], 'codes': [], 'not_coded': [], 'questions': [], 'extraction_issues': [],
                 'references_used': []}
     data = to_jsonable(reading)
-    ids = participant_peer.ShownIds()  # one for the whole reading: services first, then what refers to them
+    ids = participant_peer.ShownIds() if ids is None else ids  # services first, then what refers to them
     return {'refused': data['refused'], 'problems': data['problems'], 'unverified_quotes': data['unverified_quotes'],
             'date_of_service': {'value': data['date_of_service'], 'evidence': data['date_evidence']},
             'services': [dict(service, id=ids(service.get('id'))) for service in data['services']],
@@ -1089,13 +1091,15 @@ def _checked_against(run, used):
     return [dict(item, reused_from=str(run.reused_from_id)) if isinstance(item, dict) else item for item in used]
 
 
-def _trace_review(run, assessment=None):
+def _trace_review(run, assessment=None, ids=None):
     """A peer-review run's PeerReview (HARNESS.md 11.1) as JSON - its answers, positions, additional codes, references
     used (each checked against that run's own tool results), the frozen inputs it was shown, its problems - read as the
     adapter version that recorded it; None for any other run and a run with no answer. Each additional code carries
     ``phase``, the phase its participant first proposed it in (peer_code_phases), where ``assessment`` - the current
     one - read this review, and '' otherwise (refutation round 2, truth-8: a code its first reading proposed was called
-    "proposed after peer review, never independent")."""
+    "proposed after peer review, never independent"). ``ids``: the participant's one participants.peer.ShownIds for the
+    whole trace (_trace_runs): an additional code's service ids name the services of its own frozen first reading, so
+    each has the name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1109,7 +1113,7 @@ def _trace_review(run, assessment=None):
     shaped = [item.code if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code) else ''
               for item in peer_review.additional_codes]
     phases = peer_code_phases(assessment, run.provider, record, [code for code in shaped if code]) if read else {}
-    ids = participant_peer.ShownIds()
+    ids = participant_peer.ShownIds() if ids is None else ids
     return {**data, 'positions': [_code_entry(item, ids) for item in data['positions']],
             'additional_codes': [{**_code_entry(item, ids), 'phase': phases.get(code, '')}
                                  for item, code in zip(data['additional_codes'], shaped)],
@@ -1130,9 +1134,10 @@ def _trace_exchanges(run):
             for exchange in run.exchanges.order_by('turn')]
 
 
-def _trace_run(run, assessment=None):
+def _trace_run(run, assessment=None, ids=None):
     """One run as HARNESS.md 6 records it: what was called and what answered, its identities (the run identity is the
-    client request id a participant's vendor was given), usage and cost, the hashes, and who asked for it."""
+    client request id a participant's vendor was given), usage and cost, the hashes, and who asked for it. ``ids``: the
+    participant's one participants.peer.ShownIds for the whole trace (_trace_runs)."""
     return {'id': str(run.pk), 'state': run.state, 'sent': run.sent, 'mode': review.run_mode(run),
             'purpose': run.purpose, 'run_identity': str(run.run_identity), 'authorization_ref': run.authorization_ref,
             'requested_by': run.requested_by.label() if run.requested_by_id else None,
@@ -1144,8 +1149,18 @@ def _trace_run(run, assessment=None):
             'response_bytes': len(bytes(run.response_bytes or b'')), 'created_at': _iso(run.created_at),
             'finished_at': _iso(run.finished_at), 'error': run.error,
             'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
-            'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run),
-            'review': _trace_review(run, assessment), 'exchanges': _trace_exchanges(run)}
+            'reconciled': run.reconciled_at is not None, 'reading': _trace_reading(run, ids),
+            'review': _trace_review(run, assessment, ids), 'exchanges': _trace_exchanges(run)}
+
+
+def _trace_runs(runs, assessment):
+    """One participant's runs of the revision, oldest first, sharing one participants.peer.ShownIds (refutation round 4,
+    shapes-2, truth-3): a peer review's service ids name the services of the participant's own frozen first reading,
+    which the first-reading run before it names first, so a withheld id has one name across the participant's reading
+    and its peer review, and two ids never share one. A ShownIds of the review's own had named the biopsy code a peer
+    review added on 'colon-b' with 'id 1', the name the same trace gave the snare service 'colon-a'."""
+    ids = participant_peer.ShownIds()
+    return [_trace_run(run, assessment, ids) for run in runs]
 
 
 def trace_json(encounter):
@@ -1172,7 +1187,7 @@ def trace_json(encounter):
         'revision': {'id': str(revision.pk), 'number': revision.number, 'text_sha256': revision.text_sha256}
         if revision is not None else None,
         'participants': [{'name': name, 'label': label, 'vendor': vendor, 'model': model,
-                          'runs': [_trace_run(run, assessment) for run in runs if review.participant_of(run) == name]}
+                          'runs': _trace_runs([run for run in runs if review.participant_of(run) == name], assessment)}
                          for name, label, vendor, model in review.HARNESS_PARTICIPANTS],
         'assessments': [_trace_assessment(item, encounter) for item in (
             encounter.assessments.filter(revision=revision).order_by('created_at', 'pk') if revision else ())],
