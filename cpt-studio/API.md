@@ -205,27 +205,45 @@ sentence ("It returned 1 code that cannot be listed: ... It is not shown and nev
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool
 loop is priced exchange by exchange (Astra's long-context rate is a property of one request), and has no estimate when
-its recorded exchanges do not add up to its usage. `reused` is true when a retained answer to the identical request was
-reused and nothing was sent.
+its recorded exchanges do not add up to its usage, or when an exchange that may have been billed - any not recorded
+not sent - reported no usage: an estimate of the others is no estimate of the run (refutation round 2, truth-12: a
+loop whose second exchange's read timed out showed exchange 1's price as the run's). The reports' REVIEW PARTICIPANTS
+and the trace say which exchange ("not estimated: exchange 2 (outcome unknown) reported no usage and may have been
+billed, so the cost of this run cannot be estimated from published rates"); an exchange recorded not sent cost
+nothing. `reused` is true when a retained answer to the identical request was reused and nothing was sent.
 
 `harness.reference_validation.state` is `waiting` while processing, `failed` when the current assessment's retrieval
-failed, `done` when retrieval ran for it and its traces cover every code a proposal can be decided on, and `not_run`
-otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero codes);
-`not_connected` is always listed. A retrieval that fails never stops the assessment, which stands as made (HARNESS.md
-5): its retrieval is recorded as one entry `{"code": "", "failed": true, "notes": ["Reference validation failed: ..."]}`
-(no fact, no passage), and the state is then `failed` - never `not_run` or `done` - with that entry's note, CPT
-Studio's own sentence, as `detail`. `detail` is `""` in every other state, and a failed entry is counted in neither
-`codes_checked` nor `passages`. The code cards then say that reference validation failed for the assessment, and the
-reports' REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation failed: ...".
+failed, `done` when retrieval ran for it, its traces cover every code a proposal can be decided on and an installed
+CMS reference file applied to its service date, `not_verified` when the traces cover those codes but no installed CMS
+reference file applied (no service date is established - none documented, or a member's date in conflict with the
+document - or none covers it, as `reference_sources[].applies` records), so no code was checked against one, and
+`not_run` otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero
+codes); `not_connected` is always listed. `codes_checked` counts the traced codes only when a CMS reference file
+applied (0 for `not_verified`), and `not_verified`'s `detail` says why, in CPT Studio's own sentence: "No code was
+checked against the CMS reference files: no service date is established for this encounter, so no dated CMS
+reference file applies." or "... no installed CMS reference file applies to the service date, 2025-03-02."
+(refutation round 2, truth-3: this was `done`, its codes counted as checked). A retrieval that fails never stops the
+assessment, which stands as made (HARNESS.md 5): its retrieval is recorded as one entry `{"code": "", "failed": true,
+"notes": ["Reference validation failed: ..."]}` (no fact, no passage), and the state is then `failed` - never
+`not_run` or `done` - with that entry's note, CPT Studio's own sentence, as `detail`: it says what failed (CPT Studio
+could not record which CMS reference facts and passages it retrieved, so none is listed) and that each code's checks,
+which read the CMS facts before that, stand as shown (refutation round 2, truth-4: it said no proposal was checked).
+`detail` is `""` in every other state, and a failed entry is counted in neither `codes_checked` nor `passages`. The
+code cards then say that reference validation failed for the assessment, and the reports' REFERENCE RETRIEVAL section
+prints the entry as one line, "Reference validation failed: ...".
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
 alternatives, and the participants the engine recorded), `reference_check` (`passed`, `attention` or `not_verified`,
 from its CMS checks `pfs.presence`, `mue.units` and `pfs.endoscopic_base`; its detail always says that NCCI PTP edits
 are not connected) and `decision_state` (a member's). `participant_positions` gives each configured participant's
-position on the code - `proposed`, `not_proposed`, `advised_not_to_code` (with its reason) or `not_run` (with why) - and
-the first quote of it that was found verbatim in the document ('' when none was); it is `{}` when no participant was
-configured. A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
+position on the code in its first reading (the only reading harness@1 makes; harness@2's frozen phase-1 reading) -
+`proposed`, `not_proposed`, `advised_not_to_code` (with its reason) or `not_run` (with why) - and the first quote of it
+that was found verbatim in the document ('' when none was); it is `{}` when no participant was configured. A
+participant that first proposed the code after peer review (its `phases` entry is `peer_review`) keeps its first
+reading's position, and its `detail` says both: "Fable did not propose this code in its first reading. It proposed it
+after peer review." (refutation round 2, truth-2), in the encounter view and in the trace's reconciliation rows alike.
+A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
 section ([] for a code that was not looked up: a provider's alternatives never are).
 
@@ -267,7 +285,7 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                      "family": "gi.colonoscopy", "proposal_key": "sel:0", "value": "cecum", "spans": [...],
                      "located_by": ["astra", "fable"], "runs": ["uuid"], "confirmed_by": "label",
                      "confirmed_by_kind": "human", "attestation": "I read this passage ...", "created_at": "...",
-                     "revision_number": 1}],
+                     "revision_number": 1, "current_effect": {"state": "read", "detail": "read by this assessment"}}],
   "assessment": {"proposals": [{"...": "as above", "phases": {"fable": "peer_review"}, "confirmed": ["uuid"]}]}
 }
 ```
@@ -284,7 +302,12 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
 with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a
 stored result - '' where it stated none, and the tool; a run that reused a retained answer has the tool calls of the
-run it reused, which answered for it), and `used` every reference the run's answer says it relied on, with `retrieved`
+run it reused, which answered for it, and says so: its block alone carries `reused_from`, that retained run's id, and
+the page and the reports say these references were retrieved by the retained run's tool calls, never by its own
+(refutation round 2, truth-13); a tool call whose result the participant was never sent - the loop ended after
+CPT Studio answered it, its next exchange not sent or never made (a member's Stop, a follow-up it could not build, the
+deadline) - is not listed: refutation round 2, sends-r2-3; the trace's `exchanges` keep every tool call CPT Studio
+answered), and `used` every reference the run's answer says it relied on, with `retrieved`
 CPT Studio's check against that same run's tool results, as the reader recorded it (`retrieved: false` is a reference
 cited but never retrieved, never shown as retrieved; one participant's or phase's retrieval never counts for
 another's). `harness.reference_validation` stays the reconciliation's retrieval only. The phase, each run's reading and
@@ -313,6 +336,35 @@ page sends it as served, as it sends a decision's acknowledgement from `GET /api
 `confirmation` is the question's FindingConfirmation, or null. `confirmations` lists every confirmation of the current
 revision, oldest first, also after its question has gone (a re-assessment that read it raises it no more).
 `permissions.can_confirm` is `can_review`.
+
+Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
+FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
+every confirmation of a fact other than the date was read): `{"state": "read" | "not_read", "detail": "..."}`. A
+service date is `read` when the assessment's context carries it ("entered as the member's service date through the
+encounter context; this assessment's context carries it"; otherwise "... does not carry it (made before it, or with
+another member date)"). Any other fact is `read` ("read by this assessment") when the assessment's record lists it
+among those it read (`assessment.completeness.confirmations.applied`) or a proposal's checks read it (`confirmed`),
+and otherwise `not_read`, with why: "not read by this assessment: <the reason it recorded>" (`ignored`), "not read by
+this assessment, which was made before it", or "not read by this assessment, which records no reading of it"; with no
+assessment of its revision current, "not read: no assessment of its revision is current". The confirm endpoint's
+response carries it too: the assessment it was made on was made before it.
+
+`assessment.completeness.confirmations`, on an assessment that read the revision's confirmations (a model participant
+configured, and any confirmation recorded), is the engine's own record of them: `applied` - each answer it read, `{ids,
+scope, family, proposal_key, code, fact, value, spans}` - and `ignored` - each confirmation it did not read, `{id,
+why}`, why in CPT Studio's own words: it does not name the proposal it was made for (its code and the identity of its
+reading: unbound); the proposal it was made for is not in this assessment (moved) or is in it more than once; its
+passage is shorter than any quote CPT Studio locates (fewer than 8 non-space characters); CPT Studio cannot place its
+value on its readers' own scale (an extent's landmark, a cannulation's outcome); it answers no question this assessment
+asks; confirmations of the same question disagree; or it is malformed (its passage no exact slice of this revision's
+text, no value, no locating participant, no reviewer). The encounter checks say the same: `confirmations.applied`
+(`info`) lists what was read, and `confirmations.ignored` (`warn`) what was not, with why. A proposal's question is
+bound to the proposal it was made for through `support.identity`: recorded on every decidable proposal while a model
+participant is configured (with none, the record is harness@1's), it is the sha256 of the proposal's own reading - its
+code, family, profile version, cited passages, units and the context values its decision depends on: its fingerprint
+without its checks and status, which the other proposals and the confirmations move (HARNESS.md 12.5, refutation round
+1, EV-1). The engine reads a confirmation only for the one proposal with that code and identity, wherever its key now
+is, and the confirm endpoint refuses (409) a question whose proposal records none.
 
 Each proposal gains `phases` (from its support record: the phase each participant first proposed the code in; a code
 first proposed in peer review is `peer_review`, never independent) and `confirmed` (the ids of the confirmations its
@@ -373,7 +425,9 @@ harness@2 adds to each run `exchanges` - each HTTP exchange of a participant's t
 `error`) with its `tool_calls` (`call_id`, `tool`, `arguments`, `refs`, `result_sha256`, `executed_at`; [] for Corti's
 runs) - and `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references used
 checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
-`reading` it is instead). `reading.references_used` checks each reference against that run's own tool results. The
+`reading` it is instead). `reading.references_used` checks each reference against that run's own tool results; for a
+run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
+carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,
 whether it is its chain's `final` assessment, and the `frozen` list it recorded (`[[input name, sha256], ...]`: Corti's
 response, each model participant's reading, the revision text; [] before harness@2).
@@ -596,8 +650,11 @@ in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `
 `not_settled`, the value, passages, `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
 `peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
-window in `evidence_support`, `run=<id>` in `checks`); each names its participant in `proposed_by` and its phase in
-`proposal_origin`, and none carries a `decision`.
+window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a
+retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
+answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
+retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
+carries a `decision`.
 
 ## GET /api/encounters/{id}/original
 

@@ -1207,9 +1207,17 @@ def proposed_by(proposal):
 
 def participant_positions(proposal, records):
     """{name: {position, detail, quote}} for each harness participant the assessment had configured
-    (Assessment.participants; {} when none was): from a reading that was used, 'proposed' (with its first located
-    quote), 'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. Positions are kept
-    beside the proposal and decide nothing (I2, I3)."""
+    (Assessment.participants; {} when none was): its position in the reading the entry records - the frozen first
+    reading (HARNESS.md 12.3) - from a reading that was used, 'proposed' (with its first located quote),
+    'advised_not_to_code' (its reason and quote) or 'not_proposed'; else 'not_run' with why. A participant that first
+    proposed the code after peer review (the engine's support['phases'], HARNESS.md 11.1) keeps its first reading's
+    position, and its detail says both - that this is its first reading's position, and that it proposed the code after
+    peer review - so a proposer is never said not to have proposed its own code (refutation round 2, truth-2: "Fable did
+    not propose this code." beside proposed_by ['fable']). Positions are kept beside the proposal and decide nothing
+    (I2, I3)."""
+    phases = (proposal.support or {}).get('phases')
+    later = ({name for name, phase in phases.items() if phase == ProviderRun.PEER_REVIEW}
+             if isinstance(phases, dict) else set())
     out = {}
     for record in records or []:
         name = record.get('name') if isinstance(record, dict) else None
@@ -1221,17 +1229,25 @@ def participant_positions(proposal, records):
             continue
         proposed = {item.get('code'): item.get('quote') or '' for item in record.get('codes') or []}
         advised = {item.get('code'): item for item in record.get('not_coded') or []}
+        first = ' in its first reading' if name in later else ''
         if proposal.code in proposed:
             quote = proposed[proposal.code]
             located = (' with evidence located in the document' if quote else
                        '; none of its quotes was found in the document')
-            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{located}.', 'quote': quote}
+            out[name] = {'position': 'proposed', 'detail': f'{label} proposed this code{first}{located}.',
+                         'quote': quote}
+            again = ' again'
         elif proposal.code in advised:
             item = advised[proposal.code]
             out[name] = {'position': 'advised_not_to_code', 'quote': item.get('quote') or '',
-                         'detail': f'{label} advised not to code it: {_human(item.get("reason") or "other")}.'}
+                         'detail': f'{label} advised not to code it{first}: {_human(item.get("reason") or "other")}.'}
+            again = ''
         else:
-            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code.', 'quote': ''}
+            out[name] = {'position': 'not_proposed', 'detail': f'{label} did not propose this code{first}.',
+                         'quote': ''}
+            again = ''
+        if first:
+            out[name]['detail'] += f' It proposed it{again} after peer review.'
     return out
 
 
@@ -1313,8 +1329,9 @@ def estimated_cost(run):
     property of one request), never as its usage summed over the exchanges - and only when the exchanges recorded add up
     to the usage the run records. None for Corti (its usage is in credits, not USD), for a run that reported no usage (a
     reuse, a request not sent), where the pricing module is not installed, where a loop's exchanges do not add up to its
-    usage, and where pricing cannot price the usage: an estimate is informational, so it never fails the page or a
-    report (its error is logged)."""
+    usage, where an exchange that may have been billed reported no usage (unpriced_exchanges: an estimate of the others
+    is no estimate of the run), and where pricing cannot price the usage: an estimate is informational, so it never
+    fails the page or a report (its error is logged)."""
     if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
         return None
     try:
@@ -1324,15 +1341,36 @@ def estimated_cost(run):
             raise
         return None
     try:
-        usages = [dict(exchange.usage or {}) for exchange in run.exchanges.order_by('turn')]
+        exchanges = list(run.exchanges.order_by('turn').values_list('turn', 'state', 'usage'))
+        usages = [dict(usage or {}) for _, _, usage in exchanges]
         if run.usage_basis != participant_loop.LOOP_USAGE_BASIS and len(usages) <= 1:
             return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
-        if participant_loop.summed_usage([usage for usage in usages if usage]) != dict(run.usage):
+        reported = participant_loop.summed_usage([usage for usage in usages if usage])
+        if _unpriced(exchanges) or reported != dict(run.usage):
             return None
         return _usd(pricing.estimate_loop(run.requested_model, usages))
     except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
         log.exception('the usage of run %s could not be priced', run.pk)
         return None
+
+
+def _unpriced(exchanges):
+    """[(turn, state)] of the (turn, state, usage) ``exchanges`` of a tool loop that may have reached the vendor - every
+    one not recorded not sent - and reported no usage; [] for one exchange or none, whose run's own usage decides."""
+    if len(exchanges) <= 1:
+        return []
+    return [(turn, state) for turn, state, usage in exchanges if state != ProviderRun.NOT_SENT and not usage]
+
+
+def unpriced_exchanges(run):
+    """The exchanges of a participant's tool loop that leave its cost unknown, as (turn, state): each may have been
+    billed - it was not recorded not sent - and reported no usage, so the run has no estimate (estimated_cost), and the
+    reports and the trace say which (refutation round 2, truth-12: pricing.estimate_loop counted such an exchange and
+    priced the rest, and that sum was shown as the run's cost). An exchange recorded not sent cost nothing. [] for
+    Corti's runs and for a run of one exchange or none."""
+    if run is None or run.provider not in participants.PARTICIPANTS:
+        return []
+    return _unpriced(list(run.exchanges.order_by('turn').values_list('turn', 'state', 'usage')))
 
 
 # --- harness@2: phases, frozen records, the participants' references, candidates, confirmations (HARNESS.md 11-12) --
@@ -1461,21 +1499,44 @@ def stored_peer_review(run):
     return peer_reading(run)
 
 
+def _delivered_turns(run):
+    """The turns of the loop that answered ``run`` (jobs.loop_run) whose tool results reached its participant: each one
+    whose next exchange - the request that carried those results - was recorded and was not 'not_sent'. A loop that
+    ends once CPT Studio has answered an exchange's tool calls, sending nothing more (the next exchange not sent, a
+    member's Stop, a follow-up it could not build, the deadline), keeps the calls it answered on that exchange's record
+    (studio.participants.loop), and their results never reached the participant."""
+    from .jobs import loop_run  # local import: jobs imports this module
+
+    states = dict(loop_run(run).exchanges.values_list('turn', 'state'))
+    return {turn for turn in states if states.get(turn + 1) not in (None, ProviderRun.NOT_SENT)}
+
+
 def participant_references(run, review=None):
     """{'retrieved', 'used'} of one participant run (HARNESS.md 11.2, 12.6): each ref the tool calls of its own loop
-    returned (run_tool_calls: a reuse's are the run's it reuses), once, with its kind (fact or passage), the source,
-    release and effective window its tool result stated - read by the executor's own reader of a stored result,
-    studio.reference.tools.retrieved_references, '' where it states none - and the tool; then each reference the run's
-    answer says it used, with ``retrieved``: the reader's own check against those refs (ReferenceUse.retrieved), never
-    the participant's claim (``used`` with retrieved false is cited_not_retrieved). ``review``: the run's reading or
-    peer review when already read. Empty lists for no run."""
+    returned to its participant (run_tool_calls: a reuse's are the run's it reuses; a call whose result the loop never
+    sent - no later exchange carried it, _delivered_turns - is none of its references: refutation round 2, sends-r2-3),
+    once, with its kind (fact or passage), the source, release and effective window its tool result stated - read by
+    the executor's own reader of a stored result, studio.reference.tools.retrieved_references, '' where it states none -
+    and the tool; then each reference the run's answer says it used, with ``retrieved``: the reader's own check against
+    those refs (ReferenceUse.retrieved), never the participant's claim (``used`` with retrieved false is
+    cited_not_retrieved); and, only for a run that reused a retained answer and made no tool call itself,
+    ``reused_from``: the id of the retained run whose tool calls these are, so no page or report says they are this
+    run's own (refutation round 2, truth-13). ``review``: the run's reading or peer review when already read. Empty
+    lists for no run."""
+    from .jobs import loop_run  # local import: jobs imports this module
     from .reference.tools import retrieved_references  # local import: the tools module reads the reference store
 
     out = {'retrieved': [], 'used': []}
     if run is None:
         return out
+    answered = loop_run(run)
+    if answered is not None and answered.pk != run.pk:
+        out['reused_from'] = str(answered.pk)
     seen = set()
+    delivered = _delivered_turns(run)
     for call in run_tool_calls(run):
+        if call.exchange.turn not in delivered:
+            continue  # answered by CPT Studio, never sent to the participant (refutation round 2, sends-r2-3)
         stated = {}
         for item in retrieved_references(call.result):
             stated.setdefault(item['ref'], item)
@@ -1493,6 +1554,46 @@ def participant_references(run, review=None):
         out['used'] = [{'ref': item.ref, 'use': item.use, 'retrieved': bool(item.retrieved)}
                        for item in review.references_used]
     return out
+
+CONFIRMATION_READ, CONFIRMATION_NOT_READ = 'read', 'not_read'
+
+
+def confirmation_effect(confirmation, assessment):
+    """{'state': 'read' | 'not_read', 'detail': words}: what ``assessment`` made of the reviewer's FindingConfirmation
+    ``confirmation`` (HARNESS.md 11.3, 12.5, 12.7) - the one reading the reports' CONFIRMED FINDINGS ("Effect: <words>")
+    and the API's confirmations (current_effect) both state (refutation round 2, truth-5: the page said every
+    confirmation of a fact other than the date was read by the assessment, beside the Checks tab's "1 confirmation not
+    read"). A service date enters as the member's date through the encounter context, so it is read when this
+    assessment's context carries it; any other fact is read when the assessment's own record lists it among those it
+    read (completeness['confirmations']['applied'], engine._Confirmations.record) or a proposal's checks read it
+    (support['confirmed'], which the code cards show), and otherwise not read, with why: the reason the engine recorded
+    for not reading it (['ignored']), that the assessment was made before it, or that it records no reading of it.
+    ``assessment`` None: no assessment of its revision is current. Read-only; a confirmation is a confirmed fact, never
+    a decision (I3, I4)."""
+    if assessment is None:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read: no assessment of its revision is current'}
+    if confirmation.fact == candidates.DATE_FACT:
+        carried = (assessment.context.user_values or {}).get('service_date') == confirmation.value
+        return {'state': CONFIRMATION_READ if carried else CONFIRMATION_NOT_READ,
+                'detail': ("entered as the member's service date through the encounter context; this assessment's "
+                           'context ' + ('carries it' if carried else
+                                         'does not carry it (made before it, or with another member date)'))}
+    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
+    record = record if isinstance(record, dict) else {}
+    key = str(confirmation.pk)
+    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
+    for support in assessment.proposals.values_list('support', flat=True):
+        read = (support or {}).get('confirmed') if isinstance(support, dict) else None
+        applied |= {item for item in read if isinstance(item, str)} if isinstance(read, list) else set()
+    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
+               if isinstance(item, dict)}
+    if key in applied:
+        return {'state': CONFIRMATION_READ, 'detail': 'read by this assessment'}
+    if key in ignored:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': f'not read by this assessment: {ignored[key]}'}
+    if assessment.created_at < confirmation.created_at:
+        return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which was made before it'}
+    return {'state': CONFIRMATION_NOT_READ, 'detail': 'not read by this assessment, which records no reading of it'}
 
 
 def frozen_inputs(assessment):

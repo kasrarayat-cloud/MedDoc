@@ -426,7 +426,9 @@ def _participants(assessment):
             name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
             review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused')
         if 'exchanges' in record:  # harness@2 (HARNESS.md 12.3): the run was a tool loop
-            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')))
+            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')),
+                         unpriced_exchanges=[[turn, state] for turn, state in
+                                             review.unpriced_exchanges(runs.get(record.get('run')))])
         out.append(entry)
     return out
 
@@ -553,30 +555,14 @@ def _peer_items(assessment, peer_review, text, index):
 def _confirmed_findings(assessment):
     """Every reviewer-confirmed finding of the revision (FindingConfirmation, 11.3), oldest first: the fact, value and
     passage, who located it, who confirmed it with which attestation and when, and what became of it - a service date
-    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations'])."""
-    record = (assessment.completeness or {}).get('confirmations') if isinstance(assessment.completeness, dict) else {}
-    record = record if isinstance(record, dict) else {}
-    applied = {str(i) for item in record.get('applied') or [] if isinstance(item, dict) for i in item.get('ids') or []}
-    ignored = {str(item.get('id')): str(item.get('why') or '') for item in record.get('ignored') or []
-               if isinstance(item, dict)}
-    member_date = (assessment.context.user_values or {}).get('service_date')
+    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations']) - in
+    the words of review.confirmation_effect, the one reading the API's confirmations state too (refutation round 2,
+    truth-5)."""
     text = assessment.revision.text
     out = []
     for item in review.revision_confirmations(assessment.revision):
         spans = [span for span in item.spans or [] if isinstance(span, dict) and _matches(span, text)]
-        if item.fact == candidates.DATE_FACT:
-            effect = ("entered as the member's service date through the encounter context; this assessment's context "
-                      'carries it' if member_date == item.value else
-                      "entered as the member's service date through the encounter context; this assessment's context "
-                      'does not carry it (made before it, or with another member date)')
-        elif str(item.pk) in applied:
-            effect = 'read by this assessment'
-        elif str(item.pk) in ignored:
-            effect = f'not read by this assessment: {ignored[str(item.pk)]}'
-        elif assessment.created_at < item.created_at:
-            effect = 'not read by this assessment, which was made before it'
-        else:
-            effect = 'not read by this assessment, which records no reading of it'
+        effect = review.confirmation_effect(item, assessment)['detail']
         question = item.clarification
         out.append({'id': str(item.pk), 'clarification_id': str(item.clarification_id), 'scope': item.scope,
                     'fact': item.fact, 'family': item.family, 'proposal_key': item.proposal_key,
@@ -606,7 +592,7 @@ def _participant_reference_runs(assessment):
                 continue
             references = review.participant_references(run)
             out.append({'name': name, 'label': participants.LABELS[name], 'phase': phase, 'run': str(run.pk),
-                        'retrieved': references['retrieved'],
+                        'reused_from': references.get('reused_from'), 'retrieved': references['retrieved'],
                         'used': [{'ref': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
                                   'retrieved': bool(item['retrieved'])} for item in references['used']]})
     return out
@@ -1019,6 +1005,20 @@ def _reference_section(snap):
     return lines
 
 
+# What an exchange of a tool loop that reported no usage came to, as its record says (ProviderExchange.state).
+EXCHANGE_OUTCOMES = {ProviderRun.SUCCEEDED: 'answered', ProviderRun.FAILED: 'failed',
+                     ProviderRun.UNKNOWN: 'outcome unknown'}
+
+
+def _unpriced_words(items):
+    """Why a tool loop has no estimate when exchanges that may have been billed reported no usage
+    (review.unpriced_exchanges; refutation round 2, truth-12): an estimate of the others is no estimate of the run."""
+    named = [f'{turn} ({EXCHANGE_OUTCOMES.get(state, state)})' for turn, state in items]
+    which = f'exchange {named[0]}' if len(named) == 1 else f'exchanges {", ".join(named[:-1])} and {named[-1]}'
+    return (f'not estimated: {which} reported no usage and may have been billed, so the cost of this run cannot be '
+            'estimated from published rates')
+
+
 def _participants_section(snap):
     """Each review participant as this assessment read it (HARNESS.md 6-7): vendor, endpoint, the models requested and
     returned, its state, the vendor's request id and response id, usage, the estimated cost, and why it was not used or
@@ -1048,6 +1048,8 @@ def _participants_section(snap):
             lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
         elif entry['estimated_cost_usd'] is not None:
             lines.append(f'    Estimated cost: USD {entry["estimated_cost_usd"]} ({review.COST_BASIS})')
+        elif entry.get('unpriced_exchanges'):
+            lines.append(f'    Estimated cost: {_unpriced_words(entry["unpriced_exchanges"])}')
         elif entry['usage']:
             lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
         else:
@@ -1169,12 +1171,17 @@ def _window(item):
 
 def _references_section(snap):
     """What each participant run's own tool calls retrieved and what its answer says it used (HARNESS.md 11.2): kept
-    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL."""
+    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL. A run that reused a retained
+    answer made no tool call: its references are the retained run's, and it says so (refutation round 2, truth-13)."""
     lines = ["  Each participant run's own tool results (retrieved) and the references its answer says it relied on "
              "(used, checked against that run's own results); the reconciliation's retrieval is REFERENCE RETRIEVAL."]
     runs = snap.get('participant_references') or []
     for run in runs:
-        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}')
+        reused = run.get('reused_from')
+        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}'
+                     + (f' · reuses the retained answer of run {reused}, whose tool calls these are; this run made none'
+                        if reused else ''))
+        by = 'the retained run it reuses' if reused else 'this run'
         for item in run['retrieved']:
             ref = item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else UNKEYED_REF
             lines.append(f'    Retrieved: {ref} ({item["kind"]} · {item["source_key"] or "unknown source"}, release '
@@ -1183,8 +1190,8 @@ def _references_section(snap):
             lines.append('    Retrieved: none')
         for item in run['used']:
             lines.append(f'    Used: {item["ref"] or UNKEYED_REF} — ' + (
-                'retrieved by this run' if item['retrieved'] else
-                'cited, not retrieved by this run, so never shown as retrieved'))
+                f'retrieved by {by}' if item['retrieved'] else
+                f'cited, not retrieved by {by}, so never shown as retrieved'))
         if not run['used']:
             lines.append('    Used: none')
     if not runs:
@@ -1586,16 +1593,18 @@ def _harness2_rows(snap):
                          'status': 'proposed_after_peer_review', 'evidence': _csv_spans(added['evidence'])})
     for run in snap.get('participant_references') or []:
         source = {**base, 'proposed_by': run['name'], 'proposal_origin': run['phase']}
+        # a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)
+        named = f'run={run["run"]}' + (f';reused_from={run["reused_from"]}' if run.get('reused_from') else '')
         for item in run['retrieved']:
             rows.append({**source, 'item_list': 'participant_reference', 'status': 'retrieved',
                          'exclusion_reason': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
                          'documented_service': item['source_key'],
                          'evidence_support': f'{item["kind"]} · release {item["release"] or "not stated"}'
-                                             f'{_window(item)}', 'checks': f'run={run["run"]}'})
+                                             f'{_window(item)}', 'checks': named})
         for item in run['used']:
             rows.append({**source, 'item_list': 'participant_reference',
                          'status': 'used' if item['retrieved'] else 'cited_not_retrieved',
-                         'exclusion_reason': item['ref'], 'checks': f'run={run["run"]}'})
+                         'exclusion_reason': item['ref'], 'checks': named})
     return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 

@@ -85,17 +85,22 @@ const PEER_STATES = {
 // Why a participant whose first reading was not used takes no part in peer review (HARNESS.md 11.1).
 const PEER_NOT_RUN = 'Not run: only a participant whose own first reading was used takes part in peer review, so this one never sees its peers\' conclusions.';
 // Reference validation (harness.reference_validation, HARNESS.md 5): its look, label and plain sentence by state, and -
-// for 'failed', which must be said plainly - the word the API's own sentence (its detail) has to contain for the plain
-// one to be left out. A retrieval that failed is shown as failed, never as not run or done (refutation round 1, parity-1).
+// for 'failed' and 'not_verified', which must be said plainly - the words the API's own sentence (its detail) has to
+// contain for the plain one to be left out. A retrieval that failed is shown as failed, never as not run or done
+// (refutation round 1, parity-1); one no installed CMS reference file applied to checked no code, and says so, never
+// done (refutation round 2, truth-3).
 const REFERENCE_STATES = {
   waiting: [STAGE_LOOKS.queued, 'Waiting', 'Runs once the participants have answered: every proposed code is looked up in the connected CMS reference files.'],
   done: [STAGE_LOOKS.succeeded, 'Done', ''],
-  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: the CMS facts and passages could not be retrieved, so no proposal was checked against them.', 'failed'],
+  not_verified: [STAGE_LOOKS.unknown, 'Not verified', 'No code was checked against the CMS reference files: no installed CMS reference file applies to the service date.', 'no code was checked'],
+  failed: [STAGE_LOOKS.failed, 'Failed', 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed here; each code\'s checks read the CMS facts before that and stand as shown.', 'failed'],
   not_run: [['muted', 'info'], 'Not run', 'No proposal was checked against the CMS references for this revision.'],
 };
-// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): nothing was
-// retrieved for any code - never to be read as a lookup that found nothing for this one.
-const RETRIEVAL_FAILED = 'Reference validation failed for this assessment, so no CMS reference fact or passage was retrieved for this code.';
+// What a code card says where the assessment's retrieval failed (harness.reference_validation 'failed'): no record of the
+// reference facts and passages retrieved is listed for any code - never to be read as a lookup that found nothing for
+// this one, nor as checks that did not run: the code's CMS reference checks read the facts first, and stand as its
+// status lines show them (refutation round 2, truth-4).
+const RETRIEVAL_FAILED = 'Reference validation failed for this assessment: CPT Studio could not record which CMS reference facts and passages it retrieved, so none is listed for this code. Its CMS reference checks read the facts before that and stand as shown.';
 // A code's three statuses (HARNESS.md I4): proposed (by whom), reference-checked and approved, never one merged state.
 const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention', not_verified: 'not verified' };
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };
@@ -1002,14 +1007,18 @@ function referenceLists(proposal, doc) {
   for (const row of objects(doc.harness.participants)) {
     for (const [field, phase] of [['references', 'first reading'], ['peer_references', 'peer review']]) {
       const refs = row[field] && typeof row[field] === 'object' ? row[field] : {};
-      const who = `${lookup(PARTICIPANT_LABELS, row.name, textValue(row.name) || 'Participant')} · ${phase}`;
+      // a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)
+      const reused = Boolean(textValue(refs.reused_from));
+      const who = `${lookup(PARTICIPANT_LABELS, row.name, textValue(row.name) || 'Participant')} · ${phase}${reused ? ' (the retained run it reuses)' : ''}`;
       for (const item of objects(refs.retrieved).filter(entry => refConcerns(entry.ref, proposal.code))) {
         const window = textValue(item.effective_start) && textValue(item.effective_end) ? `effective ${formatDate(item.effective_start) || item.effective_start} – ${formatDate(item.effective_end) || item.effective_end}` : '';
         const passage = textValue(item.ref).startsWith('fact:') ? '' : ' (a policy passage, not tied to one code)';
         retrieved.push(`<li><b>${escapeHtml(who)}:</b> ${escapeHtml(`${textValue(item.ref)}${passage}`)}<small class="check-source">${escapeHtml([textValue(item.tool), textValue(item.source_key), textValue(item.release), window].filter(Boolean).join(' · '))}</small></li>`);
       }
       for (const item of objects(refs.used).filter(entry => refConcerns(entry.ref, proposal.code))) {
-        const checked = item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it';
+        const checked = reused
+          ? (item.retrieved === true ? 'retrieved by the tool calls of the retained run this run reuses' : 'cited, not retrieved: the tool calls of the retained run this run reuses never returned it')
+          : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved: its own tool calls in this run never returned it');
         // a cited reference is the participant's own text (a ref it was never given reads as written): withheld where
         // it reads like a CPT descriptor
         const use = participantText(item.use);
@@ -1346,6 +1355,8 @@ function emptySelectionCopy(assessment, doc) {
 // Every reviewer-confirmed finding of the current revision (doc.confirmations, HARNESS.md 11.3), after its question has
 // gone too: the fact and value, the passage, who located it and who confirmed it, the attestation and when. A date of
 // service enters as the member's date through the encounter context. None is a decision: '' when none is served.
+// Refutation round 2, truth-5: what the current assessment made of it is the API's (current_effect, the words the
+// reports print as "Effect:"), never assumed - a confirmation it does not read is never said to be read.
 function confirmedFindings(doc) {
   const confirmations = objects(doc.confirmations);
   if (!confirmations.length) return '';
@@ -1353,8 +1364,14 @@ function confirmedFindings(doc) {
   const items = confirmations.map(confirmation => {
     const fact = lookup(FINDING_FACTS, confirmation.fact, textValue(confirmation.fact).replace(/_/g, ' ') || 'Fact');
     const when = [formatTimestamp(confirmation.created_at), Number.isInteger(confirmation.revision_number) ? `revision ${confirmation.revision_number}` : '', confirmation.confirmed_by_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : ''].filter(Boolean).join(' · ');
-    const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`,
-      confirmation.fact === 'service_date' ? 'It entered as the member\'s date of service, through the encounter context.' : 'The assessment reads it as documented by this passage; it decides no code.'];
+    const effect = confirmation.current_effect && typeof confirmation.current_effect === 'object' && !Array.isArray(confirmation.current_effect) ? confirmation.current_effect : {};
+    const detail = textValue(effect.detail).trim();
+    const effectLine = confirmation.fact === 'service_date'
+      ? ['It entered as the member\'s date of service, through the encounter context.', effect.state === 'not_read' && detail ? sentence(`Effect: ${detail}`) : ''].filter(Boolean).join(' ')
+      : effect.state === 'read' ? 'The assessment reads it as documented by this passage; it decides no code.'
+        : effect.state === 'not_read' ? `${sentence(`Effect: ${detail || 'not read by this assessment'}`)} It decides no code.`
+          : 'Whether this assessment reads it is not recorded here; the Checks tab lists each confirmation it read or did not read. It decides no code.';
+    const lines = [...quotedSpans(confirmation.spans, exact), `Attestation recorded: ${textValue(confirmation.attestation) || 'none recorded'}`, effectLine];
     return checkItem('', 'shield', `${fact}: ${textValue(confirmation.value) || 'no value recorded'}`, [confirmedFrom(confirmation), when].filter(Boolean).join(' · '), lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
   }).join('');
   return `${sectionHeading('Confirmed findings (not decisions)', confirmations.length)}<div class="check-list-card confirmed-findings">${items}</div>`;
@@ -1481,14 +1498,17 @@ function harnessRow(key, rowState, [look, label, labelTone], title, lines, notes
 
 // What one participant run's own tool calls retrieved and what its answer says it used
 // (harness.participants[].references or .peer_references, HARNESS.md 11.2), counted; '' when the API serves none or the
-// run has neither.
+// run has neither. A run that reused a retained answer made no tool call: its references are the retained run's
+// (references.reused_from), and it says so (refutation round 2, truth-13).
 function referencesNote(references) {
   if (!references || typeof references !== 'object') return '';
   const retrieved = objects(references.retrieved).length;
   const used = objects(references.used);
   const cited = used.filter(item => item.retrieved !== true).length;
   if (!retrieved && !used.length) return '';
-  return `Its own tool calls retrieved ${plural(retrieved, 'reference', 'references')}; it says it used ${used.length}${cited ? `, ${cited} of them cited, not retrieved` : ''}.`;
+  const said = `it says it used ${used.length}${cited ? `, ${cited} of them cited, not retrieved` : ''}.`;
+  if (textValue(references.reused_from)) return `This run made no tool call: the retained run it reuses retrieved ${plural(retrieved, 'reference', 'references')} with its own tool calls; ${said}`;
+  return `Its own tool calls retrieved ${plural(retrieved, 'reference', 'references')}; ${said}`;
 }
 
 // A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
@@ -1554,8 +1574,9 @@ function referenceRow(reference) {
   const served = reference && typeof reference === 'object' ? reference : {};
   const [look, label, plain, required] = lookup(REFERENCE_STATES, served.state, REFERENCE_STATES.not_run);
   const counted = name => (Number.isInteger(served[name]) && served[name] >= 0 ? served[name] : 0);
-  // a failed retrieval says why in the API's own sentence (its detail), after the plain one where it does not say so
-  const said = served.state === 'failed' ? textValue(served.detail).trim() : '';
+  // a failed retrieval, or one no CMS reference file applied to, says why in the API's own sentence (its detail), after
+  // the plain one where it does not say so
+  const said = served.state === 'failed' || served.state === 'not_verified' ? textValue(served.detail).trim() : '';
   const lines = served.state === 'done' ? [`${plural(counted('codes_checked'), 'code', 'codes')} checked against the CMS reference files; ${plural(counted('passages'), 'passage', 'passages')} of verbatim CMS text retrieved.`]
     : !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const sources = (Array.isArray(served.sources) ? served.sources : []).filter(source => source && typeof source === 'object').map(source => {
@@ -1784,11 +1805,16 @@ function traceCode(code, after = '') {
 }
 
 // The references a participant's answer says it used (references_used), each with CPT Studio's check against that run's
-// own tool calls: one it cited and never retrieved is marked so, never shown as retrieved (HARNESS.md 11.2).
+// own tool calls: one it cited and never retrieved is marked so, never shown as retrieved (HARNESS.md 11.2). A run that
+// reused a retained answer was checked against the retained run's tool calls (each item's reused_from), and says so
+// (refutation round 2, truth-13).
 function traceReferencesUsed(items) {
   return objects(items).map(item => {
     const use = participantText(item.use);
-    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved'}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
+    const checked = textValue(item.reused_from)
+      ? (item.retrieved === true ? `retrieved by the tool calls of the retained run this run reuses (${item.reused_from})` : `cited, not retrieved by the retained run this run reuses (${item.reused_from})`)
+      : (item.retrieved === true ? 'retrieved by its own tool calls in this run' : 'cited, not retrieved');
+    return `<li><b>${escapeHtml(`${participantText(item.ref) || 'Reference not named'} — ${checked}`)}</b>${use ? `<br>${escapeHtml(`Its use: ${use}`)}` : ''}</li>`;
   });
 }
 
@@ -1856,6 +1882,21 @@ function traceAssessments(entries) {
   }).join('');
 }
 
+// What an exchange of a tool loop that reported no usage came to (its state), in the reports' words.
+const EXCHANGE_OUTCOMES = { succeeded: 'answered', failed: 'failed', unknown: 'outcome unknown' };
+
+// Why a run has no estimate when the exchanges of its tool loop that may have been billed - every one not recorded not
+// sent - reported no usage (review.unpriced_exchanges; refutation round 2, truth-12); '' otherwise.
+function unpricedNote(run) {
+  const exchanges = objects(run.exchanges);
+  if (exchanges.length < 2) return '';
+  const named = exchanges.filter(exchange => exchange.state !== 'not_sent' && !(exchange.usage && typeof exchange.usage === 'object' && Object.keys(exchange.usage).length))
+    .map(exchange => `${shownOr(exchange.turn)} (${lookup(EXCHANGE_OUTCOMES, exchange.state, textValue(exchange.state) || 'state not recorded')})`);
+  if (!named.length) return '';
+  const which = named.length === 1 ? `exchange ${named[0]}` : `exchanges ${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+  return `Not estimated: ${which} reported no usage and may have been billed, so the cost of this run cannot be estimated from published rates`;
+}
+
 // One request of one participant, with every field its run records (HARNESS.md 6), then the reading made of it.
 function traceRun(run) {
   const usage = usagePairs(run.usage && typeof run.usage === 'object' ? run.usage : {});
@@ -1874,7 +1915,7 @@ function traceRun(run) {
     ['Latency', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : 'Not recorded'],
     ['Usage', usage.length ? usage.join(' · ') : 'Not reported'],
     ['Usage basis', shownOr(run.usage_basis)],
-    ['Estimated cost', cost ? `$${cost} (estimated from published rates, not reconciled to an invoice)` : 'Not estimated'],
+    ['Estimated cost', cost ? `$${cost} (estimated from published rates, not reconciled to an invoice)` : unpricedNote(run) || 'Not estimated'],
     ['Request sha256', shownOr(run.request_sha256)],
     ['Response sha256', shownOr(run.response_sha256)],
     ['Response bytes', Number.isInteger(run.response_bytes) ? String(run.response_bytes) : 'None recorded'],

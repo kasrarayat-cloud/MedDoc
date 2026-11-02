@@ -2059,3 +2059,110 @@ test('each fact\'s Verified note says what its check established: the section ru
     assert.equal(html.includes('the check does not read whether it names this code'), false, fact);
   }
 });
+
+// refutation round 2, R2-TRUTH
+
+test('R2-TRUTH truth-3: reference validation that no CMS reference file applied to says no code was checked, never done', () => {
+  const ready = fixture(HARNESS_READY);
+  const detail = 'No code was checked against the CMS reference files: no service date is established for this encounter, so no dated CMS reference file applies.';
+  const served = { ...ready.harness.reference_validation, state: 'not_verified', detail, codes_checked: 0, passages: 0, sources: [] };
+  const rowOf = reference => harnessRow(render({ ...ready, harness: { ...ready.harness, reference_validation: reference } }), 'reference_validation');
+  const row = rowOf(served);
+  assert.ok(row.includes('<span class="status amber">Not verified</span>'), row);
+  const [[tone], label, plain, required] = app.REFERENCE_STATES.not_verified;
+  assert.equal(required, 'no code was checked');
+  assert.ok(row.startsWith(`<div class="check-item ${tone}" data-participant="reference_validation" data-state="not_verified">`), row);
+  assert.equal(label, 'Not verified');
+  assert.ok(row.includes(`<p>${app.escapeHtml(detail)}</p>`) && count(row, '<p>') === 1, 'the API\'s own sentence, once');
+  for (const other of ['Done', 'checked against the CMS reference files;', 'Not run']) assert.equal(row.includes(other), false, other);
+  assert.ok(row.includes('Not connected: NCCI procedure-to-procedure edits'), 'what is not connected is still listed');
+  // a detail that does not say no code was checked follows the plain sentence; none is the plain sentence alone
+  assert.ok(rowOf({ ...served, detail: 'Synthetic reason.' }).includes(`<p>${app.escapeHtml(plain)}</p><p>Synthetic reason.</p>`));
+  const bare = rowOf({ ...served, detail: '' });
+  assert.ok(bare.includes(`<p>${app.escapeHtml(plain)}</p>`) && count(bare, '<p>') === 1, bare);
+  // 'done' still counts its codes, and never shows a detail
+  const done = rowOf({ ...ready.harness.reference_validation, detail });
+  assert.ok(done.includes('<p>2 codes checked against the CMS reference files; 3 passages of verbatim CMS text retrieved.</p>') && !done.includes(app.escapeHtml(detail)), done);
+});
+
+test('R2-TRUTH truth-4: a failed retrieval says what failed and that each code\'s CMS checks stand, never that no proposal was checked', () => {
+  // the plan's shared wording (jobs.RETRIEVAL_FAILED), as the API serves it for a passage load that raised
+  const note = 'Reference validation failed: CPT Studio could not record which CMS reference facts and passages it retrieved for this assessment\'s codes (ValueError, logged), so none is listed here. Each code\'s checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides no status, so the assessment stands as made.';
+  for (const said of [app.REFERENCE_STATES.failed[2], app.RETRIEVAL_FAILED]) {
+    assert.equal(/no proposal was checked|no CMS reference fact or passage was retrieved/.test(said), false, said);
+    assert.ok(said.includes('could not record which CMS reference facts and passages it retrieved') && said.includes('stand as shown'), said);
+  }
+  const ready = fixture(HARNESS_READY);
+  const failed = { ...ready.harness.reference_validation, state: 'failed', detail: note, codes_checked: 0, passages: 0, sources: [] };
+  const doc = { ...ready, harness: { ...ready.harness, reference_validation: failed },
+    assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(proposal => ({ ...proposal, retrieval: [] })) } };
+  const html = render(doc);
+  const row = harnessRow(html, 'reference_validation');
+  assert.ok(row.includes(`<p>${app.escapeHtml(note)}</p>`) && count(row, '<p>') === 1, row);
+  // the card's own CMS reference checks line and its retrieval note agree: the checks ran and stand
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>CMS reference checks:</b> passed') && snare.includes(`<p class="harness-note">${app.escapeHtml(app.RETRIEVAL_FAILED)}</p>`), snare);
+});
+
+test('R2-TRUTH truth-5: the confirmed findings say what the current assessment made of each confirmation, as the API states it', () => {
+  const doc = fixture(H2_CONFIRMED);
+  const [confirmation] = doc.confirmations;
+  const why = 'the proposal it was made for is not in this assessment (no proposal of its code reads the same passages under the same context), so it answers nothing here; it is never read for the proposal that holds its key now';
+  const section = current_effect => app.confirmedFindings({ ...doc, confirmations: [{ ...confirmation, current_effect }] });
+  const ignored = section({ state: 'not_read', detail: `not read by this assessment: ${why}` });
+  assert.ok(ignored.includes(`<p>${app.escapeHtml(`Effect: not read by this assessment: ${why}.`)} It decides no code.</p>`), ignored);
+  assert.equal(ignored.includes('reads it as documented'), false, 'a confirmation it does not read is never said to be read');
+  const before = section({ state: 'not_read', detail: 'not read by this assessment, which was made before it' });
+  assert.ok(before.includes('<p>Effect: not read by this assessment, which was made before it. It decides no code.</p>'), before);
+  // read: as before; nothing served: never assumed either way
+  assert.ok(section({ state: 'read', detail: 'read by this assessment' }).includes('<p>The assessment reads it as documented by this passage; it decides no code.</p>'));
+  for (const unserved of [undefined, null, 'read', []]) {
+    const html = section(unserved);
+    assert.ok(html.includes('Whether this assessment reads it is not recorded here') && !html.includes('reads it as documented'), String(unserved));
+  }
+  // a date of service: it entered through the context; a context that no longer carries it says so
+  const date = { ...confirmation, fact: 'service_date', value: '2026-10-21', spans: [],
+    current_effect: { state: 'not_read', detail: 'entered as the member\'s service date through the encounter context; this assessment\'s context does not carry it (made before it, or with another member date)' } };
+  const dated = app.confirmedFindings({ ...doc, confirmations: [date] });
+  assert.ok(dated.includes('It entered as the member&#x27;s date of service, through the encounter context. Effect: entered as the member&#x27;s service date through the encounter context; this assessment&#x27;s context does not carry it (made before it, or with another member date).'), dated);
+});
+
+test('R2-TRUTH truth-12: a run whose sent exchange reported no usage shows no estimate, and says why', () => {
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first] = astra.runs;
+  const [one, two] = first.exchanges;
+  const runOf = (run) => app.traceView({ ...trace, participants: [{ ...astra, runs: [run] }] }, trace.encounter.id);
+  const unknown = { ...first, state: 'unknown', estimated_cost_usd: null, exchanges: [one, { ...two, state: 'unknown', usage: {}, http_status: null }] };
+  assert.ok(runOf(unknown).includes('<dt>Estimated cost</dt><dd>Not estimated: exchange 2 (outcome unknown) reported no usage and may have been billed, so the cost of this run cannot be estimated from published rates</dd>'), runOf(unknown));
+  // an exchange recorded not sent cost nothing; a run the API prices keeps its estimate
+  const unsent = { ...unknown, exchanges: [one, { ...two, state: 'not_sent', usage: {} }] };
+  assert.ok(runOf(unsent).includes('<dt>Estimated cost</dt><dd>Not estimated</dd>'));
+  assert.ok(runOf(first).includes(`<dt>Estimated cost</dt><dd>$${first.estimated_cost_usd} (estimated from published rates, not reconciled to an invoice)</dd>`));
+});
+
+test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'s tool calls\', never its own', () => {
+  const final = fixture(H2_FINAL);
+  const reused = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, reused: true, references: { ...row.references, reused_from: UUID } } : row)) } };
+  const html = render(reused);
+  const row = harnessRow(html, 'astra');
+  assert.ok(row.includes('This run made no tool call: the retained run it reuses retrieved 1 reference with its own tool calls; it says it used 2, 1 of them cited, not retrieved.'), row);
+  assert.equal(row.includes('Its own tool calls retrieved'), false);
+  const snare = codeCardOf(html, '45385');
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc<small class="check-source">'), snare);
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> ncci-2026-ch6-c-1 — cited, not retrieved: the tool calls of the retained run this run reuses never returned it'), snare);
+  assert.ok(snare.includes('<li><b>Astra · first reading (the retained run it reuses):</b> fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses'), snare);
+  assert.equal(snare.includes('Astra · first reading:</b> ncci-2026-ch6-c-1 — cited, not retrieved: its own tool calls in this run'), false, 'its own first reading is the reuse');
+  // a run's own tool calls read as before
+  assert.ok(harnessRow(render(final), 'astra').includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'));
+  // the owner's trace: each reference used names the retained run it was checked against
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first] = astra.runs;
+  const reuse = { ...first, reused_from: UUID, exchanges: [], reading: { ...first.reading, references_used: first.reading.references_used.map(item => ({ ...item, reused_from: UUID })) } };
+  const traced = app.traceView({ ...trace, participants: [{ ...astra, runs: [reuse] }] }, trace.encounter.id);
+  assert.ok(traced.includes(`<li><b>fact:cms-pfs-rvu26d:45385:mult_proc — retrieved by the tool calls of the retained run this run reuses (${UUID})</b>`), traced);
+  assert.ok(traced.includes(`<li><b>ncci-2026-ch6-c-1 — cited, not retrieved by the retained run this run reuses (${UUID})</b>`), traced);
+  assert.equal(traced.includes('retrieved by its own tool calls in this run'), false);
+});

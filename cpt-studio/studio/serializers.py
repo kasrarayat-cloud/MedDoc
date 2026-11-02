@@ -371,10 +371,20 @@ def _provider_run_json(run):
             'requested_model': run.requested_model, 'returned_model': run.returned_model}
 
 
+def _confirmation_assessment(confirmation):
+    """The assessment a confirmation's effect is stated for: its encounter's current assessment - the one the page
+    shows - when that assessment is of the confirmation's revision; None otherwise."""
+    encounter = confirmation.encounter
+    assessment = encounter.current_assessment if encounter.current_assessment_id else None
+    return assessment if assessment is not None and assessment.revision_id == confirmation.revision_id else None
+
+
 def confirmation_json(confirmation):
     """A FindingConfirmation (HARNESS.md 11.3, 12.6): the fact a reviewer confirmed from a participant's located
     passage, with that passage, who located it, who confirmed it and the attestation recorded - a confirmed fact,
-    never a decision on a code."""
+    never a decision on a code - and ``current_effect``, what the current assessment made of it, in the words the
+    reports' CONFIRMED FINDINGS use (review.confirmation_effect: read, or not read with why; refutation round 2,
+    truth-5: the page said every confirmation of a fact other than the date was read)."""
     reviewer = confirmation.confirmed_by
     return {'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
             'scope': confirmation.scope, 'fact': confirmation.fact, 'family': confirmation.family,
@@ -382,7 +392,8 @@ def confirmation_json(confirmation):
             'spans': list(confirmation.spans or []), 'located_by': list(confirmation.located_by or []),
             'runs': list(confirmation.runs or []), 'confirmed_by': reviewer.label(),
             'confirmed_by_kind': reviewer.actor_kind, 'attestation': confirmation.attestation,
-            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number}
+            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number,
+            'current_effect': review.confirmation_effect(confirmation, _confirmation_assessment(confirmation))}
 
 
 def _report_json(report):
@@ -639,8 +650,10 @@ def _reference_sources(keys):
     return found
 
 
-REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this "
-                    "assessment's codes, so no proposal was checked against them.")
+# A failed entry's note where it carries none: the facts jobs.RETRIEVAL_FAILED states (refutation round 2, truth-4).
+REFERENCE_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
+                    "it retrieved for this assessment's codes, so none is listed here. Each code's checks read the "
+                    "CMS facts before that and stand as shown.")
 
 
 def retrieval_failed(entry) -> bool:
@@ -656,14 +669,42 @@ def failure_note(entry) -> str:
     return next((item.strip() for item in notes if isinstance(item, str) and item.strip()), REFERENCE_FAILED)
 
 
+# What reference validation says when no installed CMS reference file applied to the assessment's service date, so no
+# code was looked up in one (refutation round 2, truth-3: it said "Done - 2 codes checked against the CMS reference
+# files" while every card's CMS checks were not verified).
+NO_SOURCE_NO_DATE = ('No code was checked against the CMS reference files: no service date is established for this '
+                     'encounter, so no dated CMS reference file applies.')
+NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no installed CMS reference file applies '
+                      'to the service date, {date}.')
+
+
+def _source_applied(assessment) -> bool:
+    """Whether an installed CMS reference file applied to the assessment's service date, so its codes were looked up
+    in one: the engine's own record of the lookup the checks read and the retrieval traced
+    (Assessment.reference_sources: 'applies' is true only for the one source of its kind used for the date)."""
+    return any(isinstance(source, dict) and source.get('applies') is True
+               for source in assessment.reference_sources or [])
+
+
+def _no_source(retrieval) -> str:
+    """Why no code was checked: no service date was established (the traces record none), or none applies to it."""
+    dates = sorted({entry.get('service_date') for entry in retrieval if isinstance(entry.get('service_date'), str)
+                    and entry.get('service_date')})
+    return NO_SOURCE_FOR_DATE.format(date=dates[0]) if dates else NO_SOURCE_NO_DATE
+
+
 def _reference_validation(assessment, active):
     """'waiting' while processing; 'failed' when the assessment's retrieval failed - any entry is a failed one
     (retrieval_failed) - with that entry's note as ``detail``: never 'not_run' or 'done' (refutation round 1,
-    parity-1); 'done' when retrieval ran for the assessment and its traces cover every code a proposal can be decided on
-    (selected or excluded); 'not_run' when there is no assessment, it predates the harness, or no retrieval ran for it -
-    also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what an absent passages
-    module records too). ``detail`` is '' in every state but 'failed'. A failed entry is no code checked, so it is
-    counted in neither ``codes_checked`` nor ``passages``."""
+    parity-1); 'done' when retrieval ran for the assessment, its traces cover every code a proposal can be decided on
+    (selected or excluded), and an installed CMS reference file applied to its service date (_source_applied);
+    'not_verified' when they cover every such code but no CMS reference file applied - no service date established, or
+    none covering it - so no code was checked against one, with why as ``detail`` (refutation round 2, truth-3: that was
+    'done', its codes counted as checked); 'not_run' when there is no assessment, it predates the harness, or no
+    retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what
+    an absent passages module records too). ``detail`` is '' in every other state. ``codes_checked`` counts the traced
+    codes only when a CMS reference file applied (0 otherwise), and a failed entry is no code checked, so it is counted
+    in neither ``codes_checked`` nor ``passages``."""
     out = {'state': 'not_run', 'detail': '', 'codes_checked': 0, 'passages': 0, 'sources': [],
            'not_connected': list(review.NOT_CONNECTED)}
     if active:
@@ -675,10 +716,14 @@ def _reference_validation(assessment, active):
     retrieval = [entry for entry in entries if not retrieval_failed(entry)]
     traced = {entry.get('code') for entry in retrieval}
     decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
+    applied = _source_applied(assessment)
     if not active and failures:
         out.update(state='failed', detail=failure_note(failures[0]))
     elif not active and assessment.participants and traced and decidable <= traced:
-        out['state'] = 'done'
+        if applied:
+            out['state'] = 'done'
+        else:
+            out.update(state='not_verified', detail=_no_source(retrieval))
     sources = {}
     for entry in retrieval:
         for item in review.retrieved(entry, 'facts') + review.retrieved(entry, 'passages'):
@@ -686,7 +731,8 @@ def _reference_validation(assessment, active):
             if key:
                 sources.setdefault(key, str(item.get('release') or ''))
     known = _reference_sources(sorted(sources))
-    out.update(codes_checked=len(traced), passages=sum(len(review.retrieved(entry, 'passages')) for entry in retrieval),
+    out.update(codes_checked=len(traced) if applied else 0,
+               passages=sum(len(review.retrieved(entry, 'passages')) for entry in retrieval),
                sources=[{'key': key, 'title': known.get(key, ('', '', ''))[0], 'release': release,
                          'effective_start': known.get(key, ('', '', ''))[1],
                          'effective_end': known.get(key, ('', '', ''))[2]} for key, release in sorted(sources.items())])
@@ -888,7 +934,18 @@ def _trace_reading(run):
             'codes': [_code_entry(item) for item in data['codes']],
             'not_coded': [_code_entry(item) for item in data['not_coded']],
             'questions': [dict(item, service_ids=_tokens(item.get('service_ids'))) for item in data['questions']],
-            'extraction_issues': data['extraction_issues'], 'references_used': data['references_used']}
+            'extraction_issues': data['extraction_issues'],
+            'references_used': _checked_against(run, data['references_used'])}
+
+
+def _checked_against(run, used):
+    """A run's references used as the trace serves them: as the reader recorded them, and for a run that reused a
+    retained answer each with ``reused_from``, the retained run whose tool calls CPT Studio checked it against
+    (jobs.loop_run), so the trace never says a reuse retrieved anything by its own tool calls (refutation round 2,
+    truth-13)."""
+    if not run.reused_from_id:
+        return used
+    return [dict(item, reused_from=str(run.reused_from_id)) if isinstance(item, dict) else item for item in used]
 
 
 def _trace_review(run):
@@ -904,7 +961,8 @@ def _trace_review(run):
                 'positions': [], 'additional_codes': [], 'references_used': []}
     data = to_jsonable(peer_review)
     return {**data, 'positions': [_code_entry(item) for item in data['positions']],
-            'additional_codes': [_code_entry(item) for item in data['additional_codes']]}
+            'additional_codes': [_code_entry(item) for item in data['additional_codes']],
+            'references_used': _checked_against(run, data['references_used'])}
 
 
 def _trace_exchanges(run):
