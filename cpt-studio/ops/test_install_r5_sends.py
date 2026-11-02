@@ -227,16 +227,14 @@ class AccessCheckFailureTests(TemporaryDirectoryTest):
         traceback = (b'Traceback (most recent call last):\n  File "/app/manage.py", line 22, in <module>\n    main()\n'
                      b'RuntimeError: the synthetic check ended here\n\n   \n')
         message, check = self.failed(answer(1, b'', traceback))
-        self.assertEqual(check['problem'],
-                         f'{LINE_SAYS}RuntimeError: the synthetic check ended here')
+        self.assertEqual(check['problem'], f'{LINE_SAYS}RuntimeError: the synthetic check ended here')
         self.assert_names_no_cause(message)
         for size, repeated in ((300, True), (301, False)):
             line = 'E' * (size - 4) + ' end'
             with self.subTest(size=size):
                 message, check = self.failed(answer(1, b'not a receipt\n', b'first line\n' + line.encode() + b'\n'))
                 if repeated:
-                    self.assertEqual(check['problem'],
-                                     f'{LINE_SAYS}{line}')
+                    self.assertEqual(check['problem'], f'{LINE_SAYS}{line}')
                 else:
                     self.assertEqual(check['problem'], 'it exited 1, and the last line of text it wrote on stderr is '
                                                        'longer than 300 characters, so it is not repeated here.')
