@@ -316,8 +316,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
-     "response_sha256": "24524e14fa4e8613c1ee3b208533bde8beed198ac966e7a09486e026f0db025c",
+     "request_sha256": "db581a1a6a12def4a868b3637b0938bc8179b879bba4481fa791e590c4eb09ba",
+     "response_sha256": "80295298eaa4b04a08a25c585122cdd07f87a9a3475c546a59ff4128b8bc1755",
      "response_bytes": 1745,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -342,11 +342,11 @@
        ],
        [
         "cpt_studio",
-        "f9fd52867cfc528b62b3789bde080b73cb1b41ae161c5debc23f9603dbb68cab"
+        "7496830558c9268308c544907b743c6d038a9474a1682ffafb0714ae39567591"
        ],
        [
         "fable",
-        "8f88be96182b3c46e15b06a19ced43844b451c37a85ec7a4af8de33d44f5c943"
+        "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
        ],
        [
         "revision",
@@ -495,7 +495,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
+       "request_sha256": "db581a1a6a12def4a868b3637b0938bc8179b879bba4481fa791e590c4eb09ba",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -527,8 +527,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "06c473db18974c7ccded53a9a2f49766e98125d3f546882f53c6e83a22e12a8b",
-       "response_sha256": "24524e14fa4e8613c1ee3b208533bde8beed198ac966e7a09486e026f0db025c",
+       "request_sha256": "db581a1a6a12def4a868b3637b0938bc8179b879bba4481fa791e590c4eb09ba",
+       "response_sha256": "80295298eaa4b04a08a25c585122cdd07f87a9a3475c546a59ff4128b8bc1755",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -553,7 +553,7 @@
      "run_identity": "e2b00000-0000-4000-8000-000000000015",
      "authorization_ref": "",
      "requested_by": null,
-     "adapter_version": "anthropic-messages@cptstudio-harness-2",
+     "adapter_version": "anthropic-messages@cptstudio-harness-3",
      "endpoint": "https://api.anthropic.com/v1/messages",
      "requested_model": "claude-fable-5-1",
      "returned_model": "claude-fable-5-1",
@@ -567,7 +567,7 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "c231de3ea5177bec2626d2c6cc708c484107f3646c76f7685635a563dcb75328",
+     "request_sha256": "e83a1d279c8e21b4db76ab2234dff224b39ed6202f48416d9be4a58416101a18",
      "response_sha256": "2f42c11d9fb1c7ec959bd7074584b8f32d68e548a336a8454b833c87f4894503",
      "response_bytes": 1722,
      "created_at": "2026-11-01T09:00:19Z",
@@ -700,7 +700,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "c231de3ea5177bec2626d2c6cc708c484107f3646c76f7685635a563dcb75328",
+       "request_sha256": "e83a1d279c8e21b4db76ab2234dff224b39ed6202f48416d9be4a58416101a18",
        "response_sha256": "2f42c11d9fb1c7ec959bd7074584b8f32d68e548a336a8454b833c87f4894503",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
@@ -718,7 +718,7 @@
      "run_identity": "e2b00000-0000-4000-8000-000000000016",
      "authorization_ref": "",
      "requested_by": null,
-     "adapter_version": "anthropic-messages@cptstudio-harness-2",
+     "adapter_version": "anthropic-messages@cptstudio-harness-3",
      "endpoint": "https://api.anthropic.com/v1/messages",
      "requested_model": "claude-fable-5-1",
      "returned_model": "claude-fable-5-1",
@@ -732,8 +732,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "02db4f7ab9a2af16300b2b90b1fb2cee7e178639d2cfcfb76b21680c2d8c311b",
-     "response_sha256": "091a691b4490807094dce3f4ed02ea7cdbdb93aa382ac8d6af22b833957e1b31",
+     "request_sha256": "898d41dd2cb7c73480ae8bc582a5df33112970272f0d97aacb6c0b1cb3bc1288",
+     "response_sha256": "898e1988331ac803e4b4406c0b852de9374834ef099f4d828497912630e65c48",
      "response_bytes": 1052,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -743,7 +743,7 @@
      "reading": null,
      "review": {
       "provider": "fable",
-      "adapter_version": "anthropic-messages@cptstudio-harness-2",
+      "adapter_version": "anthropic-messages@cptstudio-harness-3",
       "review_version": "harness-peer@1",
       "requested_model": "claude-fable-5-1",
       "returned_model": "claude-fable-5-1",
@@ -758,11 +758,11 @@
        ],
        [
         "cpt_studio",
-        "f9fd52867cfc528b62b3789bde080b73cb1b41ae161c5debc23f9603dbb68cab"
+        "7496830558c9268308c544907b743c6d038a9474a1682ffafb0714ae39567591"
        ],
        [
         "fable",
-        "8f88be96182b3c46e15b06a19ced43844b451c37a85ec7a4af8de33d44f5c943"
+        "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
        ],
        [
         "revision",
@@ -836,8 +836,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "02db4f7ab9a2af16300b2b90b1fb2cee7e178639d2cfcfb76b21680c2d8c311b",
-       "response_sha256": "091a691b4490807094dce3f4ed02ea7cdbdb93aa382ac8d6af22b833957e1b31",
+       "request_sha256": "898d41dd2cb7c73480ae8bc582a5df33112970272f0d97aacb6c0b1cb3bc1288",
+       "response_sha256": "898e1988331ac803e4b4406c0b852de9374834ef099f4d828497912630e65c48",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
@@ -866,7 +866,7 @@
     ],
     [
      "fable",
-     "8f88be96182b3c46e15b06a19ced43844b451c37a85ec7a4af8de33d44f5c943"
+     "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
     ],
     [
      "revision",
@@ -891,7 +891,7 @@
     ],
     [
      "fable",
-     "8f88be96182b3c46e15b06a19ced43844b451c37a85ec7a4af8de33d44f5c943"
+     "4a4acdd646bbaa2785d6bdcd66de969c02ccc687c9afc34064e2d9d0b3dc8c93"
     ],
     [
      "revision",

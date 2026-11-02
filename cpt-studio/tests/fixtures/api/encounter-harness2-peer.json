@@ -398,7 +398,7 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "c231de3ea5177bec2626d2c6cc708c484107f3646c76f7685635a563dcb75328",
+   "request_sha256": "e83a1d279c8e21b4db76ab2234dff224b39ed6202f48416d9be4a58416101a18",
    "response_sha256": "2f42c11d9fb1c7ec959bd7074584b8f32d68e548a336a8454b833c87f4894503",
    "reused_from": null,
    "error": "",
