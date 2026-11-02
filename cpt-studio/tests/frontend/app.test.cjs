@@ -1679,6 +1679,12 @@ test('confirming posts the candidate id and its served attestation once ticked, 
       body: { candidate_id: candidate.id, attestation: ATTESTATION('cecum') }, csrf: 'token123' });
     assert.equal(toastEl.textContent, 'Confirmed: extent reached cecum. The codes are being re-checked with the confirmed finding; nothing was approved.');
     assert.equal(error.hidden, true);
+    // what is sent is the sentence the API served, never one rebuilt from the value
+    app.state.doc = { ...doc, clarifications: doc.clarifications.map(item => (item.id === extent.id ? { ...item, candidates: item.candidates.map(c => ({ ...c, attestation: `A sentence the server serves for ${c.value}.` })) } : item)) };
+    asked.length = 0;
+    await app.confirmFinding(button);
+    assert.deepEqual(asked.filter(item => item.method === 'POST').map(item => item.body), [{ candidate_id: candidate.id, attestation: 'A sentence the server serves for cecum.' }]);
+    app.state.doc = doc;
     // a refusal is shown where the member confirmed, and the action can be tried again
     answer = { status: 409, body: { error: 'That question was confirmed already; a question takes one confirmation.' } };
     asked.length = 0;
