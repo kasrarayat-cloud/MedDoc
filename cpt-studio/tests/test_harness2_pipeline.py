@@ -27,6 +27,7 @@ from studio.providers.base import canonical_body
 from studio.reference import passages as reference_passages
 from studio.reference import tools
 from studio.types import PeerReview, RawExchange, sha256_json, to_jsonable
+from tests.support import docgen
 from tests.support import factories as f
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import (OfflineMixin, astra_tool_call, astra_with, code, empty_reading,
@@ -386,6 +387,28 @@ class PhaseOneLoopTests(Harness2Case):
                         self.assertTrue(refs)
         self.assertEqual(models.ProviderExchange.objects.filter(run__encounter_id=encounter_id,
                                                                 run__purpose='independent').count(), 5)
+
+    def test_a_pdf_upload_hands_its_original_to_the_loop_and_none_to_the_peer_review(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.corti.selections = []  # a PDF's extracted text wraps lines: Corti's fake proposes nothing here
+        pdf = docgen.make_pdf([OFFICE_NOTE.replace('\n', ' ')[:900]])
+        with tempfile.TemporaryDirectory() as store, override_settings(ORIGINALS_DIR=store):
+            response = self.client.post('/api/encounters', {'file': SimpleUploadedFile('synthetic-note.pdf', pdf),
+                                                            'synthetic_attestation': 'yes'})
+            self.assertEqual(response.status_code, 201, response.content)
+            encounter_id = response.json()['id']
+            drain()
+        source = models.SourceFile.objects.get(encounter_id=encounter_id)
+        for name in ('astra', 'fable'):
+            (first,), (peer,) = self.adapters[name].loops_of('first'), self.adapters[name].loops_of('peer')
+            self.assertEqual((first['original'], peer['original']), (hashlib.sha256(pdf).hexdigest(), None))
+            run = self.runs_of(encounter_id, name, 'independent')[0]
+            self.assertIn(source.sha256, json.dumps(run.request_body))  # named by sha256, never its bytes
+            self.assertNotIn('%PDF', json.dumps(run.request_body))
+            self.assertNotIn('$original_sha256', json.dumps(self.runs_of(encounter_id, name, 'peer_review')[0]
+                                                            .request_body))
+        self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
     def test_references_used_are_retrieved_only_from_the_run_s_own_tool_refs(self):
         self.adapters['fable'].first = [asks('fable', passages_call('toolu_fable_1', 'pfs_indicator_definitions')),
