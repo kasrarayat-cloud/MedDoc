@@ -1763,6 +1763,12 @@ test('parseArgs: --password-file with --username signs in instead of --credentia
     ['agent.json', undefined, undefined, false, false]);
 });
 
+test('parseArgs: --expect-harness is a flag, off by default, that takes no value', () => {
+  assert.equal(vb.parseArgs([...SIGN_IN, '--credentials', 'c.json']).expectHarness, false);
+  assert.equal(vb.parseArgs([...SIGN_IN, '--credentials', 'c.json', '--expect-harness']).expectHarness, true);
+  assert.throws(() => vb.parseArgs([...SIGN_IN, '--credentials', 'c.json', '--expect-harness=no']), /--expect-harness takes no value/);
+});
+
 test('parseArgs: --acceptance-reviewer is a flag that implies --no-auto-approve and signs in only with a password file', () => {
   const acc = vb.parseArgs([...SIGN_IN, '--password-file', 'p', '--username', 'demo-reviewer', '--acceptance-reviewer']);
   assert.deepEqual([acc.acceptanceReviewer, acc.noAutoApprove], [true, true]);
@@ -2302,6 +2308,20 @@ test('checkParticipantsCard holds the card to the harness the API serves, and sk
   }
   assert.deepEqual(vb.checkParticipantsCard(encounter(), []).map(r => r.status), ['skipped']);
   assert.deepEqual(vb.checkParticipantsCard({ ...enc, harness: { participants: 'x' } }, CARD_ROWS).map(r => r.status), ['skipped']);
+  // the live harness walk (--expect-harness): no harness is a failure, never a skip
+  for (const payload of [encounter(), { ...enc, harness: { participants: 'x' } }, { ...enc, harness: null }]) {
+    assert.deepEqual(failures(vb.checkParticipantsCard(payload, CARD_ROWS, { expectHarness: true })), ['dom.participants'], JSON.stringify(payload.harness));
+  }
+  assert.deepEqual(failures(vb.checkParticipantsCard(enc, CARD_ROWS, { expectHarness: true })), []);
+  // a served harness always names corti, astra and fable in that order: an empty list, a missing or a reordered one fails
+  const byName = name => enc.harness.participants.find(item => item.name === name);
+  for (const participants of [[], [byName('corti'), byName('astra')], [byName('astra'), byName('corti'), byName('fable')],
+    [byName('corti'), byName('astra'), byName('fable'), byName('fable')], [byName('corti'), byName('astra'), { ...byName('fable'), name: 3 }]]) {
+    for (const expectHarness of [false, true]) {
+      assert.deepEqual(failures(vb.checkParticipantsCard({ ...enc, harness: { ...enc.harness, participants } }, CARD_ROWS, { expectHarness })),
+        ['dom.participants'], `${expectHarness} ${JSON.stringify(participants.map(item => item.name))}`);
+    }
+  }
 });
 
 test('readDom reads the participants card the live app.js renders, and the walk\'s other DOM checks read the page as before', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
@@ -2408,7 +2428,10 @@ test('checkPeerRows fails a row in another state, a missing or extra row, and sk
   // skipped: a release before harness@2, a Corti-only encounter (phase 0), a payload without a harness
   for (const payload of [apiFixture('encounter-harness-ready.json'), { ...none, harness: { ...none.harness, phase: 0 } }, encounter()]) {
     assert.deepEqual(statusOf(vb.checkPeerRows(payload, [])), [['dom.peer_reviews', 'skipped']]);
+    // the live harness walk (--expect-harness) expects the peer-review rows: none served is a failure, never a skip
+    assert.deepEqual(failures(vb.checkPeerRows(payload, [], { expectHarness: true })), ['dom.peer_reviews']);
   }
+  assert.deepEqual(failures(vb.checkPeerRows(enc, rows, { expectHarness: true })), []);
 });
 
 test('checkCandidates holds each question to the API\'s candidates, flags and confirmation, and skips a payload that serves none', () => {

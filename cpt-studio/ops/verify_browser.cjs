@@ -63,6 +63,10 @@
  * pw:server:channel) is refused before anything is read, and the evidence and every line printed are scrubbed of it in
  * each form verify_login.py's Secret names.
  *
+ * --expect-harness: the release under test runs the CPT harness (HARNESS.md 11.5's live walk). The review page's
+ * participants card and its peer-review rows must then be there: an API that serves no harness, or no peer review, is a
+ * failure of that document, never a skipped check. Without it, a release before the harness is walked as before.
+ *
  * --acceptance-reviewer: the ordinary-reviewer acceptance test (CPT Studio GI interpretation 63, which overrides 40 for
  * it). It signs in with --password-file and --username only, and the session must be that account: a HUMAN account
  * (actor_kind "human") with an active reviewer membership in the workspace (role "reviewer", can_review). It implies
@@ -142,7 +146,7 @@ const PASSWORD_LOGS = ['pw:api', 'pw:channel', 'pw:protocol', 'pw:server:channel
 const WITHHELD = '[password withheld]';
 const USAGE = 'usage: verify_browser.cjs --base-url URL (--credentials FILE | --password-file FILE --username NAME) '
   + '--docs DIR --manifest FILE --out DIR [--only IDS] [--deadline-seconds N] [--stop-on-failure] [--allow-live-provider] '
-  + '[--encounter ID] [--no-auto-approve] [--acceptance-reviewer]';
+  + '[--encounter ID] [--no-auto-approve] [--acceptance-reviewer] [--expect-harness]';
 const ENCOUNTER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_DATE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 // studio/jobs.py MEMBER_DATE_CONFLICT_MESSAGE: the error of the not-sent run jobs._member_date_hold records for a member
@@ -181,11 +185,11 @@ const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep
 class UsageError extends Error {}
 
 function parseArgs(argv) {
-  const flags = new Set(['stop-on-failure', 'allow-live-provider', 'no-auto-approve', 'acceptance-reviewer']);
+  const flags = new Set(['stop-on-failure', 'allow-live-provider', 'no-auto-approve', 'acceptance-reviewer', 'expect-harness']);
   const values = new Set(['base-url', 'credentials', 'password-file', 'username', 'docs', 'manifest', 'out', 'only',
     'deadline-seconds', 'encounter']);
   const opts = { only: null, deadlineSeconds: 300, stopOnFailure: false, allowLiveProvider: false, noAutoApprove: false,
-    acceptanceReviewer: false };
+    acceptanceReviewer: false, expectHarness: false };
   for (let i = 0; i < argv.length; i += 1) {
     const [name, inline] = argv[i].replace(/^--/, '').split(/=(.*)/s);
     if (!argv[i].startsWith('--')) throw new UsageError(`unexpected argument ${argv[i]}`);
@@ -1629,10 +1633,23 @@ async function readDom(page) {
 
 // The Review participants card shows what the API's harness reports: a row for each participant in its state, reference
 // validation in its state, then clarification and the final status. Skipped where the API serves no harness (a release
-// before it); the walk judges the page, never whether a participant is configured.
-function checkParticipantsCard(enc, rows) {
+// before it) - unless the walk was told the harness is installed (--expect-harness, the live harness walk of HARNESS.md
+// 11.5), where no harness is a failure, never a skip. A harness the API serves always names corti, astra and fable, in
+// that order (API.md); one that names any other set fails, so an empty list can never pass as a card with nothing to show.
+const HARNESS_PARTICIPANTS = ['corti', 'astra', 'fable'];
+
+function checkParticipantsCard(enc, rows, { expectHarness = false } = {}) {
   const harness = enc?.harness;
-  if (!harness || !Array.isArray(harness.participants)) return [skip('dom.participants', 'the API serves no harness for this encounter')];
+  if (!harness || !Array.isArray(harness.participants)) {
+    return expectHarness
+      ? [check('dom.participants', 'hard', false, 'the API serves no harness for this encounter, and this walk expects the harness (--expect-harness)')]
+      : [skip('dom.participants', 'the API serves no harness for this encounter')];
+  }
+  const names = harness.participants.map(item => (item && typeof item === 'object' && typeof item.name === 'string' ? item.name : ''));
+  if (names.join(',') !== HARNESS_PARTICIPANTS.join(',')) {
+    return [check('dom.participants', 'hard', false, `the API's harness names the participants ${names.map(name => name || '(unnamed)').join(', ') || 'none'}; `
+      + `it always names ${HARNESS_PARTICIPANTS.join(', ')}`)];
+  }
   // the page writes a value as app.js's textValue does: a string as it is, a number or boolean as text, anything else ''
   const text = value => (typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : '');
   const shown = (rows || []).map(row => [row.key, row.state]);
@@ -1653,13 +1670,18 @@ function shownText(value) {
 // harness@2's peer-review rows (HARNESS.md 11.1, 12.6) show what the API serves: one row for Astra and one for Fable,
 // each with data-peer-state the state of the peer review the API serves for it ('' where it serves none). Skipped where
 // the API serves no phase-2 data: a release before harness@2, or a Corti-only encounter (phase 0), draws no such row.
-function checkPeerRows(enc, rows) {
+function checkPeerRows(enc, rows, { expectHarness = false } = {}) {
   const harness = enc?.harness;
   const models = harness && Array.isArray(harness.participants)
     ? harness.participants.filter(item => item && typeof item === 'object' && (item.name === 'astra' || item.name === 'fable')) : [];
   const peerOf = item => (item.peer && typeof item.peer === 'object' && !Array.isArray(item.peer) ? item.peer : {});
   const phased = harness?.phase === 1 || harness?.phase === 2 || models.some(item => Object.keys(peerOf(item)).length > 0);
-  if (!phased || !models.length) return [skip('dom.peer_reviews', 'the API serves no peer review for this encounter')];
+  if (!phased || !models.length) {
+    // the live harness walk (--expect-harness) expects Astra's and Fable's peer-review rows: none served is a failure
+    return expectHarness
+      ? [check('dom.peer_reviews', 'hard', false, 'the API serves no peer review for this encounter, and this walk expects the harness (--expect-harness)')]
+      : [skip('dom.peer_reviews', 'the API serves no peer review for this encounter')];
+  }
   const shown = (rows || []).map(row => [row.key, row.state || '']);
   const wanted = models.map(item => [item.name, shownText(peerOf(item).state)]);
   const missing = wanted.filter(([key, state]) => !shown.some(([k, s]) => k === key && s === state));
@@ -1967,8 +1989,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     });
     const before = await readDom(page);
     add(checkEvidenceMarks(enc, before.marks, before.cards));
-    add(checkParticipantsCard(enc, before.participants));
-    add(checkPeerRows(enc, before.peers));
+    add(checkParticipantsCard(enc, before.participants, { expectHarness: opts.expectHarness }));
+    add(checkPeerRows(enc, before.peers, { expectHarness: opts.expectHarness }));
     add(checkCandidates(enc, before.questions));
 
     let current = enc;
