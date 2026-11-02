@@ -1364,7 +1364,10 @@ class AssessReadsTests(HarnessCase):
                          ['fable', 'refused', []])
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
 
-    def test_the_same_assessment_compares_the_participant_records_and_the_retrieval(self):
+    def test_the_same_assessment_compares_the_participant_runs_never_the_retrieval(self):
+        # Renamed and its last assertion reversed after refutation round 2 (parity-r2-2; the round-2 plan's D6): it was
+        # test_the_same_assessment_compares_the_participant_records_and_the_retrieval, and asserted that another
+        # retrieval made another assessment. tests.test_harness2_r2_parity pins the rule.
         encounter_id = self.create()
         drain()
         encounter = self.encounter(encounter_id)
@@ -1374,7 +1377,7 @@ class AssessReadsTests(HarnessCase):
         self.assertTrue(review._same_assessment(*common, assessment.participants, assessment.retrieval))
         refused = [dict(record, state='refused') for record in assessment.participants]
         self.assertFalse(review._same_assessment(*common, refused, assessment.retrieval))
-        self.assertFalse(review._same_assessment(*common, assessment.participants, [{'code': '99213'}]))
+        self.assertTrue(review._same_assessment(*common, assessment.participants, [{'code': '99213'}]))
 
 
 # --- a retrieval that fails never stops the assessment (refutation round 1, parity-1; I1, I10) -----------------------

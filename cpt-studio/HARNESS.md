@@ -289,6 +289,47 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
   The only additions are new records outside that result: the run columns that record what was called (endpoint,
   models, response id) and the assessment's `participants` and `retrieval` fields. The `participants` record says
   "not configured". Proved by H1/H2/H4 against the round-4 head and by a parity test.
+
+  **Amended after refutation round 2 (parity-r2-1, parity-r2-2; the round-2 repair plan's D6).** The round-4 head is
+  `80f2f2dc8` (the integrated round 4, `443e67032`, merged into the harness branch).
+  - **One declared exception: the licence note of the CMS sources CPT Studio imports.** The owner's 11.6 correction
+    (`ad025537c`) changed the note `studio.reference.importers.LICENSE_NOTE` writes on every source it imports
+    (`ReferenceSource.license_note`; the CMS PFS and practitioner MUE tables) from the round-4 head's "CPT codes are
+    copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic
+    evaluation only; commercial CPT use requires an AMA license." to "CPT codes are copyright the American Medical
+    Association; descriptors are not imported or displayed. CPT Studio holds no AMA licence; whether its use of CPT
+    content needs one is an open owner decision." The installer's `license-note` phase rewrites the installed rows
+    that still hold the old text; assessments and reports keep the note they recorded. The engine lists every installed
+    source among the result's reference-source entries, so on an installed system every Corti-only assessment's two
+    imported CMS entries carry the new note and its sha256 differs from the round-4 head's (the AMA CPT and NCCI PTP
+    entries keep their own notes). With the note mapped back to the round-4 text everything else is identical, the
+    sha256 included. No proposal's bucket, status, checks, evidence or fingerprint moves, so decisions carry as before:
+    re-assessing, on identical inputs, an encounter assessed while its sources held the old note records a new
+    assessment (its entries now carry the new note), and its decisions carry onto it by their fingerprints.
+  - **What is recorded beside the result never makes an identical re-assessment another assessment.** Re-persisting
+    an identical result on identical inputs returns the current assessment unchanged (`review.persist_assessment`,
+    `review._same_assessment`). With no model participant configured in either record (every entry "not configured",
+    or none, as a round-4 row holds), the inputs compared are exactly the round-4 head's: the result's sha256, the
+    revision, the context, the routing run, the Corti run and the second-review run. With one configured in either,
+    they are those and the participant runs each entry names: its name, state and run and, on assess #2 and its
+    re-assessments, its peer state and peer run. The retrieval traces are never compared, so an encounter assessed
+    before the CMS passages were imported (the installer's `passages` phase runs after `app`; a later release can add
+    a passage file) keeps the retrieval it recorded until one of those inputs changes. The harness had compared both
+    records: such an identical re-assessment recorded a second assessment with the same sha256, carried the decisions
+    onto it and asked its questions again (a second review whose Corti request failed; a Resume after the stale sweep).
+    A record that is not a list of entries is never taken for one, so it differs.
+  - **What proves I1, and what each proof cannot see.** H1 (`ops.gi4.replay`) reads the retained fixtures' reference
+    sources, which keep the round-4 note; H2 (`ops.gi4.freeze`) compares the request side; H4 (`ops.gi4.battery`)
+    assesses with no reference rows; the engine parity test (`tests/test_harness_engine_parity.py`) builds its sources
+    in memory and the pipeline's I1 tests (`CortiOnlyParityTests`, `RetrievalFailureTests`) install none or build one by
+    hand. None of them loads a source through the importers, so none could see the note, and none re-assesses an
+    encounter on identical inputs. `tests/test_harness2_r2_parity.py` does both. It loads the CMS tables through the
+    importers (the synthetic fixtures in the real CMS layouts) and assesses the refutation lens's colonoscopy with Corti
+    alone (the in-process fake read by the real normalizer), and pins both digests: the round-4 head's `07315c45fbda`
+    with the note reset to the round-4 text, and the harness's `c961e7e69c35` with the importer's own. It pins the
+    re-persist rule on the paths above, with no participant configured and with participants configured. The inputs I1
+    compares are Corti's answers as they arrive within the send deadline: a read the deadline cuts is `unknown` (section
+    8, HTTP-TRICKLE), where the round-4 adapter kept reading.
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
