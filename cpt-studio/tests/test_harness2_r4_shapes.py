@@ -65,6 +65,11 @@ def length(text):
     return f'a value of {len(text):,} character{"" if len(text) == 1 else "s"} (not shown)'
 
 
+def compact(value):
+    """A JSON value as participants.peer names it by its length: compact, an object's keys sorted."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
 def named(number, text):
     """The name CPT Studio gives the ``number``-th id it withholds (participants.peer.ShownIds)."""
     return f'id {number}: {length(text)}'
@@ -276,6 +281,27 @@ class ReferenceShapeTests(ShapesCase):
                 self.assertNotIn(value, text, f'{value} in {where}')
 
 
+class ToolArgumentShapeTests(ShapesCase):
+    """shapes-4: a tool call's arguments in the trace - codes in a code's shape, a date in its digits, a topic of the
+    enumeration, a tool CPT Studio has - and anything else the participant wrote only by its length."""
+
+    def test_the_trace_shows_a_tool_call_s_arguments_and_tool_only_in_their_shapes(self):
+        _, trace, _, _, _ = self.run_chain()
+        first, _ = self.astra_runs(trace)
+        calls = [(call['tool'], call['arguments']) for exchange in first['exchanges'] for call in exchange['tool_calls']]
+        self.assertEqual(calls, [
+            ('cms_code_facts', {'codes': [length(ARG_CODES[0]), length(ARG_CODES[1])], 'date_of_service': '2026-10-20'}),
+            (length(TOOL_WORDS), {'codes': ['45385']}),
+            ('cms_policy_passages', {'topic': length(TOPIC_WORDS), 'codes': ['45380']}),
+            ('cms_code_facts', length(RAW_ARGUMENTS)),
+            ('cms_code_facts', {'codes': ['45385'], 'date_of_service': '2026-10-14'})])
+        self.assertIn(FACT, [ref for exchange in first['exchanges'] for call in exchange['tool_calls']
+                             for ref in call['refs']])  # CPT Studio's own refs, as returned
+        text = json.dumps(trace, ensure_ascii=False)
+        for value in (*ARG_CODES, TOOL_WORDS, TOPIC_WORDS, RAW_ARGUMENTS):
+            self.assertNotIn(value, text, value)
+
+
 # --- the engine, pure (tests.test_harness_engine's document and helpers) ----------------------------------------------
 
 class EngineListingTests(OfflineTestCase):
@@ -365,3 +391,28 @@ class SharedRuleTests(OfflineTestCase):
             self.assertEqual(peer.shown_reference(ref, retrieved), expected, (ref, retrieved))
         for (ref, retrieved), expected in cases[:-2]:
             self.assertEqual(peer.shown_ref(ReferenceUse(ref=ref, use='', retrieved=retrieved)), expected)
+
+    def test_a_tool_call_is_shown_only_in_the_tools_own_shapes(self):
+        self.assertEqual(peer.shown_tool('cms_code_facts'), 'cms_code_facts')
+        self.assertEqual(peer.shown_tool('cms_policy_passages'), 'cms_policy_passages')
+        self.assertEqual(peer.shown_tool(TOOL_WORDS), length(TOOL_WORDS))
+        self.assertEqual(peer.shown_tool(''), '')
+        cases = [
+            ({'codes': ['45385', 'G0121', *ARG_CODES], 'date_of_service': '2026-10-20'},
+             {'codes': ['45385', 'G0121', *[length(value) for value in ARG_CODES]], 'date_of_service': '2026-10-20'}),
+            ({'codes': [], 'date_of_service': ''}, {'codes': [], 'date_of_service': ''}),
+            ({'topic': 'ncci_endoscopy_rules', 'codes': ['45380']}, {'topic': 'ncci_endoscopy_rules', 'codes': ['45380']}),
+            ({'topic': TOPIC_WORDS, 'codes': ['45380']}, {'topic': length(TOPIC_WORDS), 'codes': ['45380']}),
+            ({'codes': ['45385'], 'date_of_service': '2026-10-21;W/LES(S)'},
+             {'codes': ['45385'], 'date_of_service': length('2026-10-21;W/LES(S)')}),
+            ({'codes': [45385, None, ['45385']], 'date_of_service': 20261021},
+             {'codes': [length('45385'), length('null'), length('["45385"]')], 'date_of_service': length('20261021')}),
+            ({'codes': TOOL_WORDS}, {'codes': length(TOOL_WORDS)}),
+            ({TOOL_WORDS: ['45385']}, length(compact({TOOL_WORDS: ['45385']}))),
+            ({'codes': ['45385'], 'note': 'x'}, length(compact({'codes': ['45385'], 'note': 'x'}))),
+            (RAW_ARGUMENTS, length(RAW_ARGUMENTS)), ([*ARG_CODES], length(compact(ARG_CODES))),
+            (None, None), ('', ''), ({}, {})]
+        for given, expected in cases:
+            self.assertEqual(peer.shown_arguments(given), expected, given)
+        self.assertEqual(sorted({name for tool in prompt.TOOLS for name in tool['parameters']['properties']}),
+                         ['codes', 'date_of_service', 'topic'])  # the fields the rule knows are the tools' own

@@ -1141,13 +1141,17 @@ def _trace_review(run, assessment=None, ids=None):
 
 def _trace_exchanges(run):
     """Each HTTP exchange of a participant run's tool loop (models.ProviderExchange, HARNESS.md 11.2) with the tool
-    calls CPT Studio executed for it; the results themselves are named by their sha256."""
+    calls CPT Studio executed for it; the results themselves are named by their sha256. A call's tool and arguments are
+    a model's own text, shown only in the tools' own shapes (participants.peer.shown_tool, shown_arguments; refutation
+    round 4, shapes-4: a call's codes were served as written, 'Colonoscopy, flexible, diagnostic'); the refs it returned
+    are CPT Studio's own."""
     return [{'turn': exchange.turn, 'state': exchange.state, 'http_status': exchange.http_status,
              'latency_ms': exchange.latency_ms, 'usage': exchange.usage or {},
              'request_sha256': exchange.request_sha256, 'response_sha256': exchange.response_sha256,
              'provider_request_id': exchange.provider_request_id, 'response_id': exchange.response_id,
              'error': exchange.error,
-             'tool_calls': [{'call_id': call.call_id, 'tool': call.tool, 'arguments': call.arguments,
+             'tool_calls': [{'call_id': call.call_id, 'tool': participant_peer.shown_tool(call.tool),
+                             'arguments': participant_peer.shown_arguments(call.arguments),
                              'refs': list(call.refs or []), 'result_sha256': call.result_sha256,
                              'executed_at': _iso(call.executed_at)} for call in exchange.tool_calls.order_by('id')]}
             for exchange in run.exchanges.order_by('turn')]

@@ -38,6 +38,7 @@ never replaces it; a code it adds is proposed after peer review, never independe
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from typing import Callable, Optional, Sequence
 
@@ -87,6 +88,11 @@ LESION_FIELDS = ('site', 'size', 'morphology', 'action', 'specimen')
 HCPCS = re.compile(r'[A-Z][0-9]{4}')  # an HCPCS Level II code (checks.SCOPE_FORMATS 'hcpcs'); a CPT code: reading.CODE
 MODIFIER = re.compile(r'[A-Z0-9]{2}')  # a modifier as the engine states a participant's (engine.MODIFIER_SHAPE)
 SHORT_ID = re.compile(r'[A-Za-z0-9]{1,8}')  # an id: letters and digits only, at most 8 characters
+# A tool call's own shapes (prompt.TOOLS; the owner's trace, shown_tool and shown_arguments): the tools CPT Studio has,
+# the fields they take, a date as they take one (studio.reference.tools: YYYY-MM-DD, or '' for every release held).
+TOOL_NAMES = frozenset(tool['name'] for tool in prompt.TOOLS)
+TOOL_FIELDS = frozenset(name for tool in prompt.TOOLS for name in tool['parameters']['properties'])
+TOOL_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 
 
 def code_shaped(value) -> bool:
@@ -156,6 +162,47 @@ def shown_reference(ref, retrieved):
 def shown_ref(item: ReferenceUse):
     """A reference another model says it used, as a peer request shows it (shown_reference)."""
     return shown_reference(item.ref, item.retrieved)
+
+
+def shown_tool(name):
+    """The tool a model's call names, as the owner's trace shows it (refutation round 4, shapes-4): as given only when it
+    is one of CPT Studio's tools (TOOL_NAMES) - a model can name any other, which the loop answers as unknown and records
+    by a name of up to 40 characters - and otherwise only by its length. '' (none recorded) stays ''; a value that is
+    not a string is returned as it is."""
+    if not isinstance(name, str) or not name or name in TOOL_NAMES:
+        return name
+    return withheld(name)
+
+
+def shown_arguments(arguments):
+    """A tool call's arguments as a model wrote them, as the owner's trace shows them (refutation round 4, shapes-4;
+    I9): an object of the tools' own fields (TOOL_FIELDS), each value only in its shape - each of ``codes`` as
+    shown_code shows a code, ``date_of_service`` as a YYYY-MM-DD date or '', ``topic`` as one of the policy topics - and
+    any other value only by its length; arguments that are not such an object (a field no tool has, a list, or text the
+    loop could not read as JSON, which it records as given) only by their length, as a whole. None (no arguments
+    recorded) stays None. 'Colonoscopy, flexible, diagnostic' had been served as written in a call's codes."""
+    if arguments is None:
+        return None
+    if isinstance(arguments, dict) and all(isinstance(name, str) and name in TOOL_FIELDS for name in arguments):
+        return {name: _shown_argument(name, value) for name, value in arguments.items()}
+    return _by_length(arguments)
+
+
+def _shown_argument(name: str, value):
+    if name == 'codes':
+        return ([shown_code(item) if isinstance(item, str) else _by_length(item) for item in value]
+                if isinstance(value, list) else _by_length(value))
+    if name == 'date_of_service':
+        return value if isinstance(value, str) and (not value or TOOL_DATE.fullmatch(value)) else _by_length(value)
+    return value if isinstance(value, str) and value in prompt.POLICY_TOPICS else _by_length(value)  # 'topic'
+
+
+def _by_length(value):
+    """A value a model wrote, only by its length: text as withheld names it; any other JSON value by the length of its
+    compact JSON."""
+    if isinstance(value, str):
+        return withheld(value)
+    return withheld(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
 
 
 def withheld(text):

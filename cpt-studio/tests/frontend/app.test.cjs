@@ -1912,7 +1912,10 @@ test('the trace shows each run\'s exchanges and tool calls, each peer review in 
     positions: [{ code: '45380', position: 'disputes', reason: DESCRIPTOR, evidence: [] }], additional_codes: [{ code: '45381', basis: DESCRIPTOR, evidence: [{ quote: DESCRIPTOR, spans: [], reason: 'not found' }] }],
     references_used: [{ ref: 'x', use: DESCRIPTOR, retrieved: false }] }, exchanges: [{ ...peer.exchanges[0], tool_calls: [{ ...peer.exchanges[0].tool_calls[0], arguments: { topic: DESCRIPTOR } }] }] });
   assert.equal(hostile.includes('lesion(s)'), false);
-  assert.ok(count(hostile, app.escapeHtml(app.DESCRIPTOR_WITHHELD)) >= 5, hostile);
+  // moved by refutation round 4 (R4-SHAPES, shapes-4): a tool call's arguments are shown only in the tools' own shapes, so
+  // the topic it wrote is named by its length rather than withheld whole; the other four are withheld as before
+  assert.ok(count(hostile, app.escapeHtml(app.DESCRIPTOR_WITHHELD)) >= 4, hostile);
+  assert.ok(hostile.includes(app.escapeHtml(`Arguments: {"topic":"a value of ${[...DESCRIPTOR].length} characters (not shown)"}`)), hostile);
 });
 
 test('every participant- or document-written harness@2 value the page draws is escaped', () => {
@@ -1999,8 +2002,9 @@ test('a reference or a tool a participant names itself is withheld where it read
     ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: DESCRIPTOR, use: 'Its reason.', retrieved: false }] } } : row)) } };
   const card = codeCardOf(render(cited), '45385');
   assert.equal(card.includes('lesion(s)'), false);
-  // moved by refutation round 4 (R4-SHAPES, shapes-3): a reference no tool returned is named by its length whatever it
-  // reads like (DESCRIPTOR_LIKE alone missed a hyphenated descriptor)
+  // moved by refutation round 4 (R4-SHAPES, shapes-3, shapes-4): a reference no tool returned, and a tool CPT Studio
+  // does not have, are named by their length whatever they read like (DESCRIPTOR_LIKE alone missed a hyphenated
+  // descriptor)
   assert.ok(card.includes(`<li><b>Astra · first reading:</b> a value of ${[...DESCRIPTOR].length} characters (not shown) — cited, not retrieved`), card);
   const trace = fixture(H2_TRACE);
   const astra = trace.participants[1];
@@ -2009,7 +2013,7 @@ test('a reference or a tool a participant names itself is withheld where it read
     exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...first.exchanges[0].tool_calls[0], tool: DESCRIPTOR }] }] };
   const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [named] }] }, trace.encounter.id);
   assert.equal(html.includes('lesion(s)'), false);
-  assert.ok(html.includes(`<li><b>a value of ${[...DESCRIPTOR].length} characters (not shown) — cited, not retrieved</b></li>`) && html.includes(`<li><b>${app.escapeHtml(app.DESCRIPTOR_WITHHELD)} (call_1_1)</b>`));
+  assert.ok(html.includes(`<li><b>a value of ${[...DESCRIPTOR].length} characters (not shown) — cited, not retrieved</b></li>`) && html.includes(`<li><b>a value of ${[...DESCRIPTOR].length} characters (not shown) (call_1_1)</b>`));
 });
 
 test('a peer-review run is named as one in the Activity tab, on the reconciliation card and when it stopped processing', () => {
@@ -2575,4 +2579,38 @@ test('R4-SHAPES shapes-3: a reference a participant cites and its tool calls nev
   // the API's own words for a reference it withholds read as served
   const served = { ...doc, harness: { ...doc.harness, participants: doc.harness.participants.map(row => (row.name === 'astra' ? { ...row, references: { ...row.references, used: [{ ref: r4Length(R4_REF), use: '', retrieved: false }] } } : row)) } };
   assert.ok(codeCardOf(render(served), '45385').includes(`<li><b>Astra · first reading:</b> ${r4Length(R4_REF)} — cited, not retrieved`));
+});
+
+test('R4-SHAPES shapes-3, shapes-4: the trace shows the references a run used and a tool call\'s tool and arguments only in their shapes', () => {
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first] = astra.runs;
+  const call = first.exchanges[0].tool_calls[0];
+  const fact = 'fact:cms-pfs-rvu26d:45385:mult_proc';
+  const written = { ...first,
+    reading: { ...first.reading, references_used: [{ ref: R4_REF, use: '', retrieved: false }, { ref: 'rule01', use: '', retrieved: false }, { ref: fact, use: '', retrieved: true }] },
+    exchanges: [{ ...first.exchanges[0], tool_calls: [
+      { ...call, tool: 'cms_code_facts', arguments: { codes: ['45385', 'Colonoscopy, flexible, diagnostic', 7], date_of_service: '2026-10-21;W/LES(S)' } },
+      { ...call, call_id: 'call_1_2', tool: 'Colonoscopy, flexible; diagnostic', arguments: { topic: 'colonoscopy; with biopsy, single or multiple', codes: ['G0121'] } },
+      { ...call, call_id: 'call_1_3', tool: 'cms_policy_passages', arguments: 'Colonoscopy, flexible; with biopsy' },
+      { ...call, call_id: 'call_1_4', tool: 'cms_code_facts', arguments: { codes: ['45385'], note: 'Colonoscopy' } },
+      { ...call, call_id: 'call_1_5', tool: 'cms_policy_passages', arguments: { topic: 'ncci_endoscopy_rules', codes: [] } },
+      { ...call, call_id: 'call_1_6', tool: 'cms_code_facts', arguments: null }] }] };
+  const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [written] }] }, trace.encounter.id);
+  for (const text of [R4_REF, 'Colonoscopy, flexible, diagnostic', 'Colonoscopy, flexible; diagnostic', 'W/LES(S)', 'colonoscopy; with biopsy', 'Colonoscopy, flexible; with biopsy', '"note"']) {
+    assert.equal(html.includes(app.escapeHtml(text)), false, text);
+  }
+  assert.ok(html.includes(`<li><b>${r4Length(R4_REF)} — cited, not retrieved</b></li>`), html);
+  assert.ok(html.includes('<li><b>rule01 — cited, not retrieved</b></li>') && html.includes(`<li><b>${fact} — retrieved by its own tool calls in this run</b></li>`));
+  const args = value => app.escapeHtml(`Arguments: ${JSON.stringify(value)}`);
+  assert.ok(html.includes(`<li><b>cms_code_facts (call_1_1)</b><br>${args({ codes: ['45385', r4Length('Colonoscopy, flexible, diagnostic'), r4Length('7')], date_of_service: r4Length('2026-10-21;W/LES(S)') })}<br>`), html);
+  assert.ok(html.includes(`<li><b>${r4Length('Colonoscopy, flexible; diagnostic')} (call_1_2)</b><br>${args({ topic: r4Length('colonoscopy; with biopsy, single or multiple'), codes: ['G0121'] })}<br>`));
+  assert.ok(html.includes(`<li><b>cms_policy_passages (call_1_3)</b><br>${args(r4Length('Colonoscopy, flexible; with biopsy'))}<br>`));
+  assert.ok(html.includes(`<li><b>cms_code_facts (call_1_4)</b><br>${args(r4Length(JSON.stringify({ codes: ['45385'], note: 'Colonoscopy' })))}<br>`));
+  assert.ok(html.includes(`<li><b>cms_policy_passages (call_1_5)</b><br>${args({ topic: 'ncci_endoscopy_rules', codes: [] })}<br>`));
+  assert.ok(html.includes(`<li><b>cms_code_facts (call_1_6)</b><br>${app.escapeHtml('Arguments: null')}<br>`));
+  // what the API serves since this round reads as served: its own words for a value it withholds
+  const served = { ...first, exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...call, tool: r4Length('Colonoscopy, flexible; diagnostic'), arguments: { codes: [r4Length('Colonoscopy, flexible, diagnostic')], date_of_service: '2026-10-21' } }] }] };
+  const shown = app.traceView({ ...trace, participants: [{ ...astra, runs: [served] }] }, trace.encounter.id);
+  assert.ok(shown.includes(`<li><b>${r4Length('Colonoscopy, flexible; diagnostic')} (call_1_1)</b><br>${args({ codes: [r4Length('Colonoscopy, flexible, diagnostic')], date_of_service: '2026-10-21' })}<br>`), shown);
 });
