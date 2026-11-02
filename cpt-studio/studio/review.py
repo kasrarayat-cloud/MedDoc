@@ -1172,18 +1172,23 @@ def record_words(record):
 
 def listed_codes(record):
     """(codes, unlisted) of a participant's Assessment.participants entry: the codes it proposed that may be listed by
-    name, each once, in order - the engine's own rule (engine._listable: 1 to MAX_LISTED_CODE characters), as its
-    participants.summary lists them - and how many it proposed that cannot be. A longer 'code' may carry wording, a CPT
-    descriptor say, so it is counted and never shown, never truncated (I9; refutation r1 IND-1: the participants row
-    served whatever text a participant wrote as a code). Read when serving, so records already stored are covered."""
+    name, each once, in order - the engine's own rule for a participant's code (engine.participant_listable: a CPT or
+    HCPCS code's shape; refutation round 4, the session's D9, shapes-1: the proposal provider's rule of 1 to
+    MAX_LISTED_CODE characters listed 'W/LES(S)' here), as its participants.summary lists them - and how many it proposed
+    that cannot be. Any other 'code' may carry wording, a CPT descriptor say, so it is counted and never shown, never
+    truncated (I9; refutation r1 IND-1: the participants row served whatever text a participant wrote as a code). Read
+    when serving, so records already stored are covered."""
     from .validation import engine  # local import: only the engine's rule is needed here
 
     codes, unlisted = [], 0
     for item in record.get('codes') or []:
         code = item.get('code') if isinstance(item, dict) else None
-        if not engine._listable(code):
+        if not engine.participant_listable(code):
             unlisted += 1
-        elif code not in codes:
+        elif code not in codes and item.get('quote'):
+            # a code its reading listed with no quote found in the document is not one it proposed (the engine counts
+            # no such entry; refutation round 4, truth-2: "Codes it proposed: 45385, 45380." beside the card's "Astra
+            # did not propose it")
             codes.append(code)
     return codes, unlisted
 

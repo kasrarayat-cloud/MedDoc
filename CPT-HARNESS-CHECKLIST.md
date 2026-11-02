@@ -275,3 +275,7 @@ requested in chat.
   - Round 3's other repairs (peer shapes, wording, the exchange records) and the integration's trace and problem
     quoting are indexed in HARNESS.md 12.11. A focused fourth refutation of round 3's diff comes before the PR is made
     ready.
+- **2026-11-02 ~19:40Z (session cd048041): refutation round 4 repaired.** 24 findings, all reproduced, none blocking;
+  the parity lens found nothing again. D8 (no candidate served with confirmations off) and D9 (one strict-shape rule for
+  every value a participant wrote that CPT Studio lists or shows) are recorded in HARNESS.md 12.12 with the round's other
+  repairs. A focused fifth refutation of round 4's diff comes before the PR is made ready.

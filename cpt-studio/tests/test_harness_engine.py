@@ -320,7 +320,8 @@ class MergeTests(SimpleTestCase):
         self.assertIn(UNLOCATED, item.exclusion_reason)
         self.assertEqual(item.support['proposed_by'], ['astra', 'fable'])  # who listed it; it is no proposal
         positions = item.support['participants']
-        self.assertEqual(positions['astra']['position'], 'proposed')
+        # no proposal, so no 'proposed' position either (refutation round 4, truth-2; this pin moved from 'proposed')
+        self.assertEqual(positions['astra']['position'], 'not_proposed')
         self.assertIn('not counted as a proposer', positions['astra']['detail'])
         self.assertEqual(participant_codes([read('astra', [code(COLON, '45380', 'not in the text')])]), ())
 
@@ -559,8 +560,11 @@ class EncounterTests(SimpleTestCase):
             ParticipantInput('fable', 'refused', reason='the response was cut off at the output limit.')])
         summary = encounter_check(result, 'participants.summary')
         self.assertEqual(summary.status, 'info')
-        self.assertIn('Astra (OpenAI, gpt-6-astra) read the document. It proposed 2 codes (45385, 45380), 1 quoting '
-                      'the document verbatim.', summary.detail)
+        # a code listed with no quote found verbatim is not counted as proposed (refutation round 4, truth-2; this pin
+        # moved from "It proposed 2 codes (45385, 45380), 1 quoting the document verbatim.")
+        self.assertIn('Astra (OpenAI, gpt-6-astra) read the document. It proposed 1 code (45385), 1 quoting the '
+                      'document verbatim. It listed 1 code (45380) with no quote found verbatim in the document, so it '
+                      'did not propose it.', summary.detail)
         self.assertIn('1 quote it gave was not found verbatim in the document and is never evidence.', summary.detail)
         self.assertIn('1 question it asked is a note, never a clarification.', summary.detail)
         self.assertIn('Fable (Anthropic) did not read the document: it answered, and its answer was not used (the '

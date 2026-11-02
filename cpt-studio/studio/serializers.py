@@ -734,10 +734,13 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         detail = _record_detail(record, run)
         if record.get('state') == 'not_configured' and name in configured:
             detail = f'{label} was not configured when these checks ran.'
-        # only the codes the engine lists; one it cannot list is counted, never served (I9; refutation r1 IND-1)
+        # only the codes the engine lists; one it cannot list is counted, never served (I9; refutation r1 IND-1), in
+        # the engine's own sentence for a participant's codes (refutation round 4, shapes-1)
         codes, unlisted = review.listed_codes(record)
         if unlisted:
-            detail = f'{detail} {review.unlisted_words(unlisted)}'
+            from .validation import engine  # local import: only the engine's wording is needed here
+
+            detail = f'{detail} {engine.participant_unlisted_codes(unlisted)}'
         return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
                     codes, int(record.get('unverified_quotes') or 0), unlisted)
     if newest is not None:

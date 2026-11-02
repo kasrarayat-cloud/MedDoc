@@ -3019,7 +3019,8 @@ class _Harness:
       which the documented-service reading reads no performed service, makes coding completeness incomplete
       (participants.services).
     - Its questions and its peer-review answers never become clarifications or answers: participants.summary counts
-      them, as notes; an answer is read only as the passage a reviewer confirms (_Confirmations)."""
+      them, as notes; an answer is recorded and decides nothing by itself (only a reviewer's confirmation of a
+      candidate is read, on the dormant path: _Confirmations; HARNESS.md 12.10)."""
 
     def __init__(self, participants: Sequence[ParticipantInput], text: str, pages):
         self.inputs = _usable_inputs(participants)
@@ -3249,6 +3250,15 @@ class _Harness:
             advised = self.advised.get(code, {}).get(p.provider, [])
             if p.provider not in self.readings:
                 entry = {'position': 'not_run', 'detail': self._state_sentence(p), 'quote': ''}
+            elif said and not any(x.good for x in said):
+                # no entry of either phase quotes the document verbatim: it proposed nothing (refutation round 1,
+                # EV-2 = IND-3), so its position is never 'proposed' (refutation round 4, truth-2)
+                detail = (f'{label} listed {code}' + (f' {len(said)} times' if len(said) > 1 else '')
+                          + f' ({self._stated([x.entry for x in said])}); none of its quotes was found verbatim in the '
+                          'document, so it did not propose it and is not counted as a proposer.')
+                if advised:
+                    detail += f' It also lists {code} as not to code: {_reason_words(advised[0].entry.reason)}.'
+                entry = {'position': 'not_proposed', 'detail': detail, 'quote': ''}
             elif said:
                 good = list({(span.start, span.end): span for x in said for span in x.good}.values())
                 phases = {x.phase for x in said}
@@ -3403,16 +3413,24 @@ class _Harness:
         label = PARTICIPANT_LABELS[p.provider]
         model = f', {reading.requested_model}' if reading.requested_model else ''
         parts = [f'{label} ({PARTICIPANT_VENDORS[p.provider]}{model}) read the document.']
-        codes = [code for code, by in self.codes.items() if any(x.phase == INDEPENDENT for x in by.get(p.provider, ()))]
+        given = [code for code, by in self.codes.items() if any(x.phase == INDEPENDENT for x in by.get(p.provider, ()))]
+        # a code its first reading listed with no quote found verbatim is not one it proposed (refutation round 4,
+        # truth-2: "It proposed 2 codes (45385, 45380), 1 quoting the document verbatim" beside the card's "did not
+        # propose it")
+        codes = [code for code in given if any(x.good for x in self.codes[code][p.provider] if x.phase == INDEPENDENT)]
+        unlocated = [code for code in given if code not in codes]
         if codes:
-            quoted = sum(1 for code in codes
-                         if any(x.good for x in self.codes[code][p.provider] if x.phase == INDEPENDENT))
             more = len(codes) - LISTED_IN_SUMMARY
             named = ', '.join(codes[:LISTED_IN_SUMMARY]) + (f' and {more} more' if more > 0 else '')
-            parts.append(f'It proposed {checks.plural(len(codes), "code")} ({named}), {quoted} quoting the document '
-                         'verbatim.')
+            parts.append(f'It proposed {checks.plural(len(codes), "code")} ({named}), {len(codes)} quoting the '
+                         'document verbatim.')
         else:
             parts.append('It proposed no code.')
+        if unlocated:
+            more = len(unlocated) - LISTED_IN_SUMMARY
+            named = ', '.join(unlocated[:LISTED_IN_SUMMARY]) + (f' and {more} more' if more > 0 else '')
+            parts.append(f'It listed {checks.plural(len(unlocated), "code")} ({named}) with no quote found verbatim in '
+                         f'the document, so it did not propose {"it" if len(unlocated) == 1 else "them"}.')
         if self.unlisted.get(p.provider):
             parts.append(participant_unlisted_codes(self.unlisted[p.provider], 'It'))
         if reading.unverified_quotes:

@@ -1618,3 +1618,23 @@ its database session sends nothing more, the installer's undo settles a run as t
 nothing sent). At integration the session also made the owner's trace and a participant's problems show a model-written
 code, modifier or id only in those strict shapes (I9). Each repair carries its tests and its mutation proofs; the
 measurements on the integrated head are in its commit and in PR #1459.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's fourth refutation) — recorded, not owner-ruled
+
+(a) **The fourth refutation, focused on round 3's repairs (`624754eb1..3daafa91b`), filed 24 findings, all reproduced,
+none blocking (5 major).** The parity lens found nothing for the second round running. Three of the majors were in D7's
+own display: the participants' "located passages" it still served under each open question were labelled "Their answer",
+but their values were CPT Studio's own inferences from a reading ("Their answer: time" beside "Total time of 45 minutes
+is not used to select the level"). Two were displays of a participant's own code-like text: a code the engine listed
+because it was at most ten characters long, and a reference the participant cited but never retrieved.
+
+(b) **Two further session decisions, each narrowing what CPT Studio claims or shows, neither an owner question for the
+reasons D7's interpretation gives (fail closed; never installed; not in the completion criteria).** D8: with
+confirmations off no candidate is served at all, and no sentence names a way a question is settled. D9: one strict-shape
+rule for every value a participant wrote that CPT Studio lists or shows; Corti's own listing is unchanged, as I1
+requires. HARNESS.md 12.12 indexes them and the round's other repairs.
+
+(c) **What this means for the release.** A reviewer sees each open question, what it holds (the reviewed report, or one
+code, which can still be rejected), and the participants' own readings and peer answers where they already were; CPT
+Studio no longer puts a participant's passage forward as an answer. Checklist 4.6 stays the owner's open question as
+interpretation (c) after the third refutation sets out.

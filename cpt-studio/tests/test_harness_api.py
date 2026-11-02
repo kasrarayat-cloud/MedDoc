@@ -26,8 +26,11 @@ PTP = 'NCCI procedure-to-procedure edits are not connected'
 # text): a reading keeps a code that is not five characters as given (refutation r1 IND-1).
 DESCRIPTOR_LIKE = ('45385 SYNTHETIC-PLACEHOLDER; with removal of lesion(s) by PLACEHOLDER technique, single or '
                    'multiple')
-UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
-                'It is not shown and never truncated.')
+# moved by refutation round 4 (R4-SHAPES, shapes-1): a participant's code is listed only in a CPT or HCPCS code's shape,
+# and one it cannot list is counted in the engine's sentence for a participant's codes
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: not in the shape of a CPT code (four digits, then a digit or a '
+                'capital letter) or of an HCPCS Level II code (a capital letter, then four digits). It is not shown and '
+                'never truncated.')
 
 
 def record(name, state, *, run=None, codes=(), not_coded=(), reason='', unverified=0, model=''):
@@ -354,8 +357,10 @@ class HarnessBlockTests(HarnessCase):
                           ('fable', 'Fable', 'Anthropic', 'claude-fable-5-1')])
         corti, astra, fable = rows
         self.assertEqual((corti['state'], corti['codes'], corti['estimated_cost_usd']), ('done', ['99213'], None))
+        # 99214's only quote was not found in the document, so the reading did not propose it (refutation round 4,
+        # truth-2: the row named it among the codes proposed; this pin moved with it)
         self.assertEqual((astra['state'], astra['codes'], astra['unverified_quotes'], astra['returned_model']),
-                         ('done', ['99213', '99214'], 1, 'gpt-6-astra'))
+                         ('done', ['99213'], 1, 'gpt-6-astra'))
         self.assertIn('1 of its quotes was not found', astra['detail'])
         self.assertEqual(astra['estimated_cost_usd'], '0.0270')  # 1,200 in x $10/M + 300 out x $50/M
         stored = self.runs_of(encounter_id, 'astra')[0]  # the row serves its run's usage and basis as recorded

@@ -299,7 +299,7 @@ whose API takes no model identifier), which the Activity tab names. The Activity
                                     "source_key": "cms-pfs-rvu26d", "release": "RVU26D", "effective_start": "2026-10-01",
                                     "effective_end": "2026-12-31", "tool": "cms_code_facts"}],
                      "used": [{"ref": "fact:cms-pfs-rvu26d:45385:mult_proc", "use": "...", "retrieved": true},
-                              {"ref": "ncci-2026-ch6-c-1", "use": "...", "retrieved": false}]},
+                              {"ref": "a value of 17 characters (not shown)", "use": "...", "retrieved": false}]},
       "peer_references": {"retrieved": [], "used": []}}]},
   "clarifications": [{"id": "uuid", "scope": "proposal", "fact": "extent", "...": "as above",
       "candidates": [{"id": "16 hex", "clarification_id": "uuid", "fact": "extent", "value": "cecum",
@@ -354,7 +354,11 @@ deadline) - is not listed: refutation round 2, sends-r2-3; the trace's `exchange
 answered), and `used` every reference the run's answer says it relied on, with `retrieved`
 CPT Studio's check against that same run's tool results, as the reader recorded it (`retrieved: false` is a reference
 cited but never retrieved, never shown as retrieved; one participant's or phase's retrieval never counts for
-another's). `harness.reference_validation` stays the reconciliation's retrieval only. The phase, each run's reading and
+another's). A used `ref` is served as given only when `retrieved` is true (CPT Studio's own identifier); any other is
+the participant's own text, served only as a short id of letters and digits (at most 8 characters) or by its length,
+`"a value of 17 characters (not shown)"` (`serializers.shown_used`, `participants.peer.shown_reference`; refutation
+round 4, shapes-3: a ref written as a hyphenated CPT descriptor was served as written).
+`harness.reference_validation` stays the reconciliation's retrieval only. The phase, each run's reading and
 peer review and these references are read by the pipeline's own functions (studio/jobs.py), so the page states exactly
 what the assessments read.
 
@@ -526,8 +530,13 @@ outside the caller's workspaces.
 harness@2 adds to each run `exchanges` - each HTTP exchange of a participant's tool loop (`turn`, `state`,
 `http_status`, `latency_ms`, `usage`, `request_sha256`, `response_sha256`, `provider_request_id`, `response_id`,
 `error`) with its `tool_calls` (`call_id`, `tool`, `arguments`, `refs`, `result_sha256`, `executed_at`; [] for Corti's
-runs). `arguments` is what the participant wrote, `null` when they were missing or null (refutation round 2,
-sends-r2-1), and each exchange is recorded as it ends, so a run still sending, or swept to unknown, can list exchanges
+runs). `tool` and `arguments` are what the participant wrote, served only in the tools' own shapes (refutation
+round 4, shapes-4: `participants.peer.shown_tool`, `shown_arguments`): `tool` as given only when it is one of CPT
+Studio's tools (`cms_code_facts`, `cms_policy_passages`), and `arguments` as an object of the tools' fields with each
+of `codes` in a CPT or HCPCS code's shape, `date_of_service` as YYYY-MM-DD or `""` and `topic` one of the policy
+topics; any other value, field or argument text is named by its length (`"a value of 33 characters (not shown)"`).
+`arguments` is `null` when they were missing or null (refutation round 2, sends-r2-1), and each exchange is recorded
+as it ends, so a run still sending, or swept to unknown, can list exchanges
 (sends-r2-4). Then `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references
 used checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
 `reading` it is instead). Each of its `additional_codes` carries `phase`, the phase its participant first proposed the
@@ -544,10 +553,15 @@ reading, read again from the stored bytes as the adapter version that recorded i
 found at, or with the reason it was not (an unverified quote, never evidence) - and null for Corti's runs and for a run
 with no answer; a stored answer that no longer matches its sha256 reads `{"refused": true, "problems": ["..."], ...}`.
 A code, modifier or service id a participant wrote (a reading's codes, not-coded items, services and questions, a peer
-review's additional codes and positions) is served as given only when it is a short token (at most 20 characters, no
-whitespace); any other is named by its length, as the reader's own problems name it: `"a value of 106 characters (not
-shown)"` (I9: such a field may carry a CPT descriptor). Free text (a basis, a question, a description) is served for the
-page, which withholds what reads like a descriptor.
+review's additional codes and positions) is served as given only in its strict shape (HARNESS.md 12.4: a code in a CPT
+or HCPCS code's shape, a modifier as two capital letters or digits, a service id as letters and digits of at most 8
+characters); any other is named by its length, as the reader's own problems name it: `"a value of 106 characters (not
+shown)"` (I9: such a field may carry a CPT descriptor), and a service id so withheld under a name of CPT Studio's own,
+`"id 2: a value of 7 characters (not shown)"`, which is the same for all of the participant's runs in the trace - its
+reading's and its peer review's (refutation round 4, shapes-2, truth-3). Each reference a run used
+(`reading.references_used`, `review.references_used`) is served as `harness.participants[].references.used` serves it
+(shapes-3). Free text (a basis, a question, a description) is served for the page, which withholds what reads like a
+descriptor.
 `retrieval` is the current assessment's retrieval traces as recorded; a retrieval that failed is its one entry marked
 `"failed": true`, with no code, which the page shows as "Reference validation failed" with its note, never as a code
 with nothing found. `reconciliation` keeps proposed (`proposed_by`,

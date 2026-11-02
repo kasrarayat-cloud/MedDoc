@@ -736,17 +736,17 @@ model participant configured the record is today's ("not configured") and there 
   shapes (`participants.reading._token`) against text that opens with a date or a code - '2026-10-21;W/LES(S)',
   '45385;WITH-POLYP(S)' and '45380(S)', each named by its length (falsegreen-3) - and the trace's peer-review positions
   and additional codes (falsegreen-2).
-  **Open, recorded:** a participant row's `codes` (`review.listed_codes`, which `serializers._participant_row` serves
-  and the page's participant row draws) still lists a participant's code of 1 to 10 characters by the proposal
-  provider's rule, so 'W/LES(S)' is listed there and its count is worded as Corti's; the repair (`review.listed_codes`
-  reading `engine.participant_listable`, and the row's count in `engine.participant_unlisted_codes`'s sentence) is
-  outside this repair's files and is made where the rounds' repairs are merged. Tests:
+  A participant row's `codes` (`review.listed_codes`, which `serializers._participant_row` serves and the page's
+  participant row draws) lists a participant's codes by the same rule, its count in the engine's sentence for them
+  (`engine.participant_unlisted_codes`); it had listed 'W/LES(S)' by the proposal provider's rule (made at the merge of
+  the round's repairs, from R4-SHAPES' NEEDS). Tests:
   `tests/test_harness2_r4_shapes.py` and the `// refutation round 4, R4-SHAPES` block of `tests/frontend/app.test.cjs`.
 
 ### 12.5 Candidates and confirmations (11.3)
 
-**Not offered in this release (refutation round 3, D7; 12.10): the confirm endpoint refuses first and candidates are
-served unchecked; what follows is the dormant path behind `settings.STUDIO_OFFER_CONFIRMATIONS`, kept as written.**
+**Not offered in this release (refutation round 3, D7; 12.10): the confirm endpoint refuses first and no candidate is
+served (refutation round 4, D8); what follows is the dormant path behind `settings.STUDIO_OFFER_CONFIRMATIONS`, kept as
+written.**
 
 **Candidates** (`studio/candidates.py`, pure; used by the API and the confirmation endpoint): for each OPEN clarification
 of the final assessment, from the frozen phase-1 readings and the peer answers of the runs that assessment read:
@@ -1368,3 +1368,45 @@ is listed or shown; 12.4 records how, and what is still open.
 - The provider lock belongs to a database session: a session that ends while an exchange is in flight, or between the
   last check and the send, ends the lock while that exchange may still reach the vendor (12.7).
 - What checklist 4.6 becomes is the owner's question (12.10).
+
+### 12.12 Refutation round 4 (2026-11-02): what changed, and where it is recorded
+
+The fourth refutation (six lenses on round 3's repairs, `624754eb1..3daafa91b`) filed 24 findings; independent verifiers
+reproduced all 24 (5 major, 19 minor, none blocking). The parity lens found nothing again: I1 holds across round 3's
+diff. Two session decisions, each narrowing what CPT Studio claims or shows:
+
+| decision | findings | the rule | recorded in |
+|---|---|---|---|
+| D8 | d7-1, d7-2, truth-1 | with confirmations off no candidate is served at all (round 3's "located passages" showed CPT Studio's own inferences as "Their answer"); the located-passage rendering is removed; the dormant path is unchanged | 12.10 (amendment), 12.5 (header) |
+| D9 | shapes-1..4, truth-3 | one strict-shape rule for every value a participant wrote that CPT Studio lists or shows: a code only in a CPT or HCPCS code's shape (else not listed by the engine, counted instead), a modifier only as two capital letters or digits, an id only as letters and digits of at most 8 characters (one name per participant across a served trace), an unretrieved reference only as such a short id, tool-call arguments likewise; Corti's own listing (MAX_LISTED_CODE) is unchanged (I1) | 12.4 (amendment), 12.11 (amendment) |
+
+**The other repairs:**
+- **d7-3:** the refusal says only that nothing was recorded ("This release offers no reviewer confirmation, so nothing
+  was recorded."), and the clarification row says what each open question holds by the readiness rules: a question
+  about the encounter holds the reviewed report; a question about a code holds that code, which can still be rejected; a
+  question about a documented service no code carries holds neither. No sentence names a way a question is settled
+  (12.10).
+- **d7-4, d7-5:** CONFIRMED FINDINGS is printed only while confirmations are offered; the engine's participants.summary
+  says a peer answer "is recorded and decides nothing by itself" (12.10).
+- **truth-2 (amends 12.11 truth-2):** a first reading's code with no quote found in the document is "not proposed" there
+  whether or not peer review then proposed it - in the card's positions (`review.participant_positions`), the
+  participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position and its
+  participants.summary ("It listed N codes (...) with no quote found verbatim in the document, so it did not propose
+  them."); "It proposed it after peer review." follows only where it did. (The participant row and the engine's two
+  sentences were applied at integration from R4-TRUTH's notes; three pins moved with them.)
+- **truth-4, falsegreen-6 (amends 12.11 truth-3):** Corti's row and REVIEW PARTICIPANTS count every code of an answer
+  that cannot be listed, whatever its role, as the engine does, each answer's count said apart; beside a code Corti
+  listed apart that can be listed, the row says it proposed no code that can be listed, so none was checked.
+- **truth-5 (amends 5, 12.9 truth-4 and 12.11 truth-1):** the retrieval-failure note names the step that failed - CPT
+  Studio could not load the stored CMS reference passages, so the retrieval did not run, or its retrieval for the codes
+  failed; "could not record which CMS reference facts and passages it retrieved" is no longer said.
+- **sends-1, sends-2, sends-3, falsegreen-1:** the access check's loop asks the provider lock between exchanges as the
+  pipeline's does and tolerates an ended session at its unlock; the lock check's session condition is pinned
+  deterministically; `_finish_loop`'s fallback never records a replay as sent (12.7).
+- **falsegreen-2, -3, -4, -5, -7:** pins of the trace review's shapes and the reader's quoting; the harness@2 case's
+  participant entries and the fixtures' retrieval are the stage's own; -5 is moot (located_passages is removed).
+- **At integration (the session):** the `_Harness` docstring and 12.5's header follow D8.
+
+**Open, recorded:** the residuals 12.9-12.11 list stand; R4-SHAPES' sweep left a participant's free text (a basis, a
+description, a reference's use, an answer's value, a position's reason) to the page's descriptor rule, as 12.4 says; the
+access check shares the worker's lock residual (12.7).

@@ -194,10 +194,12 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.assertIn('It returned 1 code that cannot be listed: not in the shape of a CPT code (four digits, then a '
                       'digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four digits). '
                       'It is not shown and never truncated.', summary)
-        # nowhere on the reconciliation's side, the reports, the trace or the API - the participant row's codes aside,
-        # which review.listed_codes serves (R4-SHAPES NEEDS: it reads engine.participant_listable there)
-        served = {**detail, 'harness': {**detail['harness'], 'participants': [
-            {key: value for key, value in row.items() if key != 'codes'} for row in detail['harness']['participants']]}}
+        # the participant row lists the codes it can and counts the other (review.listed_codes)
+        astra = self.rows(detail)['astra']
+        self.assertEqual((astra['codes'], astra['unlisted_codes']), (['45385'], 1))
+        self.assertTrue(astra['detail'].endswith(engine.participant_unlisted_codes(1)), astra['detail'])
+        # nowhere on the reconciliation's side, the reports, the trace or the API
+        served = detail
         for value in (LES, ADDED_TOKEN, POSITION_TOKEN):
             for where, text in (('trace', json.dumps(trace, ensure_ascii=False)), ('txt', txt),
                                 ('csv', json.dumps(rows, ensure_ascii=False)),

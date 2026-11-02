@@ -80,11 +80,17 @@ class PeerProposedPositionTests(ColonCase):
             'position': 'advised_not_to_code', 'quote': 'Q.',
             'detail': 'Fable advised not to code it in its first reading: not performed at this encounter. It '
                       'proposed it after peer review.'})
-        # an independent proposer, and a record with no phases (harness@1), read exactly as before
+        # an independent proposer, and a record with no phases (harness@1). Moved by refutation round 4, R4-TRUTH
+        # truth-2, to what the code now serves: Astra's first-reading entry has no located quote, so that reading
+        # proposed nothing whatever the phases say - 'not_proposed', the sentence above without the later one (it
+        # read "Astra proposed this code; none of its quotes was found in the document.") - and Fable's advice reads
+        # as before
         for support in ({'proposed_by': ['astra'], 'phases': {'astra': 'independent'}}, {}, None):
             plain = review.participant_positions(SimpleNamespace(code='45378', support=support), records)
-            self.assertEqual(plain['astra']['detail'], 'Astra proposed this code; none of its quotes was found in the '
-                                                       'document.')
+            self.assertEqual(plain['astra'], {
+                'position': 'not_proposed', 'quote': '',
+                'detail': 'Astra listed this code in its first reading, but none of its quotes was found in the '
+                          'document, so that reading did not propose it.'})
             self.assertEqual(plain['fable']['detail'], 'Fable advised not to code it: not performed at this encounter.')
 
 
@@ -155,12 +161,16 @@ class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, Colo
 
 # --- truth-4: a retrieval that failed says what failed, never that the CMS checks did not run ------------------------
 
-# The plan's shared wording (verify-harness-r2/REPAIR-PLAN.md): what failed is the record of the CMS facts and passages
-# retrieved; each code's checks read the CMS facts before that (jobs.stage_assess looks them up first), and stand.
-RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
-                    "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
-                    "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
-                    "and decides no status, so the assessment stands as made.")
+# The plan's shared wording (verify-harness-r2/REPAIR-PLAN.md): each code's checks read the CMS facts before the
+# retrieval (jobs.stage_assess looks them up first), and stand. Moved by refutation round 4, R4-TRUTH truth-5, to what
+# the code now serves: the tampered passage below fails the load of the stored passages, so the retrieval never ran,
+# and the note says so (jobs.RETRIEVAL_LOAD_FAILED) - it said "CPT Studio could not record which CMS reference facts
+# and passages it retrieved for this assessment's codes", when nothing was retrieved.
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not load the stored CMS reference passages "
+                    "({error}, logged), so the retrieval for this assessment's codes did not run and no CMS reference "
+                    "fact or passage is listed here. Each code's checks read the CMS facts before that and stand as "
+                    "shown; retrieval only informs the reviewer and decides no status, so the assessment stands as "
+                    "made.")
 # The fallback for a failed entry with no note. Moved by refutation round 3, R3-TRUTH truth-1, to what the serializer
 # now serves: it is said of any assessment, and where no CMS reference file applied no code's checks read a CMS fact,
 # so it claims neither that they did nor that none did (tests/test_harness2_r3_truth.py pins both notes the assess
@@ -184,7 +194,7 @@ class RetrievalFailureWordingMixin:
 
     def assertSaysWhatFailed(self, encounter_id):
         note = RETRIEVAL_FAILED.format(error='ValueError')
-        self.assertEqual(jobs.RETRIEVAL_FAILED.format(error='ValueError'), note)
+        self.assertEqual(jobs.RETRIEVAL_LOAD_FAILED.format(error='ValueError'), note)
         final = self.encounter(encounter_id).current_assessment
         self.assertEqual(final.retrieval, [{'code': '', 'service_date': '2026-10-14', 'facts': [], 'passages': [],
                                             'lookups': [], 'notes': [note], 'failed': True}])

@@ -522,8 +522,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "ac40520b1aa9296686c5808eb94320728edab765c632337bd85114d9f025938a",
-   "response_sha256": "621f4498da786c2d83f48f93c841040f1ac6a796a56eccf234b738aeb361119d",
+   "request_sha256": "54c7983d8292a5399a0faa3a23232aff49e13e0899d49f1a622c7c45d193c0e2",
+   "response_sha256": "df58002bf4d581e4e565512695bd4cdcb3ca1145cac74d725d585fee9e057146",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -545,8 +545,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "7d886fd3528971a2b1002f601c3bdf575b1e7a0a3f936f302b214db95e6574b2",
-   "response_sha256": "3a7591140173ea2d42c6a0df5faaee315f1ce36490b2efe43c7d20a7c847c289",
+   "request_sha256": "8044f842d5de5e130163fbc7725a1fb1909ab8254dcbfdf6bccd04538e935839",
+   "response_sha256": "27b2c535608ab53f029cb43daeb71a0ebc368cf6852f1e1052e4ef73b1424ad6",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -1066,8 +1066,8 @@
         "position": "no_position"
        },
        "quote": "",
-       "detail": "Astra proposed 45381 after peer review, not in its independent reading (stated units 1; modifiers none; confidence low); none of its quotes was found verbatim in the document, so it is not counted as a proposer.",
-       "position": "proposed"
+       "detail": "Astra listed 45381 (stated units 1; modifiers none; confidence low); none of its quotes was found verbatim in the document, so it did not propose it and is not counted as a proposer.",
+       "position": "not_proposed"
       },
       "fable": {
        "peer": {

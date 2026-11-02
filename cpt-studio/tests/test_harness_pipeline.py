@@ -1493,7 +1493,9 @@ class RetrievalFailureChainTests(HarnessCase):
                           ('assess', 'succeeded')])
         first, final = self.assessments(encounter_id)
         for assessment in (first, final):
-            self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'ValueError')])
+            # the stored passages could not be loaded, so the note names that step (refutation round 4, truth-5)
+            self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'ValueError',
+                                                                           step=jobs.RETRIEVAL_STEP_LOAD)])
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
         self.assertEqual(self.peer_sends(), (1, 1))
 
