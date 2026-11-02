@@ -293,3 +293,94 @@ class AnsweredQuestionEngineTests(SimpleTestCase):
         self.assertIn('It gave 3 answers to 2 open questions; ', self.summary_of('q-1', 'q-2', 'q-1'))
         self.assertIn(ANSWERED_ONCE, self.summary_of('q-1'))
 
+
+# --- shapes-1, truth-7: a peer review's HCPCS codes are codes CPT Studio reads ------------------------------------------
+
+DATE = {'value': '2026-10-14', 'evidence': ['Date of service: 2026-10-14']}
+TWO_SERVICES = [service(1, id='S1', family='colonoscopy', status='performed', evidence=[SNARE]),
+                service(2, id='S2', family='colonoscopy', status='performed', evidence=[BIOPSY])]
+
+
+def position(value, stance, quote):
+    return {'code': value, 'position': stance, 'reason': 'Synthetic.', 'evidence': [quote]}
+
+
+class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
+    """shapes-1, truth-7: the peer review's additional codes and positions were read in the CPT shape alone, so an HCPCS
+    code the engine reads (participant_listable) was "a code CPT Studio does not read" in both reports, '' in the CSV,
+    "listed in peer review" in the trace, and missing from codes_added."""
+
+    def peer_surfaces(self, encounter_id, name):
+        detail = self.detail(encounter_id)
+        trace = self.trace(encounter_id)
+        runs = next(item for item in trace['participants'] if item['name'] == name)['runs']
+        (review_,) = [run['review'] for run in runs if run.get('review')]
+        rows = csv_rows(self.download(encounter_id, fmt='csv'))
+        return (detail, review_, _section(self.download(encounter_id), reports.PEER_TITLE),
+                [(row['item_list'], row['code'], row['status']) for row in rows
+                 if row['item_list'] in ('peer_position', 'peer_additional_code') and row['proposed_by'] == name])
+
+    def test_an_hcpcs_position_and_an_hcpcs_additional_code(self):
+        # the shapes lens's input: Corti selects 45385 and G0121; Astra's peer review disputes G0121 and adds G0105
+        self.corti.selections = [('45385', SNARE), ('G0121', BIOPSY)]
+        self.adapters['astra'].first = [hp.answered('astra', empty_reading(
+            date_of_service=DATE, services=TWO_SERVICES, codes=[code('45385', service_ids=['S1'], evidence=[SNARE])]))]
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(codes=[('45385', SNARE)]))]
+        self.adapters['astra'].peer = [hp.answered('astra', {
+            'question_answers': [], 'references_used': [], 'code_positions': [position('G0121', 'disputes', BIOPSY)],
+            'additional_codes': [code('G0105', service_ids=['S2'], evidence=[BIOPSY])]}, number=2)]
+        self.adapters['fable'].peer = [hp.answered('fable', hp.EMPTY_PEER, number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'astra')
+        self.assertEqual(self.rows(detail)['astra']['peer']['codes_added'], ['G0105'])
+        self.assertIn('Codes it proposed after peer review, never independent: G0105.', self.peer_row(detail, 'astra'))
+        self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [('G0105', 'peer_review')])
+        self.assertEqual([(c['code'], c['position']) for c in review_['positions']], [('G0121', 'disputes')])
+        self.assertIn('    Position on G0121: disputes', txt)
+        self.assertIn('    Additional code G0105 · units 1 — proposed after peer review, never independent', txt)
+        self.assertFalse([line for line in txt if reports.UNREAD_CODE in line])
+        self.assertEqual(rows, [('peer_position', 'G0121', 'disputes'),
+                                ('peer_additional_code', 'G0105', 'proposed_after_peer_review')])
+
+    def test_an_hcpcs_code_a_peer_review_adds_quoting_the_document(self):
+        # truth-7 (a): ColonCase, except Fable's peer review adds G0121 on the landmarks line
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=[('G0121', LAND)]), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'fable')
+        self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], ['G0121'])
+        self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [('G0121', 'peer_review')])
+        self.assertIn('    Additional code G0121 · units 1 — proposed after peer review, never independent', txt)
+        self.assertEqual(rows, [('peer_additional_code', 'G0121', 'proposed_after_peer_review')])
+        [alternative] = self.proposals(detail, 'G0121')
+        self.assertEqual((alternative['proposed_by'], alternative['phases']), (['fable'], {'fable': 'peer_review'}))
+
+    def test_an_hcpcs_position_on_corti_s_excluded_code(self):
+        # truth-7 (b): Corti selects G0105 (excluded for scope); Astra's peer review disputes it quoting the snare line
+        self.corti.selections = [('45385', SNARE), ('45380', BIOPSY), ('G0105', SNARE)]
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(positions=[('G0105', 'disputes', SNARE)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'astra')
+        [excluded] = self.proposals(detail, 'G0105')
+        self.assertEqual(excluded['support']['participants']['astra']['peer']['detail'],
+                         'In peer review, Astra disputes G0105, quoting the document verbatim.')
+        self.assertIn('    Position on G0105: disputes', txt)
+        self.assertEqual(rows, [('peer_position', 'G0105', 'disputes')])
+
+    def test_a_value_in_no_code_s_shape_is_still_not_read(self):
+        # control: a peer review's code in no code's shape stays "a code CPT Studio does not read" and is never shown
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=[('G0121;LES', LAND)],
+                                                                           positions=[(LES, 'disputes', SNARE)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'fable')
+        self.assertIn(f'    Position on {reports.UNREAD_CODE}: disputes', txt)
+        self.assertIn(f'    Additional code {reports.UNREAD_CODE} · units 1 — listed in peer review', txt)
+        self.assertEqual(rows, [('peer_position', '', 'disputes'), ('peer_additional_code', '', 'listed_in_peer_review')])
+        self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [(length('G0121;LES'), '')])
+        self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], [])
+

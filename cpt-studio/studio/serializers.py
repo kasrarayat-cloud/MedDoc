@@ -890,14 +890,16 @@ def _peer_progress(jobs, name):
 
 
 def _codes_added(peer_review, assessment, name, record):
-    """(added, repeated): the CPT codes a peer review listed as additional codes, each once, in order, split by the
-    phase participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer
-    review - the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
+    """(added, repeated): the codes in a code's shape - a CPT or HCPCS code's, participants.peer.code_shaped, the
+    engine's rule for a participant's code (refutation round 5, shapes-1: the CPT shape alone left an HCPCS code the
+    engine read out of codes_added) - a peer review listed as additional codes, each once, in order, split by the phase
+    participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer review -
+    the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
     independent reading first proposed, which it listed again."""
     if peer_review is None or peer_review.refused:
         return [], []
     listed = list(dict.fromkeys(item.code for item in peer_review.additional_codes
-                                if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)))
+                                if participant_peer.code_shaped(item.code)))
     phases = peer_code_phases(assessment, name, record, listed)
     return ([code for code in listed if phases[code] == models.ProviderRun.PEER_REVIEW],
             [code for code in listed if phases[code] == models.ProviderRun.INDEPENDENT])
@@ -1184,8 +1186,9 @@ def _trace_review(run, assessment=None, ids=None):
     data = to_jsonable(peer_review)
     record = review.model_records(assessment).get(run.provider) if assessment is not None else None
     read = record is not None and record.get('peer_state') == 'read' and record.get('peer_run') == str(run.pk)
-    shaped = [item.code if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code) else ''
-              for item in peer_review.additional_codes]
+    # a code in a code's shape, CPT or HCPCS, as the engine reads it (participants.peer.code_shaped; refutation round 5,
+    # shapes-1: the CPT shape alone gave an HCPCS code no phase); any other is served by its length (_code_entry)
+    shaped = [item.code if participant_peer.code_shaped(item.code) else '' for item in peer_review.additional_codes]
     phases = peer_code_phases(assessment, run.provider, record, [code for code in shaped if code]) if read else {}
     ids = participant_peer.ShownIds() if ids is None else ids
     return {**data, 'positions': [_code_entry(item, ids) for item in data['positions']],

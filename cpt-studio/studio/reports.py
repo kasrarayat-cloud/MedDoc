@@ -23,7 +23,7 @@ from . import audit, candidates, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
-from .participants.reading import CODE as CODE_SHAPE
+from .participants.peer import code_shaped
 from .serializers import failure_note, peer_code_phases, retrieval_failed, shown_used
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
@@ -581,11 +581,14 @@ def _peer_items(assessment, peer_review, text, index, name='', record=None):
                         'question': question.question if question is not None else '', 'fact': fact,
                         'family': family, 'settled': bool(answer.settled),
                         'evidence': _located(answer.evidence, text, index)})
-    positions = [{'code': item.code if CODE_SHAPE.fullmatch(str(item.code)) else '', 'position': item.position,
+    # a code in a code's shape, CPT or HCPCS, as the engine reads a participant's code (participants.peer.code_shaped;
+    # refutation round 5, shapes-1, truth-7: the CPT shape alone printed an HCPCS code the engine read as "a code CPT
+    # Studio does not read"); '' for any other, printed as UNREAD_CODE
+    positions = [{'code': item.code if code_shaped(item.code) else '', 'position': item.position,
                   'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
     # each additional code with the phase its participant first proposed it in (serializers.peer_code_phases;
     # refutation round 2, truth-8): '' for a code CPT Studio does not read
-    shaped = [item.code if CODE_SHAPE.fullmatch(str(item.code)) else '' for item in peer_review.additional_codes]
+    shaped = [item.code if code_shaped(item.code) else '' for item in peer_review.additional_codes]
     phases = peer_code_phases(assessment, name, record, [code for code in shaped if code])
     added = [{'code': code, 'units': item.units if type(item.units) is int else 0,
               'evidence': _located(item.evidence, text, index), 'phase': phases.get(code, '')}
