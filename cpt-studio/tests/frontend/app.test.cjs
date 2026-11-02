@@ -1450,7 +1450,7 @@ test('a participant\'s requests are named in the Activity tab with the tokens it
   assert.ok(codes.includes(`id="reconcileForm" data-run="${degraded.provider_runs[2].id}"`));
 });
 
-// --- harness@2 (HARNESS.md 11-12): peer reviews, candidates and confirmations, references kept apart, the trace -------
+// --- harness@2 (HARNESS.md 11-12): peer reviews, candidates and confirmations, references kept apart, the trace ------
 //
 // The harness@2 fixtures are the serializer's own output (tests/test_frontend.py generates them from the rows harness@2
 // records): peer reviews running, after both peer reviews, and a confirmed finding read by a re-assessment.

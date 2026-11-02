@@ -1673,8 +1673,9 @@ function checkPeerRows(enc, rows) {
 
 // Each open question shows exactly the API's candidate answers and confirmation (HARNESS.md 12.5, 12.6): the same
 // candidates in order with the same verified flags, the confirmation's id, and a Confirm action only for a verified
-// candidate of an unconfirmed question, for a member the API allows (permissions.can_confirm); a question the API serves
-// none for shows none. Skipped where the API serves no candidate and no confirmation. Read only: the walk never confirms.
+// candidate of an unconfirmed question, for a member the API allows (permissions.can_confirm); a question the API
+// serves none for shows none. Skipped where the API serves no candidate and no confirmation. Read only: the walk never
+// confirms.
 function checkCandidates(enc, questions) {
   const open = (Array.isArray(enc?.clarifications) ? enc.clarifications : []).filter(item => item && typeof item === 'object' && item.state === 'open');
   const served = open.filter(item => (Array.isArray(item.candidates) && item.candidates.length > 0) || (item.confirmation && typeof item.confirmation === 'object'));

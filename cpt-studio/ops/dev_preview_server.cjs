@@ -201,8 +201,8 @@ async function handleApi(req, res, url) {
   return apiError(res, 404, 'Not found.');
 }
 
-// POST /api/encounters/<id>/clarifications/<question id>/confirm, as API.md describes it (HARNESS.md 12.5): a member the
-// fixture allows (permissions.can_confirm), an open question of the document not confirmed yet, one of its VERIFIED
+// POST /api/encounters/<id>/clarifications/<question id>/confirm, as API.md describes it (HARNESS.md 12.5): a member
+// the fixture allows (permissions.can_confirm), an open question of the document not confirmed yet, one of its VERIFIED
 // candidates, and the attestation exactly the candidate's served one. The confirmation is then shown on the question;
 // nothing is approved.
 function confirmFinding(req, res, id, questionId, body) {

@@ -2352,7 +2352,7 @@ test('summarize records which participants ran and what reference validation ret
   assert.equal(vb.summarize(encounter()).harness, null);
 });
 
-// --- harness@2: the peer-review rows and the candidate answers (HARNESS.md 11.1, 12.5, 12.6) ---------------------------
+// --- harness@2: the peer-review rows and the candidate answers (HARNESS.md 11.1, 12.5, 12.6) -------------------------
 //
 // The rows and the questions are held to what the API serves, read from the markup the live app.js renders for the
 // serializer's own fixtures; the walk reads them and never confirms anything.

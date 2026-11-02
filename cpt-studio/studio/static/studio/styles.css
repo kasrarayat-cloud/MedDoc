@@ -119,8 +119,9 @@
 .trace-fields dd+dt{margin-top:8px}
 }
 
-/* harness@2 (HARNESS.md 11-12): candidate answers to an open question and their confirmation, a code's confirmed finding
-   and its participants' references kept apart from the reconciliation's, and the trace's exchanges. Tokens only. */
+/* harness@2 (HARNESS.md 11-12): candidate answers to an open question and their confirmation, a code's confirmed
+   finding and its participants' references kept apart from the reconciliation's, and the trace's exchanges. Tokens
+   only. */
 .candidate-answers{margin-top:14px;padding-top:12px;border-top:1px solid #ece5d4}
 .clarification-card>.candidate-answers{margin-bottom:16px}
 .candidate-answers .evidence-label{margin-bottom:6px}

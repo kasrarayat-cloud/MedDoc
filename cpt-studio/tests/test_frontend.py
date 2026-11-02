@@ -54,15 +54,17 @@ PEER_KEYS = {'state', 'detail', 'run_id', 'codes_added', 'unverified_quotes'}
 PEER_STATES = {'waiting', 'running', 'stopped', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
                'not_configured'}
 RETRIEVED_KEYS = {'ref', 'kind', 'source_key', 'release', 'effective_start', 'effective_end', 'tool'}
-CANDIDATE_KEYS = {'id', 'clarification_id', 'fact', 'value', 'located_by', 'phase', 'phases', 'runs', 'spans', 'verified',
-                  'why', 'attestation'}
-CONFIRMATION_KEYS = {'id', 'clarification_id', 'scope', 'fact', 'family', 'proposal_key', 'value', 'spans', 'located_by',
-                     'runs', 'confirmed_by', 'confirmed_by_kind', 'attestation', 'created_at', 'revision_number'}
+CANDIDATE_KEYS = {'id', 'clarification_id', 'fact', 'value', 'located_by', 'phase', 'phases', 'runs', 'spans',
+                  'verified', 'why', 'attestation'}
+CONFIRMATION_KEYS = {'id', 'clarification_id', 'scope', 'fact', 'family', 'proposal_key', 'value', 'spans',
+                     'located_by', 'runs', 'confirmed_by', 'confirmed_by_kind', 'attestation', 'created_at',
+                     'revision_number'}
 EXCHANGE_KEYS = {'turn', 'state', 'http_status', 'latency_ms', 'usage', 'request_sha256', 'response_sha256',
                  'provider_request_id', 'response_id', 'error', 'tool_calls'}
 TOOL_CALL_KEYS = {'call_id', 'tool', 'arguments', 'refs', 'result_sha256', 'executed_at'}
 REVIEW_KEYS = {'provider', 'adapter_version', 'review_version', 'requested_model', 'returned_model', 'frozen_inputs',
-               'answers', 'positions', 'additional_codes', 'references_used', 'problems', 'refused', 'unverified_quotes'}
+               'answers', 'positions', 'additional_codes', 'references_used', 'problems', 'refused',
+               'unverified_quotes'}
 # The exact sentence a confirmation carries with the candidate's value (HARNESS.md 11.3, 12.5), written out here.
 ATTESTATION = 'I read this passage in the source document; it documents {value} for this encounter.'
 
@@ -337,7 +339,8 @@ class FixtureTests(SimpleTestCase):
                 for clarification in doc['clarifications']:
                     self.assertEqual(set(clarification) - {'candidates', 'confirmation'},
                                      {'id', 'scope', 'proposal_id', 'family', 'fact', 'question', 'reason', 'state'})
-                    self.assertTrue(final or not clarification['candidates'], 'only the final assessment has candidates')
+                    self.assertTrue(final or not clarification['candidates'],
+                                    'only the final assessment has candidates')
                     for candidate in clarification['candidates']:
                         self.assertEqual(set(candidate), CANDIDATE_KEYS)
                         self.assertEqual(candidate['clarification_id'], clarification['id'])
@@ -451,14 +454,15 @@ class BrowserLogicTests(SimpleTestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
 
 
-# --- harness@2 (HARNESS.md 11-12): the website's fixtures are the serializer's own output ------------------------------
+# --- harness@2 (HARNESS.md 11-12): the website's fixtures are the serializer's own output -----------------------------
 #
 # The encounter-harness2-*.json fixtures and trace-harness2-final.json are made here, by studio.serializers, from the
-# rows harness@2 records (tests/test_harness2_api.py's Harness2Case: the real adapters' stored requests, replayed response
-# bytes the real readers read, exchanges, tool calls, the assessments' participant entries and a confirmation recorded
-# through the real endpoint), never written from API.md's prose. CPT_STUDIO_WRITE_FIXTURES=1 writes them again, with
-# stable ids and times; otherwise the committed files must carry exactly the keys, at every level, that the serializer
-# emits now, so a change to the API that the website was not built for fails here.
+# rows harness@2 records (tests/test_harness2_api.py's Harness2Case: the real adapters' stored requests, replayed
+# response bytes the real readers read, exchanges, tool calls, the assessments' participant entries and a confirmation
+# recorded through the real endpoint), never written from API.md's prose. CPT_STUDIO_WRITE_FIXTURES=1 writes them again,
+# with stable ids and times; otherwise the committed files must carry exactly the keys, at every level, that the
+# serializer emits now, so a change to the API that the website was not built for fails here. Hashes over bytes that
+# name a question (a peer request or answer) are kept as generated: the ids they name were made stable after hashing.
 
 WRITE_FIXTURES = os.environ.get('CPT_STUDIO_WRITE_FIXTURES') == '1'
 HARNESS2_SCENARIOS = {  # fixture -> (the uuid prefix of its scenario, its title)
@@ -477,8 +481,8 @@ PHASE2_JOBS = (models.Job.ASTRA_PEER, models.Job.FABLE_PEER, models.Job.ASSESS)
 
 
 def shape(value, path=''):
-    """Every (path, type) a JSON value carries - the keys at every level ('[]' for a list's items) and each leaf's type -
-    so two payloads compare by their shape, never by their ids, times or hashes."""
+    """Every (path, type) a JSON value carries - the keys at every level ('[]' for a list's items) and each leaf's
+    type - so two payloads compare by their shape, never by their ids, times or hashes."""
     if isinstance(value, dict):
         out = {(path or '.', 'object')}
         for key, item in value.items():
@@ -502,9 +506,9 @@ def candidate_id(question_id, candidate):
 
 
 class StableIds:
-    """Stable ids and times for the generated fixtures: each uuid of a scenario becomes <prefix>-0000-4000-8000-<n> in the
-    order it first appears, each distinct time FIXTURE_TIME plus its rank among all of them (their order kept), and each
-    candidate id is computed again from its question's new id, exactly as studio.candidates computes it."""
+    """Stable ids and times for the generated fixtures: each uuid of a scenario becomes <prefix>-0000-4000-8000-<n> in
+    the order it first appears, each distinct time FIXTURE_TIME plus its rank among all of them (their order kept), and
+    each candidate id is computed again from its question's new id, exactly as studio.candidates computes it."""
 
     def __init__(self, texts):
         found = sorted({datetime.fromisoformat(value.replace('Z', '+00:00')): value
@@ -531,10 +535,10 @@ class StableIds:
 @override_settings(ASTRA_MODE='replay', FABLE_MODE='replay')
 class Harness2FixtureTests(h2.Harness2Case):
     """Three encounters as harness@2 records them, serialized: one whose peer reviews are running (assess #1 current,
-    Astra's peer stage in flight, Fable's waiting), one after both peer reviews (assess #2, three open questions with their
-    candidates), and one whose extent question a reviewer confirmed, with the re-assessment that read it."""
+    Astra's peer stage in flight, Fable's waiting), one after both peer reviews (assess #2, three open questions with
+    their candidates), and one whose extent question a reviewer confirmed, with the re-assessment that read it."""
 
-    def setUp(self):  # the parent's setUp builds one encounter; these tests build each scenario as the pipeline records it
+    def setUp(self):  # the parent's builds one encounter; these tests build each scenario as the pipeline records it
         self.ws = f.workspace()
         self.owner = self.person('owner', 'Synthetic Owner', models.Membership.OWNER)
         self.reviewer = self.person('reviewer', 'Synthetic Reviewer', models.Membership.REVIEWER)
@@ -646,7 +650,8 @@ class Harness2FixtureTests(h2.Harness2Case):
         status = pf.clarification('performed_status', family='gi.colonoscopy', proposal_key='sel:1',
                                   question='Colonoscopy: confirm whether 45380 was performed at this encounter.',
                                   reason='Whether the biopsy was performed at this encounter is in doubt.')
-        date_question = ClarificationSpec(scope='encounter', fact='service_date', question='Confirm the date of service.',
+        date_question = ClarificationSpec(scope='encounter', fact='service_date',
+                                          question='Confirm the date of service.',
                                           reason='The date of service is in question.')
         proposers = ['astra', 'fable'] if phase == 2 else ['astra']
         phases = {'astra': 'independent', 'fable': 'peer_review'} if phase == 2 else {'astra': 'independent'}
@@ -656,7 +661,8 @@ class Harness2FixtureTests(h2.Harness2Case):
                          'phases': {'astra': 'independent', 'fable': 'independent'}}
         snare = pf.proposal('sel:0', '45385', ['was removed with a cold snare'], text=h2.NOTE,
                             status='needs_clarification', clarifications=(extent,),
-                            rationale='A polyp removed with a cold snare is documented as performed on the service date.')
+                            rationale='A polyp removed with a cold snare is documented as performed on the service '
+                                      'date.')
         checks = None
         if confirmation is not None:
             words = (f"confirmed from Astra's and Fable's located passage by {confirmation.confirmed_by.label()}")
