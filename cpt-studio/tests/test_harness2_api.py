@@ -21,7 +21,7 @@ from studio.participants import prompt
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.providers.base import canonical_body
-from studio.types import ClarificationSpec, ExtractionResult, sha256_json
+from studio.types import ClarificationSpec, ExtractionResult, sha256_json, to_jsonable
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_participants_support import NOTE, PAGES, astra_with, fable_with, fixture_reading
@@ -434,3 +434,167 @@ class ConfirmationTests(Harness2Case):
         self.assertEqual([e.event for e in events], ['finding.confirmed', 'context.changed'])
         self.assertEqual(events[1].data['fields'], ['service_date'])
         self.assertFalse(models.Decision.objects.exists())
+
+
+@override_settings(**BOTH)
+class DetailTests(Harness2Case):
+    def detail(self, user=None):
+        response = self.client_for(user or self.reviewer).get(f'/api/encounters/{self.encounter.pk}')
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def rows(self, data):
+        return {row['name']: row for row in data['harness']['participants']}
+
+    def test_the_phase_and_the_permission_to_confirm(self):
+        data = self.detail()
+        self.assertEqual((data['harness']['phase'], data['permissions']['can_confirm']), (2, True))
+        self.assertFalse(self.detail(self.viewer)['permissions']['can_confirm'])
+        self.persist([self.entry(name) for name in ADAPTERS])  # an assess #1 again: phase 1
+        self.assertEqual(self.detail()['harness']['phase'], 1)
+        self.persist([jobs.not_configured_record('astra'), jobs.not_configured_record('fable')])
+        self.assertEqual(self.detail()['harness']['phase'], 0)
+
+    def test_each_participant_s_peer_review_and_its_references_kept_apart(self):
+        data = self.detail()
+        rows = self.rows(data)
+        astra, fable, corti = rows['astra'], rows['fable'], rows['corti']
+        self.assertEqual(astra['peer'], {'state': 'done', 'run_id': str(self.peer_runs['astra'].pk),
+                                         'codes_added': ['45381'], 'unverified_quotes': 0,
+                                         'detail': 'Answered in peer review, after its first reading was frozen; the '
+                                                   'review was used.'})
+        self.assertEqual((fable['peer']['state'], fable['peer']['codes_added']), ('done', []))
+        self.assertEqual((corti['peer'], corti['references'], corti['peer_references']),
+                         ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}))
+        # 1: what each participant retrieved, by phase; 2: what it says it used, checked against that run's own tools
+        self.assertEqual(astra['references'], {
+            'retrieved': [{'ref': FACT_REF, 'kind': 'fact', 'source_key': 'cms-pfs-rvu26d', 'release': 'RVU26D',
+                           'effective_start': '2026-10-01', 'effective_end': '2026-12-31', 'tool': 'cms_code_facts'}],
+            'used': [{'ref': FACT_REF, 'use': 'The endoscopic base of the snare removal.', 'retrieved': True},
+                     {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.', 'retrieved': False}]})
+        self.assertEqual(astra['peer_references'], {
+            'retrieved': [{'ref': PASSAGE_REF, 'kind': 'passage', 'source_key': 'cms-ncci-policy-manual-2026',
+                           'release': 'Revision 2026', 'effective_start': '2026-01-01', 'effective_end': '2026-12-31',
+                           'tool': 'cms_policy_passages'}],
+            'used': [{'ref': PASSAGE_REF, 'use': 'The NCCI endoscopy rule.', 'retrieved': True},
+                     # its first reading's retrieval never counts for its peer review: cited, not retrieved
+                     {'ref': FACT_REF, 'use': 'Retrieved only by its first reading.', 'retrieved': False}]})
+        self.assertEqual(fable['references'], {'retrieved': [], 'used': []})
+        # 3: the reconciliation's own retrieval stays reference_validation's, never merged with either
+        self.assertEqual(data['harness']['reference_validation']['codes_checked'], 0)
+
+    def test_open_questions_carry_their_candidates_and_their_confirmation(self):
+        clarifications = {c['fact']: c for c in self.detail()['clarifications']}
+        self.assertEqual({fact: len(c['candidates']) for fact, c in clarifications.items()},
+                         {'extent': 2, 'service_date': 1, 'performed_status': 3})
+        self.assertEqual(clarifications['extent']['candidates'], self.candidates_of('extent'))
+        self.assertTrue(all(c['confirmation'] is None for c in clarifications.values()))
+        with mock.patch('studio.jobs.reassess_after_confirmation'):
+            self.assertEqual(self.confirm('extent').status_code, 201)
+        data = self.detail()
+        extent = next(c for c in data['clarifications'] if c['fact'] == 'extent')
+        confirmation = models.FindingConfirmation.objects.get()
+        self.assertEqual({key: extent['confirmation'][key] for key in ('id', 'value', 'fact', 'located_by',
+                                                                       'confirmed_by', 'attestation')},
+                         {'id': str(confirmation.pk), 'value': 'cecum', 'fact': 'extent',
+                          'located_by': ['astra', 'fable'], 'confirmed_by': self.reviewer.label(),
+                          'attestation': candidates.attestation('cecum')})
+        self.assertEqual(extent['confirmation']['spans'], confirmation.spans)
+        self.assertEqual([c['id'] for c in data['confirmations']], [str(confirmation.pk)])
+        summaries = [row['summary'] for row in data['activity']]
+        self.assertIn("Finding confirmed from a participant's located passage (not a decision)", summaries)
+        event = next(row for row in data['activity'] if row['event'] == 'finding.confirmed')
+        self.assertEqual(event['data'], {'fact': 'extent', 'effect': 'reassessment'})
+
+    def test_no_candidate_before_the_final_assessment(self):
+        self.persist([self.entry(name) for name in ADAPTERS])
+        self.assertTrue(all(c['candidates'] == [] for c in self.detail()['clarifications']))
+
+    def test_proposals_carry_their_phases_and_confirmations_beside_the_three_statuses(self):
+        proposals = {p['code']: p for p in self.detail()['assessment']['proposals']}
+        snare, biopsy = proposals['45385'], proposals['45380']
+        self.assertEqual((snare['phases'], snare['confirmed']), ({'astra': 'independent', 'fable': 'independent'}, []))
+        self.assertEqual(biopsy['phases'], {'astra': 'independent', 'fable': 'peer_review'})
+        # 11.4: a participant's own proposal keeps its origin, never Corti's
+        self.assertEqual(biopsy['proposed_by'], ['astra', 'fable'])
+        self.assertIn('Corti did not propose this code.', biopsy['rationale'])
+        # I4: proposed, reference-checked and approved stay apart; a candidate or a confirmation approves nothing
+        self.assertEqual((biopsy['decision_state'], biopsy['decision']), ('undecided', None))
+        with mock.patch('studio.jobs.reassess_after_confirmation'):
+            self.assertEqual(self.confirm('performed_status', self.verified('performed_status')).status_code, 201)
+        biopsy = next(p for p in self.detail()['assessment']['proposals'] if p['code'] == '45380')
+        self.assertEqual((biopsy['decision_state'], biopsy['status']), ('undecided', 'needs_clarification'))
+
+    def test_a_peer_stage_under_way(self):
+        self.persist([self.entry(name) for name in ADAPTERS])  # assess #1 again: the peer stages follow it
+        job = pf.job(self.encounter, self.revision, models.Job.ASTRA_PEER, models.Job.QUEUED)
+        rows = self.rows(self.detail())
+        self.assertEqual((rows['astra']['peer']['state'], rows['fable']['peer']['state']), ('waiting', 'waiting'))
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING)
+        rows = self.rows(self.detail())
+        self.assertEqual((rows['astra']['peer']['state'], rows['fable']['peer']['state']), ('running', 'waiting'))
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.SUCCEEDED)
+        fable_job = pf.job(self.encounter, self.revision, models.Job.FABLE_PEER, models.Job.RUNNING)
+        rows = self.rows(self.detail())
+        self.assertEqual((rows['astra']['peer'], rows['fable']['peer']['state']), ({}, 'running'))
+        models.Job.objects.filter(pk=fable_job.pk).update(state=models.Job.FAILED)
+        self.assertEqual(self.rows(self.detail())['fable']['peer'], {})
+
+    def test_a_peer_review_that_was_not_used_says_why(self):
+        entries = [self.entry(name, peer=True) for name in ADAPTERS]
+        entries[1].update(peer_state='refused', peer_reason='The peer review was not used: it was cut off.',
+                          peer_sha256='')
+        self.persist(entries)
+        fable = self.rows(self.detail())['fable']
+        self.assertEqual((fable['peer']['state'], fable['peer']['codes_added']), ('refused', []))
+        self.assertEqual(fable['peer']['detail'], 'Peer review: answered; the review was not used: The peer review '
+                                                  'was not used: it was cut off.')
+
+    def test_a_corti_only_encounter_reads_as_before_with_empty_additions(self):
+        self.persist([jobs.not_configured_record('astra'), jobs.not_configured_record('fable')])
+        with override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled'):
+            data = self.detail()
+        self.assertEqual(data['harness']['phase'], 0)
+        for row in data['harness']['participants']:
+            self.assertEqual((row['peer'], row['references'], row['peer_references']),
+                             ({}, {'retrieved': [], 'used': []}, {'retrieved': [], 'used': []}), row['name'])
+        self.assertTrue(all(c['candidates'] == [] and c['confirmation'] is None for c in data['clarifications']))
+        self.assertEqual(data['confirmations'], [])
+
+
+@override_settings(**BOTH)
+class TraceTests(Harness2Case):
+    def test_the_trace_shows_exchanges_tool_calls_peer_reviews_and_each_assessment_s_frozen_list(self):
+        response = self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}/trace')
+        self.assertEqual(response.status_code, 200, response.content)
+        trace = response.json()
+        astra = next(p for p in trace['participants'] if p['name'] == 'astra')
+        first, peer_run = astra['runs']
+        self.assertEqual((first['purpose'], peer_run['purpose'], first['mode'], peer_run['mode']),
+                         ('independent', 'peer_review', 'replay', 'replay'))
+        self.assertEqual([e['turn'] for e in first['exchanges']], [1, 2])
+        self.assertEqual(first['exchanges'][0]['tool_calls'], [{
+            'call_id': 'call_1_1', 'tool': 'cms_code_facts', 'arguments': {'codes': ['45385'], 'date_of_service': ''},
+            'refs': [FACT_REF], 'result_sha256': sha(canonical_body(FACTS_RESULT)),
+            'executed_at': first['exchanges'][0]['tool_calls'][0]['executed_at']}])
+        self.assertEqual(first['exchanges'][1]['tool_calls'], [])
+        self.assertEqual(first['reading']['references_used'],
+                         [{'ref': FACT_REF, 'use': 'The endoscopic base of the snare removal.', 'retrieved': True},
+                          {'ref': PASSAGE_REF, 'use': 'A rule this run never retrieved.', 'retrieved': False}])
+        self.assertIsNone(first['review'])
+        self.assertIsNone(peer_run['reading'])
+        self.assertEqual(peer_run['review'],
+                         json.loads(json.dumps(to_jsonable(review.stored_peer_review(self.peer_runs['astra'])[0]))))
+        self.assertEqual([a['question_id'] for a in peer_run['review']['answers']],
+                         [str(self.first.clarifications.get(fact=fact).pk)
+                          for fact in ('extent', 'service_date', 'performed_status')])
+        self.assertEqual([c['code'] for c in peer_run['review']['additional_codes']], ['45381'])
+        self.assertEqual(sorted(name for name, _ in peer_run['review']['frozen_inputs']),
+                         ['astra', 'corti', 'cpt_studio', 'fable', 'revision'])
+        corti = next(p for p in trace['participants'] if p['name'] == 'corti')
+        self.assertEqual(corti['runs'][0]['exchanges'], [])
+        assessments = trace['assessments']
+        self.assertEqual([(a['id'], a['phase'], a['final'], a['current']) for a in assessments],
+                         [(str(self.first.pk), 1, False, False), (str(self.final.pk), 2, True, True)])
+        self.assertEqual(assessments[0]['frozen'], self.frozen)
+        self.assertEqual(assessments[1]['frozen'], self.frozen)

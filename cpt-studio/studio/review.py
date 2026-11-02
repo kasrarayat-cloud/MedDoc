@@ -1487,7 +1487,7 @@ def revision_confirmations(revision):
     if revision is None:
         return []
     return list(FindingConfirmation.objects.filter(revision=revision).select_related(
-        'confirmed_by', 'clarification', 'clarification__proposal').order_by('created_at', 'pk'))
+        'confirmed_by', 'revision', 'clarification', 'clarification__proposal').order_by('created_at', 'pk'))
 
 
 def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, user, membership):
