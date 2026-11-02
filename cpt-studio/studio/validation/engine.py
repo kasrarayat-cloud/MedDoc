@@ -2791,6 +2791,16 @@ def participant_listable(code) -> bool:
     return code_shaped(code)
 
 
+def participant_unlisted_count(entries) -> int:
+    """How many of a model participant's code entries - a reading's codes, or a peer review's additional codes - the
+    engine does not read (participant_listable): every entry, a value given twice counted twice, as the proposal
+    provider's codes that cannot be listed are counted one per code its answer returned. The one count of them
+    (refutation round 5, the session's D13): _Harness states it in participants.summary, and a participant row states it
+    re-read from the frozen reading (review.unlisted_count) - the row had counted the assessment's record of the reading,
+    which keeps one entry per code value, so '45385-59' given twice was 2 in the summary and 1 on the row."""
+    return sum(1 for item in entries if not participant_listable(item.code))
+
+
 def participant_unlisted_codes(count: int, who: str = 'It') -> str:
     """The sentence for codes a model participant gave that the engine does not read (participant_listable): counted,
     never named or truncated. The proposal provider's (checks.unlisted_codes: "empty, or longer than 10 characters") is
@@ -3045,9 +3055,11 @@ class _Harness:
         self.unread: dict[str, set] = {}
         self.unread_stances: dict[str, set] = {}
         for name, reading in self.readings.items():
+            unlisted = participant_unlisted_count(reading.codes)  # the one count (refutation round 5, D13)
+            if unlisted:
+                self.unlisted[name] = unlisted
             for item in reading.codes:
                 if not participant_listable(item.code):
-                    self.unlisted[name] = self.unlisted.get(name, 0) + 1
                     _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
@@ -3057,9 +3069,11 @@ class _Harness:
                 else:
                     _unread(self.unread, name, item.code)
         for name, peer in self.peers.items():
+            unlisted = participant_unlisted_count(peer.additional_codes)
+            if unlisted:
+                self.peer_unlisted[name] = unlisted
             for item in peer.additional_codes:
                 if not participant_listable(item.code):
-                    self.peer_unlisted[name] = self.peer_unlisted.get(name, 0) + 1
                     _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))

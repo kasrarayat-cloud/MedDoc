@@ -589,3 +589,92 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [(length('G0121;LES'), '')])
         self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], [])
 
+
+# --- D13 (truth-6, shapes-2): one count of a participant's codes that cannot be listed ---------------------------------
+
+class UnlistedCountTests(Surfaces, R2WordingCase):
+    """The engine counts every entry of a reading in no code's shape; the row counted the assessment's record of the
+    reading, which keeps one entry per code value, so '45385-59' given twice was 2 in the summary and 1 on the row
+    (refutation round 5, truth-6, shapes-2)."""
+
+    def fable_reads(self, *codes):
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(
+            codes=list(codes), services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        return encounter_id
+
+    def assertRowSays(self, detail, name, count):
+        row = self.rows(detail)[name]
+        self.assertEqual((row['codes'], row['unlisted_codes']), (['45385'], count))
+        self.assertEqual(unlisted_counts(row['detail']), [count])
+        self.assertTrue(row['detail'].endswith(engine.participant_unlisted_codes(count)), row['detail'])
+        self.assertEqual(unlisted_counts(browser(f'rowOf(page(), "data-participant", {json.dumps(name)})', detail)),
+                         [count])
+        # the engine's own sentence for this participant's first reading, in participants.summary
+        said = self.summary(detail).split(f'{name.capitalize()} (', 1)[1].split('Fable (', 1)[0]
+        self.assertEqual(unlisted_counts(said), [count])
+
+    def test_a_value_given_twice_is_counted_twice_as_the_engine_counts_it(self):
+        encounter_id = self.fable_reads(('45385', SNARE), ('45385-59', SNARE), ('45385-59', SNARE))
+        record = self.records(self.encounter(encounter_id).current_assessment)['fable']
+        self.assertEqual([item['code'] for item in record['codes']], ['45385', '45385-59'])  # one entry per value
+        self.assertRowSays(self.detail(encounter_id), 'fable', 2)
+
+    def test_one_value_on_two_services_is_two_codes(self):
+        # shapes-2: Astra gives 'W/LES(S)' once on each of two services
+        self.adapters['astra'].first = [hp.answered('astra', empty_reading(
+            date_of_service=DATE, services=TWO_SERVICES, codes=[
+                code('45385', service_ids=['S1'], evidence=[SNARE]), code(LES, service_ids=['S1'], evidence=[SNARE]),
+                code(LES, service_ids=['S2'], evidence=[BIOPSY])]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        self.assertRowSays(self.detail(encounter_id), 'astra', 2)
+
+    @staticmethod
+    def rewrite(assessment, records):
+        """The assessment's participant entries as ``records`` (Assessment rows are immutable: only the database
+        itself can make such a record, as one stored before a change would read)."""
+        with connection.cursor() as cursor:
+            cursor.execute(f'UPDATE {models.Assessment._meta.db_table} SET participants = %s::jsonb WHERE id = %s',
+                           [json.dumps(records), assessment.pk])
+
+    def test_the_count_is_read_again_from_the_frozen_reading_and_none_is_stated_without_it(self):
+        encounter_id = self.fable_reads(('45385', SNARE), ('45385-59', SNARE), ('45385-59', SNARE))
+        assessment = self.encounter(encounter_id).current_assessment
+        records = [dict(record) for record in assessment.participants]
+        fable = next(record for record in records if record['name'] == 'fable')
+        # a record that lists none of the codes that cannot be listed: the row still states the reading's own count
+        fable['codes'] = [{'code': '45385', 'quote': SNARE}]
+        self.rewrite(assessment, records)
+        self.assertEqual(self.rows(self.detail(encounter_id))['fable']['unlisted_codes'], 2)
+        # a reading that no longer reads back as recorded: no count, rather than another one
+        fable['reading_sha256'] = '0' * 64
+        self.rewrite(assessment, records)
+        row = self.rows(self.detail(encounter_id))['fable']
+        self.assertEqual((row['codes'], row['unlisted_codes'], row['detail']),
+                         (['45385'], None, 'Answered; the reading was used.'))
+
+    def test_a_reading_whose_every_code_can_be_listed_states_no_count(self):
+        encounter_id = self.fable_reads(('45385', SNARE))
+        row = self.rows(self.detail(encounter_id))['fable']
+        self.assertEqual((row['codes'], row['unlisted_codes'], row['detail']),
+                         (['45385'], 0, 'Answered; the reading was used.'))
+
+
+class UnlistedCountEngineTests(SimpleTestCase):
+    """D13: one function counts a reading's, and a peer review's, entries the engine does not read."""
+
+    def test_one_count_for_the_summary_and_the_row(self):
+        colon = he.COLON
+        entries = [he.code(colon, '45385', he.SNARE), he.code(colon, '45385-59', he.SNARE),
+                   he.code(colon, '45385-59', he.SNARE), he.code(colon, LES, he.BIOPSY), he.code(colon, 'G0121', he.CECUM)]
+        self.assertEqual(engine.participant_unlisted_count(entries), 3)
+        self.assertEqual(engine.participant_unlisted_count([]), 0)
+        given = he.reviewed('astra', entries, he.peer('astra', additional=[he.code(colon, LES, he.BIOPSY),
+                                                                           he.code(colon, LES, he.SNARE)]))
+        result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [given])
+        summary = he.encounter_check(result, 'participants.summary').detail
+        self.assertIn(engine.participant_unlisted_codes(3, 'It'), summary)
+        self.assertIn(engine.participant_unlisted_codes(2, 'In peer review it'), summary)
+

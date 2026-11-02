@@ -201,7 +201,11 @@ member reconciles it (`POST reconcile` takes any participant's run). `codes` are
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
-counts those (0 wherever none was returned), so the page says the reading proposed no code "that can be listed", never
+counts those (0 wherever none was returned) - a participant's as the engine counts them, every entry of its frozen
+reading that the engine does not read, re-read when serving (the number its participants.summary states), and `null`,
+with no count sentence, where that reading cannot be read again as recorded (refutation round 5, the session's D13: it
+counted the assessment's record of the reading, one entry per value, so '45385-59' given twice was 1 beside the
+summary's 2) - so the page says the reading proposed no code "that can be listed", never
 that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers returned that the engine
 cannot list - every code of an answer, whatever its role (selected, a candidate, an alternative), read again as the
 engine read it: its primary answer as the engine's `provider.unlisted` check counts it, and a bounded second review as

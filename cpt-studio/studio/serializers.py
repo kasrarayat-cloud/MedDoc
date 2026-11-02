@@ -738,8 +738,10 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         if record.get('state') == 'not_configured' and name in configured:
             detail = f'{label} was not configured when these checks ran.'
         # only the codes the engine lists; one it cannot list is counted, never served (I9; refutation r1 IND-1), in
-        # the engine's own sentence for a participant's codes (refutation round 4, shapes-1)
-        codes, unlisted = review.listed_codes(record)
+        # the engine's own sentence for a participant's codes (refutation round 4, shapes-1) and with the engine's own
+        # number, re-read from the frozen reading (refutation round 5, D13): None, and no sentence, where that reading
+        # cannot be read again as recorded
+        codes, unlisted = review.listed_codes(record), review.unlisted_count(assessment, record)
         if unlisted:
             from .validation import engine  # local import: only the engine's wording is needed here
 
