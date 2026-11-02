@@ -722,6 +722,27 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(records['astra']['frozen'][0], ['corti', corti.response_sha256])
         self.assertEqual(final.participants[0]['frozen'], records['astra']['frozen'])
 
+    def test_corti_is_shown_only_its_exact_passages_of_the_document(self):
+        real = self.corti.send
+
+        def send(request, *, deadline_s):
+            exchange = real(request, deadline_s=deadline_s)
+            answer = json.loads(exchange.response_bytes)
+            line = request.contexts[1]
+            answer['codes'][0]['evidences'] += [  # CPT Studio's own date line, and a passage that is not the text's
+                {'contextIndex': 1, 'start': 0, 'end': len(line), 'text': line},
+                {'contextIndex': 0, 'start': 0, 'end': 9, 'text': 'Not text.'}]
+            data = json.dumps(answer).encode()
+            return dataclasses.replace(exchange, response_bytes=data, response_sha256=hashlib.sha256(data).hexdigest())
+        with mock.patch.object(self.corti, 'send', side_effect=send):
+            encounter_id = self.create(TWO_EXTENTS)
+            drain()
+        run = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
+        shown = document_sections(peer_document('astra', run.request_body))['corti (another coding system):']
+        self.assertEqual([(item['code'], item['evidence']) for item in shown['codes']],
+                         [('45385', [SNARE]), ('45380', [BIOPSY])])
+        self.assertNotIn('Date of service: 2026-10-14', json.dumps(shown))
+
     def test_assess_two_reads_the_peer_reviews_and_a_code_proposed_after_peer_review_keeps_its_phase(self):
         seen = []
         real = jobs.prefetched_lookup
