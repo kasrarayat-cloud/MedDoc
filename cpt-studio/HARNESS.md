@@ -562,6 +562,16 @@ Otherwise `verified` is false and `why` says which check failed. Agreement betwe
 - creates the immutable `FindingConfirmation` (clarification, revision, scope - `encounter` for the service date,
   else `service` or `proposal` -, fact, family, proposal key, value, spans, located_by, runs, confirmed_by,
   attestation) and an audit event `finding.confirmed`, under the encounter row lock;
+- **is bound to the proposal it was made for, never to the key it held** (refutation round 1, EV-1: keys count in
+  selection order, and a later assessment of the revision can select another code ahead of it). Its clarification names
+  its proposal row; the pipeline passes that row's code and `support['identity']` with it (`jobs.confirmed_findings`,
+  `ConfirmedFinding.proposal_code`, `proposal_identity`). The identity is the sha256 of the proposal's code, family,
+  profile version, cited passages, units and the context values its decision depends on: its fingerprint without its
+  checks and status, which the other proposals and the confirmations move. The engine reads a confirmation only for the
+  one proposal, in the assessment its inputs make without any confirmation, with that code and identity, wherever its
+  key is; one whose proposal is not there, or is there twice, is not read and says why (`confirmations.ignored`). Every
+  decidable proposal records its identity while a model participant is configured (with none, the record is today's,
+  I1); a question whose proposal records none is refused (409);
 - **date of service:** then `change_context(encounter, user, {'service_date': value})`, so the date enters as the
   member's date through the existing path (every date safeguard and I8 apply); the context's audit row names the
   confirmation. The engine never reads a date confirmation;
@@ -628,6 +638,7 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
   `assessments`, peer states `waiting`/`running`/`stopped`). A phase-1 report says why no peer review follows: none was
   read, a member date conflict holds the encounter, or no participant that read is configured now.
 - **Open, recorded here so it is not lost:** refutation round 1's findings (23, all reproduced) and the integration's
-  own (a confirmation bound to a proposal key rather than its code; the HTTP read deadline checked only between chunks;
-  decisions invalidated when an intermediate assess #1 re-runs without the peer-added codes) are being repaired. The
-  peer requests' question ids are assess #1 row ids, so an identical question asked again is sent again (cost).
+  own (a confirmation bound to a proposal key rather than its code - repaired, 12.5's binding; the HTTP read deadline
+  checked only between chunks; decisions invalidated when an intermediate assess #1 re-runs without the peer-added
+  codes) are being repaired. The peer requests' question ids are assess #1 row ids, so an identical question asked
+  again is sent again (cost).

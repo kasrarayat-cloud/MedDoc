@@ -1525,6 +1525,13 @@ def confirm_finding(*, encounter, clarification_id, candidate_id, attestation, u
         expected = candidates.attestation(candidate['value'])
         if attestation != expected:
             raise AttestationRefused(f'The attestation must read exactly: {expected}')
+        if clarification.scope == 'proposal' and not (
+                clarification.proposal_id and isinstance((clarification.proposal.support or {}).get('identity'), str)
+                and clarification.proposal.support['identity']):
+            # a proposal's question is bound to its proposal's code and identity (jobs.confirmed_findings), never to the
+            # key alone: a question whose proposal records no identity could be read for no proposal (EV-1)
+            raise ConfirmationRefused("That question's proposal records no identity for a confirmation to be bound to, "
+                                      'so it cannot be confirmed; nothing was recorded.')
         confirmation = FindingConfirmation.objects.create(
             encounter=locked, revision=assessment.revision, clarification=clarification, scope=clarification.scope,
             fact=clarification.fact, family=clarification.family,

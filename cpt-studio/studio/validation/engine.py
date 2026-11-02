@@ -226,8 +226,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     confirmation = _Confirmations(confirmed, text, pages) if confirmed else None
     if confirmation is not None:
-        # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any, then read; the
-        # proposals keep the keys they have without them, so a question's key names the same proposal before and after
+        # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any - a proposal's by
+        # the proposal it was made for, never by its key - then read; the proposals keep the keys they have without them
         selections, proposals, procedure_day = confirmation.apply(
             selections, proposals, procedure_day, harness=harness,
             provider=response.provider if response is not None else '', context=context, routing=routing,
@@ -2158,21 +2158,38 @@ def _keyed(selections: Sequence[_Selection], encounter: _Encounter, harness: Opt
     """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order. ``harness``: the
     independent participants' merge, whose contradiction checks a decidable proposal carries (HARNESS.md 5); None adds
     nothing. ``keys`` and ``answers`` (by selection index): the keys these selections have without any reviewer-confirmed
-    finding, and the confirmed answers each proposal reads (_Confirmations.apply); None gives the keys above."""
+    finding, and the confirmed answers each proposal reads (_Confirmations.apply); None gives the keys above. With a
+    harness, each decidable proposal records its identity (_identity)."""
     keys = _keys(selections) if keys is None else keys
     selected, excluded = [], []
     for index, selection in enumerate(selections):
         bucket = excluded if selection.excluded else selected
         extra = harness.disagreements(selection) if harness is not None else ()
-        bucket.append(_proposal(selection, keys[index], encounter, extra, (answers or {}).get(index)))
+        bucket.append(_proposal(selection, keys[index], encounter, extra, (answers or {}).get(index),
+                                identify=harness is not None))
     return tuple(selected + excluded)
 
 
+def _identity(s: _Selection, enc: _Encounter) -> str:
+    """The identity of a decidable proposal's own reading (support['identity']): the sha256 of its code, family, profile
+    version, cited passages, units and the context values a decision on it depends on - its fingerprint without its
+    checks and status, which the other proposals and the reviewer-confirmed findings move. A confirmation of one of its
+    questions is bound to it (HARNESS.md 11.3, 12.5), never to the key it holds: keys count in selection order, and
+    another reading, a peer review or a new answer can select a code ahead of it."""
+    release = enc.pfs_source.release if enc.pfs_source else ''
+    pctc = checks.pctc_consideration(s.code, s.evaluation.reference.pfs, release, _billing(enc.context))
+    return sha256_json({'code': s.code, 'family': s.family, 'profile_version': s.profile.version,
+                        'evidence': sorted(span.text for span in s.evidence),
+                        'context': _relevant_context(s.family, enc, bool(pctc)), 'units': s.units})
+
+
 def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] = (),
-              answers: Optional['_Answers'] = None) -> ProposalAssessment:
+              answers: Optional['_Answers'] = None, *, identify: bool = False) -> ProposalAssessment:
     """``extra``: checks added after every rule's own (an independent participant's contradiction, which never changes
     the status); like every check, they are part of the fingerprint. ``answers``: the reviewer-confirmed answers to the
-    required-fact questions this proposal reads (HARNESS.md 11.3; a confirmed status is in its evaluation already)."""
+    required-fact questions this proposal reads (HARNESS.md 11.3; a confirmed status is in its evaluation already).
+    ``identify``: record support['identity'] (_identity), what a confirmation of a question of this proposal is bound
+    to - only while an independent participant is configured, so with none the result is unchanged (I1)."""
     if s.evaluation is None:
         return _excluded_early(s, key, enc.provider)
     finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
@@ -2287,6 +2304,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         # reading never carries to another), and in the record the confirmations read
         context_values = {**context_values, 'confirmed': [answer.basis() for answer in used]}
         support = {**support, 'confirmed': sorted({i for answer in used for i in answer.ids})}
+    if identify:
+        support = {**support, 'identity': _identity(s, enc)}  # what a confirmation of a question of its is bound to
     return ProposalAssessment(
         key=key, bucket='excluded' if s.excluded else 'selected', code=s.code, code_kind=s.code_kind,
         family=s.family, profile_version=profile.version, status=status,
@@ -2922,8 +2941,11 @@ class _Harness:
       proposal of its own (support['origin'] 'participant'), whose rationale says who proposed it, in which phase, and
       that Corti did not (11.4); otherwise an alternative saying why ('altp:<n>'). A participant's stated units,
       modifiers and confidence are recorded in its position and never used.
-    - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every first
-      reading's code (so they keep their keys), and is recorded as proposed after peer review, never as independent.
+    - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every code a
+      first reading listed, and is recorded as proposed after peer review, never as independent. Keys still move
+      between assessments (a code a first reading listed with no located quote is selected, at its first reading's
+      place, once its peer review locates it; a later reading or a new answer selects other codes), so a question's
+      key never identifies its proposal across assessments: a confirmation is bound by code and identity.
     - Agreement never promotes (I3): a second proposer adds its quotes to the code's evidence and its name to the
       record; with the same quotes it changes nothing else - not the bucket, status, checks, units or fingerprint (only
       the rationale's first sentence, which names the proposers). A peer review's 'supports' changes nothing at all.
@@ -3362,6 +3384,13 @@ NOT_OPEN = ('it answers no question this assessment asks (the question is not op
 DISAGREEING = 'confirmations of the same question disagree, so none of them is read and the question stays open'
 CONTEXT_ONLY = ('the service date and the other encounter-context facts enter through the encounter context as a '
                 "member's value, never by a confirmation")
+# A proposal's question is bound to the proposal it was made for, never to the key it held (HARNESS.md 12.5, EV-1).
+UNBOUND = ('it does not name the proposal it was made for (its code and the identity of its reading), and a '
+           'confirmation is never read for whichever proposal holds a key now')
+MOVED = ('the proposal it was made for is not in this assessment (no proposal of its code reads the same passages '
+         'under the same context), so it answers nothing here; it is never read for the proposal that holds its key '
+         'now')
+TWICE = 'the proposal it was made for is in this assessment more than once, so CPT Studio cannot tell which it answers'
 
 
 def _status_value(value: str) -> str:
@@ -3372,7 +3401,8 @@ def _confirmation_order(c: ConfirmedFinding) -> tuple:
     """The order confirmations are read and listed in, whatever order they are given in (every field, so that even two
     confirmations sharing an id are read the same way each time)."""
     return tuple(str(getattr(c, name)) for name in ('scope', 'family', 'proposal_key', 'fact', 'confirmation_id',
-                                                    'value', 'confirmed_by', 'located_by', 'evidence'))
+                                                    'value', 'confirmed_by', 'located_by', 'evidence',
+                                                    'proposal_code', 'proposal_identity'))
 
 
 @dataclass(frozen=True)
@@ -3472,9 +3502,12 @@ class _Confirmations:
     its passage and the reviewer; and every one of its passages must be an exact slice of the revision text.
 
     It is then matched to the open question it was made for, in the assessment these same inputs make WITHOUT any
-    confirmation: (proposal key, family, fact) for a proposal's question, (family, fact) for a service question. One that
-    answers no such question answers nothing; confirmations of one question that disagree are all left unread. So a
-    confirmation never touches another question, and none depends on which others are read.
+    confirmation: a proposal's question by the proposal it was made for - the one proposal whose code and identity
+    (_identity: its own reading, whatever else is proposed) are the confirmation's, asking (family, fact) - and never by
+    the key it held, which another reading, a peer review or a new answer can give to another code; a service question
+    by (family, fact). One whose proposal is not there, or is there twice, or that answers no such question, answers
+    nothing; confirmations of one question that disagree are all left unread. So a confirmation never touches another
+    question, and none depends on which others are read.
 
     Read, it answers its question and nothing else (apply): a status is decided as performed or not performed on its
     passage (_confirmed), through the status path; a required fact takes its confirmed value, with its passages as the
@@ -3482,8 +3515,7 @@ class _Confirmations:
     missing or in conflict. Every check, rationale and support record that uses it says so ("confirmed from Fable's
     located passage by <reviewer>") and support['confirmed'] lists the confirmations. Everything else - the same-day
     rules, the base inclusion, the references, every other question - applies as usual, so a confirmed code can still be
-    held for another reason; and it approves nothing. The proposals keep the keys they have without confirmations, so
-    the key a question names stays the proposal's whatever confirmations are read."""
+    held for another reason; and it approves nothing. The proposals keep the keys they have without confirmations."""
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
         confirmed = tuple(confirmed)
@@ -3507,7 +3539,8 @@ class _Confirmations:
 
     @staticmethod
     def _malformed(c: ConfirmedFinding) -> str:
-        for name in ('scope', 'fact', 'family', 'proposal_key', 'value', 'confirmed_by', 'confirmation_id'):
+        for name in ('scope', 'fact', 'family', 'proposal_key', 'value', 'confirmed_by', 'confirmation_id',
+                     'proposal_code', 'proposal_identity'):
             if not isinstance(getattr(c, name), str):
                 return f'its {name.replace("_", " ")} is not text'
         if not c.confirmation_id.strip():
@@ -3525,7 +3558,9 @@ class _Confirmations:
             return 'it names no service family CPT Studio knows'
         if c.scope == 'proposal' and not c.proposal_key:
             return 'it names no proposal'
-        if c.scope == 'service' and c.proposal_key:
+        if c.scope == 'proposal' and not (c.proposal_code.strip() and c.proposal_identity.strip()):
+            return UNBOUND
+        if c.scope == 'service' and (c.proposal_key or c.proposal_code or c.proposal_identity):
             return 'a service question names no proposal'
         if not c.value.strip():
             return 'it confirms no value'
@@ -3563,12 +3598,25 @@ class _Confirmations:
         asked = {(p.key, q.family, q.fact) for p in keyed for q in p.clarifications}
         services = {(q.family, q.fact) for q in (_service_questions(inventory, proposals, context)
                                                  if inventory is not None else ()) if q.scope == 'service'}
+        # each decidable proposal's identity, as these inputs make it without any confirmation (_identity reads no check
+        # and no status, so the same proposal has it whichever confirmations an assessment reads)
+        unconfirmed = _encounter(provider, context, routing, sources, date_state, selections)
+        identities = {keys[i]: (s.code, _identity(s, unconfirmed)) for i, s in enumerate(selections)
+                      if s.evaluation is not None}
         groups: dict[tuple, list] = {}
         for c, spans in self.candidates:
-            asks = ((c.proposal_key, c.family, c.fact) in asked if c.scope == 'proposal'
+            key = c.proposal_key
+            if c.scope == 'proposal':
+                # bound to the proposal it was made for, wherever its key is now: never to whichever holds the key
+                bound = [k for k, identity in identities.items() if identity == (c.proposal_code, c.proposal_identity)]
+                if len(bound) != 1:
+                    self.ignored.append((c, TWICE if bound else MOVED))
+                    continue
+                key = bound[0]
+            asks = ((key, c.family, c.fact) in asked if c.scope == 'proposal'
                     else (c.family, c.fact) in services)
             if asks:
-                groups.setdefault((c.scope, c.family, c.proposal_key, c.fact), []).append((c, spans))
+                groups.setdefault((c.scope, c.family, key, c.fact), []).append((c, spans))
             else:
                 self.ignored.append((c, NOT_OPEN))
         status: dict[int, _Answer] = {}
@@ -3624,7 +3672,9 @@ class _Confirmations:
         what = 'whether it was performed' if fact == STATUS_FACT else checks.excerpt(checks.fact_label(fact) or 'a fact')
         family = c.family if isinstance(c.family, str) else ''
         key = c.proposal_key if isinstance(c.proposal_key, str) else ''
-        target = (f'proposal {checks.excerpt(key)}' if c.scope == 'proposal' and key
+        code = c.proposal_code.strip() if isinstance(c.proposal_code, str) else ''
+        named = f' ({checks.excerpt(code)})' if code else ''  # the code of the proposal it was made for
+        target = (f'proposal {checks.excerpt(key)}{named}' if c.scope == 'proposal' and key
                   else f'the documented {PROFILES[family].label}' if family in PROFILES else 'an unnamed service')
         return f'the confirmation of {what} for {target}: {why}'
 

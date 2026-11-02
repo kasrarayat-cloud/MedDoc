@@ -147,13 +147,16 @@ class Harness2Case(TestCase):
         snare = replace(pf.proposal('sel:0', '45385', ['was removed with a cold snare'], text=NOTE,
                                     status='needs_clarification', clarifications=(extent,)),
                         support={'origin': 'primary', 'proposed_by': ['corti', 'astra', 'fable'],
-                                 'phases': {'astra': 'independent', 'fable': 'independent'}})
+                                 'phases': {'astra': 'independent', 'fable': 'independent'},
+                                 'identity': sha(b'synthetic identity of 45385')})
         biopsy = replace(pf.proposal('sel:1', '45380', [RECTUM_QUOTE], text=NOTE, status='needs_clarification',
                                      clarifications=(status,),
                                      rationale='Proposed by Astra (independent participant) and Fable after peer '
                                                'review; Corti did not propose this code.'),
                          support={'origin': 'participant', 'proposed_by': ['astra', 'fable'],
-                                  'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': []})
+                                  'phases': {'astra': 'independent', 'fable': 'peer_review'}, 'confirmed': [],
+                                  'identity': sha(b'synthetic identity of 45380')})
+        # each decidable proposal records the identity a confirmation of its question is bound to (HARNESS.md 12.5)
         return pf.result(snare, biopsy, clarifications=(date_question,))
 
     def entry(self, name, *, peer=False):

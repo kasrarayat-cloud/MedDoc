@@ -401,16 +401,20 @@ class ParticipantInput:
 class ConfirmedFinding:
     """A reviewer-confirmed answer to an open question (HARNESS.md 11.3): a fact the cited passage documents, located by
     a participant and confirmed by an owner or reviewer with an attestation. The service date never comes this way; it
-    enters through the context as the member's date."""
+    enters through the context as the member's date. A proposal's question is bound to the proposal it was made for -
+    ``proposal_code`` and ``proposal_identity``, that proposal's code and support['identity'] - never to the key it held
+    then: the engine reads it only for the one proposal with that code and identity (HARNESS.md 12.5)."""
     scope: str  # service | proposal
     fact: str  # e.g. extent | performed_status | em_basis: the open clarification's own fact
     family: str
-    proposal_key: str  # '' for a service-scope question
+    proposal_key: str  # '' for a service-scope question; the key the proposal held where it was asked (a record)
     value: str
     evidence: tuple[EvidenceSpan, ...]  # exact slices of the revision text
     located_by: tuple[str, ...]  # the participants whose quote it was
     confirmed_by: str  # the reviewer's label
     confirmation_id: str
+    proposal_code: str = ''  # '' for a service-scope question
+    proposal_identity: str = ''  # that proposal's support['identity'] where it was asked; '' for a service question
 
 
 # --- JSON round-trip ------------------------------------------------------------

@@ -162,11 +162,13 @@ def decision(item):
             item.units, item.fingerprint, item.clarifications)
 
 
-RECORD = ('proposed_by', 'participants', 'phases')  # the participants' record on a proposal (outside its decision)
+# What a configured participant adds to a proposal's support, outside its decision: the participants' record, and the
+# identity a confirmation of its question is bound to (HARNESS.md 12.5), recorded only while one is configured.
+RECORD = ('proposed_by', 'participants', 'phases', 'identity')
 
 
 def without_record(item):
-    """A proposal with the participants' record taken out of its support: what it was before them."""
+    """A proposal with what the participants add taken out of its support: what it was before them."""
     support = {k: v for k, v in item.support.items() if k not in RECORD}
     return replace(item, support=support)
 
@@ -356,6 +358,7 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertIn('stated units 2', agreed.support['participants']['fable']['detail'])
         self.assertEqual({k: v for k, v in agreed.support.items() if k not in RECORD},
                          {k: v for k, v in alone.support.items() if k not in RECORD})
+        self.assertEqual(agreed.support['identity'], alone.support['identity'])  # whoever proposed it (I3)
 
     def test_agreement_on_a_code_the_provider_selected_changes_nothing_but_the_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
