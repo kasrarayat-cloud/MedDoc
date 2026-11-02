@@ -506,6 +506,9 @@ class DetailTests(Harness2Case):
         self.assertEqual({fact: len(c['candidates']) for fact, c in clarifications.items()},
                          {'extent': 2, 'service_date': 1, 'performed_status': 3})
         self.assertEqual(clarifications['extent']['candidates'], self.candidates_of('extent'))
+        # the exact attestation is served with a verified candidate, never with an unverified one
+        self.assertEqual([c['attestation'] for c in clarifications['extent']['candidates']],
+                         [candidates.attestation('cecum'), ''])
         self.assertTrue(all(c['confirmation'] is None for c in clarifications.values()))
         with mock.patch('studio.jobs.reassess_after_confirmation'):
             self.assertEqual(self.confirm('extent').status_code, 201)

@@ -78,13 +78,13 @@ class DateTests(SimpleTestCase):
             'located_by': ['astra'], 'phase': 'independent', 'phases': {'astra': 'independent'},
             'runs': ['run-astra-1'],
             'spans': [{'start': start, 'end': start + len(DATE_QUOTE), 'text': DATE_QUOTE, 'page': 1}],
-            'verified': True, 'why': ''})
+            'verified': True, 'why': '', 'attestation': c.attestation('2026-10-21')})
 
     def test_a_passage_that_states_no_such_calendar_date_is_unverified(self):
         (candidate,) = c.candidates(DATE, NOTE, PAGES, [frozen('astra', NOTE, date='2026-10-21',
                                                                date_quotes=['Procedure: Colonoscopy.'])])
-        self.assertEqual((candidate['verified'], candidate['why']),
-                         (False, 'The passage does not state 2026-10-21 as a calendar date.'))
+        self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']),
+                         (False, 'The passage does not state 2026-10-21 as a calendar date.', ''))
         # a year names no calendar date at day precision
         (candidate,) = c.candidates(DATE, NOTE, PAGES, [frozen('fable', NOTE, date='2019-01-01',
                                                                date_quotes=[HISTORY_QUOTE])])

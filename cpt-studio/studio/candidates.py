@@ -23,7 +23,8 @@ One candidate is one value with the passage one quote was located at (every occu
 (value, spans) from several participants or phases merge into one candidate naming all of them: ``located_by`` and
 ``runs`` list each, ``phases`` says in which phase each located it, and ``phase`` is 'independent' when any of them did
 so in its frozen first reading ('peer_review' only when every one did so after peer review). ``id`` is 16 hex of the
-sha256 of (clarification id, fact, value, sorted spans, sorted located_by).
+sha256 of (clarification id, fact, value, sorted spans, sorted located_by). ``attestation`` is the exact sentence a
+confirmation of a verified candidate must carry ('' for an unverified one), served so a page never rebuilds it.
 
 Values are CPT Studio's own words, never the participant's: a date in YYYY-MM-DD form; a status (performed, not
 performed, cancelled, planned, historical); the one landmark (routing's labels, by the family's tract) or the one EUS
@@ -507,4 +508,6 @@ def _candidate(question: Question, entry: dict, index) -> dict:
             'runs': list(entry['runs']),
             'spans': [{'start': s.start, 'end': s.end, 'text': s.text, 'page': _page_of(index, s.start)}
                       for s in spans],
-            'verified': entry['why'] == '', 'why': entry['why']}
+            'verified': entry['why'] == '', 'why': entry['why'],
+            # the exact sentence a confirmation of it must carry (as the session serves a decision's), '' if unverified
+            'attestation': attestation(entry['value']) if entry['why'] == '' else ''}

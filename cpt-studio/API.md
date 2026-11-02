@@ -248,7 +248,8 @@ outcome reconciled"; Corti's read as before.
                       "located_by": ["astra", "fable"], "phase": "independent",
                       "phases": {"astra": "independent", "fable": "peer_review"}, "runs": ["uuid", "uuid"],
                       "spans": [{"start": 207, "end": 249, "text": "The colonoscope was advanced to the cecum.", "page": 1}],
-                      "verified": true, "why": ""}],
+                      "verified": true, "why": "",
+                      "attestation": "I read this passage in the source document; it documents cecum for this encounter."}],
       "confirmation": null}],
   "confirmations": [{"id": "uuid", "clarification_id": "uuid", "scope": "proposal", "fact": "extent",
                      "family": "gi.colonoscopy", "proposal_key": "sel:0", "value": "cecum", "spans": [...],
@@ -289,6 +290,8 @@ indication section; states a total time in minutes or an MDM level); otherwise `
 Agreement never verifies: identical (value, spans) from several participants merge into one candidate naming all of
 them (`located_by`, `runs`), and `phase` is `independent` when any located it in its frozen first reading,
 `peer_review` only when all did so after peer review (`phases` names each). `id` is stable for the same rows.
+`attestation` is the exact sentence a confirmation of a verified candidate must carry (`''` when unverified): the
+page sends it as served, as it sends a decision's acknowledgement from `GET /api/session`.
 `confirmation` is the question's FindingConfirmation, or null. `confirmations` lists every confirmation of the current
 revision, oldest first, also after its question has gone (a re-assessment that read it raises it no more).
 `permissions.can_confirm` is `can_review`.
