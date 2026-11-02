@@ -106,7 +106,7 @@ def run(text, codes=(), confirmed=(), *, provider_status='succeeded', **kwargs):
     response = NormalizedResponse('corti', 'test@1', selected) if provider_status == 'succeeded' else None
     return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, DAY),
                   normalized=response, reference=REFERENCE, service_date=DAY, provider_status=provider_status,
-                  confirmed=tuple(confirmed), **kwargs)
+                  confirmed=confirmed, **kwargs)  # as given: an iterator reaches the engine as one
 
 
 def confirm(text, phrase, *, fact, family, value, key='', scope='', by=('fable',), cid='conf-1', reviewer=REVIEWER,
@@ -463,6 +463,16 @@ class DeterminismTests(SimpleTestCase):
             self.assertEqual(run(text, codes), plain)
             self.assertEqual(sha256_json(run(text, codes)), sha256_json(plain))
             self.assertNotIn('confirmations', plain.completeness)
+
+    def test_an_iterator_is_read_once_as_the_sequence_it_yields(self):
+        """An exhausted or empty iterator is no input (I1); a non-empty one is read as its items, never dropped."""
+        c = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum')
+        self.assertEqual(run(TWO_EXTENTS, COLON_CODES, iter(())), run(TWO_EXTENTS, COLON_CODES))
+        self.assertEqual(run(TWO_EXTENTS, COLON_CODES, (x for x in [c])), run(TWO_EXTENTS, COLON_CODES, [c]))
+        self.assertEqual(assess(text=TWO_EXTENTS, pages=(), context=gi_context.extract_context(TWO_EXTENTS),
+                                routing=detect.route(TWO_EXTENTS, DAY), normalized=None, reference=REFERENCE,
+                                service_date=DAY, provider_status='failed', participants=iter(())),
+                         run(TWO_EXTENTS, provider_status='failed'))
 
     def test_keys_and_fingerprints_are_the_same_whatever_the_order_given(self):
         given = [confirm(STATUS_AND_EXTENT, UNCLEAR, fact='performed_status', family='gi.colonoscopy', key='sel:0',

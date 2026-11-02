@@ -158,6 +158,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
         raise ValueError(f'Unknown extraction status {extraction_status!r}.')
+    # read once, whatever iterable is given: an exhausted or empty iterator is no input (I1), never a dropped one
+    participants, confirmed = tuple(participants), tuple(confirmed)
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
@@ -3484,6 +3486,7 @@ class _Confirmations:
     the key a question names stays the proposal's whatever confirmations are read."""
 
     def __init__(self, confirmed: Sequence[ConfirmedFinding], text: str, pages):
+        confirmed = tuple(confirmed)
         for c in confirmed:
             if not isinstance(c, ConfirmedFinding):
                 raise ValueError(f'A confirmed finding must be a ConfirmedFinding, not {type(c).__name__}.')
