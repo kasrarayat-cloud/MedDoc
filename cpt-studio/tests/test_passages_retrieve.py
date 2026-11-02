@@ -292,6 +292,18 @@ class EndoscopyRuleTests(SimpleTestCase):
         # without an endoscopy none of them applies
         self.assertEqual(rules(run(['76000', '43753', '43450'])['76000']), set())
 
+    def test_only_ascii_digits_are_a_code_number(self):
+        # Refutation round 1, parity-1: '4538²'.isdigit() is True and int() refuses it, so a Corti code ending in a
+        # superscript beside an endoscopy stopped the whole assessment; Arabic-Indic digits int() to a real code number
+        # (43753, in rule 4's range). Such a string is traced as given and meets no rule of a code range.
+        for odd in ('4538²', '①', '4538₂', '٤٣٧٥٣'):
+            with self.subTest(code=odd):
+                found = run(['45385', odd])
+                self.assertEqual(sorted(found), sorted(['45385', odd]))
+                self.assertEqual((found[odd]['facts'], found[odd]['passages']), ([], []))
+                self.assertEqual(rules(found['45385']), set())
+        self.assertEqual(rules(run(['43753', '45385'])['43753']), {RULE_4})  # the ASCII code still meets rule 4
+
     def test_rules_are_listed_in_topic_then_rule_order(self):
         entry = run(['43235', '43239', '45385', '76000'])['43239']
         topics = [(p['topic'], p['topic_value']) for p in entry['passages']]

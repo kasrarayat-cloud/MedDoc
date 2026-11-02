@@ -66,6 +66,7 @@ _SCHEMA_KEYWORDS = frozenset({'type', 'properties', 'required', 'additionalPrope
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
 _RECORDED_MODEL = re.compile(r'[\x21-\x7e]{1,100}')  # fits ProviderRun.returned_model
 _TOKEN_CHARS = 20  # a code, service id or date named in a problem; longer text is described, not repeated
+_VENDOR_WORD = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:/-]*')  # how a vendor states a status, a stop reason, a category
 _WHITESPACE = re.compile(r'\s+')
 _SURROGATE = re.compile('[\ud800-\udfff]')
 
@@ -142,11 +143,34 @@ def recorded_model(value) -> str:
 
 
 def quoted(value, limit: int = 300) -> str:
-    """Vendor text for a problem message: whitespace collapsed, at most ``limit`` characters, or a plain stand-in."""
+    """Vendor text for a problem message: whitespace collapsed, at most ``limit`` characters, or a plain stand-in.
+    Never for text a model may have written (vendor_word, refused_by_model): a problem message is shown on the page and
+    in the reports, and must not repeat model-written wording (I9)."""
     if not isinstance(value, str) or not value.strip():
         return 'no reason was given'
     text = ' '.join(value.split())
     return text if len(text) <= limit else text[:limit] + '...'
+
+
+def vendor_word(value, limit: int = 60) -> str:
+    """A reason a vendor states - a status, a stop reason, a refusal category - for a problem message: as stated when it
+    is one word of at most ``limit`` letters, digits and ``_.:/-``; otherwise named by its length and never repeated -
+    longer text can be anything, model-written descriptor-like wording included (I9; refutation round 1, IND-2) - and
+    'no reason was given' when there is none."""
+    if not isinstance(value, str) or not value.strip():
+        return 'no reason was given'
+    if len(value) <= limit and _VENDOR_WORD.fullmatch(value):
+        return value
+    return f'a value of {len(value):,} characters, not repeated'
+
+
+def refused_by_model(message) -> str:
+    """Why a reading is refused when the model refused in its own words: the refusal, named by its length only. The
+    model writes that message and can write descriptor-like wording into it, so it is never repeated (I9; refutation
+    round 1, IND-2: it reached the participants card, the encounter check, both reports and the trace)."""
+    if not isinstance(message, str) or not message.strip():
+        return 'the model refused (no reason was given)'
+    return f'the model refused (its message, {len(message):,} characters, is not repeated)'
 
 
 def named(value: str, limit: int = 100) -> str:
@@ -276,7 +300,9 @@ def _schema_error(value, schema: dict, path: str, subject: str) -> str:
 
 
 def _name(key: str) -> str:
-    return repr(key if len(key) <= 40 else key[:40] + '...')
+    """An object key a model wrote, for a schema problem: as _token names a value (IND-2: never repeated when it is
+    not a short token)."""
+    return _token(key)
 
 
 def _token(value: str) -> str:

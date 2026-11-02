@@ -16,8 +16,9 @@ the caller's id on the first exchange and '<id>-<turn>' on each later one. The p
 same shape with PEER_INSTRUCTIONS, the peer schema (named prompt.PEER_SCHEMA_NAME) and two text inputs, the framed text
 and prompt.peer_document; no original file is attached.
 
-An answer is read only when its status is completed, it names gpt-6-astra as the model that answered (or a dated
-snapshot of it, gpt-6-astra-YYYY-MM-DD: never another model; I6), and its message carries output text and no refusal.
+An answer is read only when its status is completed, it names exactly gpt-6-astra as the model that answered (I6: the
+vendor lists no other snapshot or alias of it, so a dated name is another model as far as CPT Studio can tell;
+refutation round 1, EV-6), and its message carries output text and no refusal.
 An incomplete response is refused as truncated, and a harness@2 answer that still asks for tool calls is not a final
 answer. Its output text is then read as the reading (reading.py) or the peer review (peer.py).
 
@@ -57,7 +58,6 @@ BODY_KEYS = frozenset({'model', 'instructions', 'input', 'text', 'reasoning', 'm
 ORIGINAL_PATH = ('input', 0, 'content', 0, 'file_data')  # where a PDF's file data goes
 CLIENT_REQUEST_ID_CHARS = 512  # OpenAI: ASCII, at most 512 characters
 _CLIENT_REQUEST_ID = re.compile(r'[\x21-\x7e]{1,512}')
-_SNAPSHOT = re.compile(re.escape(MODEL) + r'-[0-9]{4}-[0-9]{2}-[0-9]{2}')
 
 
 def tools() -> list:
@@ -105,7 +105,8 @@ def turn_client_request_id(client_request_id: str, turn: int) -> str:
 
 
 def answered_by_astra(model) -> bool:
-    return isinstance(model, str) and (model == MODEL or _SNAPSHOT.fullmatch(model) is not None)
+    """I6: the exact model requested, and nothing else - not a dated name either (EV-6)."""
+    return model == MODEL
 
 
 def _file_data(data: bytes) -> str:
@@ -179,9 +180,10 @@ class AstraParticipant:
                           client_request_id=client_request_id, original_bytes=original_bytes)
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str,
-                  original_bytes: Optional[bytes], execute_tool) -> loop.LoopOutcome:
+                  original_bytes: Optional[bytes], execute_tool, should_stop=None) -> loop.LoopOutcome:
         """The run's tool loop (loop.run): at most max_exchanges exchanges within the loop deadline (``deadline_s``,
-        never more than loop_deadline), each read within exchange_read_timeout clamped to the time left."""
+        never more than loop_deadline), each read within exchange_read_timeout clamped to the time left; a member's Stop
+        (``should_stop``) is observed before every exchange after the first."""
         longest = CLIENT_REQUEST_ID_CHARS - len(f'-{self.max_exchanges}')
         client_error = ''
         if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID.fullmatch(client_request_id) \
@@ -197,7 +199,8 @@ class AstraParticipant:
         return loop.run(self, request, post=post, parse_turn=parse_turn, follow_up=follow_up,
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
-                        max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS, client_error=client_error)
+                        max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS, client_error=client_error,
+                        should_stop=should_stop)
 
     def _post(self, body: dict, *, deadline: float, read_timeout: float, client_request_id: str,
               original_bytes) -> RawExchange:
@@ -360,7 +363,7 @@ def _answer(response_bytes, *, tools: bool) -> tuple[str, str, str]:
     if status == 'incomplete':
         return '', returned, _incomplete(envelope.get('incomplete_details'))
     if status != 'completed':
-        return '', returned, f'its status is {reading.quoted(status, 40)}, not completed'
+        return '', returned, f'its status is {reading.vendor_word(status, 40)}, not completed'
     output = envelope.get('output')
     if not isinstance(output, list):
         return '', returned, 'the response has no output list'
@@ -377,8 +380,8 @@ def _answer(response_bytes, *, tools: bool) -> tuple[str, str, str]:
             return '', returned, 'a message in the response has no content list'
         for part in content:
             kind = part.get('type') if isinstance(part, dict) else None
-            if kind == 'refusal':
-                return '', returned, f'the model refused: {reading.quoted(part.get("refusal"))}'
+            if kind == 'refusal':  # the model's own words: named by their length, never repeated (I9, IND-2)
+                return '', returned, reading.refused_by_model(part.get('refusal'))
             if kind == 'output_text':
                 if not isinstance(part.get('text'), str):
                     return '', returned, 'an output text part of the response has no text'
@@ -395,5 +398,5 @@ def _incomplete(details) -> str:
     if reason == 'max_output_tokens':
         return 'the response was cut off at the output limit'
     if isinstance(reason, str) and reason.strip():
-        return f'the response is incomplete ({reading.quoted(reason, 60)})'
+        return f'the response is incomplete ({reading.vendor_word(reason, 60)})'
     return 'the response is incomplete'

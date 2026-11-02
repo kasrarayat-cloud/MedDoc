@@ -20,10 +20,11 @@ The contract every adapter implements (``Participant``):
   the reading used as retrieved only when it is among ``refs_retrieved``, the refs that run's own tool calls returned.
 
 harness@2 (HARNESS.md 11):
-- ``send_loop(request, *, deadline_s, client_request_id, original_bytes, execute_tool)`` is the run: the tool loop
-  (loop.py) of at most PARTICIPANT_MAX_EXCHANGES exchanges, each under send's discipline, the participant's tool calls
-  executed by ``execute_tool(name, arguments) -> (result, refs)``. It returns a loop.LoopOutcome: ``final`` (the run's
-  RawExchange) and ``exchanges`` (every exchange, with its tool calls).
+- ``send_loop(request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None)`` is the
+  run: the tool loop (loop.py) of at most PARTICIPANT_MAX_EXCHANGES exchanges, each under send's discipline, the
+  participant's tool calls executed by ``execute_tool(name, arguments) -> (result, refs)``, and a member's Stop
+  (``should_stop() -> bool``) observed before every exchange after the first. It returns a loop.LoopOutcome: ``final``
+  (the run's RawExchange), ``exchanges`` (every exchange, with its tool calls) and ``stopped``.
 - ``build_peer_request(text, pages, kind, own, peers, cpt_studio, frozen)`` is pure, like build_request: the phase-2
   request (peer.py), made from the participant's own frozen reading, the frozen peer conclusions and CPT Studio's
   rule-based reading, with no original file.
@@ -59,7 +60,8 @@ class Participant(Protocol):
              refs_retrieved: frozenset = frozenset()) -> ParticipantReading: ...
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str,
-                  original_bytes: Optional[bytes], execute_tool: Callable): ...
+                  original_bytes: Optional[bytes], execute_tool: Callable,
+                  should_stop: Optional[Callable[[], bool]] = None): ...
 
     def build_peer_request(self, text: str, pages: tuple[PageSpan, ...], kind: str, own: ParticipantReading,
                            peers: dict, cpt_studio: dict, frozen) -> ProviderRequest: ...

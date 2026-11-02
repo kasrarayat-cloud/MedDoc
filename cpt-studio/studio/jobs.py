@@ -908,7 +908,10 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
     CPT Studio's CMS tool executor (``execute_tool``; studio.reference.tools for the encounter's workspace when none is
     given) and ``original_bytes`` - a PDF upload's original, read back through studio.storage against its sha256 - to be
     re-verified against the request and expanded at send time. Every exchange and tool call of the loop is recorded with
-    the run's outcome (_finish_loop). Corti's path is unchanged."""
+    the run's outcome (_finish_loop). A member's Stop is observed before every exchange of the loop, not only the first
+    (refutation round 1, sends-3): one recorded while the loop runs ends it before its next exchange, the run records
+    the exchanges sent (failed, sent: it has no final answer, and its request is never sent again) and the stage ends
+    stopped. Corti's path is unchanged."""
     encounter, revision = job.encounter, job.revision
     independent = purpose in PARTICIPANT_PURPOSES
     if independent:
@@ -924,8 +927,7 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
             requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {},
             **(_participant_identity(provider) if independent else {}))
-        job.refresh_from_db(fields=['stop_requested_at'])
-        if job.stop_requested_at or is_stopped(encounter.pk):
+        if _stop_requested(job, encounter):
             run.state = models.ProviderRun.CANCELLED
             run.error = 'Stopped before sending; nothing was sent.'
             run.finished_at = timezone.now()
@@ -937,22 +939,35 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
                      run_identity=str(run.run_identity), purpose=purpose)
+        outcome = None
         if independent:
             tools = execute_tool or reference_tools.executor(encounter.workspace)
-            _finish_loop(run, _send_loop(provider, request, run, original_bytes, tools))
+            outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter))
+            _finish_loop(run, outcome)
         else:
             _finish_run(run, provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30))
         # a participant's row names its provider, so the Activity tab words it ("Astra response recorded")
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
                      purpose=purpose, **({'provider': provider.name} if independent else {}))
+        if outcome is not None and outcome.stopped:
+            raise StageCancelled(STOPPED_IN_LOOP_MESSAGE)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
     return run
 
 
+def _stop_requested(job, encounter):
+    """Whether a member's Stop was recorded for ``job`` or its encounter, read again from the database: before the
+    send, and before every later exchange of a participant's tool loop."""
+    job.refresh_from_db(fields=['stop_requested_at'])
+    return bool(job.stop_requested_at) or is_stopped(encounter.pk)
+
+
 PARTICIPANT_PURPOSES = (models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW)
+STOPPED_IN_LOOP_MESSAGE = ('Stopped by a workspace member while the tool loop ran: what was sent is recorded, and '
+                           'nothing more was sent.')
 LOOP_RECORDING_SECONDS = 15  # kept, after a whole tool loop, for recording its outcome within the stage's deadline
 LOOP_LATE_MESSAGE = ('the stage has run too long to finish a whole tool loop before its deadline; nothing was reserved '
                      'or sent, and it starts again')
@@ -976,15 +991,16 @@ def _check_loop_time(job):
         raise Requeue(LOOP_LATE_MESSAGE)
 
 
-def _send_loop(provider, request, run, original_bytes, execute_tool):
+def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
     exchange recorded, and blocks every further send until a member reconciles it - never a run left 'sending' that
-    nothing blocks on and no member can reconcile (I8)."""
+    nothing blocks on and no member can reconcile (I8). ``should_stop``: the member's Stop, observed before every later
+    exchange (sends-3)."""
     try:
         outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                                      client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                     execute_tool=execute_tool)
+                                     execute_tool=execute_tool, should_stop=should_stop)
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):
@@ -1134,12 +1150,44 @@ def _participant_done(job, run, outcome=None):
 
 def _retained_answer(encounter, participant, request, purpose):
     """The workspace's retained answer to the identical participant request (provider, adapter version, request sha256,
-    purpose) recorded in the same mode - the original SUCCEEDED run, not a reuse of one; None when there is none."""
+    purpose) recorded in the same mode - the original SUCCEEDED run, not a reuse of one, whose tool loop recorded its
+    exchanges; None when there is none. A run with no exchange is no loop's answer (refutation round 1, sends-2): before
+    part B, this adapter version sent its body through the single-exchange send(), whose stored answer can still ask for
+    tool calls, so reused it would stand in for the loop the identical request is owed."""
+    from django.db.models import Exists, OuterRef
+
     return models.ProviderRun.objects.filter(
+        Exists(models.ProviderExchange.objects.filter(run=OuterRef('pk'))),
         encounter__workspace=encounter.workspace, provider=participant.name,
         adapter_version=participant.adapter_version, request_sha256=request.canonical_sha256,
         state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True, purpose=purpose,
         scope__mode=participant.mode).order_by('created_at').first()
+
+
+NOT_ATTEMPTED_AGAIN_MESSAGE = ('Nothing was sent: this identical request was attempted before for this document and '
+                               'recorded not sent, and it is not attempted again behind a reconciliation or a context '
+                               'change; an addendum or a new upload makes a new request.')
+NOT_ATTEMPTED_AGAIN_ERROR = ' Its reason then: {error}'
+
+
+def _unsent_attempt(encounter, revision, participant, request, purpose):
+    """This revision's attempt of the identical participant request (provider, adapter version, request sha256, purpose,
+    mode) that stands as recorded not sent, or None (refutation round 1, sends-1). It is the newest finished run of that
+    request (_newest_finished) when that run went through the send doors - its start recorded: a reservation the stale
+    sweep settled never reached the send and still owes its attempt - sent nothing, and carries no hold: a run the
+    unknown-outcome block stopped owes its attempt, and a member date conflict's hold is never one. A request sent and
+    FAILED is the failed-request door's (_failed_before), never this one's.
+
+    Such an attempt stands as Corti's not-sent attempt does behind a metadata save (ARCHITECTURE 5.4): a chain re-run by
+    another run's reconciliation or by a context change never attempts that request again; an addendum or a new upload
+    makes a new one."""
+    run = _newest_finished(revision.provider_runs.filter(
+        provider=participant.name, purpose=purpose, adapter_version=participant.adapter_version,
+        request_sha256=request.canonical_sha256, scope__mode=participant.mode))
+    if (run is None or run.state != models.ProviderRun.NOT_SENT or run.sent or run.started_at is None
+            or 'held' in (run.scope or {}) or _failed_before(encounter, participant, request) is not None):
+        return None
+    return run
 
 
 def _reused_participant_run(job, prior, purpose, scope=None):
@@ -1199,6 +1247,12 @@ def stage_participant(job):
     prior = _retained_answer(encounter, participant, request, models.ProviderRun.INDEPENDENT)
     if prior is not None:
         return _participant_done(job, _reused_participant_run(job, prior, models.ProviderRun.INDEPENDENT), 'reused')
+    # An attempt of this identical request that was recorded not sent stands: nothing is sent and no run is added, so
+    # the assess reads that run as before (refutation round 1, sends-1). Asked before the unknown-outcome block, whose
+    # held run would owe that request an attempt.
+    unsent = _unsent_attempt(encounter, revision, participant, request, models.ProviderRun.INDEPENDENT)
+    if unsent is not None:
+        return _participant_done(job, unsent, 'not_attempted_again')
 
     if _unreconciled_unknown(encounter):
         held = _participant_not_sent(job, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
@@ -1315,6 +1369,14 @@ def stage_peer(job):
     if prior is not None:
         return _peer_done(job, first, _reused_participant_run(job, prior, models.ProviderRun.PEER_REVIEW, scope),
                           'reused')
+    unsent = _unsent_attempt(encounter, revision, participant, request, models.ProviderRun.PEER_REVIEW)
+    if unsent is not None:
+        # as phase 1 (sends-1), with a run of its own naming this assess #1, which is the run assess #2 reads; it
+        # carries the request and says why nothing was sent
+        error = NOT_ATTEMPTED_AGAIN_MESSAGE + (NOT_ATTEMPTED_AGAIN_ERROR.format(error=unsent.error) if unsent.error
+                                               else '')
+        return _peer_done(job, first, _peer_not_sent(job, first, name, participant, request, error,
+                                                     mode=participant.mode), 'not_attempted_again')
     if _unreconciled_unknown(encounter):
         held = _peer_not_sent(job, first, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                               mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
@@ -1369,7 +1431,9 @@ def _peer_material(revision, first, name, records):
     the other model's frozen reading, when it has one, in the reading schema's shape; CPT Studio's rule-based reading
     after assess #1 (_cpt_studio_reading); and assess #1's frozen list with that reading's sha256 added. A frozen
     reading that no longer reads back as assess #1 recorded it refuses the request (_PeerUnbuilt): the record shows
-    exactly what was shown."""
+    exactly what was shown. Of assess #1's frozen list, only what this request shows is listed (refutation round 1,
+    IND-5): a Corti answer or another model's reading that is not shown - not read, or refused - is not listed under
+    "shown above"; the peer builder refuses any other list (peer.check_frozen)."""
     peers = {}
     corti = _corti_conclusions(first.provider_run)
     if corti is not None:
@@ -1378,7 +1442,9 @@ def _peer_material(revision, first, name, records):
         if other != name and (records.get(other) or {}).get('state') == 'read':
             peers[other] = participant_prompt.reading_answer(_frozen_reading(revision, other, records))
     cpt_studio = _cpt_studio_reading(first)
-    frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []]
+    shown = {name, *peers, 'revision'}
+    frozen = [list(pair) for pair in (records.get(name) or {}).get('frozen') or []
+              if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[0] in shown]
     return (_frozen_reading(revision, name, records), peers, cpt_studio,
             frozen + [['cpt_studio', sha256_json(cpt_studio)]])
 
@@ -1458,12 +1524,15 @@ def _cpt_studio_reading(first):
     """CPT Studio's rule-based reading after assess #1 (HARNESS.md 12.4): its open clarifications, as the questions a
     peer answers by id, and its held and excluded proposals, each with the details of its checks that did not pass. The
     peer instructions label it as a reading that may be wrong. Each question is described by review.question_identity,
-    the one function the API's candidates match a peer answer back to the final assessment's question by (12.5)."""
+    the one function the API's candidates match a peer answer back to the final assessment's question by (12.5), and
+    named by its stable id (_question_ids)."""
+    items = list(first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
+                 .order_by('created_at', 'pk'))
+    named = _question_ids(first, items)
     questions = []
-    for item in (first.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
-                 .order_by('created_at', 'pk')):
+    for item in items:
         scope, family, fact, proposal_key, _ = review.question_identity(item)
-        questions.append({'question_id': str(item.pk), 'scope': scope, 'fact': fact, 'family': family,
+        questions.append({'question_id': named[item.pk], 'scope': scope, 'fact': fact, 'family': family,
                           'proposal_key': proposal_key, 'question': item.question, 'reason': item.reason})
 
     def proposals(status):
@@ -1473,6 +1542,28 @@ def _cpt_studio_reading(first):
                 for p in first.proposals.filter(status=status).order_by('position')]
     return {'open_questions': questions, 'held': proposals(models.Proposal.NEEDS_CLARIFICATION),
             'excluded': proposals(models.Proposal.STATUS_EXCLUDED)}
+
+
+def _question_ids(first, items):
+    """{clarification pk: the id a peer request names it by} for ``items``, open questions of assess #1 ``first``
+    (pipeline Q2: assess #1's own row ids changed with every new assess #1, so an identical question made a new, paid
+    peer request each time). A question is named by the first clarification of the revision that asks the same thing -
+    the same review.question_identity - so the same question has the same id however many assessments ask it, and the
+    identical peer request is reused, never resent. That id is a clarification of this encounter and revision, which is
+    how the review package resolves an answer's id (review.peer_answers, the reports) before it matches the question
+    through that same identity. Fail closed: a question whose identity two open questions here share keeps its own
+    id."""
+    identities = {item.pk: review.question_identity(item) for item in items}
+    seen = list(identities.values())
+    unique = {identity for identity in seen if seen.count(identity) == 1}
+    earliest = {}
+    for row in (models.Clarification.objects.filter(encounter_id=first.encounter_id,
+                                                    assessment__revision_id=first.revision_id)
+                .select_related('proposal').order_by('created_at', 'pk')):
+        identity = review.question_identity(row)
+        if identity in unique:
+            earliest.setdefault(identity, row.pk)
+    return {pk: str(earliest.get(identity, pk) if identity in unique else pk) for pk, identity in identities.items()}
 
 
 def _first_located(quotes):
@@ -1712,16 +1803,38 @@ def _confirmed_span(span, text):
                         quoted if isinstance(quoted, str) else '', exact, page if type(page) is int else None)
 
 
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this "
+                    "assessment's codes ({error}, logged), so none is recorded here and no proposal was checked "
+                    'against them. Retrieval only informs the reviewer and decides no status, so the assessment stands '
+                    'as made.')
+
+
 def _retrieval(result, service_date, reference, prefetched):
     """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that the
     checks' own lookup holds - every code a proposal can be decided on; a provider's informational alternatives were
     never looked up - from that same lookup, with the CMS passages that govern its facts, read here in the parent, which
-    has the database. [] only when no proposal has a looked-up code."""
+    has the database. [] only when no proposal has a looked-up code.
+
+    A retrieval that fails never stops the assessment (I1, I10; refutation round 1, parity-1: a Corti code ending in a
+    superscript digit raised here and the encounter was left with no assessment at all). Retrieval only informs the
+    reviewer, so the assessment is recorded as made and its retrieval is one entry marked 'failed' whose note says that
+    reference validation failed (retrieval_failure): never a trace that reads as a code checked."""
     codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
     if not codes:
         return []
-    return to_jsonable(list(reference_passages.retrieve(codes, service_date, reference,
-                                                        reference_passages.load_passages())))
+    try:
+        return to_jsonable(list(reference_passages.retrieve(codes, service_date, reference,
+                                                            reference_passages.load_passages())))
+    except Exception as exc:  # noqa: BLE001 - logged; the record says reference validation failed, never the internals
+        log.exception('reference retrieval failed for %d code(s) of an assessment', len(codes))
+        return [retrieval_failure(service_date, type(exc).__name__)]
+
+
+def retrieval_failure(service_date, error):
+    """The one Assessment.retrieval entry of a retrieval that failed: no code, no fact, no passage, and CPT Studio's own
+    sentence saying reference validation failed. Marked 'failed', so no reader counts it as a code checked."""
+    return {'code': '', 'service_date': service_date.isoformat() if service_date else None, 'facts': [],
+            'passages': [], 'lookups': [], 'notes': [RETRIEVAL_FAILED.format(error=error)], 'failed': True}
 
 
 def _provider_inputs(run):
@@ -2365,6 +2478,13 @@ def reconcile(encounter, run, user, note):
     True when recorded, None when ``run`` is not an unreconciled unknown outcome.
     The one attempt is a predict for the current revision's current context; when
     the current revision has no context (its extraction failed) nothing is queued.
+
+    A harness participant's run (refutation round 1, sends-1): when nothing else blocks a send and Corti's run in use
+    answers the request the context makes, the participants' chain starts from that run, as a context change that
+    keeps the request does - so Corti's request, sent or recorded not sent, is never attempted again behind another
+    run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before: also
+    for a context an earlier version recorded, which the predict remakes under the current rules before anything is
+    sent (_remade_context), since those rules may hold the encounter where the earlier ones did not.
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -2378,8 +2498,16 @@ def reconcile(encounter, run, user, note):
         revision, context = encounter.current_revision, encounter.current_context
         clear_stop(encounter)
         if context is not None and revision is not None and context.revision_id == revision.pk:
-            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
-                           requested_by=user)
+            corti = _run_in_use(revision)
+            if (run.purpose in PARTICIPANT_PURPOSES and participants.configured()
+                    and context.version not in EARLIER_CONTEXT_VERSIONS and not _unreconciled_unknown(encounter)
+                    and not gi_context.is_member_conflict((context.facts or {}).get('service_date'))
+                    and _run_answers(corti, revision, context)):
+                _after_predict(encounter, revision, context, corti, key=f'assess:{context.pk}:{corti.pk}',
+                               origin=f'reconcile:{run.pk}', requested_by=user)
+            else:
+                _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
+                               requested_by=user)
         # a participant's row names its provider, so the Activity tab words it ("Unknown Astra outcome reconciled")
         audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk),
                      **({'provider': run.provider} if run.purpose in PARTICIPANT_PURPOSES else {}))

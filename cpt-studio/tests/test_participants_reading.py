@@ -9,14 +9,18 @@ import hashlib
 import json
 import time
 
-from studio.participants import anthropic_fable, openai_astra, prompt, reading
+from studio.participants import anthropic_fable, loop, openai_astra, prompt, reading
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, ProviderRequest
 
 from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, PAGE_BREAK, PAGES, OfflineTestCase,
-                                             astra_envelope, astra_with, changed, code, empty_reading, fable_envelope,
-                                             fable_with, fixture_bytes, fixture_reading, service)
+                                             astra_envelope, astra_tool_call, astra_with, changed, code, empty_reading,
+                                             fable_envelope, fable_with, fixture_bytes, fixture_reading, service)
+
+# Model-written text shaped like a descriptor (synthetic placeholder wording, refutation round 1, IND-2): never repeated
+REFUSAL_WORDING = ('I will not code this. 45385 is SYNTHETIC-DESCRIPTOR-WORDING with removal of lesion(s) by snare '
+                   'technique, single or multiple, PLACEHOLDER-FOR-LICENSED-TEXT.')
 
 
 def located(text: str, quote: str) -> list[tuple[int, int, str]]:
@@ -142,15 +146,22 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
         envelope.update(changes)
         return json.dumps(envelope).encode()
 
-    def test_a_refusal_item_refuses_the_reading_with_its_text(self):
-        envelope = astra_envelope()
-        envelope['output'][1]['content'] = [{'type': 'refusal', 'refusal': "I can't help with\nthat request."}]
-        self.assertEqual(self.refused(json.dumps(envelope).encode()),
-                         "The reading was not used: the model refused: I can't help with that request.")
+    def test_a_refusal_item_refuses_the_reading_and_never_repeats_what_the_model_wrote(self):
+        # Refutation round 1, IND-2 (I9): the model writes its refusal, and it can write descriptor-like wording there;
+        # the problem - shown on the page, in the reports and in the trace - names the refusal by its length only
+        for text in ("I can't help with\nthat request.", REFUSAL_WORDING):
+            envelope = astra_envelope()
+            envelope['output'][1]['content'] = [{'type': 'refusal', 'refusal': text}]
+            with self.subTest(text=text[:20]):
+                problem = self.refused(json.dumps(envelope).encode())
+                self.assertEqual(problem, f'The reading was not used: the model refused (its message, {len(text):,} '
+                                          'characters, is not repeated).')
+                for words in ("can't help", 'SYNTHETIC-DESCRIPTOR', 'removal of lesion', 'I will not code'):
+                    self.assertNotIn(words, problem)
         envelope = astra_envelope()  # beside output text, a refusal still refuses everything
         envelope['output'][1]['content'].append({'type': 'refusal', 'refusal': ''})
         self.assertEqual(self.refused(json.dumps(envelope).encode()),
-                         'The reading was not used: the model refused: no reason was given.')
+                         'The reading was not used: the model refused (no reason was given).')
 
     def test_an_incomplete_response_is_refused_as_truncated(self):
         self.assertEqual(self.refused(self.envelope(status='incomplete',
@@ -161,6 +172,13 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
                          'The reading was not used: the response is incomplete (content_filter).')
         self.assertEqual(self.refused(self.envelope(status='incomplete', incomplete_details=None)),
                          'The reading was not used: the response is incomplete.')
+        # a stated reason that is not one word is named by its length, never repeated (IND-2, I9)
+        long_reason = {'reason': REFUSAL_WORDING}
+        self.assertEqual(self.refused(self.envelope(status='incomplete', incomplete_details=long_reason)),
+                         'The reading was not used: the response is incomplete (a value of '
+                         f'{len(REFUSAL_WORDING):,} characters, not repeated).')
+        self.assertIn(f'its status is a value of {len(REFUSAL_WORDING):,} characters, not repeated, not completed',
+                      self.refused(self.envelope(status=REFUSAL_WORDING)))
         envelope = astra_envelope()
         envelope['output'][1]['status'] = 'incomplete'
         self.assertEqual(self.refused(json.dumps(envelope).encode()),
@@ -172,17 +190,24 @@ class AstraAnswerTests(_GoodAnswerContract, OfflineTestCase):
                 self.assertIn('not completed', self.refused(self.envelope(status=status)))
 
     def test_another_model_is_refused_and_never_read(self):
-        """I6. A dated snapshot of gpt-6-astra is the same model; a model whose name merely starts with it is not."""
+        """I6: only the exact model requested, gpt-6-astra. The vendor lists no other snapshot or alias of it, so a
+        dated name - a real calendar date or not - is another model as far as CPT Studio can tell, and its answer,
+        tool calls included, is never read (refutation round 1, EV-6)."""
         for model in ('gpt-6-astra-mini', 'gpt-6-astra-pro-2026-10-01', 'gpt-6', 'gpt-6-astra-2026-10', 'GPT-6-ASTRA',
-                      'gpt-6-astra ', 'gpt-5.5', ''):
+                      'gpt-6-astra ', 'gpt-5.5', '', 'gpt-6-astra-2026-09-15', 'gpt-6-astra-2026-10-15',
+                      'gpt-6-astra-0000-00-00', 'gpt-6-astra-9999-99-99', 'gpt-6-astra-2026-13-45'):
             with self.subTest(model=model):
                 problem = self.refused(self.envelope(model=model))
                 self.assertIn('as the model that answered, not gpt-6-astra', problem)
         self.assertIn('names no model', self.refused(self.envelope(model=None)))
         self.assertIn('names no model', self.refused(self.envelope(model=['gpt-6-astra'])))
         self.assertIn("names model 'gpt-6-astra ' as the model", self.refused(self.envelope(model='gpt-6-astra ')))
-        result = self.read(self.envelope(model='gpt-6-astra-2026-09-15'))
-        self.assertEqual((result.refused, result.returned_model), (False, 'gpt-6-astra-2026-09-15'))
+        refused = self.read(self.envelope(model='gpt-6-astra-2026-09-15'))
+        self.assertEqual(refused.returned_model, 'gpt-6-astra-2026-09-15')  # what answered is kept, never read
+        dated = json.loads(astra_tool_call(('call_dated_1', 'cms_code_facts', {'codes': ['45385'],
+                                                                               'date_of_service': ''})))
+        dated['model'] = 'gpt-6-astra-2026-10-15'
+        self.assertEqual(openai_astra.parse_turn(json.dumps(dated).encode()), loop.FINAL)  # nor its tool calls run
         refused = self.read(self.envelope(model='gpt-6-astra-mini'))
         self.assertEqual(refused.returned_model, 'gpt-6-astra-mini')  # what answered is kept, the answer is not read
 
@@ -250,6 +275,13 @@ class FableAnswerTests(_GoodAnswerContract, OfflineTestCase):
             with self.subTest(details=details):
                 self.assertEqual(self.refused(self.envelope(stop_reason='refusal', stop_details=details)),
                                  'The reading was not used: the model refused (no category was given).')
+        # a category that is not one word is named by its length, never repeated (IND-2, I9); nor is the explanation
+        problem = self.refused(self.envelope(stop_reason='refusal', stop_details={
+            'type': 'refusal', 'category': REFUSAL_WORDING[:60], 'explanation': REFUSAL_WORDING}))
+        self.assertEqual(problem, 'The reading was not used: the model refused (a category of 60 characters, not '
+                                  'repeated).')
+        self.assertIn(f'it stopped for a value of {len(REFUSAL_WORDING):,} characters, not repeated, not at the end',
+                      self.refused(self.envelope(stop_reason=REFUSAL_WORDING)))
 
     def test_any_other_stop_is_refused(self):
         for stop in ('stop_sequence', 'tool_use', 'pause_turn', 'model_context_window_exceeded', None):
@@ -455,6 +487,12 @@ class ReadingTests(OfflineTestCase):
             'given.'))
         for text in ('Colonoscopy', 'first service', 'twenty-first'):
             self.assertFalse(any(text in problem for problem in result.problems), text)
+
+    def test_a_field_name_the_model_wrote_is_named_by_its_length_when_it_is_not_one_word(self):
+        # IND-2 (I9): an extra field's name is model-written too; a refusal names it only when it is a short token
+        problem = self.refused(dict(fixture_reading(), **{REFUSAL_WORDING: 'x'}))
+        self.assertEqual(problem, 'The reading was not used: the answer breaks the reading schema: the reading has a '
+                                  f'field the schema does not allow (a value of {len(REFUSAL_WORDING):,} characters).')
 
     def test_units_outside_1_to_99_drop_that_code(self):
         units = (1, 99, 0, 100, -1, 10 ** 40)

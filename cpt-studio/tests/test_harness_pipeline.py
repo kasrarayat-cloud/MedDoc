@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from studio import audit, jobs, models, review, storage
 from studio.gi import detect as gi_detect
-from studio.participants import loop, prompt
+from studio.participants import loop, peer, prompt
 from studio.providers.base import ProviderUnavailable, canonical_body
 from studio.reference.store import prefetched_lookup, selected_codes
 from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantCode, ParticipantNotCoded,
@@ -49,7 +49,8 @@ class _WorkerDied(BaseException):
 
 
 class ScriptedCorti(FakeProvider):
-    """Corti's fake (tests.test_pipeline_api.FakeProvider) with scripted outcomes; it records every request it sends."""
+    """Corti's fake (tests.test_pipeline_api.FakeProvider) with scripted outcomes; it records every request it is handed
+    (one scripted 'not_sent' reaches nothing, as the live adapter's connection that was never established)."""
 
     def __init__(self, *args, outcomes=(), **kwargs):
         super().__init__(*args, **kwargs)
@@ -59,6 +60,14 @@ class ScriptedCorti(FakeProvider):
         self.requests.append(request)
         saved, self.outcome = self.outcome, (self.outcomes.pop(0) if self.outcomes else self.outcome)
         try:
+            if self.outcome == 'not_sent':
+                return RawExchange(outcome='not_sent', sent=False, error='The Corti coding service could not be '
+                                                                         'reached (ConnectTimeout); nothing was sent.')
+            if self.outcome == 'failed':  # a non-200: its body is kept, so the run has response bytes
+                data = b'{"error": "synthetic overload"}'
+                return RawExchange(outcome='failed', sent=True, http_status=503, response_bytes=data,
+                                   response_sha256=hashlib.sha256(data).hexdigest(),
+                                   error='Corti answered HTTP 503; the response body is retained. (synthetic)')
             return super().send(request, deadline_s=deadline_s)
         finally:
             self.outcome = saved
@@ -83,9 +92,11 @@ class FakeParticipant:
         self.outcome, self.outcomes = outcome, []
         self.peer_codes, self.peer_outcome, self.peer_outcomes = list(peer_codes), peer_outcome, []
         self.built, self.sent, self.peer_built, self.peer_sent, self.executors = [], [], [], [], []
+        self.given = []  # exactly what stage_participant handed this adapter's request builder (I5)
 
     def build_request(self, text, pages, kind, original):
         self.built.append((kind, original))
+        self.given.append({'text': text, 'pages': pages, 'kind': kind, 'original': original})
         framed = prompt.framed_document(text, pages, kind)
         if framed is None:
             raise ProviderUnavailable('The document could not be framed; nothing was sent.')
@@ -104,11 +115,13 @@ class FakeParticipant:
             raise ProviderUnavailable('The document could not be framed; nothing was sent.')
         body = {'model': self.requested_model, 'instructions': prompt.PEER_INSTRUCTIONS, 'input': framed,
                 'peer': prompt.peer_document(own, peers, cpt_studio, frozen)}
+        peer.check_frozen(text, own, peers, cpt_studio, [tuple(pair) for pair in frozen])  # as the real builder does
         return ProviderRequest(provider=self.name, adapter_version=self.adapter_version, body=body,
                                canonical_sha256=hashlib.sha256(canonical_body(body)).hexdigest(), contexts=(text,))
 
-    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool):
-        """The run (HARNESS.md 11.2): the real tool loop, its one exchange answered by send, asking for no tool."""
+    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None):
+        """The run (HARNESS.md 11.2): the real tool loop, its one exchange answered by send, asking for no tool; the
+        member's Stop is passed on as the adapters pass it."""
         self.executors.append(execute_tool)
 
         def post(turn, body, deadline):
@@ -123,7 +136,8 @@ class FakeParticipant:
                         longest_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                         max_exchanges=settings.PARTICIPANT_MAX_EXCHANGES,
                         max_tool_result_bytes=settings.PARTICIPANT_MAX_TOOL_RESULT_BYTES,
-                        max_request_bytes=settings.PARTICIPANT_MAX_REQUEST_BYTES, body_keys=frozenset(request.body))
+                        max_request_bytes=settings.PARTICIPANT_MAX_REQUEST_BYTES, body_keys=frozenset(request.body),
+                        should_stop=should_stop)
 
     def send(self, request, *, deadline_s, client_request_id, original_bytes):
         peer = request.body.get('instructions') == prompt.PEER_INSTRUCTIONS
@@ -136,6 +150,9 @@ class FakeParticipant:
         if outcome == 'unknown':
             return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent '
                                                                    '(synthetic).', **identity)
+        if outcome == 'not_sent':  # e.g. its credentials file is missing at send time: nothing left
+            return RawExchange(outcome='not_sent', sent=False, requested_model=self.requested_model,
+                               error='The credentials file does not exist. No request was sent. (synthetic)')
         if outcome == 'failed':
             data = b'{"error": {"type": "overloaded_error"}}'
             return RawExchange(outcome='failed', sent=True, http_status=529, response_bytes=data,
@@ -514,8 +531,18 @@ class ChainTests(HarnessCase):
             self.assertEqual([executor.__qualname__ for executor in adapter.executors],
                              ['executor.<locals>.execute_tool'] * 2)
         self.assertEqual(len(self.corti.requests), 1)
-        # the request is the revision alone: no title, member value or CPT Studio reading in it (I5)
-        self.assertNotIn(encounter.title, json.dumps(astra.request_body))
+        # the request is the revision alone: no title, member value, CPT Studio reading or other participant's output in
+        # it (I5). What the stage hands each builder is the revision's own text and pages, and the stored body frames
+        # exactly that text (refutation round 1, FG-2: only the title was checked, and only for Astra)
+        revision = encounter.current_revision
+        pages = jobs._participant_pages(revision)
+        framed = prompt.framed_document(revision.text, pages, 'paste')
+        for adapter, run in ((self.adapters['astra'], astra), (self.adapters['fable'], fable)):
+            self.assertEqual(adapter.given, [{'text': revision.text, 'pages': pages, 'kind': 'paste',
+                                              'original': None}])
+            self.assertEqual(run.request_body, {'model': adapter.requested_model, 'instructions': prompt.INSTRUCTIONS,
+                                                'input': framed, 'original': None})
+            self.assertNotIn(encounter.title, json.dumps(run.request_body))
         assessment = encounter.current_assessment
         self.assertEqual(assessment, final)
         for read in (first, final):  # assess #1 and assess #2 read the same frozen phase-1 readings
@@ -709,15 +736,16 @@ class UnknownOutcomeTests(HarnessCase):
         encounter = self.encounter(encounter_id)
         self.assertEqual(encounter.state, 'provider_unknown')  # the encounter-wide block stays
         self.assertIn('reconciliation', self.client.get('/api/encounters').json()['encounters'][0]['queue_reasons'])
-        # reconcile queues predict: Corti's identical request is reused, and only Astra is sent again
+        # a participant's reconciliation re-checks with Corti's run in use, which answers the request: nothing is handed
+        # to Corti and no predict runs (refutation round 1, sends-1), and only Astra is sent again
         response = self.post(f'/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         self.assertEqual(len(self.corti.requests), 1)
         corti = self.runs_of(encounter_id, 'corti')
-        self.assertEqual([(r.state, r.sent, bool(r.reused_from_id)) for r in corti],
-                         [('succeeded', True, False), ('succeeded', False, True)])
+        self.assertEqual([(r.state, r.sent, bool(r.reused_from_id)) for r in corti], [('succeeded', True, False)])
+        self.assertNotIn('predict', [j.kind for j in self.jobs_of(encounter_id)][3:])
         self.assertEqual(len(self.adapters['astra'].sent), 2)  # the unknown one, then once after the reconciliation
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # never sent before: sent once now
         records = self.records(encounter_id)
@@ -856,6 +884,135 @@ class UnknownOutcomeTests(HarnessCase):
         reused = [run for run in self.runs_of(encounter_id, purpose='peer_review') if run.reused_from_id]
         self.assertEqual(sorted(run.provider for run in reused), ['astra', 'fable'])
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+
+
+@override_settings(**LIVE, **BOTH)
+class ProviderLockTests(HarnessCase):
+    """Refutation round 1, FG-4 (I8): a participant's send takes the same installation-wide advisory lock as Corti's; a
+    stage that finds it held by another session reserves and sends nothing, and goes back to the queue."""
+
+    def test_a_participant_stage_waits_while_another_session_holds_the_provider_lock(self):
+        from tests.test_pipeline_api import _OtherSession
+
+        other = _OtherSession(self)
+        encounter_id = self.create()
+        for _ in range(3):
+            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: Astra's stage is queued
+        self.assertTrue(other.try_lock())
+        try:
+            with mock.patch('studio.jobs.time.sleep'):
+                job = jobs.run_job(jobs.claim_next())
+            job.refresh_from_db()
+            self.assertEqual((job.kind, job.state, job.result),
+                             ('astra', 'queued', {'requeued': 'another provider request is in flight'}))
+            self.assertEqual((self.adapters['astra'].sent, self.runs_of(encounter_id, 'astra')), ([], []))
+        finally:
+            self.assertTrue(other.unlock())
+        drain()
+        self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
+
+
+@override_settings(**LIVE, **BOTH)
+class NotSentAttemptTests(HarnessCase):
+    """Refutation round 1, sends-1 (I8; ARCHITECTURE 5.4): an attempt that went through the send doors and was recorded
+    not sent stands. A chain re-run by another run's reconciliation or by a context change never attempts that identical
+    request again - only an addendum or a new upload makes a new one - and the reconciled run alone gets its attempt."""
+
+    def reconcile(self, encounter_id, run):
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(run.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+
+    def test_reconciling_another_run_never_attempts_a_participant_s_unsent_request_again(self):  # N3
+        self.adapters['astra'].outcomes = ['not_sent']
+        self.adapters['fable'].outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        (astra,) = self.runs_of(encounter_id, 'astra')
+        self.assertEqual((astra.state, astra.sent, astra.started_at is not None), ('not_sent', False, True))
+        self.reconcile(encounter_id, self.runs_of(encounter_id, 'fable')[0])
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (1, 1, 2))  # only the reconciled request is attempted again
+        self.assertEqual(self.runs_of(encounter_id, 'astra'), [astra])
+        records = self.records(encounter_id)
+        self.assertEqual((records['astra']['state'], records['astra']['run'], records['fable']['state']),
+                         ('not_sent', str(astra.pk), 'read'))
+        self.assertEqual(self.peer_sends(), (0, 1))
+
+    def test_a_participant_s_reconciliation_never_attempts_corti_s_unsent_request_again(self):  # N2
+        self.corti.outcomes = ['not_sent']
+        self.adapters['astra'].outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        (corti,) = self.runs_of(encounter_id, 'corti')
+        self.assertEqual((corti.state, corti.sent), ('not_sent', False))
+        self.assertEqual([r.scope.get('held') for r in self.runs_of(encounter_id, 'fable')], ['unknown_outcome'])
+        self.reconcile(encounter_id, self.runs_of(encounter_id, 'astra')[0])
+        # Corti's request is not handed over again; Astra's reconciled request is, and Fable, held by the unknown
+        # outcome, gets its turn
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (1, 2, 1))
+        self.assertEqual(self.runs_of(encounter_id, 'corti'), [corti])
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run, corti)
+        records = self.records(encounter_id)
+        self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
+
+    def test_a_reconciliation_on_a_context_an_earlier_version_recorded_queues_the_predict_that_remakes_it(self):
+        # the participants' chain re-checks with Corti's run only on a current context: an earlier version's is remade
+        # under the current rules first, by the predict, since they may hold the encounter where the earlier did not
+        earlier = jobs.EARLIER_CONTEXT_VERSIONS[-1]
+        self.adapters['astra'].outcomes = ['unknown']
+        labels = {'CONTEXT_VERSION': earlier, 'EARLIER_CONTEXT_VERSIONS': jobs.EARLIER_CONTEXT_VERSIONS[:-1]}
+        with mock.patch.multiple(jobs, **labels):
+            encounter_id = self.create()
+            drain()
+        context = self.encounter(encounter_id).current_context
+        self.assertEqual(context.version, earlier)
+        astra = self.runs_of(encounter_id, 'astra')[0]
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        queued = self.jobs_of(encounter_id)[-1]
+        self.assertEqual((queued.kind, queued.idempotency_key),
+                         ('predict', f'predict:{context.pk}:after-reconcile:{astra.pk}'))
+        drain()
+        self.assertEqual(self.encounter(encounter_id).current_context.version, jobs.CONTEXT_VERSION)
+
+    def test_a_date_change_never_attempts_a_participant_s_unsent_request_again(self):  # N1
+        self.adapters['astra'].outcomes = ['not_sent']
+        encounter_id = self.create(OFFICE_NOTE.replace('Date of service: 2026-10-20\n', ''), service_date='2026-10-20')
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'setting': 'office'}).status_code, 201)
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-21'}).status_code, 201)
+        drain()
+        # Corti's request carries the date, so it is a new request; the participants' carry none
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (2, 1, 1))
+        self.assertEqual([(r.state, r.sent) for r in self.runs_of(encounter_id, 'astra')], [('not_sent', False)])
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
+
+    def test_a_peer_review_s_unsent_request_is_not_attempted_again_for_a_new_first_assessment(self):
+        self.adapters['astra'].peer_outcomes = ['not_sent']
+        encounter_id = self.create()
+        drain()
+        (unsent,) = self.runs_of(encounter_id, 'astra', 'peer_review')
+        self.assertEqual((unsent.state, unsent.sent, unsent.started_at is not None), ('not_sent', False, True))
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
+        drain()
+        # the new assess #1 makes the identical peer requests: Astra's is not attempted again, Fable's is reused
+        self.assertEqual(self.peer_sends(), (1, 1))
+        later = self.runs_of(encounter_id, 'astra', 'peer_review')[1]
+        first = self.assessments(encounter_id)[-2]
+        self.assertEqual((later.state, later.sent, later.request_sha256, later.scope['assessment']),
+                         ('not_sent', False, unsent.request_sha256, str(first.pk)))
+        self.assertTrue(later.error.startswith(jobs.NOT_ATTEMPTED_AGAIN_MESSAGE))
+        record = self.records(encounter_id)['astra']
+        self.assertEqual((record['peer_state'], record['peer_run']), ('not_sent', str(later.pk)))
+        self.assertEqual(self.records(encounter_id)['fable']['peer_state'], 'read')
 
 
 @override_settings(**LIVE, **BOTH)
@@ -1220,6 +1377,123 @@ class AssessReadsTests(HarnessCase):
         self.assertFalse(review._same_assessment(*common, assessment.participants, [{'code': '99213'}]))
 
 
+# --- a retrieval that fails never stops the assessment (refutation round 1, parity-1; I1, I10) -----------------------
+
+COLON = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+         'Colonoscopy report (fictional)\nDate of service: 2026-10-21\nPlace of service: Ambulatory surgery center\n'
+         'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\n'
+         'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
+REACHED = 'The colonoscope was advanced to the cecum and the examination was completed.'
+HOT_SNARE = 'was removed with a hot snare'
+# The round-4 head's (80f2f2dc8) assessment sha256 of COLON with Corti selecting 45378 and '4538²' beside the PFS
+# source install_endoscopy_pfs installs: the lens's and the verifier's measurement, which no step outside Corti may
+# change (I1).
+ROUND_4_SUPERSCRIPT_SHA256 = 'b8bdc979057dabb198705218517faa79612f9ed5bd43108a8f6946aa55f099be'
+
+
+def install_endoscopy_pfs():
+    """One CMS PFS source covering 2026-10-21 in which 45378 and 45385 have multiple procedure indicator 3 (synthetic
+    values, exactly the refutation lens's)."""
+    from datetime import datetime, timezone as tz
+
+    source = models.ReferenceSource.objects.create(
+        key='cms-pfs-rvu26d', kind='cms-pfs', title='RVU26D synthetic', release='RVU26D', sha256='b' * 64, row_count=2,
+        publisher='CMS', url='https://www.cms.gov/synthetic', retrieved_at=datetime(2026, 10, 23, tzinfo=tz.utc),
+        effective_start=date(2026, 10, 1), effective_end=date(2026, 12, 31), license_note='synthetic',
+        scope_note='synthetic')
+    for code in ('45378', '45385'):
+        models.ReferenceCodeFact.objects.create(source=source, code=code, facts={
+            'status': 'A', 'global_days': '000', 'mult_proc': '3', 'endo_base': '45378', 'pctc': '0'})
+
+
+@override_settings(**LIVE)
+class RetrievalFailureTests(HarnessCase):
+    """With Astra and Fable disabled (I1): nothing retrieval meets stops the assessment Corti's answer makes."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('studio.jobs.run_assessment', side_effect=engine_refusing_participants)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def engine_sha256(self, encounter_id):
+        """The engine's result recomputed from the same inputs exactly as the round-4 head called it."""
+        encounter = self.encounter(encounter_id)
+        revision, context, run = encounter.current_revision, encounter.current_context, self.runs_of(encounter_id)[0]
+        provider_status, normalized = jobs._provider_inputs(run)
+        service_date = jobs.context_service_date(context)
+        reference = prefetched_lookup(tuple(sorted(set(selected_codes(normalized)))))
+        routing = from_jsonable(RoutingResult, jobs.to_jsonable(gi_detect.route(revision.text, service_date)))
+        return sha256_json(engine.assess(
+            text=revision.text, pages=tuple(PageSpan(**p) for p in revision.pages), context=jobs.context_facts(context),
+            routing=routing, normalized=normalized, reference=reference, service_date=service_date,
+            provider_status=provider_status, extraction_status=revision.extraction_status,
+            extraction_messages=tuple(revision.messages), second=None, second_scope=None))
+
+    def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
+        self.corti.selections = [('45378', REACHED), ('4538²', HOT_SNARE)]
+        install_endoscopy_pfs()
+        encounter_id = self.create(COLON)
+        drain()
+        self.assertEqual([(j.kind, j.state, j.error) for j in self.jobs_of(encounter_id)],
+                         [('extract', 'succeeded', ''), ('analyze', 'succeeded', ''), ('predict', 'succeeded', ''),
+                          ('assess', 'succeeded', '')])
+        encounter = self.encounter(encounter_id)
+        assessment = encounter.current_assessment
+        self.assertEqual(encounter.state, 'needs_clarification')
+        self.assertEqual(sorted((p.code, p.bucket, p.status) for p in assessment.proposals.all()),
+                         [('45378', 'selected', 'needs_clarification'), ('4538²', 'excluded', 'excluded')])
+        self.assertEqual(assessment.sha256, ROUND_4_SUPERSCRIPT_SHA256)
+        self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))
+        # retrieval ran for both codes; the superscript one is traced as given and meets no code-range rule
+        self.assertEqual([entry['code'] for entry in assessment.retrieval], ['45378', '4538²'])
+        self.assertEqual([entry.get('failed') for entry in assessment.retrieval], [None, None])
+        self.assertEqual(assessment.retrieval[1]['passages'], [])
+
+    def test_a_retrieval_that_raises_leaves_the_assessment_as_made_and_says_reference_validation_failed(self):
+        with mock.patch('studio.jobs.reference_passages.retrieve', side_effect=RuntimeError('synthetic defect')), \
+                self.assertLogs('studio.jobs', level='ERROR') as logged:
+            encounter_id = self.create()
+            drain()
+        self.assertIn('reference retrieval failed', logged.output[0])
+        self.assertEqual([(j.kind, j.state) for j in self.jobs_of(encounter_id)][-1], ('assess', 'succeeded'))
+        encounter = self.encounter(encounter_id)
+        assessment = encounter.current_assessment
+        self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))  # the engine's result, untouched (I1)
+        self.assertEqual(encounter.state, 'ready_for_review')
+        self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'RuntimeError')])
+        (note,) = assessment.retrieval[0]['notes']
+        self.assertTrue(note.startswith('Reference validation failed: '))
+        self.assertNotIn('synthetic defect', note)  # the exception's text is logged, never recorded
+        # no reader takes the failure for a code checked: the page never says reference validation is done
+        harness = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']
+        self.assertNotEqual(harness['reference_validation']['state'], 'done')
+        # and the reports' REFERENCE RETRIEVAL section says reference validation failed, in CPT Studio's words
+        from studio import reports
+
+        snap = reports.snapshot(encounter, 'draft')
+        self.assertIn(f'Note: {note}', reports.render_txt(snap).decode('utf-8'))
+
+
+@override_settings(**LIVE, **BOTH)
+class RetrievalFailureChainTests(HarnessCase):
+    def test_both_assessments_of_the_chain_are_recorded_and_say_reference_validation_failed(self):
+        tampered = ValueError('changed after import')
+        with mock.patch('studio.jobs.reference_passages.load_passages', side_effect=tampered), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            encounter_id = self.create()
+            drain()
+        chain = self.jobs_of(encounter_id)
+        self.assertEqual([(j.kind, j.state) for j in chain][-4:],
+                         [('assess', 'succeeded'), ('astra_peer', 'succeeded'), ('fable_peer', 'succeeded'),
+                          ('assess', 'succeeded')])
+        first, final = self.assessments(encounter_id)
+        for assessment in (first, final):
+            self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'ValueError')])
+        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.peer_sends(), (1, 1))
+
+
 # --- what a participant is given --------------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
@@ -1253,6 +1527,13 @@ class DocumentKindTests(HarnessCase):
         source = models.SourceFile.objects.get(encounter_id=encounter_id)
         original = {'sha256': source.sha256, 'bytes': source.size}
         self.assertEqual(self.adapters['astra'].built, [('pdf', original)])
+        # the revision's own text and pages, and the original named by sha256 and size only (I5; FG-2)
+        revision = self.encounter(encounter_id).current_revision
+        for name in ('astra', 'fable'):
+            self.assertEqual(self.adapters[name].given, [{'text': revision.text, 'kind': 'pdf', 'original': original,
+                                                          'pages': jobs._participant_pages(revision)}])
+            self.assertEqual(self.runs_of(encounter_id, name)[0].request_body['input'],
+                             prompt.framed_document(revision.text, jobs._participant_pages(revision), 'pdf'))
         self.assertEqual(self.adapters['astra'].sent[0]['original'], hashlib.sha256(pdf).hexdigest())
         run = self.runs_of(encounter_id, 'astra')[0]
         self.assertEqual(run.request_body['original'], original)  # named, never its bytes

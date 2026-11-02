@@ -16,6 +16,11 @@ How a loop ends:
 - 'failed' when an exchange failed (its body kept), when a later exchange could not be sent, when the participant still
   asks for tools after the last exchange allowed ("the tool-call limit was reached"), when it asks for tool calls CPT
   Studio cannot answer, or when the loop's deadline passes before its tool calls are answered. Nothing more is sent.
+- 'failed' and ``stopped`` when the caller's ``should_stop`` says a member's Stop was recorded (refutation round 1,
+  sends-3: a Stop is observed before sending, HARNESS.md 2). It is asked wherever the loop would go on - before the
+  tool calls of an answer are answered, and again before the next exchange is sent - so no exchange after the first is
+  ever sent once a Stop is recorded; the exchanges sent so far are kept. A check that raises stops the loop too (CPT
+  Studio never sends on without knowing). A final answer is never cut short: nothing is asked once one arrives.
 - 'succeeded' only when the last exchange is the final answer: one that asks for no tool call. The reader then reads or
   refuses it exactly as a single answer (another model's answer, a refusal or a cut-off answer is final, never acted on).
 
@@ -47,6 +52,10 @@ from studio.providers.base import ProviderUnavailable, canonical_body, valid_dea
 from studio.types import ProviderRequest, RawExchange
 
 MAX_TOOL_CALLS = 64  # tool calls one answer may ask for at once; more are not answered and the loop fails
+STOPPED = ('Stopped by a workspace member while the tool loop ran, after {number} exchange{plural}; nothing more was '
+           'sent, and the run has no final answer.')
+STOP_UNCHECKED = ('CPT Studio could not check for a Stop while the tool loop ran ({error}), after {number} '
+                  'exchange{plural}; nothing more was sent, and the run has no final answer.')
 LOOP_USAGE_BASIS = 'provider_reported_tokens_summed_over_exchanges'
 TOOL_LIMIT = 'the tool-call limit was reached'
 TOO_LARGE = 'the result is too large; ask for fewer codes'
@@ -118,6 +127,7 @@ class ExchangeRecord:
 class LoopOutcome:
     final: RawExchange
     exchanges: tuple[ExchangeRecord, ...] = ()
+    stopped: bool = False  # ended by a member's Stop (should_stop) before going on: the caller's stage ends as stopped
 
     @property
     def outcome(self) -> str:
@@ -136,16 +146,20 @@ def _now() -> datetime:
 def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float], RawExchange],
         parse_turn: Callable[[bytes], Turn], follow_up: Callable[[dict, Turn, tuple], dict],
         execute_tool, deadline_s, longest_s: float, max_exchanges: int, max_tool_result_bytes: int,
-        max_request_bytes: int, body_keys: frozenset, client_error: str = '') -> LoopOutcome:
+        max_request_bytes: int, body_keys: frozenset, client_error: str = '',
+        should_stop: Optional[Callable[[], bool]] = None) -> LoopOutcome:
     """The loop for ``request`` (built by ``adapter``). ``post(turn, body, deadline)`` sends one exchange of a stored
     body under http.post's discipline and never raises once it has begun to send; ``deadline_s`` is the caller's,
-    never more than ``longest_s``; ``client_error``, when not '', refuses the loop before it starts."""
+    never more than ``longest_s``; ``client_error``, when not '', refuses the loop before it starts; ``should_stop()``,
+    when given, says whether a member's Stop was recorded (asked before the loop goes on after each exchange)."""
     model = adapter.requested_model
     if not valid_deadline(deadline_s):
         return _refused('The loop deadline must be a positive number of seconds; nothing was sent.')
     deadline = monotonic() + min(deadline_s, longest_s)
     if not callable(execute_tool):
         return _refused('No tool executor was given; nothing was sent.')
+    if should_stop is not None and not callable(should_stop):
+        return _refused('The Stop check given is not callable; nothing was sent.')
     try:
         verified_body(request, adapter, max_request_bytes)
         http.check_shape(request.body, model, body_keys)
@@ -153,7 +167,7 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         return _refused(str(exc))
     if client_error:
         return _refused(client_error, model)
-    records, raws = [], []
+    records, raws, stopped = [], [], False
     body, sha256, number = request.body, request.canonical_sha256, 0
     while True:
         number += 1
@@ -177,6 +191,8 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         elif monotonic() >= deadline:
             end = ('failed', "The loop's deadline passed before the participant's tool calls were answered; nothing "
                              'more was sent.')
+        elif halt := _halt(should_stop, number):
+            end, stopped = ('failed', halt), True
         else:
             answered, complete = _answer(turn.calls, execute_tool, deadline, max_tool_result_bytes)
             if not complete:
@@ -199,8 +215,23 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
                                  'more was sent.')
             else:
                 body, sha256 = following, following_sha256
+                if halt := _halt(should_stop, number):  # a Stop recorded while the tools were answered
+                    end, stopped = ('failed', halt), True
         if end is not None:
-            return LoopOutcome(final=_final(raws, *end), exchanges=tuple(records))
+            return LoopOutcome(final=_final(raws, *end), exchanges=tuple(records), stopped=stopped)
+
+
+def _halt(should_stop, number: int) -> str:
+    """Why the loop stops for a member's Stop instead of going on after exchange ``number``; '' to go on. A check that
+    raises stops it too, with CPT Studio's own sentence (never the exception's text)."""
+    if should_stop is None:
+        return ''
+    plural = '' if number == 1 else 's'
+    try:
+        stop = should_stop()
+    except Exception as exc:  # the database, say: the loop never sends on without knowing
+        return STOP_UNCHECKED.format(number=number, plural=plural, error=type(exc).__name__)
+    return STOPPED.format(number=number, plural=plural) if stop else ''
 
 
 def _refused(error: str, requested_model: str = '') -> LoopOutcome:

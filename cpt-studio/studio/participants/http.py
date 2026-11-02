@@ -8,6 +8,12 @@ match the request, credentials that cannot be used, the deadline passing before 
 never established. Once the request may have reached the vendor, a missing or incomplete response is 'unknown' (sent),
 never a failure that invites a resend; a non-200 is 'failed' with its body kept; a 200 is 'succeeded'.
 
+Every read is bounded by the time the exchange has left (HTTP-TRICKLE, found by the part B integration agent): a read
+timeout bounds each wait for a byte, never the whole read, so a response trickling in a byte at a time - its status
+line, a header or its body - could hold an exchange past the loop's deadline and the stale-stage sweep. The default
+session's connections are watched (_Watch): at the exchange's deadline the socket is shut down, whatever read is
+blocked on it returns at once, and the outcome is 'unknown' (sent) - never a partial body taken for the answer.
+
 Every exchange records what was called and what answered (HARNESS.md 6): the endpoint only when the request may have
 reached it, the model the verified request names, and the model, id and usage the response body states, as stated.
 
@@ -19,10 +25,13 @@ its placeholder.
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import dataclasses
 import hashlib
 import re
+import socket
+import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from time import monotonic
@@ -30,6 +39,8 @@ from typing import Callable, Optional, Sequence
 
 import requests
 from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.exceptions import MaxRetryError, NewConnectionError
 
 from studio.participants import prompt
@@ -56,8 +67,110 @@ def default_session() -> requests.Session:
     session = requests.Session()
     session.trust_env = False  # no environment proxies, CA overrides or .netrc credentials
     session.max_redirects = 0
-    session.mount('https://', HTTPAdapter(max_retries=0))
+    for prefix in ('https://', 'http://'):  # the vendors are https; every send keeps one discipline
+        session.mount(prefix, _WatchedAdapter(max_retries=0))
     return session
+
+
+# --- every read bounded by the time left (HTTP-TRICKLE) -------------------------------------------------------------
+
+_WATCH: contextvars.ContextVar = contextvars.ContextVar('studio.participants.http.watch', default=None)
+
+
+class _Watch:
+    """One exchange's deadline over the sockets it connects. post() holds one for each exchange; a watched connection
+    (the default session's) hands it its socket once connected - the connect timeout, clamped to the time left, bounds
+    the connection and its TLS handshake - and at the deadline every socket handed over is shut down, so whatever read
+    is blocked on it returns at once. The timer starts with the first socket and is cancelled and joined when the
+    exchange ends (disarm), so no socket is touched after it. A socket handed over once the deadline has passed - the
+    connection took the time that was left - is shut down and refused before the request is written (``unsent``):
+    nothing left, so the outcome is not_sent, never an unknown outcome a member must reconcile."""
+
+    def __init__(self, deadline: float):
+        self.deadline = deadline
+        self.fired = False
+        self.unsent = False
+        self._sockets = []
+        self._timer = None
+        self._done = False
+        self._lock = threading.Lock()
+
+    def watch(self, sock) -> None:
+        """Watch a connection's socket; a watched connection calls it once connected, before the request is written."""
+        with self._lock:
+            if self._done:
+                return
+            if self.fired or monotonic() >= self.deadline:
+                self.fired = self.unsent = True
+                _shutdown(sock)
+                raise ConnectionAbortedError('the deadline passed before the request was sent')
+            self._sockets.append(sock)
+            if self._timer is None:
+                self._timer = threading.Timer(max(0.0, self.deadline - monotonic()), self._fire)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def _fire(self) -> None:
+        with self._lock:
+            if self._done:
+                return
+            self.fired = True
+            for sock in self._sockets:
+                _shutdown(sock)
+
+    def disarm(self) -> bool:
+        """End the watch: nothing is shut down after this. Whether the deadline had already cut the exchange."""
+        with self._lock:
+            self._done = True
+            self._sockets = []
+            timer, fired = self._timer, self.fired
+        if timer is not None:
+            timer.cancel()
+            timer.join()
+        return fired
+
+    def __enter__(self) -> '_Watch':
+        self._token = _WATCH.set(self)
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        _WATCH.reset(self._token)
+        self.disarm()
+        return False
+
+
+def _shutdown(sock) -> None:
+    """Shut a connected socket down for both directions, which wakes a read blocked on it. The base socket's own
+    method: an SSL socket's shutdown() would also drop its SSL object under the reader."""
+    with suppress(Exception):
+        socket.socket.shutdown(sock, socket.SHUT_RDWR)
+
+
+def _watched(connection_class):
+    class Watched(connection_class):
+        def connect(self) -> None:
+            super().connect()
+            watch = _WATCH.get()
+            if watch is not None:
+                watch.watch(self.sock)
+    Watched.__name__ = Watched.__qualname__ = f'Watched{connection_class.__name__}'
+    return Watched
+
+
+class _WatchedHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _watched(HTTPConnection)
+
+
+class _WatchedHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _watched(HTTPSConnection)
+
+
+class _WatchedAdapter(HTTPAdapter):
+    """requests' adapter whose connections hand their sockets to the exchange's watch (_Watch)."""
+
+    def init_poolmanager(self, *args, **kwargs) -> None:
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {'http': _WatchedHTTPPool, 'https': _WatchedHTTPSPool}
 
 
 # --- the request ---------------------------------------------------------------------
@@ -224,24 +337,34 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
         if timeouts is None:
             return not_sent('The deadline passed before the request was sent; nothing was sent.', requested_model)
         started = monotonic()
-        try:
-            response = session.post(url, data=body, headers=headers, timeout=timeouts, allow_redirects=False,
-                                    stream=True)
-        except Exception as exc:
-            if _never_connected(exc):
-                return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
-                                requested_model)
-            return _unknown(vendor, exc, started, url, requested_model)
-        status, request_id = None, ''
-        try:
-            status = response.status_code
-            request_id = _request_id(response.headers, vendor.request_id_header)
-            raw = _read_capped(response, max_response_bytes, deadline)
-        except Exception as exc:
-            return _unknown(vendor, exc, started, url, requested_model, status, request_id)
-        finally:
-            with suppress(Exception):
-                response.close()
+        with _Watch(deadline) as watch:
+            try:
+                response = session.post(url, data=body, headers=headers, timeout=timeouts, allow_redirects=False,
+                                        stream=True)
+            except Exception as exc:
+                if watch.disarm() and watch.unsent:
+                    return not_sent('The deadline passed before the request was sent; nothing was sent.',
+                                    requested_model)
+                if watch.fired:
+                    return _unknown(vendor, _BodyError(DEADLINE_READING), started, url, requested_model)
+                if _never_connected(exc):
+                    return not_sent(f'{vendor.label} could not be reached ({type(exc).__name__}); nothing was sent.',
+                                    requested_model)
+                return _unknown(vendor, exc, started, url, requested_model)
+            status, request_id = None, ''
+            try:
+                status = response.status_code
+                request_id = _request_id(response.headers, vendor.request_id_header)
+                raw = _read_capped(response, max_response_bytes, deadline)
+                if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
+                    raise _BodyError(DEADLINE_READING)
+            except Exception as exc:
+                if watch.disarm():
+                    exc = _BodyError(DEADLINE_READING)
+                return _unknown(vendor, exc, started, url, requested_model, status, request_id)
+            finally:
+                with suppress(Exception):
+                    response.close()
         latency = _elapsed_ms(started)
         usage, returned_model, response_id = describe(raw)
         error = ''
@@ -305,6 +428,9 @@ def _describe(exc: Exception) -> str:
     return str(exc) if isinstance(exc, _BodyError) else type(exc).__name__
 
 
+DEADLINE_READING = 'the deadline passed while the response was being read'
+
+
 def _read_capped(response, cap: int, deadline: float) -> bytes:
     chunks, size = [], 0
     for chunk in response.iter_content(CHUNK_BYTES):
@@ -312,7 +438,7 @@ def _read_capped(response, cap: int, deadline: float) -> bytes:
         if size > cap:
             raise _BodyError(f'the response exceeded {cap:,} bytes')
         if monotonic() > deadline:
-            raise _BodyError('the deadline passed while the response was being read')
+            raise _BodyError(DEADLINE_READING)
         chunks.append(chunk)
     return b''.join(chunks)
 
