@@ -893,10 +893,15 @@ function candidateAnswers(clarification, doc) {
   return `<div class="candidate-answers" data-question="${escapeHtml(id)}"${confirmation ? ` data-confirmation="${escapeHtml(textValue(confirmation.id))}"` : ''}>${confirmation ? confirmedAnswer(confirmation, exact) : ''}${list}<p class="harness-note">${escapeHtml(CANDIDATE_NOTE)}</p></div>`;
 }
 
+// A code's CMS reference check (HARNESS.md I4: PTP is always "not verified"), stating the PTP limit exactly once: the
+// API's detail ends with its own sentence saying the NCCI procedure-to-procedure edits are not connected (review.
+// PTP_NOT_CONNECTED), so the page's parenthetical is added only where the detail does not say it (refutation round 2,
+// FG2-5: every real card stated it twice).
 function referenceCheckText(check) {
   const said = lookup(REFERENCE_CHECK_LABELS, check?.state, 'not verified');
   const detail = typeof check?.detail === 'string' && check.detail.trim() ? ` — ${check.detail.trim()}` : '';
-  return `${said}${detail} (NCCI procedure-to-procedure edits not verified: not connected)`;
+  const stated = /procedure-to-procedure edits are not connected/i.test(detail);
+  return `${said}${detail}${stated ? '' : ' (NCCI procedure-to-procedure edits not verified: not connected)'}`;
 }
 
 function decisionWords(proposal) {

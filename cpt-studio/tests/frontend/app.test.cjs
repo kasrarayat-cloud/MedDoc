@@ -2109,3 +2109,20 @@ test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated de
   assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code with evidence located in the document. — “${app.escapeHtml(quote)}”</p>`), html);
   assert.equal(html.includes('withheld'), false);
 });
+
+test('R2-WORDING FG2-5: a code card the serializer\'s fixture draws states the PTP limit exactly once', () => {
+  const final = fixture(H2_FINAL);
+  const html = render(final);
+  const cards = final.assessment.proposals.filter(p => p.bucket === 'selected');
+  assert.ok(cards.length >= 2);
+  for (const proposal of cards) {
+    assert.ok(proposal.reference_check.detail.endsWith('NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified.'), proposal.code);
+    const line = /<li><b>CMS reference checks:<\/b> ([^<]*)<\/li>/.exec(codeCardOf(html, proposal.code))[1];
+    assert.equal(count(line, 'procedure-to-procedure'), 1, line);
+  }
+  // a check served without that sentence (or with none) still says it, once
+  for (const check of [{ state: 'passed', detail: 'Present in the CMS fee schedule file: passed.' }, { state: 'not_verified' }, null]) {
+    const line = app.codeStatusLines({ proposed_by: ['corti'], reference_check: check });
+    assert.equal(count(line, 'procedure-to-procedure'), 1, JSON.stringify(check));
+  }
+});

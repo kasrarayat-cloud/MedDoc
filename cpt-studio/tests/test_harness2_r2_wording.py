@@ -385,3 +385,26 @@ class DocumentQuoteTests(R2WordingCase):
         self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code with evidence located in the document. '
                                  f'— “{PLURAL}”'])
         self.assertNotIn('its quote is withheld', json.dumps(lines))
+
+
+# --- FG2-5: every real code card states the PTP limit once -----------------------------------------------------------
+
+class ReferenceLineTests(R2WordingCase):
+    """FG2-5 (I4: PTP always "not verified"): the API's reference_check detail always ends with review.PTP_NOT_CONNECTED,
+    and the page always appended its own "(NCCI procedure-to-procedure edits not verified: not connected)" too, so every
+    real code card stated the PTP limit twice; only hand-written fixtures, whose details the API cannot produce, were
+    tested. Each card the real API serves now states it exactly once."""
+
+    def test_each_code_card_states_the_ptp_limit_once(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        cards = [p for p in detail['assessment']['proposals'] if p['bucket'] == 'selected']
+        self.assertEqual(len(cards), 3)
+        for proposal in cards:
+            self.assertTrue(proposal['reference_check']['detail'].endswith(
+                'NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified.'))
+        lines = browser('cards(page()).map(card => statusLine(card, "CMS reference checks"))', detail)
+        self.assertEqual(len(lines), 3)
+        for line in lines:
+            self.assertEqual(line.count('procedure-to-procedure'), 1, line)
