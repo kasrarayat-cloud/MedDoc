@@ -1,7 +1,8 @@
-"""The participant access check (HARNESS.md 8; checklist item 1.3): it refuses unless the participant is live, the
-installation synthetic-only and authorized, and the single-flight lock free; it sends exactly one request through the
-real adapter and its real session factory, prints one JSON receipt with no secret in it, writes nothing to the
-database and releases the lock. Offline: requests.Session is patched to return a fake session; data is synthetic."""
+"""The participant access check (HARNESS.md 8, 11.2; checklist item 1.3): it refuses unless the participant is live,
+the installation synthetic-only and authorized, and the single-flight lock free; it sends one request through the real
+adapter's tool loop and its real session factory (the tools answered by a trivial local executor), prints one JSON
+receipt with no secret in it - every exchange's ids included - writes nothing to the database and releases the lock.
+Offline: requests.Session is patched to return a fake session; data is synthetic."""
 from __future__ import annotations
 
 import json
@@ -15,9 +16,10 @@ from django.test import override_settings
 
 from studio.jobs import PROVIDER_LOCK_KEY
 
-from tests.test_participants_support import (ANTHROPIC_KEY, OPENAI_KEY, SECRETS, FakeResponse, FakeSession,
-                                             OfflineDatabaseTestCase, anthropic_env, astra_with, empty_reading,
-                                             fixture_bytes, openai_env, write_file)
+from tests.test_participants_support import (ANTHROPIC_KEY, FACTS_ARGUMENTS, OPENAI_KEY, SECRETS, FakeResponse,
+                                             FakeSession, OfflineDatabaseTestCase, anthropic_env, astra_tool_call,
+                                             astra_with, empty_reading, fable_tool_use, fixture_bytes, openai_env,
+                                             write_file)
 from tests.test_providers import (CLIENT_ID, CLIENT_SECRET, FIXTURES as CORTI_FIXTURES, TOKEN, dotenv as corti_env,
                                   token_response)
 
@@ -86,7 +88,7 @@ class AccessCheckTests(OfflineDatabaseTestCase):
         self.assertEqual({key: receipt[key] for key in (
             'participant', 'adapter_version', 'endpoint', 'requested_model', 'returned_model', 'outcome', 'sent',
             'http_status', 'request_id', 'response_id', 'usage_basis', 'error', 'authorization_ref')}, {
-            'participant': 'astra', 'adapter_version': 'openai-responses@cptstudio-harness-1',
+            'participant': 'astra', 'adapter_version': 'openai-responses@cptstudio-harness-2',
             'endpoint': 'https://api.openai.com/v1/responses', 'requested_model': 'gpt-6-astra',
             'returned_model': 'gpt-6-astra', 'outcome': 'succeeded', 'sent': True, 'http_status': 200,
             'request_id': 'req_synth_1', 'response_id': 'resp_synthetic_fixture_0001',
@@ -100,7 +102,74 @@ class AccessCheckTests(OfflineDatabaseTestCase):
         self.assertEqual(receipt['reading']['unverified_quotes'], 4)
         self.assertRegex(receipt['checked_at'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$')
         self.assertIsInstance(receipt['latency_ms'], float)
+        self.assertEqual(receipt['exchange_count'], 1)
+        (exchange,) = receipt['exchanges']
+        self.assertEqual({key: value for key, value in exchange.items() if key != 'latency_ms'}, {
+            'turn': 1, 'outcome': 'succeeded', 'http_status': 200, 'request_sha256': receipt['request_sha256'],
+            'response_sha256': receipt['response_sha256'], 'request_id': 'req_synth_1',
+            'response_id': 'resp_synthetic_fixture_0001', 'client_request_id': receipt['client_request_id'],
+            'tool_calls': []})
+        self.assertIn('"tools"', call['data'].decode())  # the harness@2 request, with its tools
         self.assertLockFree()
+
+    def test_the_tool_loop_runs_and_every_exchange_is_in_the_receipt(self):
+        for name, first, final, header in (
+                ('astra', astra_tool_call(('call_access_1', 'cms_code_facts', FACTS_ARGUMENTS)),
+                 fixture_bytes('astra-colonoscopy.response.json'), 'x-request-id'),
+                ('fable', fable_tool_use(('toolu_access_1', 'cms_code_facts', FACTS_ARGUMENTS)),
+                 fixture_bytes('fable-colonoscopy.response.json'), 'request-id')):
+            with self.subTest(name=name):
+                receipt, error, session = self.check(name, FakeResponse(200, first, headers={header: 'req_turn_1'}),
+                                                     FakeResponse(200, final, headers={header: 'req_turn_2'}))
+                self.assertIsNone(error)
+                self.assertEqual(len(session.calls), 2)
+                self.assertEqual((receipt['outcome'], receipt['exchange_count']), ('succeeded', 2))
+                first_exchange, second_exchange = receipt['exchanges']
+                self.assertEqual([(item['turn'], item['outcome'], item['request_id'], item['response_id'])
+                                  for item in receipt['exchanges']],
+                                 [(1, 'succeeded', 'req_turn_1', json.loads(first)['id']),
+                                  (2, 'succeeded', 'req_turn_2', json.loads(final)['id'])])
+                self.assertEqual(first_exchange['request_sha256'], receipt['request_sha256'])
+                self.assertNotEqual(second_exchange['request_sha256'], receipt['request_sha256'])
+                call_id = 'call_access_1' if name == 'astra' else 'toolu_access_1'
+                self.assertEqual(first_exchange['tool_calls'], [{'call_id': call_id, 'tool': 'cms_code_facts'}])
+                self.assertEqual(second_exchange['tool_calls'], [])
+                self.assertEqual((receipt['request_id'], receipt['response_id'], receipt['response_sha256']),
+                                 ('req_turn_2', json.loads(final)['id'], second_exchange['response_sha256']))
+                self.assertEqual(receipt['usage_basis'], 'provider_reported_tokens_summed_over_exchanges')
+                self.assertEqual(receipt['reading']['refused'], False)
+                sent = json.loads(session.calls[1]['data'])
+                result = (sent['input'][-1]['output'] if name == 'astra'
+                          else sent['messages'][-1]['content'][0]['content'])
+                self.assertEqual(json.loads(result)['tool'], 'cms_code_facts')
+                self.assertIn('no reference data', json.loads(result)['note'])
+                if name == 'astra':
+                    self.assertEqual([call['headers']['X-Client-Request-Id'] for call in session.calls],
+                                     [receipt['client_request_id'], receipt['client_request_id'] + '-2'])
+                    self.assertEqual([item['client_request_id'] for item in receipt['exchanges']],
+                                     [receipt['client_request_id'], receipt['client_request_id'] + '-2'])
+                else:
+                    self.assertEqual([item['client_request_id'] for item in receipt['exchanges']], ['', ''])
+                self.assertIsNotNone(receipt['estimated_cost'])
+                self.assertLockFree()
+
+    def test_the_loop_is_given_the_send_deadline_inside_the_installers_limit(self):
+        from studio.management.commands import participant_access_check
+
+        seen = {}
+
+        def capture(self_, request, **options):
+            seen.update(options)
+            raise AssertionError('stop here: nothing is sent')
+        with override_settings(**self.live), mock.patch(
+                'studio.participants.openai_astra.AstraParticipant.send_loop', capture), \
+                self.assertRaises(AssertionError):
+            participant_access_check._participant('astra')
+        from django.conf import settings
+        self.assertEqual(seen['deadline_s'], settings.PARTICIPANT_SEND_DEADLINE_SECONDS)
+        self.assertIs(seen['execute_tool'], participant_access_check._local_tool)
+        self.assertEqual(participant_access_check._local_tool('cms_code_facts', {}),
+                         ({'tool': 'cms_code_facts', 'note': participant_access_check.TOOL_NOTE}, []))
 
     def test_fable_one_request_and_a_receipt_with_no_secret(self):
         raw = fixture_bytes('fable-colonoscopy.response.json')

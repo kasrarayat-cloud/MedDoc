@@ -12,6 +12,13 @@ and Corti codes the same note. The answer is read as the pipeline reads it, and 
 secret in it: what was called, which model was asked for and which answered, the vendor's request and response ids,
 the latency, the usage as reported with its estimated cost, and a summary of the reading. Nothing is written to the
 database. The exit status is 1 when the request did not succeed or its answer was not used.
+
+Astra's and Fable's request is the harness@2 one, so it offers the reference tools and runs as the pipeline's does,
+through the tool loop (send_loop, HARNESS.md 11.2). The tools are answered here by a trivial local executor that
+returns a fixed synthetic note and no reference data: the check proves access and the loop's mechanics, not the CMS
+sources. The receipt gives the number of exchanges and, for each, its outcome, its request and response sha256 and the
+vendor's request and response ids (Astra's client request id too), and each tool call's id and tool. The loop is given
+PARTICIPANT_SEND_DEADLINE_SECONDS, inside the installer's limit for the whole check.
 """
 from __future__ import annotations
 
@@ -24,11 +31,13 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 
-from studio.participants import LABELS, participant_mode, pricing, registry
+from studio.participants import LABELS, openai_astra, participant_mode, pricing, registry
 from studio.providers import get_provider
 from studio.providers.base import ProviderUnavailable
 
 PARTICIPANTS = ('corti', 'astra', 'fable')
+TOOL_NOTE = ('This is CPT Studio\'s access check: its tools return no reference data here. Answer from the document '
+             'alone.')
 NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for a CPT Studio access check.\n'
         'Procedure: Colonoscopy. Date of service: 2026-11-01.\n'
         'Findings: The colonoscope was advanced to the cecum; the appendiceal orifice was identified. A 5 mm '
@@ -83,20 +92,36 @@ def _single_flight():
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
 
 
+def _local_tool(name: str, arguments: dict) -> tuple[dict, list]:
+    """The access check's tool executor: a fixed synthetic note and no reference data, so no ref is ever retrieved."""
+    return {'tool': name, 'note': TOOL_NOTE}, []
+
+
 def _participant(name: str) -> dict:
     adapter = registry.build(name, 'live')
     request = adapter.build_request(NOTE, (), 'paste', None)
     client_request_id = f'cptstudio-access-check-{uuid.uuid4()}'
-    exchange = adapter.send(request, deadline_s=settings.PARTICIPANT_SEND_DEADLINE_SECONDS,
-                            client_request_id=client_request_id, original_bytes=None)
+    outcome = adapter.send_loop(request, deadline_s=settings.PARTICIPANT_SEND_DEADLINE_SECONDS,
+                                client_request_id=client_request_id, original_bytes=None, execute_tool=_local_tool)
+    exchange = outcome.final
     summary = None
     if exchange.outcome == 'succeeded':
-        reading = adapter.read(request, exchange.response_bytes)
+        reading = adapter.read(request, exchange.response_bytes, outcome.refs_retrieved)
         summary = {'refused': reading.refused, 'problems': list(reading.problems),
                    'codes': [code.code for code in reading.codes], 'unverified_quotes': reading.unverified_quotes}
     receipt = _receipt(name, adapter.adapter_version, request, exchange, summary)
     receipt['client_request_id'] = client_request_id if name == 'astra' else ''
-    receipt['estimated_cost'] = pricing.estimate(adapter.requested_model, exchange.usage)
+    receipt['estimated_cost'] = pricing.estimate_loop(adapter.requested_model,
+                                                      [record.usage for record in outcome.exchanges])
+    receipt['exchange_count'] = len(outcome.exchanges)
+    receipt['exchanges'] = [{
+        'turn': record.turn, 'outcome': record.outcome, 'http_status': record.http_status,
+        'request_sha256': record.request_sha256, 'response_sha256': record.response_sha256,
+        'request_id': record.provider_request_id, 'response_id': record.response_id, 'latency_ms': record.latency_ms,
+        'client_request_id': openai_astra.turn_client_request_id(client_request_id, record.turn)
+        if name == 'astra' else '',
+        'tool_calls': [{'call_id': call.call_id, 'tool': call.tool} for call in record.tool_calls],
+    } for record in outcome.exchanges]
     return receipt
 
 

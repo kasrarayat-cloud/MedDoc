@@ -4,6 +4,7 @@ fallback), the strict JSON and CPT Studio's own schema validation, the bounds, t
 (test_participants_support)."""
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import time
@@ -15,7 +16,7 @@ from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, Provi
 
 from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, PAGE_BREAK, PAGES, OfflineTestCase,
                                              astra_envelope, astra_with, changed, code, empty_reading, fable_envelope,
-                                             fixture_bytes, fixture_reading, service)
+                                             fable_with, fixture_bytes, fixture_reading, service)
 
 
 def located(text: str, quote: str) -> list[tuple[int, int, str]]:
@@ -612,3 +613,75 @@ class ParticipantInvariantTests(OfflineTestCase):
         self.assertTrue(spans)
         self.assertTrue(all(isinstance(span, EvidenceSpan) and NOTE[span.start:span.end] == span.text
                             for span in spans))
+
+
+class ReferencesUsedTests(OfflineTestCase):
+    """HARNESS.md 11.2: references_used is the participant's claim; ``retrieved`` is CPT Studio's check of it against
+    the refs that participant's own run's tool results returned, never the claim itself."""
+    REFS = [{'ref': 'ncci-2026-ch6-c-1', 'use': 'Surgical endoscopy includes diagnostic endoscopy.'},
+            {'ref': 'fact:cms-pfs-rvu26d:45385:mult_proc', 'use': 'The endoscopic base.'},
+            {'ref': 'cms-claims-100-04-ch12-40.6.c', 'use': 'Cited, never retrieved.'}]
+
+    def setUp(self):
+        super().setUp()
+        self.cases = []
+        for adapter_class, build in ((AstraParticipant, astra_with), (FableParticipant, fable_with)):
+            adapter = adapter_class(self.tmp / 'never-read.env')
+            request = adapter.build_request(NOTE, PAGES, 'paste', None)
+            answer = changed(fixture_reading(), references_used=self.REFS)
+            self.cases.append((adapter, request, build(answer)))
+
+    def test_a_reference_is_retrieved_only_when_the_runs_own_tool_results_returned_it(self):
+        refs = {'ncci-2026-ch6-c-1', 'fact:cms-pfs-rvu26d:45385:mult_proc', 'fact:cms-pfs-rvu26d:45380:status'}
+        for adapter, request, raw in self.cases:
+            for given in (refs, frozenset(refs), sorted(refs), tuple(refs)):
+                with self.subTest(adapter=adapter.name, given=type(given).__name__):
+                    result = adapter.read(request, raw, given)
+                    self.assertEqual([(item.ref, item.use, item.retrieved) for item in result.references_used],
+                                     [(item['ref'], item['use'], retrieved)
+                                      for item, retrieved in zip(self.REFS, (True, True, False))])
+
+    def test_without_the_runs_refs_nothing_is_retrieved_and_the_two_argument_call_still_works(self):
+        from studio.participants import registry
+
+        for adapter, request, raw in self.cases:
+            with self.subTest(adapter=adapter.name):
+                reader = registry.reader(request.provider, request.adapter_version)
+                for result in (adapter.read(request, raw), reader(request, raw), reader(request, raw, frozenset())):
+                    self.assertEqual([item.retrieved for item in result.references_used], [False, False, False])
+                self.assertEqual([item.retrieved for item in reader(request, raw, {'ncci-2026-ch6-c-1'}).references_used],
+                                 [True, False, False])
+
+    def test_refs_must_be_a_set_of_ref_strings(self):
+        adapter, request, raw = self.cases[0]
+        for given in ('ncci-2026-ch6-c-1', b'x', None, [1], {'a': 1}, 7):
+            with self.subTest(given=given), self.assertRaises(TypeError):
+                adapter.read(request, raw, given)
+
+    def test_a_harness_1_run_is_read_as_before(self):
+        for adapter, request, raw in self.cases:
+            module = openai_astra if adapter.name == 'astra' else anthropic_fable
+            older = ProviderRequest(provider=request.provider, adapter_version=module.ADAPTER_VERSION_1,
+                                    body=request.body, canonical_sha256=request.canonical_sha256,
+                                    contexts=request.contexts)
+            with self.subTest(adapter=adapter.name):
+                current, previous = adapter.read(request, raw), adapter.read(older, raw)
+                self.assertEqual(previous.adapter_version, module.ADAPTER_VERSION_1)
+                self.assertEqual(dataclasses.replace(previous, adapter_version=current.adapter_version), current)
+                refused = adapter.read(older, b'[]')
+                self.assertEqual((refused.adapter_version, refused.problems),
+                                 (module.ADAPTER_VERSION_1, ('The reading was not used: the response is not a JSON '
+                                                             'object.',)))
+
+    def test_an_astra_answer_that_still_asks_for_tools_is_final_only_for_harness_1(self):
+        adapter, request, _ = self.cases[0]
+        envelope = astra_envelope()
+        envelope['output'].append({'type': 'function_call', 'id': 'fc_synthetic', 'call_id': 'call_synthetic',
+                                   'name': 'cms_code_facts', 'arguments': '{}', 'status': 'completed'})
+        raw = json.dumps(envelope).encode()
+        result = adapter.read(request, raw)
+        self.assertEqual(result.problems, ('The reading was not used: the response still asks for tool calls, so it '
+                                           'is not a final answer.',))
+        older = ProviderRequest(provider='astra', adapter_version=openai_astra.ADAPTER_VERSION_1, body=request.body,
+                                canonical_sha256=request.canonical_sha256, contexts=request.contexts)
+        self.assertFalse(adapter.read(older, raw).refused)  # harness@1 sent no tools, and read such an answer so

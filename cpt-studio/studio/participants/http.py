@@ -13,7 +13,9 @@ reached it, the model the verified request names, and the model, id and usage th
 
 A PDF original travels by reference (HARNESS.md 3). The stored request body holds {"$original_sha256": hex,
 "$original_bytes": n} where the vendor's file data goes, and the request's sha256 is of that stored form. At send time
-the given bytes are re-verified against both and only then expanded into the vendor's file block.
+the given bytes are re-verified against both and only then expanded into the vendor's file block. A tool loop
+(loop.py) sends every exchange through post() and re-verifies and expands the original on each exchange that carries
+its placeholder.
 """
 from __future__ import annotations
 
@@ -67,6 +69,16 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
     PDF only, its original named by sha256 and size. Over ``max_bytes`` once the original is expanded it is refused,
     never truncated. Content that cannot be sent raises ProviderUnavailable; wrong argument types are programming
     errors (TypeError, ValueError)."""
+    framed = framed_text(text, pages, kind, prompt.framed_document)
+    holder = placeholder(original) if kind == 'pdf' else None  # only a PDF's original is attached (prompt.KINDS)
+    return finished_request(name, adapter_version, make_body(framed, holder), text, max_bytes=max_bytes,
+                            holder=holder, file_prefix=file_prefix)
+
+
+def framed_text(text: str, pages: Sequence[PageSpan], kind: str, frame: Callable) -> str:
+    """``frame(text, pages, kind)`` (prompt.framed_document, or its peer-review form) after the checks every
+    participant request makes of the revision: content that cannot be sent raises ProviderUnavailable, wrong argument
+    types raise TypeError or ValueError."""
     if not isinstance(text, str):
         raise TypeError('The document text must be a string.')
     if not isinstance(pages, (tuple, list)) or not all(isinstance(page, PageSpan) for page in pages):
@@ -77,13 +89,18 @@ def build_request(name: str, adapter_version: str, text: str, pages: Sequence[Pa
         raise ProviderUnavailable('The document has no text to send; nothing was sent.')
     if '\x00' in text:
         raise ProviderUnavailable('The document text contains NUL characters; nothing was sent.')
-    framed = prompt.framed_document(text, tuple(pages), kind)
+    framed = frame(text, tuple(pages), kind)
     if framed is None:
         reason = ('it contains its own framing marker' if prompt.marker(text) in text
                   else 'its pages do not cover it exactly')
         raise ProviderUnavailable(f'The document text cannot be framed: {reason}; nothing was sent.')
-    holder = placeholder(original) if kind == 'pdf' else None  # only a PDF's original is attached (prompt.KINDS)
-    body = make_body(framed, holder)
+    return framed
+
+
+def finished_request(name: str, adapter_version: str, body: dict, text: str, *, max_bytes: int,
+                     holder: Optional[dict] = None, file_prefix: str = '') -> ProviderRequest:
+    """The ProviderRequest for a built ``body`` whose quotes are located in ``text``: refused over ``max_bytes``
+    once a PDF original (``holder``) is expanded, never truncated."""
     try:
         encoded = canonical_body(body)
     except UnicodeEncodeError:
@@ -176,12 +193,13 @@ def _placeholders(body):
             pending.extend((path + (index,), value) for index, value in enumerate(node))
 
 
-def sendable(body: dict, max_bytes: int) -> bytes:
+def sendable(body: dict, max_bytes: int, *, with_original: bool = True) -> bytes:
     """The exact bytes sent: the canonical encoding (studio.providers.base) of the expanded body, refused over the
-    limit, never truncated."""
+    limit, never truncated. ``with_original``: whether an original file was expanded into it (the message says so)."""
     data = canonical_body(body)
     if len(data) > max_bytes:
-        raise ProviderUnavailable(f'The request with its original file is {len(data):,} bytes, over the '
+        with_file = ' with its original file' if with_original else ''
+        raise ProviderUnavailable(f'The request{with_file} is {len(data):,} bytes, over the '
                                   f'{max_bytes:,}-byte limit; nothing was truncated or sent.')
     return data
 

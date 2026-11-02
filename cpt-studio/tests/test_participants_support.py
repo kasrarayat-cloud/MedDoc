@@ -4,6 +4,11 @@ Every participant test runs behind a guard that fails on requests.Session constr
 connects (a positive control in test_participants_send proves the guard trips), and every send uses a fake session:
 injected, or returned by a patched requests.Session where the real session factory is under test. All data is
 synthetic (tests/fixtures/participants/README.md) and every credential value is fake.
+
+The tool-loop answers (astra_tool_call, fable_tool_use) are built in code in the vendors' documented shapes: a Responses
+API answer whose output holds a reasoning item with its encrypted content and function_call items (call_id, name,
+arguments as a JSON string); a Messages API answer that stopped for tool_use, holding a thinking block with its
+signature and tool_use blocks (id, name, input). Their ids carry "synthetic" and none is vendor output.
 """
 from __future__ import annotations
 
@@ -215,3 +220,70 @@ def empty_reading(**fields) -> dict:
                'clarifications': [], 'extraction_issues': [], 'references_used': []}
     reading.update(fields)
     return reading
+
+
+# --- the tool loop (HARNESS.md 11.2) ---------------------------------------------------------------------------------
+
+ASTRA_TOOL_USAGE = {'input_tokens': 2500, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens': 120,
+                    'output_tokens_details': {'reasoning_tokens': 64}, 'total_tokens': 2620}
+FABLE_TOOL_USAGE = {'input_tokens': 2700, 'cache_creation_input_tokens': 0, 'cache_read_input_tokens': 0,
+                    'output_tokens': 140, 'output_tokens_details': {'thinking_tokens': 80}, 'service_tier': 'standard'}
+FACTS_ARGUMENTS = {'codes': ['45385'], 'date_of_service': '2026-10-21'}
+PASSAGES_ARGUMENTS = {'topic': 'ncci_endoscopy_rules', 'codes': ['45385', '45380']}
+
+
+def astra_tool_call(*calls, number=1, model='gpt-6-astra', usage=None, reasoning=None, envelope=None) -> bytes:
+    """A completed Responses API answer from ``model`` that asks for function calls: a reasoning item carrying its
+    encrypted content, then one function_call per (call_id, name, arguments); arguments that are not a str are
+    JSON-encoded. ``envelope`` sets top-level fields."""
+    output = [reasoning if reasoning is not None else
+              {'type': 'reasoning', 'id': f'rs_synthetic_tool_{number:04d}', 'summary': [],
+               'encrypted_content': f'gAAAAB-synthetic-encrypted-reasoning-{number:04d}=='}]
+    for index, (call_id, name, arguments) in enumerate(calls, start=1):
+        output.append({'type': 'function_call', 'id': f'fc_synthetic_{number:02d}_{index:02d}', 'call_id': call_id,
+                       'name': name, 'arguments': arguments if isinstance(arguments, str) else json.dumps(arguments),
+                       'status': 'completed'})
+    body = {'id': f'resp_synthetic_tool_{number:04d}', 'object': 'response', 'created_at': 1793000000 + number,
+            'status': 'completed', 'error': None, 'incomplete_details': None, 'model': model, 'output': output,
+            'usage': copy.deepcopy(ASTRA_TOOL_USAGE if usage is None else usage)}
+    body.update(envelope or {})
+    return json.dumps(body).encode()
+
+
+def fable_tool_use(*calls, number=1, model='claude-fable-5-1', usage=None, thinking=None, envelope=None) -> bytes:
+    """A Messages API answer from ``model`` that stopped for tool_use: a thinking block with its signature, then one
+    tool_use block per (id, name, input). ``envelope`` sets top-level fields."""
+    content = [thinking if thinking is not None else
+               {'type': 'thinking', 'thinking': f'Synthetic reasoning {number}.',
+                'signature': f'synthetic-signature-{number:04d}'}]
+    for call_id, name, arguments in calls:
+        content.append({'type': 'tool_use', 'id': call_id, 'name': name, 'input': arguments})
+    body = {'id': f'msg_synthetic_tool_{number:04d}', 'type': 'message', 'role': 'assistant', 'model': model,
+            'content': content, 'stop_reason': 'tool_use', 'stop_sequence': None, 'stop_details': None,
+            'usage': copy.deepcopy(FABLE_TOOL_USAGE if usage is None else usage)}
+    body.update(envelope or {})
+    return json.dumps(body).encode()
+
+
+class FakeExecutor:
+    """The caller's tool executor: records every call and answers from ``answers`` ({tool: (result, refs)} or a
+    callable taking (name, arguments)), or a default result naming the tool and its codes, with one ref per code."""
+
+    def __init__(self, answers=None):
+        self.answers = answers or {}
+        self.calls = []
+
+    def __call__(self, name, arguments):
+        self.calls.append((name, copy.deepcopy(arguments)))
+        answer = self.answers.get(name) if isinstance(self.answers, dict) else self.answers
+        if callable(answer):
+            return answer(name, arguments)
+        if answer is not None:
+            return answer
+        refs = [f'fact:cms-pfs-rvu26d:{item}:status' for item in arguments.get('codes', [])]
+        return {'tool': name, 'facts': [{'ref': ref, 'value': 'A'} for ref in refs], 'release': 'RVU26D'}, refs
+
+
+def canonical(value) -> str:
+    """A tool result as the loop sends it: canonical JSON."""
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)

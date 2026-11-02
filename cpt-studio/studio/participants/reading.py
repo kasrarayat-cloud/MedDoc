@@ -17,6 +17,10 @@ Item-level findings never refuse the reading; they are recorded as problems. A c
 ([0-9]{4}[0-9A-Z]) is kept as given. A code whose units fall outside 1 to 99 is dropped. A date of service that is not
 YYYY-MM-DD and an extraction issue on a page below 1 are not used. Repeated service ids and service ids that no service
 has are named.
+
+references_used (harness-reading@2, HARNESS.md 11.2) is the participant's claim. Each entry's ``retrieved`` is CPT
+Studio's check of it: True only when the ref is among ``refs_retrieved``, the refs the tool results of that participant's
+own run returned to it (loop.LoopOutcome.refs_retrieved); a reference cited but never retrieved stays False.
 """
 from __future__ import annotations
 
@@ -162,9 +166,11 @@ def refusal(provider: str, adapter_version: str, requested_model: str, returned_
 
 
 def read(answer: str, source: str, *, provider: str, adapter_version: str, requested_model: str,
-         returned_model: str) -> ParticipantReading:
+         returned_model: str, refs_retrieved=frozenset()) -> ParticipantReading:
     """The reading in ``answer`` (the vendor's output text), its quotes located in ``source`` (the revision text the
-    request carried as its context 0)."""
+    request carried as its context 0), each reference it used checked against ``refs_retrieved``."""
+    refs = retrieved_refs(refs_retrieved)
+
     def refused(reason: str) -> ParticipantReading:
         return refusal(provider, adapter_version, requested_model, returned_model, reason)
 
@@ -183,18 +189,30 @@ def read(answer: str, source: str, *, provider: str, adapter_version: str, reque
     if error:
         return refused(error)
     return _Reader(source, provider=provider, adapter_version=adapter_version, requested_model=requested_model,
-                   returned_model=returned_model).read(parsed)
+                   returned_model=returned_model).read(parsed, refs)
+
+
+def retrieved_refs(value) -> frozenset:
+    """``refs_retrieved`` as a set: a set, frozenset, list or tuple of ref strings. Anything else is a programming
+    error (TypeError) - a string especially, whose characters would otherwise each count as a ref."""
+    if not isinstance(value, (set, frozenset, list, tuple)):
+        raise TypeError('refs_retrieved must be a set of ref strings.')
+    refs = frozenset(value)
+    if not all(isinstance(ref, str) for ref in refs):
+        raise TypeError('refs_retrieved must be a set of ref strings.')
+    return refs
 
 
 # --- schema --------------------------------------------------------------------------
 
-def schema_error(value, schema: Optional[dict] = None) -> str:
-    """The first place ``value`` breaks ``schema`` (prompt.SCHEMA by default), or ''. Interprets exactly the keywords
-    prompt.py uses - type (object, array, string, integer), properties, required, additionalProperties (false only),
-    items and enum - and refuses to judge a schema with any other, so a schema change cannot pass unchecked."""
+def schema_error(value, schema: Optional[dict] = None, subject: str = 'the reading') -> str:
+    """The first place ``value`` breaks ``schema`` (prompt.SCHEMA by default), or ''; ``subject`` names the whole value
+    in the message. Interprets exactly the keywords prompt.py uses - type (object, array, string, integer, boolean),
+    properties, required, additionalProperties (false only), items and enum - and refuses to judge a schema with any
+    other, so a schema change cannot pass unchecked."""
     schema = prompt.SCHEMA if schema is None else schema
     _check_schema(json.dumps(schema, sort_keys=True))
-    return _schema_error(value, schema, '')
+    return _schema_error(value, schema, '', subject)
 
 
 @functools.lru_cache(maxsize=8)
@@ -214,25 +232,25 @@ def _check_schema(encoded: str) -> None:
             pending.extend(node['properties'].values())
         elif kind == 'array':
             pending.append(node['items'])
-        elif kind not in ('string', 'integer'):
+        elif kind not in ('string', 'integer', 'boolean'):
             raise ValueError(f'The reading schema uses the type {kind!r}, which this validator does not implement.')
 
 
-def _schema_error(value, schema: dict, path: str) -> str:
+def _schema_error(value, schema: dict, path: str, subject: str) -> str:
     kind = schema['type']
     if kind == 'object':
         if not isinstance(value, dict):
-            return f'{_subject(path)} is not an object'
+            return f'{path or subject} is not an object'
         properties = schema['properties']
         for key in value:
             if key not in properties:
-                return f'{_subject(path)} has a field the schema does not allow ({_name(key)})'
+                return f'{path or subject} has a field the schema does not allow ({_name(key)})'
         for key in schema.get('required', ()):
             if key not in value:
-                return f'{_subject(path)} lacks the required field {key!r}'
+                return f'{path or subject} lacks the required field {key!r}'
         for key, child in properties.items():
             if key in value:
-                error = _schema_error(value[key], child, f'{path}.{key}' if path else key)
+                error = _schema_error(value[key], child, f'{path}.{key}' if path else key, subject)
                 if error:
                     return error
         return ''
@@ -240,7 +258,7 @@ def _schema_error(value, schema: dict, path: str) -> str:
         if not isinstance(value, list):
             return f'{path} is not a list'
         for index, item in enumerate(value):
-            error = _schema_error(item, schema['items'], f'{path}[{index}]')
+            error = _schema_error(item, schema['items'], f'{path}[{index}]', subject)
             if error:
                 return error
         return ''
@@ -250,13 +268,11 @@ def _schema_error(value, schema: dict, path: str) -> str:
         if 'enum' in schema and value not in schema['enum']:
             return f'{path} is not one of the values the schema allows'
         return ''
+    if kind == 'boolean':
+        return '' if type(value) is bool else f'{path} is not true or false'
     if type(value) is not int:  # 'integer': a JSON number with no fraction or exponent; a bool is not one
         return f'{path} is not an integer'
     return ''
-
-
-def _subject(path: str) -> str:
-    return path or 'the reading'
 
 
 def _name(key: str) -> str:
@@ -273,9 +289,10 @@ def _token(value: str) -> str:
 
 # --- bounds --------------------------------------------------------------------------
 
-def bound_error(reading: dict) -> str:
-    """The first bound a schema-valid reading breaks, named by count, or ''."""
-    for key, limit, label in _TOP_LISTS:
+def bound_error(reading: dict, top_lists: tuple = _TOP_LISTS) -> str:
+    """The first bound a schema-valid reading breaks, named by count, or ''. ``top_lists``: (key, limit, label) of each
+    top-level list; the item lists and the text limits are the same for every schema that uses their field names."""
+    for key, limit, label in top_lists:
         if len(reading[key]) > limit:
             return f'it lists {len(reading[key]):,} {label}, more than the {limit} this adapter accepts'
     pending = [(reading, '', '')]
@@ -368,7 +385,7 @@ class _Reader:
         self.unverified += sum(1 for item in located if not item.spans)
         return located
 
-    def read(self, parsed: dict) -> ParticipantReading:
+    def read(self, parsed: dict, refs: frozenset) -> ParticipantReading:
         when = parsed['date_of_service']
         value = when['value']
         if value and not _iso_date(value):
@@ -419,10 +436,10 @@ class _Reader:
                                      'document has; it was not used.')
                 continue
             issues.append(ExtractionIssue(page=item['page'], issue=item['issue']))
-        # harness-reading@2: what the participant says it relied on. ``retrieved`` stays False here: only CPT Studio's
-        # check against that participant's own tool results in the same run may set it (HARNESS.md 11.2), and a run
+        # harness-reading@2: what the participant says it relied on. ``retrieved`` is CPT Studio's check, never the
+        # participant's claim: True only for a ref its own run's tool results returned to it (HARNESS.md 11.2); a run
         # without tools retrieved nothing.
-        references = tuple(ReferenceUse(ref=item['ref'], use=item['use'], retrieved=False)
+        references = tuple(ReferenceUse(ref=item['ref'], use=item['use'], retrieved=item['ref'] in refs)
                            for item in parsed['references_used'])
         return ParticipantReading(
             reading_version=prompt.READING_VERSION, date_of_service=value, date_evidence=date_evidence,

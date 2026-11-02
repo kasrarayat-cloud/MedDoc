@@ -13,6 +13,9 @@ on 2026-11-01 (docs/cpt-harness/vendor-and-reference-facts-20261101.md):
 
 Corti reports credits, not tokens, and has no estimate here. An answer whose usage lacks a token count, or states one
 that is not a whole number of tokens, has no estimate (None) rather than a guessed one.
+
+A tool loop (HARNESS.md 11.2) is several requests, each priced on its own (estimate_loop): the long-context rate is a
+property of one request, so a loop's summed usage is never priced as if it were one.
 """
 from __future__ import annotations
 
@@ -41,6 +44,35 @@ class _Invalid(Exception):
 def estimate(model: str, usage) -> Optional[dict]:
     """{'estimated_usd': '0.040690', 'rates': {...}, 'basis': BASIS} for an answer of ``model`` (the model the request
     named) with ``usage`` as the vendor reported it; None when there is nothing to estimate from."""
+    priced = _priced(model, usage)
+    return None if priced is None else _result(model, *priced)
+
+
+def estimate_loop(model: str, usages) -> Optional[dict]:
+    """The estimate for a tool loop whose exchanges reported ``usages`` (each exchange's usage as reported, in order):
+    each exchange priced on its own and the costs added up (Astra's long-context rate applies per request). One
+    exchange's estimate is estimate()'s exactly. An exchange that reported no usage ({}: one never answered, say) is
+    counted and not priced; None when no exchange can be priced or a reported usage cannot be."""
+    if not isinstance(usages, (list, tuple)):
+        return None
+    if len(usages) == 1:
+        return estimate(model, usages[0])
+    reported = [usage for usage in usages if usage != {}]
+    priced = [_priced(model, usage) for usage in reported]
+    if not priced or any(item is None for item in priced):
+        return None
+    tokens = {}
+    for _, counts, _ in priced:
+        for kind, count in counts.items():
+            tokens[kind] = tokens.get(kind, 0) + count
+    extra = {'exchanges': len(usages), 'exchanges_priced': len(priced)}
+    if model == ASTRA:
+        extra['long_context_exchanges'] = sum(1 for _, _, details in priced if details['long_context'])
+    return _result(model, sum(cost for cost, _, _ in priced), tokens, extra)
+
+
+def _priced(model: str, usage) -> Optional[tuple]:
+    """(unrounded cost, priced tokens, extra rate details) of one answer, or None."""
     if not isinstance(usage, dict):
         return None
     try:
@@ -53,7 +85,7 @@ def estimate(model: str, usage) -> Optional[dict]:
     return None
 
 
-def _astra(usage: dict) -> dict:
+def _astra(usage: dict) -> tuple:
     rates = RATES[ASTRA]
     total_input, output = _count(usage, 'input_tokens'), _count(usage, 'output_tokens')
     details = usage.get('input_tokens_details')
@@ -69,19 +101,18 @@ def _astra(usage: dict) -> dict:
     cost = (tokens['input'] * rates['input'] * input_multiplier
             + tokens['cached_input'] * rates['cached_input'] * input_multiplier
             + tokens['output'] * rates['output'] * output_multiplier) / _MILLION
-    return _result(ASTRA, cost, tokens, {'long_context': long_context,
-                                         'multipliers': {'input': str(input_multiplier),
-                                                         'output': str(output_multiplier)}})
+    return cost, tokens, {'long_context': long_context,
+                          'multipliers': {'input': str(input_multiplier), 'output': str(output_multiplier)}}
 
 
-def _fable(usage: dict) -> dict:
+def _fable(usage: dict) -> tuple:
     rates = RATES[FABLE]
     tokens = {'input': _count(usage, 'input_tokens'),
               'cache_write': _count(usage, 'cache_creation_input_tokens', optional=True),
               'cache_read': _count(usage, 'cache_read_input_tokens', optional=True),
               'output': _count(usage, 'output_tokens')}
     cost = sum(tokens[kind] * rates[kind] for kind in tokens) / _MILLION
-    return _result(FABLE, cost, tokens, {})
+    return cost, tokens, {}
 
 
 def _count(usage: dict, key: str, *, optional: bool = False) -> int:
