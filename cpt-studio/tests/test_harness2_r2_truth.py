@@ -153,7 +153,7 @@ class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, Colo
 # --- truth-4: a retrieval that failed says what failed, never that the CMS checks did not run ------------------------
 
 # The plan's shared wording (verify-harness-r2/REPAIR-PLAN.md): what failed is the record of the CMS facts and passages
-# retrieved; each code's checks read the CMS facts before that (jobs.run_assess looks them up first), and stand.
+# retrieved; each code's checks read the CMS facts before that (jobs.stage_assess looks them up first), and stand.
 RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
                     "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
                     "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
