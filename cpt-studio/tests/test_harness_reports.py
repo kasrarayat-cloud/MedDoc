@@ -30,6 +30,11 @@ sys.modules['cpt_verify_downloads_harness'] = vd  # dataclasses resolve their mo
 _spec.loader.exec_module(vd)
 
 
+# the REVIEW PARTICIPANTS section's closing line for an assessment recorded before the harness: what the record shows,
+# never that Corti ran (refutation r1 parity-2)
+PREDATES = '  This assessment was recorded before the review participants existed: Astra and Fable were not part of it.'
+
+
 def section(text, title):
     """The body lines of the TXT section headed ``title`` (up to the next blank line before a heading)."""
     lines = text.splitlines()
@@ -251,10 +256,29 @@ class CortiOnlyReportTests(TestCase):
         text = reports.render_txt(reports.snapshot(s.encounter, 'draft')).decode('utf-8')
         lines = section(text, 'REVIEW PARTICIPANTS')
         self.assertIn('  - Astra · OpenAI · not recorded: this assessment predates the review participants', lines)
-        self.assertEqual(lines[-1], '  This assessment was recorded before the review participants existed: only '
-                                    'Corti was run.')
+        self.assertEqual(lines[-1], PREDATES)
         self.assertEqual(section(text, 'REFERENCE RETRIEVAL')[0],
                          '  - none retrieved: this assessment was recorded before reference retrieval existed')
+
+    def test_one_recorded_before_the_harness_never_says_corti_ran_when_it_did_not(self):
+        # refutation r1 parity-2: "only Corti was run" closed the section under "Corti · the provider was not run", and
+        # under a Corti run held with nothing sent; the closing line now says only what the record shows
+        s = pf.scenario()
+        held = pf.provider_run(s.encounter, s.revision, state=models.ProviderRun.NOT_SENT)
+        models.ProviderRun.objects.filter(pk=held.pk).update(
+            scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+        held.refresh_from_db()
+        for corti, persist in (('the provider was not run', lambda: pf.assess(s.encounter, pf.standard_result(),
+                                                                              no_provider=True)),
+                               ('nothing was sent: the service date entered as encounter metadata conflicts with the '
+                                'document', lambda: pf.assess(s.encounter, pf.standard_result(), run=held))):
+            with self.subTest(corti):
+                persist()
+                lines = section(reports.render_txt(reports.snapshot(s.encounter, 'draft')).decode('utf-8'),
+                                'REVIEW PARTICIPANTS')
+                self.assertEqual(lines[0], f'  - Corti · Corti · {corti}')
+                self.assertEqual(lines[-1], PREDATES)
+                self.assertFalse(any('only Corti' in line for line in lines), lines)
 
 
 @override_settings(**LIVE, **BOTH)

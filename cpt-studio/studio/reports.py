@@ -1058,7 +1058,10 @@ def _participants_section(snap):
             label = 'Refusal reason' if entry.get('refused') else 'Reason'
             lines.append(f'    {label}: {_indent(entry["reason"], "      ")}')
     if not snap.get('harness'):
-        lines.append('  This assessment was recorded before the review participants existed: only Corti was run.')
+        # what the record shows, never that Corti ran: the Corti line above says what became of its request, which may
+        # have been not run or held with nothing sent (refutation r1 parity-2)
+        lines.append('  This assessment was recorded before the review participants existed: Astra and Fable were not '
+                     'part of it.')
     return lines
 
 
