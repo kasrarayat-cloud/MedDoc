@@ -448,7 +448,11 @@ def _txt_second_review(doc, name, sections, api) -> list[Result]:
     out.append(Result(doc, name, 'txt.second_review.origin', 'pass' if marked == want else 'fail',
                       f'{len(marked)} numbered item(s) say they came from the second review, as persisted'
                       if marked == want else f'Origin line on {sorted(marked)}; the second review added {sorted(want)}'))
-    # 2. every alternative worded by its origin
+    # 2. every alternative of the provider's worded by its origin. A harness participant's alternative (origin
+    # 'participant') is worded as its participant's ('proposed by ...' or 'listed by ...'), never as the provider's or
+    # the second review's, so it is not counted here - and a participant alternative worded as either would add a line
+    # nothing expects, which fails (walk-tool repair W1: it was expected as a 'provider alternative' and failed a
+    # right report)
     heading = next((h for h in body if h.startswith('ALTERNATIVES')), None)
     seen = Counter()
     for line in body.get(heading, []) if heading else []:
@@ -456,7 +460,8 @@ def _txt_second_review(doc, name, sections, api) -> list[Result]:
         if match:
             seen[(match.group('code'), match.group('origin'))] += 1
     expected = Counter((str(p.get('code')), 'second-review alternative' if proposal_origin(p) == 'second_review'
-                        else 'provider alternative') for p in proposals if p.get('bucket') == 'alternative')
+                        else 'provider alternative') for p in proposals
+                       if p.get('bucket') == 'alternative' and proposal_origin(p) != 'participant')
     out.append(Result(doc, name, 'txt.second_review.alternatives', 'pass' if seen == expected else 'fail',
                       f'{sum(seen.values())} alternative(s), each worded by its origin' if seen == expected else
                       f'listed {sorted(seen.items())}; persisted {sorted(expected.items())}'))
