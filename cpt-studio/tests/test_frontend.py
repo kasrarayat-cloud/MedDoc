@@ -24,6 +24,19 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by', 'permissions', 'revision', 'context',
                'routing', 'pipeline', 'provider_runs', 'assessment', 'clarifications', 'decisions', 'readiness',
                'reports', 'activity'}
+# The harness@1 API contract the website renders (HARNESS.md 7): encounter detail's harness and permissions, each
+# proposal's harness fields, and the owner's trace.
+PARTICIPANTS = ['corti', 'astra', 'fable']
+PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes', 'unverified_quotes',
+                    'usage', 'usage_basis', 'estimated_cost_usd', 'returned_model'}
+PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
+                      'stopped'}
+RETRIEVAL_ITEM_KEYS = {'kind', 'source_key', 'release', 'label', 'value', 'page', 'section', 'text'}
+TRACE_RUN_KEYS = {'id', 'state', 'purpose', 'adapter_version', 'endpoint', 'requested_model', 'returned_model', 'request_id',
+                  'response_id', 'http_status', 'latency_ms', 'usage', 'usage_basis', 'estimated_cost_usd', 'request_sha256',
+                  'response_sha256', 'response_bytes', 'created_at', 'finished_at', 'error', 'reused_from', 'reading'}
+READING_KEYS = {'refused', 'problems', 'unverified_quotes', 'date_of_service', 'services', 'codes', 'not_coded', 'questions',
+                'extraction_issues'}
 
 
 class _Audit(HTMLParser):
@@ -198,6 +211,71 @@ class FixtureTests(SimpleTestCase):
         self.assertEqual({row['id'] for row in rows}, set(details))
         for row in rows:
             self.assertEqual(row['state'], details[row['id']]['state'])
+
+    def test_harness_fixtures_carry_the_api_contract(self):
+        harnessed = {name: doc for name, doc in self.detail_fixtures().items() if 'harness' in doc}
+        self.assertTrue({'encounter-harness-ready.json', 'encounter-harness-degraded.json',
+                         'encounter-processing.json'} <= set(harnessed))
+        for name, doc in harnessed.items():
+            with self.subTest(name):
+                self.assertEqual(set(doc['permissions']), {'can_review', 'is_owner'})
+                harness = doc['harness']
+                self.assertEqual(set(harness), {'participants', 'reference_validation', 'clarification', 'final'})
+                self.assertEqual([item['name'] for item in harness['participants']], PARTICIPANTS)
+                for item in harness['participants']:
+                    self.assertEqual(set(item), PARTICIPANT_KEYS)
+                    self.assertIn(item['state'], PARTICIPANT_STATES)
+                    self.assertTrue(item['run_id'] is None or UUID.match(item['run_id']))
+                reference = harness['reference_validation']
+                self.assertEqual(set(reference), {'state', 'codes_checked', 'passages', 'sources', 'not_connected'})
+                self.assertIn(reference['state'], {'waiting', 'done', 'not_run'})
+                self.assertEqual(harness['clarification'], {'open': doc['open_clarifications']})
+                self.assertEqual(harness['final'], {'state': doc['state'], 'label': doc['state_label']})
+                for proposal in (doc['assessment'] or {}).get('proposals', []):
+                    self.assertTrue(set(proposal['proposed_by']) <= set(PARTICIPANTS))
+                    self.assertIn(proposal['reference_check']['state'], {'passed', 'attention', 'not_verified'})
+                    for participant, position in proposal['participant_positions'].items():
+                        self.assertIn(participant, PARTICIPANTS[1:])
+                        self.assertEqual(set(position), {'position', 'detail', 'quote'})
+                        self.assertIn(position['position'], {'proposed', 'not_proposed', 'advised_not_to_code', 'not_run'})
+                        self.assertIn(position['quote'], doc['revision']['text'])  # a quote is the document's own text
+                    for item in proposal['retrieval']:
+                        self.assertEqual(set(item), RETRIEVAL_ITEM_KEYS)
+                        self.assertIn(item['kind'], {'fact', 'passage'})
+
+    def test_trace_fixture_carries_the_api_contract_and_quotes_the_document_exactly(self):
+        trace, ready = _fixture('trace-harness-ready.json'), _fixture('encounter-harness-ready.json')
+        text = ready['revision']['text']
+        self.assertEqual(set(trace), {'encounter', 'revision', 'participants', 'retrieval', 'reconciliation'})
+        self.assertEqual((trace['encounter']['id'], trace['revision']['id']), (ready['id'], ready['revision']['id']))
+        self.assertEqual([item['name'] for item in trace['participants']], PARTICIPANTS)
+        located = 0
+        for participant in trace['participants']:
+            for run in participant['runs']:
+                self.assertEqual(set(run), TRACE_RUN_KEYS)
+                if run['reading'] is None:
+                    continue
+                self.assertEqual(set(run['reading']), READING_KEYS)
+                reading = run['reading']
+                items = reading['services'] + reading['codes'] + reading['not_coded'] + reading['questions']
+                quotes = [quote for item in items for quote in item['evidence']]
+                self.assertEqual(sum(1 for quote in quotes if not quote['spans']), reading['unverified_quotes'])
+                for quote in quotes:
+                    for span in quote['spans']:
+                        self.assertEqual(text[span['start']:span['end']], span['text'])
+                        located += 1
+        self.assertGreater(located, 5)
+        for entry in trace['retrieval']:
+            self.assertEqual(set(entry), {'code', 'service_date', 'facts', 'passages', 'lookups', 'notes'})
+            for passage in entry['passages']:
+                self.assertEqual(set(passage), {'source_key', 'release', 'passage_key', 'section', 'page', 'topic',
+                                                'topic_value', 'sha256', 'text'})
+                self.assertEqual(hashlib.sha256(passage['text'].encode('utf-8')).hexdigest(), passage['sha256'])
+                self.assertTrue(passage['text'].startswith('SYNTHETIC FIXTURE TEXT, not CMS text'))
+        self.assertEqual([row['code'] for row in trace['reconciliation']],
+                         [proposal['code'] for proposal in ready['assessment']['proposals']])
+        for row in trace['reconciliation']:
+            self.assertEqual(set(row), {'code', 'family', 'status', 'proposed_by', 'positions', 'reference_check', 'approved'})
 
     def test_session_fixtures_label_agent_users(self):
         agent, human = _fixture('session-agent.json'), _fixture('session.json')

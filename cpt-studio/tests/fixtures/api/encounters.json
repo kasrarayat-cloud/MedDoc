@@ -1,6 +1,32 @@
 {
  "encounters": [
   {
+   "id": "c0000000-0000-4000-8000-00000000000a",
+   "title": "Upper endoscopy with a participant failure",
+   "state": "provider_unknown",
+   "state_label": "Provider outcome unknown",
+   "service_date": "2026-10-29",
+   "families": [
+    "Upper GI endoscopy (EGD, esophagoscopy, POEM)"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 0,
+   "created_at": "2026-10-30T09:10:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000009",
+   "title": "Colonoscopy with polypectomy and biopsy",
+   "state": "ready_for_review",
+   "state_label": "Ready for review",
+   "service_date": "2026-10-28",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "pdf",
+   "open_clarifications": 0,
+   "created_at": "2026-10-30T09:00:00Z"
+  },
+  {
    "id": "c0000000-0000-4000-8000-000000000008",
    "title": "Flexible sigmoidoscopy report",
    "state": "stopped",
