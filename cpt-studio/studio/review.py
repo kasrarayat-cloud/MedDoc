@@ -14,7 +14,7 @@ import importlib
 import json
 import logging
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from . import audit, candidates, participants
 from .gi.context import charge_date_problem
+from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
                      Proposal, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
@@ -1203,22 +1204,33 @@ def proposal_retrieval(proposal, retrieval):
     return out
 
 
+USD_PLACES = Decimal('0.0001')  # an estimate is shown to four decimals (API.md: "0.0270")
+
+
 def _usd(value):
-    """An estimate as USD text with four decimals; None for no estimate."""
+    """An estimate - studio.participants.pricing's {'estimated_usd': '0.027000', 'rates': ..., 'basis': ...} - as USD
+    text with four decimals, rounded half up as pricing rounds ('0.0270'); None for no estimate, or for one that is not
+    a finite amount. (Review read the key 'usd', which pricing never returns, so no cost was ever shown: refutation r1
+    FG-3, sends-4.)"""
     if isinstance(value, dict):
-        value = value.get('usd')
+        value = value.get('estimated_usd')
     if value is None or isinstance(value, bool):
         return None
-    if isinstance(value, (Decimal, int, float)):
-        return f'{Decimal(str(value)):.4f}'
-    return str(value)
+    try:
+        amount = Decimal(str(value))
+        return f'{amount.quantize(USD_PLACES, rounding=ROUND_HALF_UP):f}' if amount.is_finite() else None
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def estimated_cost(run):
     """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
-    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). None for Corti (its usage is in
-    credits, not USD), for a run that reported no usage (a reuse, a request not sent), where the pricing module is not
-    installed, and where it cannot price the usage: an estimate is informational, so it never fails the page or a
+    (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). A tool loop (HARNESS.md 11.2) is
+    several requests, so it is priced exchange by exchange (pricing.estimate_loop: Astra's long-context rate is a
+    property of one request), never as its usage summed over the exchanges - and only when the exchanges recorded add up
+    to the usage the run records. None for Corti (its usage is in credits, not USD), for a run that reported no usage (a
+    reuse, a request not sent), where the pricing module is not installed, where a loop's exchanges do not add up to its
+    usage, and where pricing cannot price the usage: an estimate is informational, so it never fails the page or a
     report (its error is logged)."""
     if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
         return None
@@ -1229,7 +1241,12 @@ def estimated_cost(run):
             raise
         return None
     try:
-        return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+        usages = [dict(exchange.usage or {}) for exchange in run.exchanges.order_by('turn')]
+        if run.usage_basis != participant_loop.LOOP_USAGE_BASIS and len(usages) <= 1:
+            return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+        if participant_loop.summed_usage([usage for usage in usages if usage]) != dict(run.usage):
+            return None
+        return _usd(pricing.estimate_loop(run.requested_model, usages))
     except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
         log.exception('the usage of run %s could not be priced', run.pk)
         return None

@@ -18,7 +18,7 @@ from django.test import TestCase, override_settings
 
 from studio import jobs, models, reports, review, serializers
 from tests.support import pipeline_factories as pf
-from tests.test_harness_api import fake_pricing, record
+from tests.test_harness_api import record
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE
@@ -95,8 +95,8 @@ class HandBuiltReportTests(TestCase):
         return run
 
     def txt(self, kind='draft'):
-        with mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
-            return reports.render_txt(reports.snapshot(self.s.encounter, kind)).decode('utf-8')
+        # the installed pricing module, never a stand-in (refutation r1 FG-3)
+        return reports.render_txt(reports.snapshot(self.s.encounter, kind)).decode('utf-8')
 
     def test_review_participants_section(self):
         lines = section(self.txt(), 'REVIEW PARTICIPANTS')
@@ -113,14 +113,21 @@ class HandBuiltReportTests(TestCase):
         fable = lines.index('  - Fable · Anthropic · answered; the reading was not used')
         self.assertIn('    Models: requested claude-fable-5-1 · returned claude-other-model', lines[fable:])
         self.assertIn('    Refusal reason: Answered by claude-other-model, not claude-fable-5-1.', lines[fable:])
+        self.assertIn('    Estimated cost: USD 0.0150 (estimated from published rates, not reconciled to an invoice)',
+                      lines[fable:])  # 1,000 in x $10/M + 100 out x $50/M
         self.assertIn('    Estimated cost: not estimated (Corti reports usage in credits, not USD)', lines[:astra])
 
     def test_a_run_with_usage_and_no_estimate_says_not_estimated_never_no_usage(self):
-        text = reports.render_txt(reports.snapshot(self.s.encounter, 'draft')).decode('utf-8')  # no pricing module
-        lines = section(text, 'REVIEW PARTICIPANTS')
-        astra = lines.index('  - Astra · OpenAI · answered; the reading was used')
-        self.assertIn('    Estimated cost: not estimated (no published rate could be applied to the usage reported)',
-                      lines[astra:astra + 9])
+        # usage the installed pricing module cannot price (a token count that is not a whole number), and no pricing
+        # module at all: either is "not estimated", never "no usage reported"
+        models.ProviderRun.objects.filter(pk=self.astra.pk).update(usage={'input_tokens': '2000', 'output_tokens': 400})
+        for modules in ({}, {'studio.participants.pricing': None}):
+            with self.subTest(modules=modules), mock.patch.dict(sys.modules, modules):
+                text = reports.render_txt(reports.snapshot(self.s.encounter, 'draft')).decode('utf-8')
+                lines = section(text, 'REVIEW PARTICIPANTS')
+                astra = lines.index('  - Astra · OpenAI · answered; the reading was used')
+                self.assertIn('    Estimated cost: not estimated (no published rate could be applied to the usage '
+                              'reported)', lines[astra:astra + 9])
 
     def test_reference_retrieval_section(self):
         lines = section(self.txt(), 'REFERENCE RETRIEVAL')
@@ -192,8 +199,7 @@ class HandBuiltReportTests(TestCase):
         self.s.encounter.refresh_from_db()
         api = json.loads(json.dumps(serializers.encounter_detail(self.s.encounter, self.s.membership(self.s.reviewer)),
                                     default=str))
-        with mock.patch.dict(sys.modules, {'studio.participants.pricing': fake_pricing()}):
-            snap = reports.snapshot(self.s.encounter, 'reviewed')
+        snap = reports.snapshot(self.s.encounter, 'reviewed')
         failed = [f'{r.check}: {r.detail}' for r in
                   vd.check_txt('harness', 'reviewed.txt', reports.render_txt(snap).decode('utf-8'), 'reviewed', api)
                   + vd.check_csv('harness', 'reviewed.csv', reports.render_csv(snap).decode('utf-8'), 'reviewed', api)
@@ -288,6 +294,12 @@ class RealDownloadsTests(HarnessCase):
         self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')
                             for line in usage), usage)
         self.assertTrue(TIME_QUOTE in text)
+        # each participant's first reading carries its estimated cost from the installed pricing module (HARNESS.md 6;
+        # refutation r1 sends-4): 1,200 in x $10/M + 300 out x $50/M
+        participants_section = section(text, 'REVIEW PARTICIPANTS')
+        astra = participants_section.index('  - Astra · OpenAI · answered; the reading was used')
+        self.assertIn('    Estimated cost: USD 0.0270 (estimated from published rates, not reconciled to an invoice)',
+                      participants_section[astra:astra + 10])
         # harness@2 (HARNESS.md 12.6): Astra's peer review is listed as one, also replayed, and the report has its
         # PEER REVIEW and PARTICIPANT REFERENCES sections; Fable's refused first reading took no part in peer review
         self.assertTrue(any(line.startswith('  - astra · REPLAY (recorded response, not live output) · succeeded')
