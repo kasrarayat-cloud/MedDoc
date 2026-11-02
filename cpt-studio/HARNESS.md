@@ -49,10 +49,25 @@ upload -> extract -> analyze -> predict (Corti) -> astra -> fable -> assess (ret
   every further send for the encounter until a member reconciles it.
 - Reconcile queues predict as today. Corti's identical request is then reused, and the chain resends only the
   participant whose outcome was unknown.
+  - **Superseded after refutation round 1 (sends-1):** reconciling Corti's run queues predict as before. Reconciling a
+    participant's run instead re-checks with Corti's run in use, as a context change that keeps the request does, when
+    that run answers the request the current context makes, the context is current (not one an earlier version
+    recorded), no other unknown outcome is open and no member date conflict holds the encounter; otherwise it queues
+    predict, as before (`jobs.reconcile`). Corti's request, sent or recorded not sent, is never attempted again behind
+    another run's reconciliation; only the participant the reconciliation released is sent again.
 - A request that FAILED is never sent again (`_failed_before`, keyed per provider).
+- A participant attempt recorded not sent is never retried behind a reconciliation or a context change (refutation
+  round 1, sends-1; `jobs._unsent_attempt`, asked after reuse and before the unknown-outcome block). When the identical
+  request's newest finished run went through the send doors and sent nothing, that attempt stands: nothing is sent, and
+  in phase 1 no run is added (a peer stage records a not-sent peer run for its assess #1). A run the unknown-outcome
+  block held, a member date conflict's hold, or a reservation the stale sweep settled still owes its attempt. Only an
+  addendum or a new upload makes a new request.
 
 **Reuse.** A succeeded run with the same (provider, adapter version, request sha256) in the same workspace is reused,
-nothing is sent, and the usage basis is `reused_retained_result_no_new_usage`.
+nothing is sent, and the usage basis is `reused_retained_result_no_new_usage`. **Amended after refutation round 1
+(sends-2):** a participant's run is reused only when it is the original run, recorded in the same mode, and its tool
+loop recorded its exchanges (`ProviderExchange` rows; `jobs._retained_answer`). A run the single-exchange send recorded
+before part B is no loop's answer, so it never stands in for the loop the identical request is owed.
 
 ## 3. What a participant receives (independence)
 
@@ -140,6 +155,14 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
 - **Passages.** The passages that govern those facts are retrieved from `ReferencePassage`. These are verbatim CMS text
   with source key, release, effective dates, page or section, and sha256.
 - **Trace.** Each lookup and each passage is recorded as a retrieval trace on the assessment (`Assessment.retrieval`).
+- **A retrieval that fails** (refutation round 1, parity-1) never stops the assessment, which is recorded as the engine
+  made it (I1, I10). Its retrieval is one entry `{'code': '', 'failed': True, 'notes': [...]}`
+  (`jobs.retrieval_failure`) whose note, CPT Studio's own sentence, says reference validation failed; the exception's
+  text is logged, never recorded. Retrieval only informs the reviewer and decides no status. No reader takes the entry
+  for a code checked: the API's reference validation is `failed`, with that note as its detail (never `not_run` or
+  `done`), the code cards and the owner's trace say so, and the reports' REFERENCE RETRIEVAL prints it as one line,
+  "Reference validation failed: ...". A code number is read as a number only when it is ASCII digits
+  (`passages._endoscopy_rules`), so a superscript or another script's digit neither raises nor meets a rule.
 
 **Retrievable passages in harness@1** (each read from its publisher's file, sha256-pinned):
 
@@ -200,8 +223,9 @@ Corti's usage is reported in credits, not USD.
 
 **Administrative trace view.** An owner-only trace view (`#/encounters/<id>/trace`, API `GET /api/encounters/<id>/trace`,
 which refuses with 403 for any role but owner) shows:
-- each participant's request identity, endpoints, models, usage, cost, raw-response hash and full normalized reading,
-  including its unverified quotes;
+- each participant's request identity, endpoints, models, usage, cost, raw-response hash and full normalized reading
+  (a code, modifier or service id it wrote that is not a short token is named by its length, I9), including its
+  unverified quotes;
 - the retrieval traces and the reconciliation table.
 
 **Design.** No CSS before byte 32785 of `styles.css` changes, and no new token is added (`tests/test_frontend.py`).
@@ -240,6 +264,14 @@ fallback is configured; Anthropic's server-side `fallbacks` is deliberately not 
 no redirects, `trust_env=False`, a bounded response read, and the exact raw bytes retained. CPT Studio's outcome
 classification (`not_sent` versus `unknown`) and raw-byte retention need control the SDKs' automatic retries and
 parsing take away. The image gains no dependency.
+
+**Every read is bounded by the exchange's deadline** (refutation round 1, HTTP-TRICKLE). A read timeout bounds each wait
+for a byte, never the whole read, so a response trickling in - its status line, a header or its body - could hold an
+exchange past its deadline and the stale sweep. Each exchange's connections are watched (`participants.http._Watch`,
+`_WatchedAdapter`): at the deadline the socket is shut down, so a blocked read returns at once. A read the deadline cuts
+is `unknown`, and its partial body is never taken for the answer; a request whose connection took the time that was left
+is never written, and is `not_sent`. Corti's adapter reads under the same watch, by import (the round's follow-up): a
+cut coding read is `unknown`, a cut token read sends no coding request (`not_sent`).
 
 ## 9. INVARIANTS (the claims the adversarial pass attacks)
 
@@ -354,6 +386,11 @@ CMS sources; nothing is fetched from the web, and no vendor web-search tool is e
   sha256, status, latency, usage, request ids.
 - The tool calls of each exchange are recorded as `ToolCall` rows.
 - Per-exchange read timeout: 240 s. The loop's deadline is 540 s, below `STALE_RUNNING_SECONDS`.
+- A member's Stop is observed before every later exchange, not only before the first (refutation round 1, sends-3): the
+  loop asks before it answers an exchange's tool calls and again before it sends the next one
+  (`loop.run(should_stop=)`), and a check that raises stops it too. A Stop ends the loop: the run is recorded failed and
+  sent, with the exchanges sent so far (it has no final answer, and its request is never sent again), and the stage
+  ends stopped; a Resume does not resend that request.
 - An exchange with an unknown outcome makes the run unknown. Nothing is retried automatically.
 - The thinking and reasoning items each vendor returns are passed back unchanged, as the vendors require:
   - Anthropic: append-only history, with thinking blocks unchanged;
@@ -477,7 +514,10 @@ predict -> astra -> fable -> assess #1 -> astra_peer -> fable_peer -> assess #2
   the final assessment read plus every confirmation of the revision. Nothing is sent.
 - **Stale sweep, Stop, Resume, reconcile:** the peer kinds are sending stages like `astra`/`fable`. Reconcile queues
   predict as today; identical requests are reused, so only a participant whose outcome was unknown (or that it blocked)
-  is sent again, and phase 2 then runs for the new phase-1 set.
+  is sent again, and phase 2 then runs for the new phase-1 set. **Superseded after refutation round 1 (sends-1):** a
+  reconcile is as section 2 now says - Corti's run queues predict; a participant's run re-checks with Corti's run in use
+  when that run answers the request, the context is current and nothing else blocks a send - and an attempt recorded
+  not sent, phase 1 or peer review, is never retried behind a reconcile or a context change.
 - **Worker deadlines:** a phase-1 or peer job's deadline covers `PARTICIPANT_LOOP_DEADLINE_SECONDS` (540 s) plus its
   own bookkeeping, below `STALE_RUNNING_SECONDS` (600 s); the installer's stop timeout (600 s) is above both.
 
@@ -525,8 +565,15 @@ model participant configured the record is today's ("not configured") and there 
 - `cpt_studio`: from assess #1: `open_questions` = its open clarifications as
   `{question_id: <clarification id>, scope, fact, family, proposal_key, question, reason}`; `held` and `excluded` =
   its proposals in those states as `{key, code, status, reasons: [non-pass check details]}`; labelled as a reading that
-  may be wrong (the prompt does this).
-- `frozen`: assess #1's `frozen` list plus `['cpt_studio', sha256 of canonical JSON of the cpt_studio dict]`.
+  may be wrong (the prompt does this). **Amended after refutation round 1 (pipeline Q2):** `question_id` is the id of
+  the revision's first clarification that asks the same thing - the same `review.question_identity` - so an identical
+  question keeps its id however many assessments ask it, and the identical peer request is reused, never sent again
+  (`jobs._question_ids`); fail closed, a question whose identity two open questions share keeps its own id.
+- `frozen`: assess #1's `frozen` list plus `['cpt_studio', sha256 of canonical JSON of the cpt_studio dict]`. **Amended
+  after refutation round 1 (IND-5):** only what the request shows is listed - the participant's own reading under its
+  own name, `corti` only when Corti's answer is shown, the other model only when its reading is shown, `revision` and
+  `cpt_studio` - and the peer builder refuses any other list, and any sha256 it can compute from what it shows that
+  differs (`peer.check_frozen`).
 
 ### 12.5 Candidates and confirmations (11.3)
 
@@ -644,8 +691,39 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
   additive fields (candidates' `phases` and `attestation`, the encounter's top-level `confirmations`, the trace's
   `assessments`, peer states `waiting`/`running`/`stopped`). A phase-1 report says why no peer review follows: none was
   read, a member date conflict holds the encounter, or no participant that read is configured now.
+- **Decisions (refutation round 1, Q1).** A decision is recorded only on its chain's final assessment
+  (`review.is_final`). While an assess #1 owes peer stages, no action is offered, a decision is refused (409) with "The
+  peer reviews of this document have not finished: a decision is recorded on its final assessment.", and readiness
+  lists "The peer reviews have not finished: decisions are recorded on the final assessment". Decisions carry between
+  final assessments only: persisting such an assess #1 neither carries nor invalidates one; the next final assessment
+  carries or invalidates the current decisions of `review.decision_holder` (the assessment the encounter's latest
+  decision was recorded or carried onto); a new revision invalidates them there. With no model participant configured
+  every assessment is final (I1).
+- **12.5, the binding (refutation round 1, EV-1), as R1 recorded it.** A confirmation is bound to its proposal's code
+  and identity - the fingerprint without its checks and status, never the full fingerprint, which moves whenever
+  another code is added beside it - read from the confirmation's clarification's own proposal row
+  (`jobs.confirmed_findings`). The engine reads it only for the one unconfirmed proposal with that code and identity,
+  wherever its key now is, and never for the proposal that holds its key now. One it cannot read is not read and is
+  listed in `confirmations.ignored` with why: it names no proposal (unbound), its proposal is not there (moved) or is
+  there twice, its passage is shorter than any quote CPT Studio locates (fewer than 8 non-space characters, EV-3), or
+  its value cannot be placed (EV-4, below). It fails closed, at the cost of some friction: the identity includes the
+  service date, so a confirmation made before the date itself is confirmed is not read in the next chain, and is listed
+  with why; the reviewer confirms it again.
+- **A confirmed extent or cannulation is read as the readers read it (refutation round 1, EV-4):** an extent is one of
+  routing's landmarks placed against the depth the procedure calls for, a cannulation successful or failed; short or
+  failed gives the incomplete result (`service.incomplete`, the 52/53 consideration); a value CPT Studio cannot place
+  is not read (`confirmations.ignored`) and the question stays open.
+- **I9 in the API (refutation round 1, IND-1).** A participant row's `codes` lists only the codes the engine lists
+  (`engine._listable`), its detail ending with the engine's count sentence. The trace serves a participant's code,
+  modifier or service id as given only when it is a short token (`participants.reading._token`), otherwise "a value of
+  N characters (not shown)".
+- **Cost (refutation round 1, FG-3, sends-4).** `estimated_cost_usd` is pricing's `estimated_usd` to four decimals,
+  rounded half up. A tool loop is priced per exchange (`pricing.estimate_loop`), never its summed usage as one request,
+  and has no estimate when its exchanges do not add up to its usage.
 - **Open, recorded here so it is not lost:** refutation round 1's findings (23, all reproduced) and the integration's
   own (a confirmation bound to a proposal key rather than its code - repaired, 12.5's binding; the HTTP read deadline
   checked only between chunks; decisions invalidated when an intermediate assess #1 re-runs without the peer-added
   codes) are being repaired. The peer requests' question ids are assess #1 row ids, so an identical question asked
-  again is sent again (cost).
+  again is sent again (cost). **Since repaired** (refutation round 1's repairs R1, R2 and R3 and their follow-ups,
+  2026-11-02): the findings; the HTTP read deadline (the participants' sends and Corti's, section 8); the decisions
+  (Q1, above); the question ids (pipeline Q2, 12.4).
