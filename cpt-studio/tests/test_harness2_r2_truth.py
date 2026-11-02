@@ -14,7 +14,8 @@ from django.test import Client, override_settings
 from studio import jobs, models, reports, review, serializers
 from studio.types import RawExchange
 from tests.support import factories as f
-from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase, Harness2Case, asks, facts_call, unknown
+from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
+                                          facts_call, unknown)
 from tests.test_pipeline_api import drain
 
 
@@ -340,3 +341,85 @@ class CostCoverageTests(Harness2Case):
         self.assertEqual(self.served_costs(encounter_id, run), (['0.0310'], '0.0310'))
         self.assertEqual(self.cost_line(encounter_id),
                          f'    Estimated cost: USD 0.0310 ({review.COST_BASIS})')
+
+
+# --- sends-r2-3: a tool result the participant was never sent is never shown as one it retrieved ---------------------
+
+class UndeliveredReferenceTests(Harness2Case):
+    """A tool call's refs are references its participant retrieved only when the exchange that carried its result to
+    the participant was sent (the next exchange, recorded and not 'not_sent'). The loop records the tool calls it
+    answered on exchange N even when it then ends without sending exchange N+1 - not sent, a Stop, a follow-up it could
+    not build, the deadline - so those results never reached the participant (refutation round 2, sends-r2-3: the API
+    and the reports listed all 8 refs as retrieved). The trace still shows every tool call CPT Studio answered."""
+
+    def astra_row(self, encounter_id):
+        rows = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        return next(row for row in rows if row['name'] == 'astra')
+
+    def references_lines(self, encounter_id, run):
+        text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
+        lines = text.split('\nPARTICIPANT REFERENCES\n', 1)[1].split('\n\n', 1)[0].splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith('  - Astra · independent reading · run '))
+        self.assertIn(str(run.pk), lines[start])
+        return lines[start + 1:start + 3]
+
+    def answered_refs(self, run):
+        (call,) = models.ToolCall.objects.filter(exchange__run=run)
+        self.assertEqual(call.exchange.turn, 1)
+        self.assertTrue(call.refs)  # CPT Studio executed it and recorded what it returned
+        return call.refs
+
+    def test_results_the_next_exchange_never_carried_are_not_retrieved(self):
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), NEVER_SENT]
+        encounter_id = self.create()
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((run.state, run.sent, [(item.turn, item.state) for item in run.exchanges.order_by('turn')]),
+                         ('failed', True, [(1, 'succeeded'), (2, 'not_sent')]))
+        refs = self.answered_refs(run)
+        self.assertEqual(review.participant_references(run)['retrieved'], [])
+        row = self.astra_row(encounter_id)
+        self.assertEqual((row['run_id'], row['references']['retrieved']), (str(run.pk), []))
+        self.assertEqual(self.references_lines(encounter_id, run), ['    Retrieved: none', '    Used: none'])
+        # the owner's trace keeps every tool call CPT Studio answered, with the refs it returned
+        owner = Client()
+        owner.force_login(f.member(self.ws, f.user('owner_sends_r2_3'), role=models.Membership.OWNER))
+        trace = owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        (traced,) = [item for participant in trace['participants'] for item in participant['runs']
+                     if item['id'] == str(run.pk)]
+        self.assertEqual(traced['exchanges'][0]['tool_calls'][0]['refs'], refs)
+
+    def test_results_answered_while_a_member_stopped_the_loop_are_not_retrieved(self):
+        encounter_id = self.create()
+        adapter = self.adapters['astra']
+        original = adapter.send_loop
+        adapter.first = [asks('astra', facts_call('call_astra_1', ['99213'])), answered('astra', ASTRA_READING)]
+
+        def send_loop(request, *, execute_tool, **kwargs):
+            def tool(name, arguments):
+                out = execute_tool(name, arguments)
+                jobs.stop_encounter(models.Encounter.objects.get(pk=encounter_id), self.reviewer)  # a member's Stop
+                return out
+            return original(request, execute_tool=tool, **kwargs)
+        adapter.send_loop = send_loop
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual([(item.turn, item.state) for item in run.exchanges.order_by('turn')], [(1, 'succeeded')])
+        self.answered_refs(run)
+        self.assertEqual(review.participant_references(run)['retrieved'], [])
+
+    def assertCarried(self, second):
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), second]
+        encounter_id = self.create()
+        drain()
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual(run.exchanges.get(turn=2).state, 'succeeded' if isinstance(second, bytes) else 'unknown')
+        refs = self.answered_refs(run)
+        self.assertEqual([item['ref'] for item in review.participant_references(run)['retrieved']], refs)
+
+    def test_results_the_answering_exchange_carried_are_retrieved(self):
+        self.assertCarried(answered('astra', ASTRA_READING))
+
+    def test_results_an_exchange_sent_with_an_unknown_outcome_carried_are_retrieved(self):
+        # the request carrying them was written to the vendor: they were sent to the participant
+        self.assertCarried(unknown())

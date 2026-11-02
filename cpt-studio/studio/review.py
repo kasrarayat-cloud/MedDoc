@@ -1480,21 +1480,37 @@ def stored_peer_review(run):
     return peer_reading(run)
 
 
+def _delivered_turns(run):
+    """The turns of the loop that answered ``run`` (jobs.loop_run) whose tool results reached its participant: each one
+    whose next exchange - the request that carried those results - was recorded and was not 'not_sent'. A loop that
+    ends once CPT Studio has answered an exchange's tool calls, sending nothing more (the next exchange not sent, a
+    member's Stop, a follow-up it could not build, the deadline), keeps the calls it answered on that exchange's record
+    (studio.participants.loop), and their results never reached the participant."""
+    from .jobs import loop_run  # local import: jobs imports this module
+
+    states = dict(loop_run(run).exchanges.values_list('turn', 'state'))
+    return {turn for turn in states if states.get(turn + 1) not in (None, ProviderRun.NOT_SENT)}
+
+
 def participant_references(run, review=None):
     """{'retrieved', 'used'} of one participant run (HARNESS.md 11.2, 12.6): each ref the tool calls of its own loop
-    returned (run_tool_calls: a reuse's are the run's it reuses), once, with its kind (fact or passage), the source,
-    release and effective window its tool result stated - read by the executor's own reader of a stored result,
-    studio.reference.tools.retrieved_references, '' where it states none - and the tool; then each reference the run's
-    answer says it used, with ``retrieved``: the reader's own check against those refs (ReferenceUse.retrieved), never
-    the participant's claim (``used`` with retrieved false is cited_not_retrieved). ``review``: the run's reading or
-    peer review when already read. Empty lists for no run."""
+    returned to its participant (run_tool_calls: a reuse's are the run's it reuses; a call whose result the loop never
+    sent - no later exchange carried it, _delivered_turns - is none of its references: refutation round 2, sends-r2-3),
+    once, with its kind (fact or passage), the source, release and effective window its tool result stated - read by
+    the executor's own reader of a stored result, studio.reference.tools.retrieved_references, '' where it states none -
+    and the tool; then each reference the run's answer says it used, with ``retrieved``: the reader's own check against
+    those refs (ReferenceUse.retrieved), never the participant's claim (``used`` with retrieved false is
+    cited_not_retrieved). ``review``: the run's reading or peer review when already read. Empty lists for no run."""
     from .reference.tools import retrieved_references  # local import: the tools module reads the reference store
 
     out = {'retrieved': [], 'used': []}
     if run is None:
         return out
     seen = set()
+    delivered = _delivered_turns(run)
     for call in run_tool_calls(run):
+        if call.exchange.turn not in delivered:
+            continue  # answered by CPT Studio, never sent to the participant (refutation round 2, sends-r2-3)
         stated = {}
         for item in retrieved_references(call.result):
             stated.setdefault(item['ref'], item)

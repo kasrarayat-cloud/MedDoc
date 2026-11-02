@@ -302,7 +302,10 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 `retrieved` lists every ref that run's own tool calls returned (a `fact:<source>:<code>:<field>` ref or a passage key,
 with the source, release and effective window its tool result stated - read by the CMS tool executor's own reader of a
 stored result - '' where it stated none, and the tool; a run that reused a retained answer has the tool calls of the
-run it reused, which answered for it), and `used` every reference the run's answer says it relied on, with `retrieved`
+run it reused, which answered for it; a tool call whose result the participant was never sent - the loop ended after
+CPT Studio answered it, its next exchange not sent or never made (a member's Stop, a follow-up it could not build, the
+deadline) - is not listed: refutation round 2, sends-r2-3; the trace's `exchanges` keep every tool call CPT Studio
+answered), and `used` every reference the run's answer says it relied on, with `retrieved`
 CPT Studio's check against that same run's tool results, as the reader recorded it (`retrieved: false` is a reference
 cited but never retrieved, never shown as retrieved; one participant's or phase's retrieval never counts for
 another's). `harness.reference_validation` stays the reconciliation's retrieval only. The phase, each run's reading and
