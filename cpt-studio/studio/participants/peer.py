@@ -89,6 +89,15 @@ MODIFIER = re.compile(r'[A-Z0-9]{2}')  # a modifier as the engine states a parti
 SHORT_ID = re.compile(r'[A-Za-z0-9]{1,8}')  # an id: letters and digits only, at most 8 characters
 
 
+def code_shaped(value) -> bool:
+    """Whether ``value`` is in a code's shape: the five characters CPT Studio lists a CPT code in (reading.CODE,
+    serializers.CODE_SHAPE: four digits and a digit or capital letter) or an HCPCS Level II code's (HCPCS: a capital
+    letter and four digits). The one rule (refutation round 4, the session's D9) by which a code a model participant -
+    or Corti - wrote is shown as given (shown_code: a peer request, the owner's trace) and by which the engine reads a
+    participant's code at all (engine.participant_listable): no other value is listed or shown as a code."""
+    return isinstance(value, str) and bool(reading.CODE.fullmatch(value) or HCPCS.fullmatch(value))
+
+
 def shown_code(value):
     """A code another model - or Corti - wrote, as a peer request shows it to the other vendor: as given only in a
     code's shape - the five characters CPT Studio lists a CPT code in (reading.CODE, serializers.CODE_SHAPE: four digits
@@ -98,7 +107,7 @@ def shown_code(value):
     both vendors, and any piece of a descriptor cut to 20 characters; text in a code field may carry a CPT descriptor,
     which CPT Studio never sends (I9). '' (no code named) stays ''; a value that is not a string is returned as it
     is."""
-    if not isinstance(value, str) or reading.CODE.fullmatch(value) or HCPCS.fullmatch(value):
+    if not isinstance(value, str) or code_shaped(value):
         return value
     return withheld(value)
 

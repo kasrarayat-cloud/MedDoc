@@ -2773,17 +2773,52 @@ def _listable(code) -> bool:
     return isinstance(code, str) and 0 < len(code) <= MAX_LISTED_CODE
 
 
+def participant_listable(code) -> bool:
+    """Whether the engine reads a model participant's ``code`` at all: only in a code's shape, a CPT code's or an HCPCS
+    Level II code's (participants.peer.code_shaped, the one rule by which a peer request and the owner's trace show a
+    code as given; refutation round 4, the session's D9). Any other code a participant gives is counted, as the proposal
+    provider's codes that cannot be listed are, and never listed: no proposal, alternative, position, reference lookup
+    or summary names it, so it reaches neither the reconciliation, the retrieval, the page nor the reports (shapes-1:
+    'W/LES(S)' passed _listable, the proposal provider's rule of 1 to MAX_LISTED_CODE characters, and reached all of
+    them as a participant's alternative). The proposal provider's own rule is I1's and does not change."""
+    from studio.participants.peer import code_shaped  # local: the peer module's rule (it imports the HTTP layer)
+
+    return code_shaped(code)
+
+
+def participant_unlisted_codes(count: int, who: str = 'It') -> str:
+    """The sentence for codes a model participant gave that the engine does not read (participant_listable): counted,
+    never named or truncated. The proposal provider's (checks.unlisted_codes: "empty, or longer than 10 characters") is
+    not true of a participant's 'W/LES(S)', 8 characters in no code's shape."""
+    pronoun = 'It is' if count == 1 else 'They are'
+    return (f'{who} returned {checks.plural(count, "code")} that cannot be listed: not in the shape of a CPT code (four '
+            'digits, then a digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four '
+            f'digits). {pronoun} not shown and never truncated.')
+
+
+# A participant's position on a code only the proposal provider can list - one in no code's shape - when the participant
+# gave that very value: its entry is not read (participant_listable), so neither "proposed" nor "did not propose" is
+# said of it, and the value is never named as the participant's.
+UNREAD_CODE_POSITION = ("{label} gave this code in an entry CPT Studio does not read: a participant's code is read only "
+                        "in the shape of a CPT or HCPCS code, and this code is not in one.")
+UNREAD_PEER_POSITION = ("In peer review, {label} took a position on this code, which CPT Studio does not read: a "
+                        "participant's code is read only in the shape of a CPT or HCPCS code, and this code is not in "
+                        "one.")
+
+
 def participant_codes(participants: Sequence[ParticipantInput]) -> tuple[str, ...]:
     """The codes an assessment with ``participants`` may look up beside the proposal provider's (the assess stage
-    prefetches the union for the bounded child, which has no database): every listable code a used reading, or a used
-    peer review's additional codes, proposes with at least one located quote. A superset of what _Harness.merge reads;
-    never a code it would miss. Inputs read as _Harness reads them (_usable_inputs): a malformed one proposes nothing."""
+    prefetches the union for the bounded child, which has no database): every code in a code's shape
+    (participant_listable) a used reading, or a used peer review's additional codes, proposes with at least one located
+    quote. A superset of what _Harness.merge reads; never a code it would miss. Inputs read as _Harness reads them
+    (_usable_inputs): a malformed one proposes nothing."""
     found = set()
     for p in _usable_inputs(participants):
         entries = list(p.reading.codes) if p.state == 'read' else []
         if p.state == 'read' and p.peer_state == 'read':
             entries += list(p.peer.additional_codes)
-        found |= {item.code for item in entries if _listable(item.code) and any(q.spans for q in item.evidence)}
+        found |= {item.code for item in entries
+                  if participant_listable(item.code) and any(q.spans for q in item.evidence)}
     return tuple(sorted(found))
 
 
@@ -2934,6 +2969,13 @@ def _usable_inputs(participants: Sequence[ParticipantInput]) -> tuple[Participan
                  for name, entries in sorted(given.items(), key=lambda item: order[item[0]]))
 
 
+def _unread(store: dict, name: str, value) -> None:
+    """Keep ``value``, a code participant ``name`` gave that is not read (participant_listable), in ``store``: only to
+    word its position on the proposal provider's own code of that value (_Harness.positions), never to list it."""
+    if isinstance(value, str) and value:
+        store.setdefault(name, set()).add(value)
+
+
 @dataclass(frozen=True)
 class _Said:
     """One participant's entry about one code, with its quotes' spans as CPT Studio verified them: ``good`` are exact
@@ -2991,24 +3033,35 @@ class _Harness:
         self.stances: dict[str, dict[str, list[_Said]]] = {}  # code -> participant -> its peer-review positions
         self.unlisted: dict[str, int] = {}
         self.peer_unlisted: dict[str, int] = {}
+        # a participant's code is read only in a code's shape (participant_listable; refutation round 4, shapes-1): any
+        # other it gave is counted (codes) and kept only as a value it gave, unread (unread, unread_stances), so that its
+        # position on the proposal provider's own code of that value is never said to be "did not propose"
+        self.unread: dict[str, set] = {}
+        self.unread_stances: dict[str, set] = {}
         for name, reading in self.readings.items():
             for item in reading.codes:
-                if not _listable(item.code):
+                if not participant_listable(item.code):
                     self.unlisted[name] = self.unlisted.get(name, 0) + 1
+                    _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
             for item in reading.not_coded:
-                if _listable(item.code):
+                if participant_listable(item.code):
                     self.advised.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
+                else:
+                    _unread(self.unread, name, item.code)
         for name, peer in self.peers.items():
             for item in peer.additional_codes:
-                if not _listable(item.code):
+                if not participant_listable(item.code):
                     self.peer_unlisted[name] = self.peer_unlisted.get(name, 0) + 1
+                    _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))
             for item in peer.positions:
-                if _listable(item.code):
+                if participant_listable(item.code):
                     self.stances.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))
+                else:
+                    _unread(self.unread_stances, name, item.code)
         self._missing: Optional[list[dict]] = None
 
     def _said(self, entry, phase: str = INDEPENDENT) -> _Said:
@@ -3224,7 +3277,9 @@ class _Harness:
                          'detail': f'{label} advises not to code {code}: {_reason_words(first.entry.reason)}.',
                          'quote': checks.excerpt(first.good[0].text) if first.good else ''}
             else:
-                entry = {'position': 'not_proposed', 'detail': f'{label} did not propose {code}.', 'quote': ''}
+                entry = {'position': 'not_proposed', 'quote': '',
+                         'detail': (UNREAD_CODE_POSITION.format(label=label) if code in self.unread.get(p.provider, ())
+                                    else f'{label} did not propose {code}.')}
             if p.peer_state:
                 entry['peer'] = self._peer_position(p, code)
             out[p.provider] = entry
@@ -3241,8 +3296,10 @@ class _Harness:
                   or next((x for x in known if x.entry.position == 'supports'), None)
                   or next((x for x in known if x.entry.position == 'cannot_tell'), None))
         if chosen is None:
-            return {'position': 'no_position', 'detail': f'{label} took no position on {code} in peer review.',
-                    'quote': ''}
+            return {'position': 'no_position', 'quote': '',
+                    'detail': (UNREAD_PEER_POSITION.format(label=label)
+                               if code in self.unread_stances.get(p.provider, ())
+                               else f'{label} took no position on {code} in peer review.')}
         position = chosen.entry.position
         detail = f'In peer review, {label} {PEER_POSITION_WORDS[position]} {code}' + (
             ', quoting the document verbatim.' if chosen.good
@@ -3303,7 +3360,7 @@ class _Harness:
         else:
             parts.append('It listed no additional code.')
         if self.peer_unlisted.get(p.provider):
-            parts.append(checks.unlisted_codes(self.peer_unlisted[p.provider], MAX_LISTED_CODE, 'In peer review it'))
+            parts.append(participant_unlisted_codes(self.peer_unlisted[p.provider], 'In peer review it'))
         if peer.answers:
             parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is read only as '
                          'the passage a reviewer confirms.')
@@ -3354,7 +3411,7 @@ class _Harness:
         else:
             parts.append('It proposed no code.')
         if self.unlisted.get(p.provider):
-            parts.append(checks.unlisted_codes(self.unlisted[p.provider], MAX_LISTED_CODE, 'It'))
+            parts.append(participant_unlisted_codes(self.unlisted[p.provider], 'It'))
         if reading.unverified_quotes:
             one = reading.unverified_quotes == 1
             parts.append(f'{checks.plural(reading.unverified_quotes, "quote")} it gave {"was" if one else "were"} not '
