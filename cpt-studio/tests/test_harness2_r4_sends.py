@@ -202,7 +202,9 @@ class HoldsProviderLockTests(TransactionTestCase):
         self.addCleanup(unlock)
 
     def test_a_lock_another_session_holds_is_not_this_session_s(self):
-        self.assertFalse(jobs._holds_provider_lock())  # nobody holds it
+        # this session has taken no lock (pg_locks lists every database's locks on the cluster: only the pid tells
+        # this session's apart)
+        self.assertFalse(jobs._holds_provider_lock())
         self.assertTrue(self.other.try_lock())
         try:
             self.assertFalse(jobs._holds_provider_lock(), "another session's provider lock was read as this session's")
