@@ -20,8 +20,8 @@ from django.test import SimpleTestCase
 from studio.gi import context as gi_context
 from studio.gi import detect
 from studio.reference.store import InMemoryReferenceLookup
-from studio.types import (ConfirmedFinding, EvidenceSpan, NormalizedResponse, ProviderCode, ReferenceSourceInfo,
-                          canonical_json, sha256_json)
+from studio.types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, ProviderCode,
+                          ReferenceSourceInfo, canonical_json, sha256_json)
 from studio.validation import checks, engine
 from studio.validation.engine import assess
 
@@ -216,7 +216,7 @@ class ConfirmedFactTests(SimpleTestCase):
         self.assertIsNotNone(encounter_check(after, 'confirmations.applied'))
 
     def test_a_confirmed_value_never_replaces_a_value_the_readers_read(self):
-        documented = checks.FactState('extent', engine.Fact('extent', 'cecum', 'document'), '')
+        documented = checks.FactState('extent', Fact('extent', 'cecum', 'document'), '')
         missing = checks.FactState('extent', None, 'missing')
         answer = engine._Answer('service', 'gi.colonoscopy', '', '', 'extent', 'terminal ileum',
                                 (span(TWO_EXTENTS, LAND),), ('conf-1',), WORDS)
@@ -391,8 +391,9 @@ class GuardTests(SimpleTestCase):
         base = confirm(TWO_EXTENTS, LAND, fact='extent', family='gi.colonoscopy', key='sel:0', value='cecum')
         before = run(TWO_EXTENTS, COLON_CODES)
         for changed, why in (({'confirmed_by': '  '}, 'it names no reviewer'),
-                             ({'located_by': ()}, 'it names no participant CPT Studio knows'),
-                             ({'located_by': ('gemini',)}, 'it names no participant CPT Studio knows'),
+                             ({'located_by': ()}, 'it names neither Astra nor Fable'),
+                             ({'located_by': ('gemini',)}, 'it names neither Astra nor Fable'),
+                             ({'located_by': ('corti',)}, 'it names neither Astra nor Fable'),  # 11.3: no candidate
                              ({'confirmation_id': ''}, 'it has no confirmation id'),
                              ({'value': ' '}, 'it confirms no value'),
                              ({'evidence': ()}, 'it cites no passage'),

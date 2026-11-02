@@ -3352,7 +3352,9 @@ CONFIRMABLE_FACTS = tuple(sorted({fact for profile in PROFILES.values() for fact
 # (the reading status the status path then words: a plain 'not performed' is a denial).
 NOT_PERFORMED_VALUES = {'not_performed': 'negated', 'negated': 'negated', 'cancelled': 'cancelled',
                         'planned': 'planned', 'historical': 'historical'}
-LOCATORS = {PRIMARY: 'Corti', **PARTICIPANT_LABELS}  # the participants whose quote a confirmed passage can be
+# The participants whose quote a confirmed passage can be: the model participants, whose frozen readings and peer-review
+# answers are the only candidates (HARNESS.md 11.3, step 1) - so with none configured nothing is ever confirmed (I1).
+LOCATORS = dict(PARTICIPANT_LABELS)
 NOT_OPEN = ('it answers no question this assessment asks (the question is not open here, or its proposal is held for '
             'another reason or not at all)')
 DISAGREEING = 'confirmations of the same question disagree, so none of them is read and the question stays open'
@@ -3529,7 +3531,7 @@ class _Confirmations:
                     f'encounter ({", ".join(NOT_PERFORMED_VALUES)})')
         if not isinstance(c.located_by, (tuple, list)) or not c.located_by \
                 or not all(isinstance(name, str) and name in LOCATORS for name in c.located_by):
-            return 'it names no participant CPT Studio knows as the one that located its passage'
+            return 'it names neither Astra nor Fable as the participant that located its passage'
         if not c.confirmed_by.strip():
             return 'it names no reviewer'
         if not isinstance(c.evidence, (tuple, list)) or not c.evidence \
