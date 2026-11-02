@@ -340,6 +340,20 @@ def _provider_run_json(run):
             'purpose': run.purpose, 'scope_items': list((run.scope or {}).get('items', []))}
 
 
+def confirmation_json(confirmation):
+    """A FindingConfirmation (HARNESS.md 11.3, 12.6): the fact a reviewer confirmed from a participant's located
+    passage, with that passage, who located it, who confirmed it and the attestation recorded - a confirmed fact,
+    never a decision on a code."""
+    reviewer = confirmation.confirmed_by
+    return {'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
+            'scope': confirmation.scope, 'fact': confirmation.fact, 'family': confirmation.family,
+            'proposal_key': confirmation.proposal_key, 'value': confirmation.value,
+            'spans': list(confirmation.spans or []), 'located_by': list(confirmation.located_by or []),
+            'runs': list(confirmation.runs or []), 'confirmed_by': reviewer.label(),
+            'confirmed_by_kind': reviewer.actor_kind, 'attestation': confirmation.attestation,
+            'created_at': _iso(confirmation.created_at), 'revision_number': confirmation.revision.number}
+
+
 def _report_json(report):
     return {'id': str(report.pk), 'kind': report.kind, 'fmt': report.fmt, 'filename': report.filename,
             'sha256': report.sha256, 'generated_at': _iso(report.generated_at),
