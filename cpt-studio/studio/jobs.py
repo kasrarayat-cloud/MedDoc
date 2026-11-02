@@ -1803,10 +1803,10 @@ def _confirmed_span(span, text):
                         quoted if isinstance(quoted, str) else '', exact, page if type(page) is int else None)
 
 
-RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages it "
-                    "retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's checks "
-                    "read the CMS facts before that and stand as shown; retrieval only informs the reviewer and decides "
-                    "no status, so the assessment stands as made.")
+RETRIEVAL_FAILED = ("Reference validation failed: CPT Studio could not record which CMS reference facts and passages "
+                    "it retrieved for this assessment's codes ({error}, logged), so none is listed here. Each code's "
+                    "checks read the CMS facts before that and stand as shown; retrieval only informs the reviewer "
+                    "and decides no status, so the assessment stands as made.")
 
 
 def _retrieval(result, service_date, reference, prefetched):
