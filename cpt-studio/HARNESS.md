@@ -1110,7 +1110,9 @@ kept:
   bounded second review listed as an alternative: "Corti's second review also listed this code, as an alternative; see
   Alternatives.").
 - **truth-8 (amends 12.6):** `codes_added` holds only codes a participant first proposed in peer review
-  (`serializers.peer_code_phases`, the engine's `support['phases']`); a code repeated there is named in the detail
+  (`serializers.peer_code_phases`, "the engine's `support['phases']`" (superseded, round 5: the session's D12 - read
+  only from the participant's entries that located a quote, as the engine's phases are, so a code no entry of either
+  phase located is neither added nor repeated: "listed in peer review")); a code repeated there is named in the detail
   ("It listed 45385 again in peer review; it first proposed it in its independent reading."), and the reports and the
   trace word each additional code by its `phase`.
 - **truth-9 (amends 12.6):** a final phase-1 assessment serves the peer state `not_sent` with why (a member date

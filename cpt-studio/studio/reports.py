@@ -27,6 +27,7 @@ from .participants.peer import code_shaped
 from .serializers import failure_note, peer_code_phases, retrieval_failed, shown_used
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
+from .validation.engine import LISTED_NOT_PROPOSED
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
@@ -195,7 +196,7 @@ def _reinstated(proposal, decision):
 
 def _item(proposal, decision, kind, text):
     exact = review.exact_evidence(proposal.evidence, text)
-    return {
+    item = {
         'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind),
         'bucket': proposal.bucket, 'code': proposal.code, 'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
@@ -213,6 +214,10 @@ def _item(proposal, decision, kind, text):
         # who proposed it and what the CMS reference checks found, never the decision above (I4)
         'proposed_by': review.proposed_by(proposal), 'reference_check': review.reference_check(proposal),
     }
+    listed = review.listed_by(proposal)
+    if listed:  # a participant's alternative's listers (refutation round 5, D12); none in a Corti-only snapshot
+        item['listed_by'] = listed
+    return item
 
 
 def _support(support, text):
@@ -587,9 +592,10 @@ def _peer_items(assessment, peer_review, text, index, name='', record=None):
     positions = [{'code': item.code if code_shaped(item.code) else '', 'position': item.position,
                   'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
     # each additional code with the phase its participant first proposed it in (serializers.peer_code_phases;
-    # refutation round 2, truth-8): '' for a code CPT Studio does not read
+    # refutation round 2, truth-8): '' for a code CPT Studio does not read, and for one it proposed in neither phase -
+    # no entry of either located a quote (refutation round 5, the session's D12)
     shaped = [item.code if code_shaped(item.code) else '' for item in peer_review.additional_codes]
-    phases = peer_code_phases(assessment, name, record, [code for code in shaped if code])
+    phases = peer_code_phases(peer_review, record)
     added = [{'code': code, 'units': item.units if type(item.units) is int else 0,
               'evidence': _located(item.evidence, text, index), 'phase': phases.get(code, '')}
              for item, code in zip(peer_review.additional_codes, shaped)]
@@ -813,10 +819,32 @@ def _item_block(number, item, kind):
     return lines + _harness_lines(item)
 
 
-def _proposers(item):
-    """Who proposed the code, by label ('Corti, Astra'); 'not recorded' for a proposal that names none."""
+def _labels(names):
     labels = {name: label for name, label, _, _ in review.HARNESS_PARTICIPANTS}
-    return ', '.join(labels.get(name, name) for name in item.get('proposed_by') or []) or 'not recorded'
+    return [labels.get(name, name) for name in names or []]
+
+
+def _listed_words(item):
+    """'listed by Astra with no quote found verbatim in the document, so not proposed' for the participants that only
+    listed a participant's alternative's code (review.listed_by; refutation round 5, the session's D12); '' for none."""
+    listed = _labels(item.get('listed_by'))
+    return f'listed by {_join_labels(listed)} {LISTED_NOT_PROPOSED}' if listed else ''
+
+
+def _join_labels(labels):
+    return labels[0] if len(labels) == 1 else f'{", ".join(labels[:-1])} and {labels[-1]}'
+
+
+def _proposers(item):
+    """Who proposed the code, by label ('Corti, Astra'), and apart from them the participants that only listed it
+    ('none; listed by Astra with no quote found verbatim in the document, so not proposed': refutation round 5, the
+    session's D12 - "Astra" was printed as the proposer of a code its reading only listed); 'not recorded' for a
+    proposal that names neither."""
+    named = ', '.join(_labels(item.get('proposed_by')))
+    listed = _listed_words(item)
+    if listed:
+        return f'{named}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if named else f'none; {listed}'
+    return named or 'not recorded'
 
 
 def _harness_lines(item, pad='     '):
@@ -916,12 +944,18 @@ def _excluded_section(snap):
 
 def _alternative_words(item):
     """How an informational code came to be listed: a code the bounded second review listed, one a harness participant
-    proposed that CPT Studio did not add as a proposal (origin participant), or a provider alternative."""
+    proposed that CPT Studio did not add as a proposal (origin participant) - or one a participant only listed, with no
+    quote found verbatim, which it did not propose (refutation round 5, the session's D12) - or a provider
+    alternative."""
     origin = (item.get('support') or {}).get('origin')
     if origin == 'second_review':
         return 'second-review alternative'
     if origin == 'participant':
-        return f'proposed by {_proposers(item)}, not added as a proposal'
+        named, listed = ', '.join(_labels(item.get('proposed_by'))), _listed_words(item)
+        if listed and not named:
+            return listed
+        said = f'proposed by {named or "not recorded"}, not added as a proposal'
+        return f'{said}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if listed else said
     return 'provider alternative'
 
 

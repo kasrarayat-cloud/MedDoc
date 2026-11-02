@@ -83,9 +83,7 @@
      "state": "done",
      "detail": "Answered in peer review, after its first reading was frozen; the review was used. 1 of its quotes was not found in the document, so it is never used as evidence.",
      "run_id": "e2d00000-0000-4000-8000-000000000004",
-     "codes_added": [
-      "45381"
-     ],
+     "codes_added": [],
      "unverified_quotes": 1
     },
     "references": {
@@ -522,8 +520,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "f205d994e86342ef3a082a83237a40ddd8d1da74a7487432e589740e0ab6becf",
-   "response_sha256": "c907ea2d2a33531f46d189bddd099f8b72260956e3070e15996cd8fa89444bfb",
+   "request_sha256": "7ea52e7fc466193971e081e88bedb022cd1cb4c639096c242e5b2e64e8aa1749",
+   "response_sha256": "7616afda560e528022fb601fdcdb061c87f9a38bfecb68506bd1cfacbb1b10e9",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -545,8 +543,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "28a1f2371833bf6eefc0cdb9a574782608773ab5ee51a6bb05008d46ea3bacec",
-   "response_sha256": "29ab51aba7cbda618e8ab9fac3720b64b32b68641dee9311c5d8da0682cc21bf",
+   "request_sha256": "8f1d18a198ff1ce752b4025835d88ead081d7f325f343939cb4c896c12dbc09a",
+   "response_sha256": "d4d8a71f23f8aa6303f4c82255f0360c662ac7e82486c535abc0e2302c71a637",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -767,6 +765,7 @@
      "astra",
      "fable"
     ],
+    "listed_by": [],
     "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
@@ -994,6 +993,7 @@
      "astra",
      "fable"
     ],
+    "listed_by": [],
     "corti_relation": "none",
     "participant_positions": {
      "astra": {
@@ -1031,14 +1031,14 @@
     "profile_version": "gi.colonoscopy@1",
     "status": "informational",
     "status_label": "Not selected",
-    "exclusion_reason": "Proposed by Astra after peer review, but not added as a proposal: none of its quotes was found verbatim in the document text, and a quote that is not found is never evidence. Alternatives cannot be approved.",
+    "exclusion_reason": "Listed by Astra with no quote found verbatim in the document, so not proposed, and not added as a proposal: none of its quotes was found verbatim in the document text, and a quote that is not found is never evidence. Alternatives cannot be approved.",
     "reinstatable": false,
     "descriptor": {
      "status": "withheld",
      "label": "Description withheld — no licensed CPT descriptor is connected."
     },
     "evidence": [],
-    "rationale": "Proposed by Astra after peer review; not added as a proposal: none of its quotes was found verbatim in the document text, and a quote that is not found is never evidence. Informational only.",
+    "rationale": "Listed by Astra with no quote found verbatim in the document, so not proposed; not added as a proposal: none of its quotes was found verbatim in the document text, and a quote that is not found is never evidence. Informational only.",
     "units": 1,
     "checks": [
      {
@@ -1052,12 +1052,10 @@
     "modifier_considerations": [],
     "support": {
      "origin": "participant",
-     "phases": {
-      "astra": "peer_review"
-     },
-     "proposed_by": [
+     "listed_by": [
       "astra"
      ],
+     "proposed_by": [],
      "participants": {
       "astra": {
        "peer": {
@@ -1087,14 +1085,15 @@
     "reinstated_by": null,
     "allowed_actions": [],
     "approve_withheld_by": null,
-    "proposed_by": [
+    "proposed_by": [],
+    "listed_by": [
      "astra"
     ],
     "corti_relation": "none",
     "participant_positions": {
      "astra": {
       "position": "not_proposed",
-      "detail": "Astra did not propose this code in its first reading. It proposed it after peer review.",
+      "detail": "Astra did not propose this code.",
       "quote": ""
      },
      "fable": {
@@ -1108,9 +1107,7 @@
      "detail": "No CMS reference check ran for this code. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
     },
     "retrieval": [],
-    "phases": {
-     "astra": "peer_review"
-    },
+    "phases": {},
     "confirmed": []
    }
   ],

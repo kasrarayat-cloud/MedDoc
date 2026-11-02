@@ -96,7 +96,9 @@ class SectionTests(Harness2Case):
             f'      {at(RECTUM_QUOTE, 2)}',
             '    Position on 45380: supports',
             f'      {at(RECTUM_QUOTE, 2)}',
-            '    Additional code 45381 · units 1 — proposed after peer review, never independent'])
+            # moved by refutation round 5 (R5-ACCOUNT, the session's D12): 45381's only quote is in no document, so its
+            # peer review listed it and proposed it in neither phase ("proposed after peer review, never independent")
+            '    Additional code 45381 · units 1 — listed in peer review'])
         # moved by refutation round 3 (falsegreen-11): Astra's peer-review code quotes a sentence in no document (the
         # engine lists 45381 apart), so the section counts the quote as not found, and shows none of it
         self.assertEqual(lines[12], '    Unverified quotes: 1 (not found in the document; never used as evidence)')
@@ -242,8 +244,10 @@ class CsvTests(Harness2Case):
         self.assertEqual((position['code'], position['status'], position['proposed_by']),
                          ('45380', 'supports', 'astra'))
         (added,) = by_list['peer_additional_code']
+        # moved by refutation round 5 (R5-ACCOUNT, D12): listed in peer review with no located quote, so proposed in no
+        # phase (it was proposed_after_peer_review); proposal_origin stays the row's phase, peer review
         self.assertEqual((added['code'], added['units'], added['status'], added['proposal_origin']),
-                         ('45381', '1', 'proposed_after_peer_review', 'peer_review'))
+                         ('45381', '1', 'listed_in_peer_review', 'peer_review'))
         references = sorted((r['proposed_by'], r['proposal_origin'], r['status'], r['exclusion_reason'])
                             for r in by_list['participant_reference'])
         # moved by refutation round 4 (R4-SHAPES, shapes-3): a ref no tool of its run returned, only by its length

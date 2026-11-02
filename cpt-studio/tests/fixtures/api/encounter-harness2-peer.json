@@ -668,6 +668,7 @@
      "astra",
      "fable"
     ],
+    "listed_by": [],
     "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
@@ -880,6 +881,7 @@
     "proposed_by": [
      "astra"
     ],
+    "listed_by": [],
     "corti_relation": "none",
     "participant_positions": {
      "astra": {

@@ -316,8 +316,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "54c7983d8292a5399a0faa3a23232aff49e13e0899d49f1a622c7c45d193c0e2",
-     "response_sha256": "df58002bf4d581e4e565512695bd4cdcb3ca1145cac74d725d585fee9e057146",
+     "request_sha256": "1a0edf7d8d46ce395e2ce79a98c6440171fa0008b01efac3dcbad90f11449f02",
+     "response_sha256": "a3d66dd77ddc67d502b9002d6ced2d8927249c09658a1fe9abec505a0999352a",
      "response_bytes": 1791,
      "created_at": "2026-11-01T09:00:28Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -342,7 +342,7 @@
        ],
        [
         "cpt_studio",
-        "47d38dd2a60f870ef49e4ca645cf9a68d5ff4f06644c9c28b81c74118a18e55e"
+        "d7b4fd6d3b4fd1ab62b0cb4f890d34732d16f8780d20695e301b9bb395e95b53"
        ],
        [
         "fable",
@@ -458,7 +458,7 @@
          }
         ],
         "confidence": "low",
-        "phase": "peer_review"
+        "phase": ""
        }
       ],
       "references_used": [
@@ -487,7 +487,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "54c7983d8292a5399a0faa3a23232aff49e13e0899d49f1a622c7c45d193c0e2",
+       "request_sha256": "1a0edf7d8d46ce395e2ce79a98c6440171fa0008b01efac3dcbad90f11449f02",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -519,8 +519,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "54c7983d8292a5399a0faa3a23232aff49e13e0899d49f1a622c7c45d193c0e2",
-       "response_sha256": "df58002bf4d581e4e565512695bd4cdcb3ca1145cac74d725d585fee9e057146",
+       "request_sha256": "1a0edf7d8d46ce395e2ce79a98c6440171fa0008b01efac3dcbad90f11449f02",
+       "response_sha256": "a3d66dd77ddc67d502b9002d6ced2d8927249c09658a1fe9abec505a0999352a",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -724,8 +724,8 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "8044f842d5de5e130163fbc7725a1fb1909ab8254dcbfdf6bccd04538e935839",
-     "response_sha256": "27b2c535608ab53f029cb43daeb71a0ebc368cf6852f1e1052e4ef73b1424ad6",
+     "request_sha256": "9c6168d43817d051b914174356aa37370f7921b83b2b3c35ef0785d4b9a0c380",
+     "response_sha256": "c016c792acb24b3dafe433d14477b934a79485fe9a9271fc57e8551fbfb711cd",
      "response_bytes": 1083,
      "created_at": "2026-11-01T09:00:29Z",
      "finished_at": "2026-11-01T09:00:17Z",
@@ -750,7 +750,7 @@
        ],
        [
         "cpt_studio",
-        "47d38dd2a60f870ef49e4ca645cf9a68d5ff4f06644c9c28b81c74118a18e55e"
+        "d7b4fd6d3b4fd1ab62b0cb4f890d34732d16f8780d20695e301b9bb395e95b53"
        ],
        [
         "fable",
@@ -829,8 +829,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "8044f842d5de5e130163fbc7725a1fb1909ab8254dcbfdf6bccd04538e935839",
-       "response_sha256": "27b2c535608ab53f029cb43daeb71a0ebc368cf6852f1e1052e4ef73b1424ad6",
+       "request_sha256": "9c6168d43817d051b914174356aa37370f7921b83b2b3c35ef0785d4b9a0c380",
+       "response_sha256": "c016c792acb24b3dafe433d14477b934a79485fe9a9271fc57e8551fbfb711cd",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
@@ -945,6 +945,7 @@
     "astra",
     "fable"
    ],
+   "listed_by": [],
    "positions": {
     "astra": {
      "position": "proposed",
@@ -972,6 +973,7 @@
     "astra",
     "fable"
    ],
+   "listed_by": [],
    "positions": {
     "astra": {
      "position": "proposed",
@@ -995,13 +997,14 @@
    "family": "gi.colonoscopy",
    "bucket": "alternative",
    "status": "informational",
-   "proposed_by": [
+   "proposed_by": [],
+   "listed_by": [
     "astra"
    ],
    "positions": {
     "astra": {
      "position": "not_proposed",
-     "detail": "Astra did not propose this code in its first reading. It proposed it after peer review.",
+     "detail": "Astra did not propose this code.",
      "quote": ""
     },
     "fable": {

@@ -634,9 +634,11 @@ class DetailTests(Harness2Case):
         rows = self.rows(data)
         astra, fable, corti = rows['astra'], rows['fable'], rows['corti']
         # moved by refutation round 3 (falsegreen-11): Astra's peer-review code quotes a sentence in no document (45381
-        # is listed apart, as the engine lists a code with no located quote), which its row counts
+        # is listed apart, as the engine lists a code with no located quote), which its row counts; and moved by round 5
+        # (R5-ACCOUNT, the session's D12): with no located quote its peer review listed 45381 and proposed no code there,
+        # so codes_added - the codes it first proposed in peer review - holds none (it held 45381)
         self.assertEqual(astra['peer'], {'state': 'done', 'run_id': str(self.peer_runs['astra'].pk),
-                                         'codes_added': ['45381'], 'unverified_quotes': 1,
+                                         'codes_added': [], 'unverified_quotes': 1,
                                          'detail': 'Answered in peer review, after its first reading was frozen; the '
                                                    'review was used. 1 of its quotes was not found in the document, '
                                                    'so it is never used as evidence.'})
@@ -778,8 +780,10 @@ class TraceTests(Harness2Case):
         self.assertIsNone(first['review'])
         self.assertIsNone(peer_run['reading'])
         expected = json.loads(json.dumps(to_jsonable(review.stored_peer_review(self.peer_runs['astra'])[0])))
-        # each additional code with the phase its participant first proposed it in (R2-WORDING truth-8)
-        expected['additional_codes'] = [dict(item, phase='peer_review') for item in expected['additional_codes']]
+        # each additional code with the phase its participant first proposed it in (R2-WORDING truth-8) - moved by
+        # refutation round 5 (R5-ACCOUNT, the session's D12): 45381's quote is in no document, so it was proposed in
+        # neither phase, '' (listed in peer review), where it was 'peer_review'
+        expected['additional_codes'] = [dict(item, phase='') for item in expected['additional_codes']]
         # moved by refutation round 4 (R4-SHAPES, shapes-3): FACT_REF, which only its first reading retrieved, is
         # served by its length
         self.assertEqual([(item['ref'], item['retrieved']) for item in expected['references_used']],

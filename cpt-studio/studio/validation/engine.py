@@ -2764,6 +2764,10 @@ PEER_POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes',
                        'cannot_tell': 'cannot tell whether the document supports'}
 UNLOCATED = ('none of its quotes was found verbatim in the document text, and a quote that is not found is never '
              'evidence')
+# What a participant that gave a code with no entry quoting the document verbatim did: it listed the code and did not
+# propose it (refutation round 1, EV-2 = IND-3), said wherever who proposed an alternative is said (refutation round 5,
+# the session's D12: "Proposed by Astra" was said of a reading the same assessment says did not propose the code).
+LISTED_NOT_PROPOSED = 'with no quote found verbatim in the document, so not proposed'
 LISTED_IN_SUMMARY = 8  # codes a participant's summary sentence names; the rest are counted
 MODIFIER_SHAPE = re.compile(r'[A-Z0-9]{2}', re.A)  # a modifier as a participant may state one; anything else is counted
 OPEN_QUESTION = 'open question'  # the words review.coding_completeness drops a completeness reason for
@@ -3083,12 +3087,15 @@ class _Harness:
         return tuple(name for name in PARTICIPANT_ORDER if any(s.good for s in by.get(name, ())))
 
     def phase(self, code: str, name: str) -> str:
-        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read from its
-        entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a first
-        reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
-        proposed after peer review); from all its entries only when none does (an alternative it never located)."""
-        said = self.codes[code][name]
-        counted = [s for s in said if s.good] or said
+        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read only from
+        its entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a
+        first reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
+        proposed after peer review); '' for a participant none of whose entries did, which proposed the code in no
+        phase: it listed it (refutation round 5, the session's D12 - the fallback to all its entries named such a
+        participant as an alternative's proposer, with a phase)."""
+        counted = [s for s in self.codes.get(code, {}).get(name, ()) if s.good]
+        if not counted:
+            return ''
         return INDEPENDENT if any(s.phase == INDEPENDENT for s in counted) else PEER_REVIEW
 
     def _who(self, code: str, names: Sequence[str]) -> str:
@@ -3173,19 +3180,33 @@ class _Harness:
         return list(selections) + added, tuple(listed)
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
-        """A participant's code that is not a proposal, saying why: informational, never approvable."""
+        """A participant's code that is not a proposal, saying why: informational, never approvable. ``names``: every
+        participant that gave the code. Only those with an entry that quotes the document verbatim proposed it
+        (proposers()); the others listed it, and are said to have, never to have proposed it (refutation round 5, the
+        session's D12: "Proposed by Astra (independent participant)" was said of a reading whose every quote was not
+        found, beside the same assessment's "so it did not propose it")."""
         code_kind, scope_reason = checks.code_scope(code)
         kept = self._good(code, names)
         family = family_for_code(code)
         found = (checks.scope_check(code_kind, scope_reason),)
         profile_version = PROFILES[family].version
-        who, why = self._who(code, names), why.rstrip('.')
+        located = [name for name in names if name in self.proposers(code)]
+        listed = checks._join([PARTICIPANT_LABELS[name] for name in names if name not in located])
+        why = why.rstrip('.')
+        if not located:
+            exclusion = f'Listed by {listed} {LISTED_NOT_PROPOSED}, and not added as a proposal: {why}.'
+            rationale = f'Listed by {listed} {LISTED_NOT_PROPOSED}; not added as a proposal: {why}.'
+        else:
+            who = self._who(code, located)
+            apart = f' Listed by {listed} {LISTED_NOT_PROPOSED} by {listed}.' if listed else ''
+            exclusion = f'Proposed by {who}, but not added as a proposal: {why}.{apart}'
+            rationale = f'Proposed by {who}; not added as a proposal: {why}.{apart}'
         return ProposalAssessment(
             key=f'altp:{index}', bucket='alternative', code=code, code_kind=code_kind, family=family,
             profile_version=profile_version, status='informational',
-            exclusion_reason=f'Proposed by {who}, but not added as a proposal: {why}. Alternatives cannot be approved.',
+            exclusion_reason=f'{exclusion} Alternatives cannot be approved.',
             reinstatable=False, provider_display='', evidence=kept,
-            rationale=(f'Proposed by {who}; not added as a proposal: {why}. Informational only.'
+            rationale=(f'{rationale} Informational only.'
                        + (f' {checks.plural(len(kept), "exact evidence passage")}.' if kept else '')),
             checks=found, modifier_considerations=(), units=1,
             fingerprint=_fingerprint(code, family, profile_version, kept, found, {}, 1, 'informational'),
@@ -3213,30 +3234,46 @@ class _Harness:
 
     def recorded(self, proposals: Sequence[ProposalAssessment]) -> tuple[ProposalAssessment, ...]:
         """Every proposal with who proposed it (support['proposed_by']), the phase each participant among them first
-        proposed it in (support['phases']: 'independent' or 'peer_review'; only where a participant gave the code) and
-        each participant's position on its code in both phases (support['participants']). Outside the fingerprint: who
-        proposed a code never changes its decision."""
+        proposed it in (support['phases']: 'independent' or 'peer_review'; only for a participant whose entry for the
+        code quotes the document verbatim, phase()), each participant's position on its code in both phases
+        (support['participants']) and, for a participant's alternative, the participants that gave its code with no
+        entry quoting the document verbatim, which listed it and did not propose it (support['listed_by']; refutation
+        round 5, the session's D12). Outside the fingerprint: who proposed a code never changes its decision."""
         out = []
         for p in proposals:
             by = self._proposed_by(p)
             support = {**(p.support or {}), 'proposed_by': by, 'participants': self.positions(p.code)}
-            phases = {name: self.phase(p.code, name) for name in by if name in self.codes.get(p.code, {})}
+            phases = {name: self.phase(p.code, name) for name in by}  # '' for a name that proposed in no phase
+            phases = {name: phase for name, phase in phases.items() if phase}
             if phases:
                 support['phases'] = phases
+            listed = self._listed_by(p)
+            if listed:
+                support['listed_by'] = listed
             out.append(replace(p, support=support))
         return tuple(out)
 
     def _proposed_by(self, p: ProposalAssessment) -> list[str]:
         origin = (p.support or {}).get('origin', 'primary')
         if p.bucket == 'alternative':
-            # an alternative is proposed by no one; a participant's lists every participant that gave the code
-            by = self.codes.get(p.code, {})
-            return [name for name in PARTICIPANT_ORDER if name in by] if origin == 'participant' else []
+            # an alternative is proposed by no one; a participant's names the participants that proposed its code - an
+            # entry quoting the document verbatim (proposers()) - and never one that only listed it (_listed_by;
+            # refutation round 5, the session's D12)
+            return list(self.proposers(p.code)) if origin == 'participant' else []
         if origin == 'participant':
             return list(self.proposers(p.code))
         if p.bucket == 'selected' or p.reinstatable:  # decidable: the participants' proposals were merged into it
             return [PRIMARY, *self.proposers(p.code)]
         return [PRIMARY]  # excluded for scope or evidence: a participant's code of its own stands apart from it
+
+    def _listed_by(self, p: ProposalAssessment) -> list[str]:
+        """The participants that gave a participant's alternative's code with no entry quoting the document verbatim,
+        in stage order: they listed it and did not propose it (refutation round 1, EV-2 = IND-3), so they are never
+        among its proposers; [] for any other proposal (refutation round 5, the session's D12)."""
+        if p.bucket != 'alternative' or (p.support or {}).get('origin') != 'participant':
+            return []
+        proposers = self.proposers(p.code)
+        return [name for name in PARTICIPANT_ORDER if name in self.codes.get(p.code, {}) and name not in proposers]
 
     def positions(self, code: str) -> dict:
         """{participant: {'position', 'detail', 'quote'}} for every configured participant: 'proposed', 'not_proposed',

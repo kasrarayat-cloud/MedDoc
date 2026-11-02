@@ -1210,6 +1210,17 @@ def proposed_by(proposal):
     return ([CORTI] if corti else []) + [name for name in participants.PARTICIPANTS if name in named]
 
 
+def listed_by(proposal):
+    """The participants the engine recorded as having listed a participant's alternative's code with no entry that
+    quotes the document verbatim (support['listed_by']): they did not propose it, so they are never among proposed_by,
+    and each surface that says who proposed the alternative names them apart, as having listed it (refutation round 5,
+    the session's D12). In harness order; [] for any other proposal, and for a record that carries none or no list."""
+    listed = (proposal.support or {}).get('listed_by')
+    named = {name for name in listed if isinstance(name, str)} if isinstance(listed, list) else set()
+    proposers = set(proposed_by(proposal))
+    return [name for name in participants.PARTICIPANTS if name in named and name not in proposers]
+
+
 # How Corti stands to a proposal's code (corti_relation), in the order a Corti entry of the code is looked for.
 CORTI_RELATIONS = ('proposer', 'selected_without_exact_passage', 'selected_apart', 'candidate', 'second_review', 'none')
 

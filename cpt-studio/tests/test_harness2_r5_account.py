@@ -294,6 +294,211 @@ class AnsweredQuestionEngineTests(SimpleTestCase):
         self.assertIn(ANSWERED_ONCE, self.summary_of('q-1'))
 
 
+# --- D12 (truth-1, truth-2, truth-3): "proposed" only of an entry with a located quote ---------------------------------
+
+class AlternativeAccountTests(Surfaces, R2WordingCase):
+    """A participant-origin alternative named every participant that gave the code as its proposer - "Proposed by Astra
+    (independent participant), but not added as a proposal: none of its quotes was found verbatim ..." - beside the
+    same assessment's "It listed 1 code (45378) with no quote found verbatim in the document, so it did not propose it"
+    (refutation round 5, truth-1, truth-3; round 4's truth-2 applied EV-2 = IND-3 to the cards, the row, the engine's
+    position and the summary only)."""
+
+    def test_an_alternative_no_participant_located_names_no_proposer_on_any_surface(self):
+        # truth-1: Astra's first reading lists 45378 with a quote no document holds; nobody else lists it
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', SNARE), ('45380', BIOPSY), ('45378', UNLOCATED_DIAG)],
+            services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        self.assertIn({'code': '45378', 'quote': ''},
+                      self.records(self.encounter(encounter_id).current_assessment)['astra']['codes'])
+        detail = self.detail(encounter_id)
+        [alternative] = self.proposals(detail, '45378')
+        reason = (f'Listed by Astra {LISTED_WORDS}, and not added as a proposal: {UNLOCATED_WHY}. Alternatives cannot be '
+                  'approved.')
+        self.assertEqual((alternative['bucket'], alternative['proposed_by'], alternative['phases'],
+                          alternative['listed_by'], alternative['support']['listed_by']),
+                         ('alternative', [], {}, ['astra'], ['astra']))
+        self.assertNotIn('phases', alternative['support'])
+        self.assertEqual((alternative['exclusion_reason'], alternative['rationale']),
+                         (reason, f'Listed by Astra {LISTED_WORDS}; not added as a proposal: {UNLOCATED_WHY}. '
+                                  'Informational only.'))
+        self.assertEqual(alternative['support']['participants']['astra']['position'], 'not_proposed')
+        self.assertIn('It listed 1 code (45378) with no quote found verbatim in the document, so it did not propose '
+                      'it.', self.summary(detail))
+        # the page's Alternatives
+        page = self.page_lines(detail)
+        self.assertEqual(page[page.index('45378 · Colonoscopy') + 1], reason)
+        self.assertFalse([line for line in page if 'Proposed by Astra' in line])
+        # both reports
+        txt = self.download(encounter_id)
+        self.assertEqual(_block(_section(txt, reports.ALTERNATIVES_TITLE), '  - 45378 · '),
+                         [f'  - 45378 · Colonoscopy — listed by Astra {LISTED_WORDS}, never selectable: {reason}',
+                          f'     Proposed by: none; listed by Astra {LISTED_WORDS}'])
+        rows = [row for row in csv_rows(self.download(encounter_id, fmt='csv')) if row['code'] == '45378']
+        self.assertEqual([(row['item_list'], row['proposal_origin'], row['proposed_by'], row['exclusion_reason'])
+                          for row in rows], [('alternative', 'participant', '', reason)])
+        # the owner's trace
+        trace = self.trace(encounter_id)
+        (row,) = [item for item in trace['reconciliation'] if item['code'] == '45378']
+        self.assertEqual((row['proposed_by'], row['listed_by']), ([], ['astra']))
+        trace_page = self.trace_lines(trace)
+        self.assertIn(f'Proposed by: none; listed by Astra {LISTED_WORDS}', trace_page)
+        for where, text in (('page', '\n'.join(page)), ('txt', txt), ('trace', '\n'.join(trace_page))):
+            self.assertNotIn('Proposed by: not recorded', text, where)
+
+    def test_an_alternative_one_participant_located_and_another_listed_names_each_for_what_it_did(self):
+        # Astra locates G0121 (an HCPCS code: out of scope, so an alternative); Fable lists it with an unfound quote
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', SNARE), ('45380', BIOPSY), ('G0121', LAND)],
+            services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(
+            codes=[('45385', SNARE), ('G0121', UNLOCATED_DIAG)], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        [alternative] = self.proposals(detail, 'G0121')
+        apart = f'Listed by Fable {LISTED_WORDS} by Fable.'
+        reason = (f'Proposed by Astra (independent participant), but not added as a proposal: {HCPCS_WHY}. {apart} '
+                  'Alternatives cannot be approved.')
+        self.assertEqual((alternative['proposed_by'], alternative['phases'], alternative['listed_by'],
+                          alternative['exclusion_reason']), (['astra'], {'astra': 'independent'}, ['fable'], reason))
+        self.assertEqual(alternative['rationale'],
+                         f'Proposed by Astra (independent participant); not added as a proposal: {HCPCS_WHY}. {apart} '
+                         'Informational only. 1 exact evidence passage.')
+        txt = self.download(encounter_id)
+        self.assertEqual(_block(_section(txt, reports.ALTERNATIVES_TITLE), '  - G0121 · '), [
+            f'  - G0121 · Service outside the GI profiles — proposed by Astra, not added as a proposal; listed by Fable '
+            f'{LISTED_WORDS} by Fable, never selectable: {reason}',
+            f'     Proposed by: Astra; listed by Fable {LISTED_WORDS} by Fable'])
+        (row,) = [item for item in self.trace(encounter_id)['reconciliation'] if item['code'] == 'G0121']
+        self.assertEqual((row['proposed_by'], row['listed_by']), (['astra'], ['fable']))
+        self.assertIn(f'Proposed by: Astra; listed by Fable {LISTED_WORDS} by Fable',
+                      self.trace_lines(self.trace(encounter_id)))
+        # control: the located alternative of one participant reads as before (Fable's 45378 after peer review is a
+        # proposal of its own; Astra's G0121 is worded as round 4 worded a located alternative)
+        self.assertEqual(self.proposals(detail, '45378')[0]['proposed_by'], ['fable'])
+
+    def test_a_peer_review_s_unlocated_additional_code_is_listed_never_proposed_after_peer_review(self):
+        # truth-3: Fable's peer review adds 45378 with a quote no document holds
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=[('45378', UNLOCATED_DIAG)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        [alternative] = self.proposals(detail, '45378')
+        reason = (f'Listed by Fable {LISTED_WORDS}, and not added as a proposal: {UNLOCATED_WHY}. Alternatives cannot be '
+                  'approved.')
+        self.assertEqual((alternative['proposed_by'], alternative['phases'], alternative['listed_by'],
+                          alternative['exclusion_reason']), ([], {}, ['fable'], reason))
+        # the card's positions (and the trace's) no longer add "It proposed it after peer review."
+        self.assertEqual(alternative['participant_positions']['fable'],
+                         {'position': 'not_proposed', 'detail': 'Fable did not propose this code.', 'quote': ''})
+        fable = self.rows(detail)['fable']
+        self.assertEqual(fable['peer']['codes_added'], [])
+        self.assertNotIn('45378', fable['peer']['detail'])
+        peer_row = self.peer_row(detail, 'fable')
+        self.assertIn('It first proposed no code in peer review that can be listed.', peer_row)
+        self.assertNotIn('45378', peer_row)
+        page = self.page_lines(detail)
+        self.assertIn('45378 · Colonoscopy', page)  # the Alternatives title carries no "proposed after peer review"
+        self.assertEqual(page[page.index('45378 · Colonoscopy') + 1], reason)
+        txt = self.download(encounter_id)
+        self.assertIn('    Additional code 45378 · units 1 — listed in peer review', _section(txt, reports.PEER_TITLE))
+        added = [row for row in csv_rows(self.download(encounter_id, fmt='csv'))
+                 if row['item_list'] == 'peer_additional_code']
+        self.assertEqual([(row['proposed_by'], row['code'], row['status']) for row in added],
+                         [('fable', '45378', 'listed_in_peer_review')])
+        trace = self.trace(encounter_id)
+        fable_runs = next(item for item in trace['participants'] if item['name'] == 'fable')['runs']
+        self.assertEqual([[(c['code'], c['phase']) for c in run['review']['additional_codes']]
+                          for run in fable_runs if run.get('review')], [[('45378', '')]])
+        trace_page = self.trace_lines(trace)
+        self.assertTrue([line for line in trace_page if line.startswith('45378 · units 1 · confidence high · listed '
+                                                                        'in peer review')], trace_page)
+        self.assertIn(f'Proposed by: none; listed by Fable {LISTED_WORDS}', trace_page)
+        self.assertFalse([line for line in trace_page if 'proposed it after peer review' in line.lower()
+                          or 'never independent' in line])
+
+    def test_a_code_listed_with_no_located_quote_in_both_phases_is_never_said_to_be_repeated(self):
+        # truth-2: Astra's first reading lists 45385 with a quote no document holds, and its peer review lists it
+        # again with the same quote; 45385 is Corti's
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', UNLOCATED), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45385', UNLOCATED)]), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        [snare] = self.proposals(detail, '45385', bucket='selected')
+        self.assertEqual((snare['proposed_by'], snare['phases']), (['corti', 'fable'], {'fable': 'independent'}))
+        self.assertEqual(snare['participant_positions']['astra'],
+                         {'position': 'not_proposed', 'quote': '', 'detail': LISTED})
+        astra = self.rows(detail)['astra']
+        self.assertEqual(astra['peer']['codes_added'], [])
+        self.assertNotIn('first proposed', astra['peer']['detail'])
+        self.assertNotIn('45385', astra['peer']['detail'])
+        txt = self.download(encounter_id)
+        self.assertIn('    Additional code 45385 · units 1 — listed in peer review', _section(txt, reports.PEER_TITLE))
+        self.assertNotIn('repeated in peer review', txt)
+        added = [row for row in csv_rows(self.download(encounter_id, fmt='csv'))
+                 if row['item_list'] == 'peer_additional_code' and row['proposed_by'] == 'astra']
+        self.assertEqual([(row['proposed_by'], row['code'], row['status']) for row in added],
+                         [('astra', '45385', 'listed_in_peer_review')])
+        trace = self.trace(encounter_id)
+        astra_runs = next(item for item in trace['participants'] if item['name'] == 'astra')['runs']
+        self.assertEqual([[(c['code'], c['phase']) for c in run['review']['additional_codes']]
+                          for run in astra_runs if run.get('review')], [[('45385', '')]])
+        self.assertFalse([line for line in self.trace_lines(trace) if 'first proposed in its independent reading'
+                          in line])
+
+    def test_located_entries_keep_their_phases(self):
+        # control: a code its first reading located and its peer review lists again (located or not) is repeated; a code
+        # only its peer review located is proposed after peer review (ColonCase: Fable's 45378 on the landmarks)
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45385', SNARE),
+                                                                                  ('45380', UNLOCATED_DIAG)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        astra, fable = self.rows(detail)['astra'], self.rows(detail)['fable']
+        self.assertEqual((astra['peer']['codes_added'], fable['peer']['codes_added']), ([], ['45378']))
+        self.assertIn('It listed 45385 and 45380 again in peer review; it first proposed them in its independent '
+                      'reading.', astra['peer']['detail'])
+        txt = _section(self.download(encounter_id), reports.PEER_TITLE)
+        self.assertIn('    Additional code 45385 · units 1 — repeated in peer review; first proposed in its independent '
+                      'reading', txt)
+        self.assertIn('    Additional code 45378 · units 1 — proposed after peer review, never independent', txt)
+
+
+class AlternativeEngineTests(SimpleTestCase):
+    """D12 in the engine itself (tests.test_harness_engine's document and helpers)."""
+
+    def test_a_participant_whose_entries_located_nothing_is_never_a_proposer_and_has_no_phase(self):
+        colon = he.COLON
+        astra = he.read('astra', [he.code(colon, '45385', he.SNARE), he.code(colon, '45378', 'not in the text at all')])
+        fable = he.reviewed('fable', [he.code(colon, '45385', he.SNARE)],
+                            he.peer('fable', additional=[he.code(colon, '45378', 'nor is this one in the text')]))
+        result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [astra, fable])
+        alternative = he.proposal(result, '45378')
+        self.assertEqual((alternative.bucket, alternative.support.get('proposed_by'), alternative.support.get('phases'),
+                          alternative.support.get('listed_by')), ('alternative', [], None, ['astra', 'fable']))
+        self.assertEqual(alternative.exclusion_reason, f'Listed by Astra and Fable {LISTED_WORDS}, and not added as a '
+                                                       f'proposal: {UNLOCATED_WHY}. Alternatives cannot be approved.')
+        harness = engine._Harness([astra, fable], colon, ())
+        self.assertEqual((harness.phase('45378', 'astra'), harness.phase('45378', 'fable')), ('', ''))
+        self.assertEqual(harness.phase('45385', 'astra'), 'independent')
+        # a located one is still its proposer, with its phase
+        located = he.reviewed('fable', [he.code(colon, '45385', he.SNARE)],
+                              he.peer('fable', additional=[he.code(colon, 'G0121', he.CECUM)]))
+        alternative = he.proposal(he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [astra, located]),
+                                  'G0121')
+        self.assertEqual((alternative.support['proposed_by'], alternative.support['phases'],
+                          alternative.support.get('listed_by')), (['fable'], {'fable': 'peer_review'}, None))
+        self.assertTrue(alternative.exclusion_reason.startswith('Proposed by Fable after peer review, but not added as '
+                                                                f'a proposal: {HCPCS_WHY}.'))
+
+
 # --- shapes-1, truth-7: a peer review's HCPCS codes are codes CPT Studio reads ------------------------------------------
 
 DATE = {'value': '2026-10-14', 'evidence': ['Date of service: 2026-10-14']}

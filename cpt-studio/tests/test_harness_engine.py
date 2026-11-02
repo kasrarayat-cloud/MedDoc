@@ -318,7 +318,11 @@ class MergeTests(SimpleTestCase):
         item = proposal(result, '45380')
         self.assertEqual((item.bucket, item.status, item.evidence), ('alternative', 'informational', ()))
         self.assertIn(UNLOCATED, item.exclusion_reason)
-        self.assertEqual(item.support['proposed_by'], ['astra', 'fable'])  # who listed it; it is no proposal
+        # moved by refutation round 5 (R5-ACCOUNT, the session's D12): an alternative names as its proposers only the
+        # participants that located the code - none here - and the ones that only listed it apart (support['listed_by']);
+        # both were its proposed_by, so "Proposed by Astra and Fable" was said of readings that proposed nothing
+        self.assertEqual((item.support['proposed_by'], item.support['listed_by']), ([], ['astra', 'fable']))
+        self.assertNotIn('phases', item.support)
         positions = item.support['participants']
         # no proposal, so no 'proposed' position either (refutation round 4, truth-2; this pin moved from 'proposed')
         self.assertEqual(positions['astra']['position'], 'not_proposed')
@@ -841,8 +845,11 @@ class PeerReviewTests(SimpleTestCase):
         unlocated = code(COLON, '45380', 'a 12 mm flat lesion was sampled with forceps')  # not in the text
         added = peer('astra', additional=[code(COLON, '45380', BIOPSY)])
         first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [unlocated])])
-        self.assertEqual((proposal(first, '45380').bucket, proposal(first, '45380').support['phases']),
-                         ('alternative', {'astra': 'independent'}))  # what it did in its first reading
+        # moved by refutation round 5 (R5-ACCOUNT, the session's D12): what it did in its first reading is list the
+        # code, which proposes it in no phase - it was its alternative's proposer, with the phase 'independent'
+        support = proposal(first, '45380').support
+        self.assertEqual((proposal(first, '45380').bucket, support.get('phases'), support['proposed_by'],
+                          support['listed_by']), ('alternative', None, [], ['astra']))
         result = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added)])
         control = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', review=added)])
         item = proposal(result, '45380')
@@ -884,7 +891,13 @@ class PeerReviewTests(SimpleTestCase):
                          [('altp:0', 'G0105'), ('altp:1', '45378')])
         self.assertTrue(proposal(result, 'G0105').exclusion_reason.startswith(
             'Proposed by Fable after peer review, but not added as a proposal: HCPCS Level II code'))
-        self.assertEqual(proposal(result, '45378').support['phases'], {'fable': 'peer_review'})
+        # moved by refutation round 5 (R5-ACCOUNT, the session's D12): 45378's only quote is not in the document, so
+        # Fable's peer review listed it and proposed it in no phase - it was its proposer, 'after peer review'
+        unlocated = proposal(result, '45378')
+        self.assertEqual((unlocated.support.get('phases'), unlocated.support['proposed_by'],
+                          unlocated.support['listed_by']), (None, [], ['fable']))
+        self.assertTrue(unlocated.exclusion_reason.startswith('Listed by Fable with no quote found verbatim in the '
+                                                              'document, so not proposed, and not added as a proposal'))
 
     def test_peer_review_keeps_the_keys_of_every_first_reading_code(self):
         """assess #1 and assess #2: a code no first reading listed, added in peer review, comes after every first

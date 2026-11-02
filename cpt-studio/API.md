@@ -255,7 +255,10 @@ REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation 
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
-alternatives, and the participants the engine recorded), `reference_check` (`passed`, `attention` or `not_verified`,
+alternatives, and the participants the engine recorded - for a participant's alternative only those with an entry that
+quotes the document verbatim; one that gave its code with no quote found verbatim listed it and did not propose it,
+and is served apart in `listed_by`, `[]` on every other proposal, as `support.listed_by` records it: refutation round
+5, the session's D12), `reference_check` (`passed`, `attention` or `not_verified`,
 from its CMS checks `pfs.presence`, `mue.units` and `pfs.endoscopic_base`; its detail always says that NCCI PTP edits
 are not connected) and `decision_state` (a member's). `participant_positions` gives each configured participant's
 position on the code in its first reading (the only reading harness@1 makes; harness@2's frozen phase-1 reading) -
@@ -331,8 +334,11 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 `blocked`, `not_configured`) with a `detail` sentence, its `run_id`, the codes the review proposed after peer review
 (`codes_added`, never independent) and its unverified quotes. `codes_added` lists only the additional codes the
 participant first proposed in its peer review - the phase the engine records on the assessment's proposals of the code
-(`phases`), or, for a code no proposal records it on, whether its frozen first reading listed the code
-(`serializers.peer_code_phases`); an additional code its first reading proposed is named in the `detail` instead ("It
+(`phases`), or, for a code no proposal records it on, "whether its frozen first reading listed the code" (superseded,
+round 5, the session's D12: read only from its entries that located a quote, as the engine's `phases` are - its first
+reading's located quote, else its peer review's - so a code no entry of either phase located is neither added nor
+repeated: it was listed in peer review) (`serializers.peer_code_phases`); an additional code its first reading
+proposed is named in the `detail` instead ("It
 listed 45385 again in peer review; it first proposed it in its independent reading."), never as proposed after peer
 review (refutation round 2, truth-8). A final assessment of phase 1 - one that owes no peer
 stage because a member date conflict holds it, or because the participant is not configured now - serves, for each
@@ -567,7 +573,7 @@ reading's and its peer review's (refutation round 4, shapes-2, truth-3). Each re
 descriptor.
 `retrieval` is the current assessment's retrieval traces as recorded; a retrieval that failed is its one entry marked
 `"failed": true`, with no code, which the page shows as "Reference validation failed" with its note, never as a code
-with nothing found. `reconciliation` keeps proposed (`proposed_by`,
+with nothing found. `reconciliation` keeps proposed (`proposed_by`, with `listed_by` apart: refutation round 5, D12,
 `positions`), reference-checked (`reference_check`) and approved (`approved`: the member's current decision is an
 approval) apart.
 
