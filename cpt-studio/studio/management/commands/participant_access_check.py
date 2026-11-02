@@ -21,9 +21,16 @@ proves access and the loop's mechanics, not the CMS sources. The receipt gives t
 its outcome, its request and response sha256 and the vendor's request and response ids (Astra's client request id
 too), and each tool call's id and tool. The loop is given PARTICIPANT_SEND_DEADLINE_SECONDS, inside the installer's
 limit for the whole check.
+
+Before each later exchange the loop asks, as the pipeline's loop does, whether this database session still holds the
+single-flight lock (refutation round 4, sends-1): the session is idle for the whole loop, and once it has ended the lock
+has ended with it, so another session - the worker's - could take it and send. When it does not hold the lock, or the
+question fails, nothing more is sent; the receipt of what was sent is still printed, with CPT Studio's sentence for why
+the loop stopped, and the check does not pass.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from contextlib import contextmanager
@@ -31,13 +38,15 @@ from datetime import datetime, timezone
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
+from django.db import Error, connection
 
-from studio.participants import LABELS, openai_astra, participant_mode, pricing, registry
+from studio.participants import LABELS, loop, openai_astra, participant_mode, pricing, registry
 from studio.providers import get_provider
 from studio.providers.base import ProviderUnavailable
 
 PARTICIPANTS = ('corti', 'astra', 'fable')
+LOCK_UNCHECKED = ('CPT Studio could not check that its database session still holds the provider lock ({error}), '
+                  'after {number} exchange{plural}; nothing more was sent, and the run has no final answer.')
 TOOL_NOTE = ('This is CPT Studio\'s access check: its tools return no reference data here. Answer from the document '
              'alone.')
 NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for a CPT Studio access check.\n'
@@ -79,7 +88,9 @@ class Command(BaseCommand):
 @contextmanager
 def _single_flight():
     """The installation-wide provider lock the pipeline's sends take (jobs._send): one clinical provider call at a
-    time, the access check included. Taking a session advisory lock writes nothing."""
+    time, the access check included. Taking a session advisory lock writes nothing. The lock is the session's and ends
+    with it: an unlock that fails - the session has ended (refutation round 4, sends-1) - closes the connection, which
+    ends any session still holding the lock, and the receipt of what was sent is still printed."""
     from studio.jobs import PROVIDER_LOCK_KEY
 
     with connection.cursor() as cursor:
@@ -90,8 +101,34 @@ def _single_flight():
     try:
         yield
     finally:
-        with connection.cursor() as cursor:
-            cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
+        except Error:
+            connection.close()
+
+
+class _LockLost(Exception):
+    """The access check's database session does not hold the provider lock _single_flight took."""
+
+
+def _should_stop(why: list) -> bool:
+    """The access check's ``should_stop`` (loop.run asks it before every later exchange). It has no member's Stop to
+    observe, so it asks only what the pipeline's loop asks after the Stop (jobs._send_loop): whether this database
+    session still holds the provider lock _single_flight took (jobs._holds_provider_lock). False while it does; when it
+    does not, or the question fails, it raises, so the loop ends there and nothing more is sent (refutation round 4,
+    sends-1), and ``why`` keeps the receipt's sentence: (template, the error's type name)."""
+    from studio.jobs import LOOP_LOCK_LOST_MESSAGE, _holds_provider_lock
+
+    try:
+        held = _holds_provider_lock()
+    except Exception as exc:
+        why.append((LOCK_UNCHECKED, type(exc).__name__))
+        raise
+    if not held:
+        why.append((LOOP_LOCK_LOST_MESSAGE, ''))
+        raise _LockLost()
+    return False
 
 
 def _local_tool(name: str, arguments: dict) -> tuple[dict, list]:
@@ -103,8 +140,15 @@ def _participant(name: str) -> dict:
     adapter = registry.build(name, 'live')
     request = adapter.build_request(NOTE, (), 'paste', None)
     client_request_id = f'cptstudio-access-check-{uuid.uuid4()}'
+    why = []
     outcome = adapter.send_loop(request, deadline_s=settings.PARTICIPANT_SEND_DEADLINE_SECONDS,
-                                client_request_id=client_request_id, original_bytes=None, execute_tool=_local_tool)
+                                client_request_id=client_request_id, original_bytes=None, execute_tool=_local_tool,
+                                should_stop=lambda: _should_stop(why))
+    if why and outcome.stopped:  # the loop ended at the check that found the lock gone, or could not ask
+        (template, error), number = why[0], len(outcome.exchanges)
+        final = dataclasses.replace(outcome.final, error=template.format(
+            error=error, number=number, plural='' if number == 1 else 's'))
+        outcome = loop.LoopOutcome(final=final, exchanges=outcome.exchanges)
     exchange = outcome.final
     summary = None
     if exchange.outcome == 'succeeded':

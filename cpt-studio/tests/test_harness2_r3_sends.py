@@ -22,6 +22,15 @@ RecordedAsItEndsTests. Synthetic data only; nothing is sent. Corti is the harnes
 Fable are the real replay adapters on the real tool loop with scripted answers (tests.test_harness2_pipeline), their
 tool calls answered by CPT Studio's real CMS tool executor over a synthetic reference store; sends-4 uses the real
 ReplayParticipant with a recording.
+
+Refutation round 4 (R4-SENDS) adds to LockedSessionTests:
+- sends-2, falsegreen-1: the lock check asks whether THIS session holds the lock (jobs._holds_provider_lock, pid =
+  pg_backend_pid()), and only a race pinned that condition. Here another session - a second worker's, or the access
+  check's - takes the lock once the worker's session has ended and keeps it while the loop asks: the loop still sends
+  nothing more. The access check's own loop, and the check itself, are pinned in tests.test_harness2_r4_sends.
+- sends-3: _finish_loop's fallback (the run's outcome could not be written) settles sent by the rule the sweep and the
+  undo use (jobs.may_have_reached_vendor): a replayed run, whose reservation names no endpoint, called no vendor and is
+  never recorded sent, whether its loop answered or ended at the lock check.
 """
 import os
 import socket
@@ -100,7 +109,8 @@ def end_session_by_server():
 class LockedSessionTests(OfflineMixin, TransactionTestCase):
     """HARNESS.md 2 and I8: every provider send takes the one installation-wide advisory lock, a lock of the database
     session that took it (jobs._send). No test transaction wraps the pipeline here, as none wraps the worker, so a write
-    that meets an ended session lets Django open another one exactly as it does in the worker."""
+    that meets an ended session lets Django open another one exactly as it does in the worker. Round 4's sends-3 tests
+    are here for that reason too: the worker's session ends as _finish_loop writes a run's outcome."""
     create = Harness2Case.create
     runs_of = Harness2Case.runs_of
     run_until = Harness2Case.run_until
@@ -219,6 +229,115 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
         self.assertEqual((run.state, run.sent, run.error), ('unknown', False, IN_FLIGHT))
         self.assertEqual(models.Job.objects.get(pk=job.pk).state, 'unknown')
         self.assertEqual(seen['posted'], 1)
+
+    # refutation round 4, sends-2 and falsegreen-1: a lock another session holds is not this session's
+
+    def taken_elsewhere(self, end):
+        """``end`` ends the worker's session; then another session - a second worker's, or the access check's - takes
+        the provider lock as soon as the ended backend has let it go, and keeps it while the loop asks. Returns the
+        callback and a list that says whether the other session took the lock (asserted after the stage: an assertion
+        inside the executor would be answered as a failed tool call)."""
+        took = []
+
+        def ended():
+            end()
+            deadline = time.monotonic() + 5.0
+            while not self.other.try_lock():
+                if time.monotonic() >= deadline:
+                    took.append(False)
+                    return
+                time.sleep(0.05)
+            took.append(True)  # kept until the test ends
+            self.addCleanup(self.other.unlock)
+        return ended, took
+
+    def assert_lock_held_elsewhere_sends_nothing_more(self, end):
+        ended, took = self.taken_elsewhere(end)
+        seen, encounter_id, job = self.loop(end_after_tools=ended)
+        self.assertEqual(took, [True])  # another session held the lock when the loop asked
+        self.assertFalse(seen['lock free elsewhere during exchange 1'])
+        self.assertEqual(seen['posted'], 1, 'exchange 2 was sent while another session held the provider lock')
+        self.assertNotIn('lock free elsewhere during exchange 2', seen)
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((run.state, run.sent, run.error),
+                         ('failed', True, jobs.LOOP_LOCK_LOST_MESSAGE.format(number=1, plural='')))
+        self.assertEqual(recorded(run), [(1, 'succeeded', 200)])
+        job.refresh_from_db()
+        self.assertEqual((job.state, job.result['state']), ('succeeded', 'failed'))
+
+    def test_a_lock_another_session_took_once_the_session_ended_is_not_this_session_s(self):
+        self.assert_lock_held_elsewhere_sends_nothing_more(end_session_by_socket)
+
+    def test_a_lock_another_session_took_once_the_server_ended_the_session_is_not_this_session_s(self):
+        self.assert_lock_held_elsewhere_sends_nothing_more(end_session_by_server)
+
+    # refutation round 4, sends-3: _finish_loop's fallback never records a replayed run as sent
+
+    def replay_whose_outcome_meets_an_ended_session(self, answer, *, end_after_tools=None):
+        """Astra is the real ReplayParticipant (it calls no vendor: each exchange sent False, endpoint ''), replaying
+        ``answer`` for its first exchange; ``end_after_tools`` ends the worker's session once the real executor has
+        answered a tool call. The worker's session then ends as _finish_loop's own transaction writes the run's
+        outcome (its first _finish_run), so the fallback writes the run on the session Django opens next. Returns the
+        loop's final (outcome, sent, endpoint, error) and the run, read back on a fresh session."""
+        replay = ReplayParticipant('astra', self.tmp / 'replay')
+        self.adapters['astra'] = replay
+        encounter_id = self.create()
+        job = self.run_until('astra')
+        kind, original, _ = jobs._participant_document(job.revision)
+        request = replay.build_request(job.revision.text, jobs._participant_pages(job.revision), kind, original)
+        folder = self.tmp / 'replay' / 'astra'
+        folder.mkdir(parents=True)
+        (folder / f'{request.canonical_sha256}.json').write_bytes(answer)
+        real_finish, real_executor, finals = jobs._finish_run, reference_tools.executor, []
+
+        def finish_run(run, exchange):
+            finals.append((exchange.outcome, exchange.sent, exchange.endpoint, exchange.error))
+            if len(finals) == 1:
+                end_session_by_socket()
+            return real_finish(run, exchange)
+
+        def executor(workspace, **kwargs):
+            run_tool = real_executor(workspace, **kwargs)
+
+            def execute_tool(name, arguments):
+                result = run_tool(name, arguments)
+                if end_after_tools:
+                    end_after_tools()
+                return result
+            return execute_tool
+        with mock.patch('studio.jobs._finish_run', side_effect=finish_run), \
+                mock.patch('studio.jobs.reference_tools.executor', side_effect=executor), \
+                self.assertLogs('studio.jobs', level='ERROR') as logged:
+            jobs.run_job(job)
+        self.assertIn('the loop outcome of participant run', '\n'.join(logged.output))  # the fallback wrote the run
+        connection.close()  # read back on a fresh session
+        (run,) = self.runs_of(encounter_id, 'astra', 'independent')
+        return finals[0], run
+
+    def assert_settled_as_a_replay(self, run):
+        """Unknown - its outcome could not be recorded, so the encounter waits for a member's reconciliation, as for a
+        replayed run the stale sweep settles - and never sent: one rule with may_have_reached_vendor, and no sentence
+        about what reached a vendor."""
+        self.assertEqual((run.state, run.sent, run.endpoint, run.scope['mode']), ('unknown', False, '', 'replay'),
+                         'a replay that reached nothing is recorded sent')
+        self.assertEqual(run.error, jobs.UNRECORDED_REPLAY_MESSAGE.format(label='Astra'))
+        self.assertFalse(jobs.may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists())
+        self.assertEqual(served(run.encounter, run), ('unknown', False))  # the trace's "Sent: No"
+        self.assertTrue(jobs._unreconciled_unknown(run.encounter))
+
+    def test_a_replayed_answer_whose_outcome_meets_an_ended_session_is_never_recorded_sent(self):
+        final, run = self.replay_whose_outcome_meets_an_ended_session(answered('astra', ASTRA_READING))
+        self.assertEqual(final, ('succeeded', False, '', ''))  # the loop's own final: nothing reached a vendor
+        self.assert_settled_as_a_replay(run)
+        self.assertEqual(recorded(run), [(1, 'succeeded', None)])  # recorded as it ended, before the session ended
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0))  # the ended session's backend has exited
+
+    def test_nor_a_replayed_loop_that_ended_at_the_lock_check(self):
+        final, run = self.replay_whose_outcome_meets_an_ended_session(
+            asks('astra', facts_call('call_astra_1', ['99213'])), end_after_tools=end_session_by_socket)
+        self.assertEqual(final, ('failed', False, '', jobs.LOOP_LOCK_LOST_MESSAGE.format(number=1, plural='')))
+        self.assert_settled_as_a_replay(run)
+        self.assertTrue(lock_free_elsewhere(self.other, wait=5.0))
 
 
 # --- sends-3 and sends-4: the installer's undo settles a run as the sweep does; a replay reached nothing --------------

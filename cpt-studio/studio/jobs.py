@@ -975,6 +975,9 @@ LOOP_LATE_MESSAGE = ('the stage has run too long to finish a whole tool loop bef
                      'or sent, and it starts again')
 UNRECORDED_MESSAGE = ('The {label} outcome could not be recorded whole (logged), so what reached the vendor is not '
                       'known. The outcome is unknown; reconcile it before any new attempt.')
+UNRECORDED_REPLAY_MESSAGE = ('The {label} outcome could not be recorded whole (logged). It was replayed from a '
+                             'recorded response and called no vendor, so nothing was sent. The outcome is unknown; '
+                             'reconcile it before any new attempt.')
 LOOP_OUTCOMES = ('succeeded', 'failed', 'unknown', 'not_sent')
 
 
@@ -1070,7 +1073,11 @@ def _finish_loop(run, outcome):
     exactly as the LoopOutcome carries them, in one transaction (HARNESS.md 12.1): the run's own fields from the loop's
     final RawExchange (its first request is already the run's request; its final response is the last exchange's). When
     they cannot all be recorded, the run is recorded as unknown - an exchange may have reached the vendor - unless the
-    loop provably sent nothing."""
+    loop provably sent nothing. Its sent flag follows the rule the stale sweep and the installer's undo settle a run by
+    (may_have_reached_vendor): a run whose reservation names no endpoint, a replay, called no vendor and is never sent,
+    whatever its loop's final says (refutation round 4, sends-3: this fallback recorded a replayed run sent, with
+    "what reached the vendor is not known")."""
+    called = bool(run.endpoint)  # the reservation's: the endpoint its adapter calls, '' for a replay
     try:
         with transaction.atomic():
             _finish_run(run, outcome.final)
@@ -1080,11 +1087,13 @@ def _finish_loop(run, outcome):
         log.exception('the loop outcome of participant run %s could not be recorded', run.pk)
         label = participants.LABELS.get(run.provider, run.provider)
         unsent = outcome.final.outcome == 'not_sent' and not outcome.final.sent
+        if unsent:
+            error = f'Nothing was sent; its record could not be written ({type(exc).__name__}, logged).'
+        else:
+            error = (UNRECORDED_MESSAGE if called else UNRECORDED_REPLAY_MESSAGE).format(label=label)
         _finish_run(run, RawExchange(
-            outcome='not_sent' if unsent else 'unknown', sent=not unsent, endpoint=outcome.final.endpoint,
-            requested_model=outcome.final.requested_model,
-            error=(f'Nothing was sent; its record could not be written ({type(exc).__name__}, logged).' if unsent
-                   else UNRECORDED_MESSAGE.format(label=label))))
+            outcome='not_sent' if unsent else 'unknown', sent=called and not unsent, endpoint=outcome.final.endpoint,
+            requested_model=outcome.final.requested_model, error=error))
 
 
 def _record_exchange(run, record):
