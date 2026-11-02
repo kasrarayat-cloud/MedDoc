@@ -830,6 +830,30 @@ class ReassessTests(ColonCase):
         self.assertEqual({p.key: p.status for p in self.encounter(encounter_id).current_assessment.proposals.all()
                           if p.key in ('sel:0', 'sel:1')}, {'sel:0': 'ready', 'sel:1': 'ready'})
 
+    def test_a_confirmation_is_read_by_every_later_assessment_of_the_revision_assess_one_included(self):
+        """Every assessment of the revision with a participant configured reads its confirmations - assess #1 too, the
+        current assessment while phase 2 runs (decisions are carried or invalidated against it): one that did not would
+        hold the confirmed code again after any later context change."""
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        confirmation = self.confirm(encounter_id, self.encounter(encounter_id).current_assessment, 'sel:0')
+        jobs.reassess_after_confirmation(self.encounter(encounter_id), self.reviewer)
+        drain()
+        before = len(self.assessments(encounter_id))
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        later = self.assessments(encounter_id)[before:]
+        self.assertEqual([jobs.assessment_phase(a) for a in later], [1, 2])  # a new assess #1, then its assess #2
+        for assessment in later:
+            item = self.proposal(assessment, 'sel:0')
+            self.assertEqual((item.code, item.status, item.support['confirmed']),
+                             ('45385', 'ready', [str(confirmation.pk)]))
+            self.assertIn('confirmations.applied', [c['id'] for c in assessment.encounter_checks])
+        # the new peer requests show the question answered: only sel:1's is open
+        peers = self.runs_of(encounter_id, 'astra', 'peer_review')
+        self.assertEqual([q['proposal_key'] for q in open_questions('astra', peers[-1].request_body)], ['sel:1'])
+
     def test_it_is_refused_while_busy_and_without_a_finished_final_assessment(self):
         encounter_id = self.create(TWO_EXTENTS)
         with self.assertRaisesMessage(jobs.Refused, jobs.REASSESS_BUSY):
