@@ -18,7 +18,8 @@ from studio.providers.base import ProviderUnavailable, canonical_body, request_s
 from studio.types import PageSpan, ParticipantReading, ProviderRequest, from_jsonable, sha256_json, to_jsonable
 
 from tests.test_participants_support import (NOTE, ORIGINAL, PAGE_BREAK, PAGES, OfflineTestCase, astra_envelope,
-                                             astra_with, fable_envelope, fable_with, fixture_bytes, fixture_reading)
+                                             astra_with, changed, fable_envelope, fable_with, fixture_bytes,
+                                             fixture_reading)
 
 CORTI = {'selected': [{'code': '45385', 'evidence': ['was removed with a cold snare']}]}
 CORTI_SHA256 = hashlib.sha256(b'synthetic corti response bytes').hexdigest()
@@ -44,12 +45,15 @@ GOOD = {
                         {'ref': 'fact:cms-pfs-rvu26d:45385:mult_proc', 'use': 'The endoscopic base.'}],
 }
 # The protected constants of prompt.py, pinned at the harness@2 contract commit (7c79270cd): this package adds to
-# prompt.py and changes none of them.
+# prompt.py and changes none of them - but PEER_INSTRUCTIONS, reworded by refutation round 1's IND-4 repair (the own
+# reading is shown as CPT Studio recorded it, not "unchanged"). Every peer request carries it, so a stored peer request
+# of the earlier wording is refused by its reader as one this adapter does not build, never misread (part B is not
+# installed: no such request was stored by an installation); PEER_VERSION names the output schema, which is unchanged.
 PROTECTED = {
     'INSTRUCTIONS': '9b0d4edd857842565df4f3a5526139d04067de299d6c6b9872e6e873505f4ce9',
     'SCHEMA': '41ca6eeed2e58bcb1455f9c4a178af8c08098ed286abb0bffc01beed0feb129a',
     'TOOLS': '14e5b23965544a2eef07c7017ccba0dc21e988a74a07ce9afa386e86b94b1904',
-    'PEER_INSTRUCTIONS': 'c4ca94a39557daa12d1901405e719a3796d78ad383b998b3e783b2c19a09f384',
+    'PEER_INSTRUCTIONS': 'ec283b2eac90d9e2538b2df2008314e7e9d58a4949e819c7bf89823444d8887a',
     'PEER_SCHEMA': 'fe7c3b2ff866e3d35e8014df47a0fe6cbdca6b2cf2b7d79ef7f91c96049473ec',
     'KINDS': '934c56c6134aedf377765687cf2d002ea386d0dc040396011f8040ef7d280b2c',
     'READING_VERSION': '8286b50746226dd0b0a0f8f4f836a59a5cce209ca2233adf0d5a9d18e6542443',
@@ -530,6 +534,24 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
 
 
 class PromptConstantTests(OfflineTestCase):
+    def test_the_instructions_say_the_own_reading_is_shown_as_cpt_studio_recorded_it(self):
+        # Refutation round 1, IND-4: the own reading shown is CPT Studio's normalized one, which leaves out what CPT
+        # Studio could not use, so the instructions may not call it unchanged - a dropped code would read as one a peer
+        # proposed and the participant did not
+        text = ' '.join(prompt.PEER_INSTRUCTIONS.split())
+        self.assertNotIn('unchanged', text)
+        self.assertIn('it is shown to you below as CPT Studio recorded it', text)
+        for left_out in ('a code whose units fall outside 1 to 99', 'a date of service not written YYYY-MM-DD',
+                         'an extraction issue naming no page'):
+            self.assertIn(left_out, text)
+        adapter = AstraParticipant(self.tmp / 'never-read.env')
+        own = adapter.read(adapter.build_request(NOTE, PAGES, 'paste', None), astra_with(changed(
+            fixture_reading(), date_of_service={'value': '2026-11-01T09:00', 'evidence': []},
+            codes=[dict(fixture_reading()['codes'][0], units=0)], extraction_issues=[{'page': 0, 'issue': 'x'}])))
+        self.assertEqual(len(own.problems), 3)  # each item CPT Studio could not use is named in its problems
+        shown = prompt.reading_answer(own)  # and left out of what the peer request shows, as the instructions now say
+        self.assertEqual((shown['date_of_service']['value'], shown['codes'], shown['extraction_issues']), ('', [], []))
+
     def test_the_protected_constants_are_unchanged(self):
         for name, expected in PROTECTED.items():
             value = getattr(prompt, name)
