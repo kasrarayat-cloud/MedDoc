@@ -353,3 +353,35 @@ class PeerRepeatedCodeTests(R2WordingCase):
         self.assertEqual(len(rows), 2)
         self.assertIn('"repeated_in_peer_review"', next(row for row in rows if '"45385"' in row))
         self.assertIn('"proposed_after_peer_review"', next(row for row in rows if '"45378"' in row))
+
+
+# --- IR2-4: participant text that reads like a descriptor is withheld; the document's own passage is shown ----------
+
+PLURAL = 'Polyp(s) in the sigmoid colon were removed with a hot snare.'
+
+
+class DocumentQuoteTests(R2WordingCase):
+    """IR2-4 (b) (I9; app.js's own rule that the document's text is shown as it is): a participant's position quote is its
+    first LOCATED quote - an exact slice of the revision (jobs._first_located, I7) - and the code card withheld it as
+    "reads like a CPT descriptor" because the document itself wrote a plural mark, while the owner's trace showed the
+    same passage verbatim. The card now shows it as the document's own text."""
+
+    def test_a_located_quote_with_the_document_s_own_plural_mark_is_shown(self):
+        text = TWO_EXTENTS.replace('A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.', PLURAL)
+        self.assertIn(PLURAL, text)
+        snare = 'were removed with a hot snare'
+        self.corti.selections = [('45385', snare), ('45380', BIOPSY)]
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', snare), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', snare)]))]
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(
+            codes=[('45385', PLURAL)], services=[('c1', 'colonoscopy', 'performed', PLURAL)]))]
+        encounter_id = self.create(text)
+        drain()
+        detail = self.detail(encounter_id)
+        [card] = self.proposals(detail, '45385', bucket='selected')
+        self.assertEqual(card['participant_positions']['fable']['quote'], PLURAL)  # the document's own passage
+        lines = browser(f'[...visible(cardOf(page(), {json.dumps(card["id"])})).split("\\n")]'
+                        '.filter(line => line.startsWith("Fable proposed it"))', detail)
+        self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code with evidence located in the document. '
+                                 f'— “{PLURAL}”'])
+        self.assertNotIn('its quote is withheld', json.dumps(lines))

@@ -127,9 +127,11 @@ const VERIFIED_CHECKS = {
 };
 // Free text a participant wrote (a basis, a description, a quote it could not locate) that reads like a CPT descriptor -
 // the AMA's plural marks ("polyp(s)"), "; with", "single or multiple", "when performed", "(separate procedure)", "list
-// separately" - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a model can write one.
-// The document's own text and the retrieved CMS passages are shown as they are.
-const DESCRIPTOR_LIKE = /\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|initial)\b|\bsingle or multiple\b|\bwhen performed\b|\(separate procedure\)|\blist separately\b/i;
+// separately"; the office E/M long descriptor's frame ("visit for the ... of a new patient", "medically appropriate
+// history", "minutes must be met or exceeded"); and an abbreviated short descriptor's "W/", "W/O", "SINGLE/MULTIPLE"
+// (refutation round 2, IR2-4) - is withheld, never shown (HARNESS.md I9): no licensed descriptor is connected, and a
+// model can write one. The document's own text and the retrieved CMS passages are shown as they are.
+const DESCRIPTOR_LIKE = /\((?:s|es|ies)\)|;\s*(?:with|without|diagnostic|including|each|single|multiple|first|initial)\b|\bsingle or multiple\b|\bwhen performed\b|\(separate procedure\)|\blist separately\b|\bvisit for the\b[^.;]{0,80}?\bof an? (?:new|established) patient\b|\bmedically appropriate history\b|\bminutes must be met or exceeded\b|\bsingle\/multiple\b|\bw\/(?:o\b|[a-z])/i;
 const DESCRIPTOR_WITHHELD = 'Withheld: this text reads like a CPT descriptor, which CPT Studio never shows.';
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
 const CHECK_LOOKS = { pass: ['', 'circle-check'], info: ['muted', 'info'], not_applicable: ['muted', 'info'], warn: ['pending', 'info'], fail: ['pending', 'close'], not_verified: ['pending', 'clock'] };
@@ -962,12 +964,14 @@ function confirmedFacts(proposal, doc) {
   return `<div class="confirmed-fact">${icon('shield')}<span><strong>Confirmed finding, not a decision</strong>${lines.map(line => `<br>${escapeHtml(line)}`).join('')}</span></div>`;
 }
 
+// A participant's position on a code, with the passage it quoted: the API's quote is its first LOCATED quote, an exact
+// slice of the revision (jobs._first_located, I7), so it is the document's own text and is shown as it is, as the trace
+// shows a located quote (refutation round 2, IR2-4: a passage was withheld for the plural mark the document wrote).
 function positionText(name, position) {
   const detail = participantText(position?.detail);
   const quote = typeof position?.quote === 'string' ? position.quote.trim() : '';
   const said = `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, position?.position, 'took a position that was not recorded')}${detail ? `: ${detail}` : ''}`;
-  if (!quote) return sentence(said);
-  return DESCRIPTOR_LIKE.test(quote) ? `${said} — its quote is withheld: it reads like a CPT descriptor.` : `${said} — “${quote}”`;
+  return quote ? `${said} — “${quote}”` : sentence(said);
 }
 
 // What Astra and Fable each said about this code (participant_positions; {} when none is configured): proposed it, did

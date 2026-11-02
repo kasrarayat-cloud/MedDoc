@@ -1325,12 +1325,13 @@ test('no descriptor-like text is rendered: not the provider\'s display, not a pa
   const ready = fixture(HARNESS_READY);
   const proposals = ready.assessment.proposals.map((proposal, index) => ({ ...proposal, provider_display: `${DESCRIPTOR} ${index}`,
     participant_positions: { astra: { position: 'advised_not_to_code', detail: DESCRIPTOR, quote: '' },
-      fable: { position: 'advised_not_to_code', detail: 'not performed at this encounter', quote: `${DESCRIPTOR}.` } } }));
+      fable: { position: 'advised_not_to_code', detail: `not performed at this encounter ${DESCRIPTOR}`, quote: '' } } }));
   const doc = { ...ready, assessment: { ...ready.assessment, proposals } };
   const pages = ['codes', 'checks', 'timeline'].map(tab => render(doc, tab)).join('\n');
   assert.equal(pages.includes('lesion(s)') || pages.includes(app.escapeHtml(DESCRIPTOR)), false);
   assert.ok(pages.includes(`Astra advised not to code it: ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}`));
-  assert.ok(pages.includes('Fable advised not to code it: not performed at this encounter — its quote is withheld: it reads like a CPT descriptor.'));
+  // a position's quote is the document's own located passage (shown as it is, R2-WORDING IR2-4); its detail is not
+  assert.ok(pages.includes(`Fable advised not to code it: ${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}`));
   assert.equal(count(pages, '<h3>Description withheld</h3>'), 2);
   // the trace: every free-text field of a reading, and an unlocated quote
   const trace = fixture(HARNESS_TRACE);
@@ -2071,4 +2072,40 @@ test('R2-WORDING truth-8: a peer review\'s additional code is called never indep
   assert.equal(shown('independent').includes('never independent'), false);
   for (const phase of ['peer_review', undefined]) assert.ok(shown(phase).includes(`${head}proposed after peer review, never independent</b>`), String(phase));
   for (const phase of ['', 'exploded', null]) assert.ok(shown(phase).includes(`${head}listed in peer review</b>`), String(phase));
+});
+
+test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated descriptor is withheld; a located quote is the document\'s own text', () => {
+  // (a) placeholder shapes only, never licensed text: the office E/M long-descriptor frame and a short descriptor
+  const shapes = [
+    'Office or other outpatient visit for the SYNTHETIC-PLACEHOLDER of an established patient, which requires a medically appropriate history and/or examination and PLACEHOLDER level of medical decision making.',
+    'Outpatient visit for the PLACEHOLDER of a new patient.',
+    'When using total time on the date of the encounter for code selection, PLACEHOLDER minutes must be met or exceeded.',
+    'which requires a medically appropriate history',
+    'SYNTHETIC-PLACEHOLDER COLSC FLX W/BIOPSY SINGLE/MULTIPLE',
+    'SYNTHETIC-PLACEHOLDER EGD W/O PLACEHOLDER',
+    'placeholder single/multiple',
+  ];
+  for (const text of shapes) {
+    assert.ok(app.DESCRIPTOR_LIKE.test(text), text);
+    assert.equal(app.participantText(text), app.DESCRIPTOR_WITHHELD, text);
+  }
+  // CPT Studio's own wording, and plain clinical prose, are not caught
+  for (const text of ['Basis for the visit level (total time or medical decision making)', 'it states a total time in minutes or a level of medical decision making',
+    'Established patient', 'The polyp was removed w/ a cold snare.', 'Total time on the date of the encounter was 24 minutes.', 'A follow-up visit for the patient is planned.']) {
+    assert.equal(app.DESCRIPTOR_LIKE.test(text), false, text);
+  }
+  // a reference's use with the E/M frame is withheld on every code card that lists it
+  const final = fixture(H2_FINAL);
+  const cited = { ...final, harness: { ...final.harness, participants: final.harness.participants.map(row => (row.name === 'astra'
+    ? { ...row, references: { ...row.references, used: [...row.references.used, { ref: 'status-A', use: shapes[0], retrieved: false }] } } : row)) } };
+  for (const code of ['45385', '45380']) {
+    const card = codeCardOf(render(cited), code);
+    assert.equal(card.includes('medically appropriate history'), false, code);
+    assert.ok(card.includes(`Its use: “${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}”`), code);
+  }
+  // (b) a position's quote is its first located quote, an exact slice of the document: shown as the document's text
+  const quote = 'Polyp(s) in the sigmoid colon were removed with a hot snare.';
+  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code with evidence located in the document.', quote } } });
+  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code with evidence located in the document. — “${app.escapeHtml(quote)}”</p>`), html);
+  assert.equal(html.includes('withheld'), false);
 });
