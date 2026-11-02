@@ -84,7 +84,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
     "participants": [
       {"name": "corti", "label": "Corti", "vendor": "Corti", "model": "", "state": "done",
        "detail": "Answered; its codes were checked.", "run_id": "uuid", "reused": false, "codes": ["45385"],
-       "unverified_quotes": 0, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
+       "unlisted_codes": 0, "unverified_quotes": 0, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
        "estimated_cost_usd": null, "returned_model": ""},
       {"name": "astra", "label": "Astra", "vendor": "OpenAI", "model": "gpt-6-astra", "state": "refused",
        "detail": "Answered; the reading was not used: the response was cut off at the output limit.", "run_id": "uuid",
@@ -200,7 +200,9 @@ stopped with an unexpected error before it recorded an outcome included - makes 
 member reconciles it (`POST reconcile` takes any participant's run). `codes` are the codes that participant proposed
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
 "code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
-sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated.");
+sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
+counts those (0 on Corti's row and wherever none was returned), so the page says the reading proposed no code "that can
+be listed", never that it proposed none (refutation round 2, truth-11);
 `usage` is as the vendor reported it, with its `usage_basis`; `estimated_cost_usd` is a string estimated from published
 rates, not reconciled to an invoice, to four decimals (`"0.0270"`, rounded half up), and null for Corti (credits, not
 USD), for a run that reported no usage (a reuse), and where the installed pricing module cannot price the usage. A tool

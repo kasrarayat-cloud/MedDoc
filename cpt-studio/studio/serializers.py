@@ -548,10 +548,12 @@ def _record_detail(record, run):
     return detail
 
 
-def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0):
+def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0, unlisted=0):
+    # ``unlisted``: how many codes the reading proposed that the engine cannot list, never served (I9): the page says
+    # which codes can be listed, never that a participant proposed none (refutation round 2, truth-11)
     return {'name': name, 'label': label, 'vendor': vendor, 'model': model, 'state': state, 'detail': detail,
             'run_id': str(run.pk) if run is not None else None,
-            'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes),
+            'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes), 'unlisted_codes': unlisted,
             'unverified_quotes': unverified, 'usage': dict(run.usage or {}) if run is not None else {},
             'usage_basis': run.usage_basis if run is not None else '', 'estimated_cost_usd': review.estimated_cost(run),
             'returned_model': run.returned_model if run is not None else ''}
@@ -620,7 +622,7 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         if unlisted:
             detail = f'{detail} {review.unlisted_words(unlisted)}'
         return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
-                    codes, int(record.get('unverified_quotes') or 0))
+                    codes, int(record.get('unverified_quotes') or 0), unlisted)
     if newest is not None:
         held = newest.state == models.ProviderRun.NOT_SENT and (newest.scope or {}).get('held')
         return _row(name, label, vendor, model, 'blocked' if held else RUN_STATES.get(newest.state, 'unknown'),

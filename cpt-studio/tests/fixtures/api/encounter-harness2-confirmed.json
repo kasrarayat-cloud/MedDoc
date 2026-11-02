@@ -39,6 +39,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "creditsConsumed": 0.0281
@@ -69,6 +70,7 @@
      "45385",
      "45380"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -149,6 +151,7 @@
     "codes": [
      "45385"
     ],
+    "unlisted_codes": 0,
     "unverified_quotes": 0,
     "usage": {
      "input_tokens": 2000,
@@ -468,8 +471,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "04150bde2ac1674ce5c9110486f12a4a1b6540ae4e2072e7ae84e870c2277c4a",
-   "response_sha256": "73905fdecb49f8e870f20cb58d964003410f385ca19d15d37c5a87dd66bee134",
+   "request_sha256": "7cea47814f7033d2a80f96a7814662db7306b15a10c76fcad23ee0d331fa2599",
+   "response_sha256": "6784cb0778b57e0ca4ad42d619b679c4f5d68c2f188e2ee89b9873f6778762d7",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -491,8 +494,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "cc61ebc9c3d118923f53821812510e2c70b621d84dcda35227c2e3adf4f4516c",
-   "response_sha256": "531313980cc425afdfc5754267ce66c8053936607b0a9e1033870fb3409297cb",
+   "request_sha256": "6cfd6f95c36c230adc8884374dac67641d5628231f44af9d7cfe7a73294dde4a",
+   "response_sha256": "63ae10bc8060153b222d88dcd18d3fdb915437c905c3f78def5e8282d2e7677f",
    "reused_from": null,
    "error": "",
    "reconciled": false,

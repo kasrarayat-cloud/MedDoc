@@ -32,8 +32,8 @@ DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by'
 # so a fixture taken from the real API was rejected, and no frontend test could see a key the API serves).
 PARTICIPANTS = ['corti', 'astra', 'fable']
 PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes',
-                    'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd', 'returned_model', 'peer',
-                    'references', 'peer_references'}
+                    'unlisted_codes', 'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd',
+                    'returned_model', 'peer', 'references', 'peer_references'}
 PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
                       'stopped'}
 HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification', 'final'}
@@ -61,7 +61,7 @@ RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 
 FIXTURE_LACKS = {
     'permissions': {'can_confirm'},
     'harness': {'phase'},
-    'participant': {'peer', 'references', 'peer_references'},
+    'participant': {'peer', 'references', 'peer_references', 'unlisted_codes'},
     'trace': {'assessments'},
     'trace_run': {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled', 'review',
                   'exchanges'},

@@ -164,3 +164,45 @@ class CortiRelationTests(R2WordingCase):
         self.assertEqual([text.split('\n')[0] for text in lines],
                          ['Proposed by: Fable', 'Proposed by: Fable; Corti did not propose this code.',
                           'Proposed by: Fable'])
+
+
+# --- truth-11: a participant row never says "It proposed no code" beside the codes it cannot list ----------------------
+
+class UnlistedCodesTests(R2WordingCase):
+    """truth-11 (HARNESS.md 7; the round-1 IND-1 repair's count sentence): a participant whose reading proposed only a
+    code the engine cannot list read "It returned 1 code that cannot be listed ..." and then "It proposed no code." The
+    row serves the count (unlisted_codes), and the page says what can be listed, never that it proposed nothing."""
+
+    LONG = '45385-SYNTHETIC-LONG-VALUE'
+
+    def fable_reads(self, *codes):
+        self.adapters['fable'].first = [hp.answered('fable', hp.reading(
+            codes=[(value, SNARE) for value in codes], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        return self.detail(encounter_id)
+
+    def row_text(self, detail, name):
+        return browser(f'rowOf(page(), "data-participant", {json.dumps(name)})', detail)
+
+    def test_a_reading_that_proposed_only_a_code_it_cannot_list(self):
+        detail = self.fable_reads(self.LONG)
+        rows = {row['name']: row for row in detail['harness']['participants']}
+        text = self.row_text(detail, 'fable')
+        self.assertIn('It returned 1 code that cannot be listed', text)
+        self.assertIn('It proposed no code that can be listed.', text)
+        self.assertNotIn('It proposed no code.', text)
+        self.assertNotIn(self.LONG, json.dumps(detail['harness']))  # never served (I9)
+        self.assertEqual((rows['fable']['codes'], rows['fable']['unlisted_codes']), ([], 1))
+        # control: a row whose every code can be listed reads as before
+        self.assertEqual((rows['astra']['codes'], rows['astra']['unlisted_codes']), (['45385', '45380'], 0))
+        self.assertIn('Codes it proposed: 45385, 45380.', self.row_text(detail, 'astra'))
+        self.assertEqual(rows['corti']['unlisted_codes'], 0)
+
+    def test_a_reading_with_codes_it_can_and_cannot_list_says_which_are_listed(self):
+        detail = self.fable_reads('45385', self.LONG)
+        text = self.row_text(detail, 'fable')
+        self.assertIn('Codes it proposed that can be listed: 45385.', text)
+        self.assertNotIn('Codes it proposed: 45385.', text)
+        fable = next(row for row in detail['harness']['participants'] if row['name'] == 'fable')
+        self.assertEqual((fable['codes'], fable['unlisted_codes']), (['45385'], 1))

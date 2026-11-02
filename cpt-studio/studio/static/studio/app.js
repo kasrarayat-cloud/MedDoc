@@ -1485,18 +1485,23 @@ function referencesNote(references) {
 // A participant's row: its state as the API reports it, with the API's own sentence - after the plain one when it gives
 // none, or when the state must be said plainly (not configured, not used, unknown, blocked, failed) and its sentence
 // does not say so - and what it proposed, how many of its quotes the document does not contain, whether its answer was
-// reused, and the model asked for and the one that answered.
+// reused, and the model asked for and the one that answered. A reading that proposed codes the engine cannot list
+// (unlisted_codes; the API's sentence counts them) is said to have proposed none that can be listed, never none at all
+// (refutation round 2, truth-11).
 function participantRow(participant) {
   const name = typeof participant.name === 'string' ? participant.name : '';
   const [look, label, plain, required] = lookup(PARTICIPANT_STATES, participant.state, [['pending', 'info'], 'State not recorded', 'The state of this participant was not recorded.', 'not recorded']);
   const said = typeof participant.detail === 'string' ? participant.detail.trim() : '';
   const lines = !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const codes = (Array.isArray(participant.codes) ? participant.codes : []).filter(code => typeof code === 'string' && code);
+  const unlisted = Number.isInteger(participant.unlisted_codes) && participant.unlisted_codes > 0;
   const unverified = Number.isInteger(participant.unverified_quotes) && participant.unverified_quotes > 0 ? participant.unverified_quotes : 0;
   const model = textValue(participant.model);
   const returned = textValue(participant.returned_model);
+  const proposed = codes.length ? `${unlisted ? 'Codes it proposed that can be listed' : 'Codes it proposed'}: ${codes.join(', ')}.`
+    : unlisted ? 'It proposed no code that can be listed.' : 'It proposed no code.';
   const notes = [
-    participant.state === 'done' ? (codes.length ? `Codes it proposed: ${codes.join(', ')}.` : 'It proposed no code.') : '',
+    participant.state === 'done' ? proposed : '',
     unverified ? `${plural(unverified, 'quote it gave was', 'quotes it gave were')} not found in the document text, so never used as evidence.` : '',
     participant.reused === true ? 'Reused the stored answer to an identical request; nothing new was sent.' : '',
     model && returned ? `Model requested: ${model}; answered by ${returned}.` : model ? `Model: ${model}.` : '',

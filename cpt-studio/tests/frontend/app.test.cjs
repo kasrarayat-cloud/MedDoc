@@ -2014,3 +2014,20 @@ test('R2-WORDING truth-6: a card says "Corti did not propose this code" only whe
   assert.ok(app.codeStatusLines({ proposed_by: ['corti', 'astra'], corti_relation: 'none', reference_check: { state: 'passed' } })
     .includes('<li><b>Proposed by:</b> Corti, Astra</li>'));
 });
+
+test('R2-WORDING truth-11: a participant row never says it proposed no code beside codes it cannot list', () => {
+  const final = fixture(H2_FINAL);
+  const fable = final.harness.participants.find(row => row.name === 'fable');
+  assert.equal(fable.unlisted_codes, 0, 'the serializer serves the count');
+  const row = fields => harnessRow(render(withParticipant(final, 'fable', fields)), 'fable');
+  assert.ok(row({ codes: [], unlisted_codes: 1 }).includes('<small class="check-source">It proposed no code that can be listed.</small>'));
+  assert.equal(row({ codes: [], unlisted_codes: 1 }).includes('It proposed no code.<'), false);
+  assert.ok(row({ codes: ['45385'], unlisted_codes: 2 }).includes('<small class="check-source">Codes it proposed that can be listed: 45385.</small>'));
+  // none it cannot list (or no count served): as before
+  for (const unlisted_codes of [0, undefined, -1, '1', 1.5]) {
+    assert.ok(row({ codes: [], unlisted_codes }).includes('<small class="check-source">It proposed no code.</small>'), String(unlisted_codes));
+    assert.ok(row({ codes: ['45385'], unlisted_codes }).includes('<small class="check-source">Codes it proposed: 45385.</small>'), String(unlisted_codes));
+  }
+  // only a reading that was used lists codes at all
+  assert.equal(row({ state: 'refused', codes: [], unlisted_codes: 1 }).includes('It proposed'), false);
+});
