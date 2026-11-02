@@ -588,3 +588,46 @@ Otherwise `verified` is false and `why` says which check failed. Agreement betwe
 - reports (TXT and CSV): a PEER REVIEW section (answers, positions, additional codes marked "proposed after peer
   review"), a CONFIRMED FINDINGS section (fact, value, passage, located by, confirmed by, attestation, time), and the
   participants' retrieved and used references kept apart from REFERENCE RETRIEVAL.
+
+### 12.7 As integrated (2026-11-02): where the built packages refine 12.1-12.6
+
+The part B packages and their integration (`ca3fd243b`, `3c4c3b29e`, `3c2890b16`) settled these points. Where this list
+and 12.1-12.6 differ, this list describes the code; the earlier text is kept so the change can be seen.
+
+- **12.1, the final assessment.** When at least one configured model participant's phase-1 state is `read` and no member
+  date conflict holds the encounter, assess #1 queues the first owed peer stage; otherwise it is the final assessment.
+  `jobs.owed_peer_stages` decides it, and the API, the candidates, the confirmation endpoint and the reports all read it.
+- **12.1, confirmations.** While a model participant is configured, every assess of the revision (assess #1, assess #2 and
+  each re-assessment) reads its non-date confirmations; with none configured, none are read (I1).
+- **12.1, the re-assessment key.** `<the final assessment's key, any earlier ':c:' part left off>:c:<12 hex of
+  sha256(sorted ids of every confirmation of the revision)>`, so the key stays bounded however many confirmations follow.
+- **12.1, the upgrade mark.** A chain started by the upgrade's predict marks its peer stages `:after-upgrade`; they stop
+  where they would send until a member's Resume, as its phase-1 stages do.
+- **12.1, deadlines.** A phase-1 or peer job's deadline is 580 s: the 540 s loop, 15 s to record its outcome and 25 s of
+  the stage's own work before the loop. It ends 20 s before `STALE_RUNNING_SECONDS` (600 s); the installer's 600 s stop
+  timeout outlasts it. A stage left with less than a whole loop's time is queued again, having reserved and sent nothing.
+- **12.3 and 12.4, the frozen list and what a peer sees of Corti.** `frozen` lists `corti` when its run has response
+  bytes, and a model participant whenever a reading was produced. Corti is shown to a peer only from a read, unrefused
+  answer, with `modifiers: []`, `units` as the number of its entries, and `evidence` only as exact passages of the
+  revision (never the date line CPT Studio adds to Corti's request, never `display`).
+- **One implementation per fact.** The assessment's phase (`jobs.assessment_phase`), a run's reading and peer review as
+  recorded (`jobs.participant_reading`, `jobs.peer_reading`, `recorded_reading`, `recorded_peer_review`), the run whose
+  loop answered (`jobs.loop_run`), the frozen hashes (`jobs.answer_sha256`) and a question's identity
+  (`review.question_identity`) each have one implementation, which the pipeline, the API, the candidates and the
+  reports call.
+- **12.5.** Candidate values are CPT Studio's own words (an ISO date, a status word, routing's landmark or structure
+  label, successful or failed, time or level); a value it cannot restate is `''` and unverified. A cannulation passage
+  must state the value's own outcome. A peer answer is matched through the clarification its id names, by (scope,
+  family, fact, proposal key, proposal code). Candidates and confirmations exist only while a model participant is
+  configured. A confirmation is refused (409) while processing is under way. `context.changed` carries
+  `confirmation: <id>` when a confirmed date saved the context.
+- **12.6.** `references.retrieved[]` is `{ref, kind: fact|passage, source_key, release, effective_start, effective_end,
+  tool}`, from the tool calls of the loop that answered the run (a reuse shows the calls of the run it reuses), dated
+  by `tools.retrieved_references`; `used[].retrieved` is the reader's own check. `API.md` records the review package's
+  additive fields (candidates' `phases` and `attestation`, the encounter's top-level `confirmations`, the trace's
+  `assessments`, peer states `waiting`/`running`/`stopped`). A phase-1 report says why no peer review follows: none was
+  read, a member date conflict holds the encounter, or no participant that read is configured now.
+- **Open, recorded here so it is not lost:** refutation round 1's findings (23, all reproduced) and the integration's
+  own (a confirmation bound to a proposal key rather than its code; the HTTP read deadline checked only between chunks;
+  decisions invalidated when an intermediate assess #1 re-runs without the peer-added codes) are being repaired. The
+  peer requests' question ids are assess #1 row ids, so an identical question asked again is sent again (cost).
