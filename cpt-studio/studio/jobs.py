@@ -1142,6 +1142,32 @@ def _retained_answer(encounter, participant, request, purpose):
         scope__mode=participant.mode).order_by('created_at').first()
 
 
+NOT_ATTEMPTED_AGAIN_MESSAGE = ('Nothing was sent: this identical request was attempted before for this document and '
+                               'recorded not sent, and it is not attempted again behind a reconciliation or a context '
+                               'change; an addendum or a new upload makes a new request.')
+NOT_ATTEMPTED_AGAIN_ERROR = ' Its reason then: {error}'
+
+
+def _unsent_attempt(encounter, revision, participant, request, purpose):
+    """This revision's attempt of the identical participant request (provider, adapter version, request sha256, purpose,
+    mode) that stands as recorded not sent, or None (refutation round 1, sends-1). It is the newest finished run of that
+    request (_newest_finished) when that run went through the send doors - its start recorded: a reservation the stale
+    sweep settled never reached the send and still owes its attempt - sent nothing, and carries no hold: a run the
+    unknown-outcome block stopped owes its attempt, and a member date conflict's hold is never one. A request sent and
+    FAILED is the failed-request door's (_failed_before), never this one's.
+
+    Such an attempt stands as Corti's not-sent attempt does behind a metadata save (ARCHITECTURE 5.4): a chain re-run by
+    another run's reconciliation or by a context change never attempts that request again; an addendum or a new upload
+    makes a new one."""
+    run = _newest_finished(revision.provider_runs.filter(
+        provider=participant.name, purpose=purpose, adapter_version=participant.adapter_version,
+        request_sha256=request.canonical_sha256, scope__mode=participant.mode))
+    if (run is None or run.state != models.ProviderRun.NOT_SENT or run.sent or run.started_at is None
+            or 'held' in (run.scope or {}) or _failed_before(encounter, participant, request) is not None):
+        return None
+    return run
+
+
 def _reused_participant_run(job, prior, purpose, scope=None):
     """The run a participant stage records where it reuses ``prior``: the whole run, nothing sent and no new usage, and
     no exchange of its own (its loop is prior's: loop_run). ``scope``: what it adds to prior's mode (a peer review names
@@ -1199,6 +1225,12 @@ def stage_participant(job):
     prior = _retained_answer(encounter, participant, request, models.ProviderRun.INDEPENDENT)
     if prior is not None:
         return _participant_done(job, _reused_participant_run(job, prior, models.ProviderRun.INDEPENDENT), 'reused')
+    # An attempt of this identical request that was recorded not sent stands: nothing is sent and no run is added, so
+    # the assess reads that run as before (refutation round 1, sends-1). Asked before the unknown-outcome block, whose
+    # held run would owe that request an attempt.
+    unsent = _unsent_attempt(encounter, revision, participant, request, models.ProviderRun.INDEPENDENT)
+    if unsent is not None:
+        return _participant_done(job, unsent, 'not_attempted_again')
 
     if _unreconciled_unknown(encounter):
         held = _participant_not_sent(job, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
@@ -1315,6 +1347,14 @@ def stage_peer(job):
     if prior is not None:
         return _peer_done(job, first, _reused_participant_run(job, prior, models.ProviderRun.PEER_REVIEW, scope),
                           'reused')
+    unsent = _unsent_attempt(encounter, revision, participant, request, models.ProviderRun.PEER_REVIEW)
+    if unsent is not None:
+        # as phase 1 (sends-1), with a run of its own naming this assess #1, which is the run assess #2 reads; it
+        # carries the request and says why nothing was sent
+        error = NOT_ATTEMPTED_AGAIN_MESSAGE + (NOT_ATTEMPTED_AGAIN_ERROR.format(error=unsent.error) if unsent.error
+                                               else '')
+        return _peer_done(job, first, _peer_not_sent(job, first, name, participant, request, error,
+                                                     mode=participant.mode), 'not_attempted_again')
     if _unreconciled_unknown(encounter):
         held = _peer_not_sent(job, first, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                               mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
@@ -2380,6 +2420,11 @@ def reconcile(encounter, run, user, note):
     True when recorded, None when ``run`` is not an unreconciled unknown outcome.
     The one attempt is a predict for the current revision's current context; when
     the current revision has no context (its extraction failed) nothing is queued.
+
+    A harness participant's run (refutation round 1, sends-1): when nothing else blocks a send and Corti's run in use
+    answers the request the context makes, the participants' chain starts from that run, as a context change that
+    keeps the request does - so Corti's request, sent or recorded not sent, is never attempted again behind another
+    run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before.
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -2393,8 +2438,16 @@ def reconcile(encounter, run, user, note):
         revision, context = encounter.current_revision, encounter.current_context
         clear_stop(encounter)
         if context is not None and revision is not None and context.revision_id == revision.pk:
-            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
-                           requested_by=user)
+            corti = _run_in_use(revision)
+            if (run.purpose in PARTICIPANT_PURPOSES and participants.configured()
+                    and not _unreconciled_unknown(encounter)
+                    and not gi_context.is_member_conflict((context.facts or {}).get('service_date'))
+                    and _run_answers(corti, revision, context)):
+                _after_predict(encounter, revision, context, corti, key=f'assess:{context.pk}:{corti.pk}',
+                               origin=f'reconcile:{run.pk}', requested_by=user)
+            else:
+                _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
+                               requested_by=user)
         # a participant's row names its provider, so the Activity tab words it ("Unknown Astra outcome reconciled")
         audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk),
                      **({'provider': run.provider} if run.purpose in PARTICIPANT_PURPOSES else {}))

@@ -49,7 +49,8 @@ class _WorkerDied(BaseException):
 
 
 class ScriptedCorti(FakeProvider):
-    """Corti's fake (tests.test_pipeline_api.FakeProvider) with scripted outcomes; it records every request it sends."""
+    """Corti's fake (tests.test_pipeline_api.FakeProvider) with scripted outcomes; it records every request it is handed
+    (one scripted 'not_sent' reaches nothing, as the live adapter's connection that was never established)."""
 
     def __init__(self, *args, outcomes=(), **kwargs):
         super().__init__(*args, **kwargs)
@@ -59,6 +60,9 @@ class ScriptedCorti(FakeProvider):
         self.requests.append(request)
         saved, self.outcome = self.outcome, (self.outcomes.pop(0) if self.outcomes else self.outcome)
         try:
+            if self.outcome == 'not_sent':
+                return RawExchange(outcome='not_sent', sent=False, error='The Corti coding service could not be '
+                                                                         'reached (ConnectTimeout); nothing was sent.')
             return super().send(request, deadline_s=deadline_s)
         finally:
             self.outcome = saved
@@ -136,6 +140,9 @@ class FakeParticipant:
         if outcome == 'unknown':
             return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent '
                                                                    '(synthetic).', **identity)
+        if outcome == 'not_sent':  # e.g. its credentials file is missing at send time: nothing left
+            return RawExchange(outcome='not_sent', sent=False, requested_model=self.requested_model,
+                               error='The credentials file does not exist. No request was sent. (synthetic)')
         if outcome == 'failed':
             data = b'{"error": {"type": "overloaded_error"}}'
             return RawExchange(outcome='failed', sent=True, http_status=529, response_bytes=data,
@@ -709,15 +716,16 @@ class UnknownOutcomeTests(HarnessCase):
         encounter = self.encounter(encounter_id)
         self.assertEqual(encounter.state, 'provider_unknown')  # the encounter-wide block stays
         self.assertIn('reconciliation', self.client.get('/api/encounters').json()['encounters'][0]['queue_reasons'])
-        # reconcile queues predict: Corti's identical request is reused, and only Astra is sent again
+        # a participant's reconciliation re-checks with Corti's run in use, which answers the request: nothing is handed
+        # to Corti and no predict runs (refutation round 1, sends-1), and only Astra is sent again
         response = self.post(f'/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         self.assertEqual(len(self.corti.requests), 1)
         corti = self.runs_of(encounter_id, 'corti')
-        self.assertEqual([(r.state, r.sent, bool(r.reused_from_id)) for r in corti],
-                         [('succeeded', True, False), ('succeeded', False, True)])
+        self.assertEqual([(r.state, r.sent, bool(r.reused_from_id)) for r in corti], [('succeeded', True, False)])
+        self.assertNotIn('predict', [j.kind for j in self.jobs_of(encounter_id)][3:])
         self.assertEqual(len(self.adapters['astra'].sent), 2)  # the unknown one, then once after the reconciliation
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # never sent before: sent once now
         records = self.records(encounter_id)
@@ -856,6 +864,88 @@ class UnknownOutcomeTests(HarnessCase):
         reused = [run for run in self.runs_of(encounter_id, purpose='peer_review') if run.reused_from_id]
         self.assertEqual(sorted(run.provider for run in reused), ['astra', 'fable'])
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
+
+
+@override_settings(**LIVE, **BOTH)
+class NotSentAttemptTests(HarnessCase):
+    """Refutation round 1, sends-1 (I8; ARCHITECTURE 5.4): an attempt that went through the send doors and was recorded
+    not sent stands. A chain re-run by another run's reconciliation or by a context change never attempts that identical
+    request again - only an addendum or a new upload makes a new one - and the reconciled run alone gets its attempt."""
+
+    def reconcile(self, encounter_id, run):
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': str(run.pk), 'note': RECONCILE_NOTE})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+
+    def test_reconciling_another_run_never_attempts_a_participant_s_unsent_request_again(self):  # N3
+        self.adapters['astra'].outcomes = ['not_sent']
+        self.adapters['fable'].outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        (astra,) = self.runs_of(encounter_id, 'astra')
+        self.assertEqual((astra.state, astra.sent, astra.started_at is not None), ('not_sent', False, True))
+        self.reconcile(encounter_id, self.runs_of(encounter_id, 'fable')[0])
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (1, 1, 2))  # only the reconciled request is attempted again
+        self.assertEqual(self.runs_of(encounter_id, 'astra'), [astra])
+        records = self.records(encounter_id)
+        self.assertEqual((records['astra']['state'], records['astra']['run'], records['fable']['state']),
+                         ('not_sent', str(astra.pk), 'read'))
+        self.assertEqual(self.peer_sends(), (0, 1))
+
+    def test_a_participant_s_reconciliation_never_attempts_corti_s_unsent_request_again(self):  # N2
+        self.corti.outcomes = ['not_sent']
+        self.adapters['astra'].outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        (corti,) = self.runs_of(encounter_id, 'corti')
+        self.assertEqual((corti.state, corti.sent), ('not_sent', False))
+        self.assertEqual([r.scope.get('held') for r in self.runs_of(encounter_id, 'fable')], ['unknown_outcome'])
+        self.reconcile(encounter_id, self.runs_of(encounter_id, 'astra')[0])
+        # Corti's request is not handed over again; Astra's reconciled request is, and Fable, held by the unknown
+        # outcome, gets its turn
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (1, 2, 1))
+        self.assertEqual(self.runs_of(encounter_id, 'corti'), [corti])
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run, corti)
+        records = self.records(encounter_id)
+        self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
+
+    def test_a_date_change_never_attempts_a_participant_s_unsent_request_again(self):  # N1
+        self.adapters['astra'].outcomes = ['not_sent']
+        encounter_id = self.create(OFFICE_NOTE.replace('Date of service: 2026-10-20\n', ''), service_date='2026-10-20')
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'setting': 'office'}).status_code, 201)
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-21'}).status_code, 201)
+        drain()
+        # Corti's request carries the date, so it is a new request; the participants' carry none
+        self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
+                         (2, 1, 1))
+        self.assertEqual([(r.state, r.sent) for r in self.runs_of(encounter_id, 'astra')], [('not_sent', False)])
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
+
+    def test_a_peer_review_s_unsent_request_is_not_attempted_again_for_a_new_first_assessment(self):
+        self.adapters['astra'].peer_outcomes = ['not_sent']
+        encounter_id = self.create()
+        drain()
+        (unsent,) = self.runs_of(encounter_id, 'astra', 'peer_review')
+        self.assertEqual((unsent.state, unsent.sent, unsent.started_at is not None), ('not_sent', False, True))
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
+        drain()
+        # the new assess #1 makes the identical peer requests: Astra's is not attempted again, Fable's is reused
+        self.assertEqual(self.peer_sends(), (1, 1))
+        later = self.runs_of(encounter_id, 'astra', 'peer_review')[1]
+        first = self.assessments(encounter_id)[-2]
+        self.assertEqual((later.state, later.sent, later.request_sha256, later.scope['assessment']),
+                         ('not_sent', False, unsent.request_sha256, str(first.pk)))
+        self.assertTrue(later.error.startswith(jobs.NOT_ATTEMPTED_AGAIN_MESSAGE))
+        record = self.records(encounter_id)['astra']
+        self.assertEqual((record['peer_state'], record['peer_run']), ('not_sent', str(later.pk)))
+        self.assertEqual(self.records(encounter_id)['fable']['peer_state'], 'read')
 
 
 @override_settings(**LIVE, **BOTH)

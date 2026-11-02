@@ -1149,8 +1149,11 @@ class SweepStopResumeTests(Harness2Case):
                              {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
-        self.assertEqual(self.kinds(encounter_id)[-7:], ['predict', 'astra', 'fable', 'assess', 'astra_peer',
+        # the participants' chain starts from Corti's run in use, which answers the request: no predict runs
+        # (refutation round 1, sends-1)
+        self.assertEqual(self.kinds(encounter_id)[-7:], ['assess', 'astra', 'fable', 'assess', 'astra_peer',
                                                          'fable_peer', 'assess'])
+        self.assertEqual(self.kinds(encounter_id).count('predict'), 1)
         self.assertEqual((len(self.corti.requests), self.sent('astra', 'first'), self.sent('fable', 'first')),
                          (1, 2, 1))
         final = self.encounter(encounter_id).current_assessment
