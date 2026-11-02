@@ -878,8 +878,12 @@ class PeerReviewTests(SimpleTestCase):
         self.assertEqual(proposal(result, '45378').support['phases'], {'fable': 'peer_review'})
 
     def test_peer_review_keeps_the_keys_of_every_first_reading_code(self):
-        """assess #1 and assess #2: a code added in peer review comes after every first reading's code, so the keys
-        a question names on the first assessment name the same proposals on the second."""
+        """assess #1 and assess #2: a code no first reading listed, added in peer review, comes after every first
+        reading's code, so it never takes the key of one a first reading proposed. That is all it guarantees: a code a
+        first reading listed with no located quote is selected at its own place once its peer review locates it, and
+        a later reading or a new answer selects other codes, so keys still move between assessments - which is why a
+        confirmation is bound to its proposal's code and identity, never its key (refutation round 1, EV-1;
+        tests/test_harness_engine_confirmations.py BindingTests)."""
         first = run(COLON, (), [read('astra', [code(COLON, '45385', SNARE)]), read('fable', [code(COLON, '45378', CECUM)])],
                     provider_status='failed')
         second = run(COLON, (), [reviewed('astra', [code(COLON, '45385', SNARE)], peer('astra', additional=[
