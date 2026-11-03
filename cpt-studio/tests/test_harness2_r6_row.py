@@ -3,16 +3,15 @@ mark of an alternative a peer review proposed with a located quote (falsegreen-2
 is pinned in the `// refutation round 6, R6-ROW` block of tests/frontend/app.test.cjs, with the row's branches.
 
 row-1. An addendum makes its revision current, and the encounter's current assessment stays the earlier revision's until
-the new revision is first assessed: through its extract, analyze, predict, astra and fable stages, and for good after a
-member's Stop before then. The API serves that assessment as `assessment`, with its clarifications and
-open_clarifications, while harness.clarification.open counted the open questions of review.live_assessment - the
-current assessment only when it was made on the current revision - and so served 0. The row's guards read
-doc.assessment, so the row drew "None open" / "No question is open for this revision." in its succeeded look beside the
-earlier revision's open questions the same response serves; with Corti alone too. Now harness_json serves the count as
-null while the current revision has no assessment, and the row reads null as it reads no assessment: "Waiting" / "Known
-once the proposals are checked." while a stage runs, otherwise "Not asked" / "No question was asked: the proposals were
-not checked for this revision." - never a count. The earlier revision's questions are drawn as before: recorded, not
-repaired here, and not pinned here.
+the new revision is first assessed - through every stage before that assessment, and for good after a member's Stop
+before it. The API serves that assessment as `assessment`, with its clarifications and open_clarifications, while
+harness.clarification.open counted the open questions of review.live_assessment - the current assessment only when it
+was made on the current revision - and so served 0. The row's guards read doc.assessment, so the row drew "None open" /
+"No question is open for this revision." in its succeeded look beside the earlier revision's open questions the same
+response serves; with Corti alone too. Now harness_json serves the count as null while the current revision has no
+assessment, and the row reads null as it reads no assessment: "Waiting" / "Known once the proposals are checked." while
+a stage runs, otherwise "Not asked" / "No question was asked: the proposals were not checked for this revision." - never
+a count. The earlier revision's questions are drawn as before: recorded, not repaired here, and not pinned here.
 
 falsegreen-2. HARNESS.md 11.1: a code first proposed in phase 2 is marked proposed after peer review. Round 5 moved the
 only pin of the " · proposed after peer review" mark on an alternative's title to an alternative D12 made listed-only,
@@ -20,9 +19,10 @@ so a page that drops the mark passed every test. Pinned here on the real pipelin
 code G0121 quoting the landmarks line, which the engine keeps as an alternative proposed by Fable in peer review with a
 located quote.
 
-Each pin runs the real pipeline and renders the served detail with the shipped app.js (node). The row-1 pins failed on
-the base de6418fc6 for the finding's reason. Synthetic data only; nothing is sent: Corti is the suite's in-process fake
-read by the real normaliser, and Astra and Fable are the real replay adapters on the real tool loop
+Each pin runs the real pipeline and renders the served detail with the shipped app.js (node). On the base de6418fc6 the
+row-1 pins of the window failed for the finding's reason ({'open': 0} and "None open"), and the one before any
+assessment failed on the count alone, which was 0. Synthetic data only; nothing is sent: Corti is the suite's
+in-process fake read by the real normaliser, and Astra and Fable are the real replay adapters on the real tool loop
 (tests.test_harness2_pipeline) or disabled.
 """
 import json

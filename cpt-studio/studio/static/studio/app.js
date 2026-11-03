@@ -1731,10 +1731,10 @@ function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
   const note = 'A participant\'s own questions never hold the reviewed report.';
-  // No assessment of this revision: none at all (doc.assessment null), or a count the API serves as null - the current
-  // revision has none, and doc.assessment, whose questions the page draws, is an earlier revision's (after an addendum,
-  // until its revision is first assessed; refutation round 6, row-1: the API served 0 there, and the row drew "None
-  // open" beside those questions). One is coming while a stage runs; otherwise none was made (the text could not be
+  // No assessment of this revision: none at all (doc.assessment null), or doc.assessment is an earlier revision's - the
+  // API serves the count as null while the current revision has none (after an addendum, until its revision is first
+  // assessed; refutation round 6, row-1: the API served 0 there, and the row drew "None open" beside that assessment's
+  // questions, which the page draws). One is coming while a stage runs; otherwise none was made (the text could not be
   // read, processing stopped, the outcome is unknown), and nothing asks a question of this revision until one is.
   // Waiting says only when the questions are known, no longer why one is asked (refutation round 5, D11): "only where
   // the documentation leaves open something that changes the coding" did not fit a member's entry that conflicts with
