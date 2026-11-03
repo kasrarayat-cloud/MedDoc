@@ -371,3 +371,13 @@ requested in chat.
   - Four page shapes are pinned. The page code was right.
   A narrow twelfth refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner
   question, the release-standard question and interpretation 68 stay open.
+- **2026-11-03 ~17:00Z (session cd048041): refutation round 12 repaired; the review ends.** The narrow twelfth refutation
+  of round 11's repair commit, one lens, filed 4 findings. 2 were reproduced, both minor, and 2 were not: in those the
+  clause truly states the reading's own reading. I1 held. The repairs, each with a failing pin and a mutation proof
+  (HARNESS.md 12.20):
+  - A quoted mention is named only with its own status, never the whole service's.
+  - The clause's first-quote and first-place rules are pinned.
+  The repair writes no new sentence; it only narrows round 11's clause. So no concrete finding justifies a thirteenth
+  round. A further pre-existing false READY on the installed Corti-only path, an attached prior EGD report's title, is
+  verified and recorded for the shared-reader repair. 4.6, D3-D5, D14's owner question, the release-standard question
+  and interpretation 68 stay open.

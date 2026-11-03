@@ -1963,3 +1963,49 @@ sentences, with I1, and the new pins.
   excluded and 42 held, as on the base.
 - The suite passes 5,273 tests in 219 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
   ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+### 12.20 Refutation round 12 (2026-11-03): what changed, where it is recorded, and why the review ends here
+
+The twelfth refutation is the narrow pass over round 11's repair commit alone, `2153571ec..09ae39ae5`, with one lens.
+It filed 4 findings. The independent verifier reproduced 2, both minor: one in round 11's own clause and one false
+green. It did not reproduce the other 2: in each, the clause truly states the reading's own reading, and that reading is
+one of the readers' recorded residuals. **I1 held:** the replay is EQUAL and the battery moves nothing, with their
+positive controls.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| wording-1 (in round 11's own repair) | The clause named the inventory's status of the whole service as what the quoted words hold. It printed "and reads in the quoted words an incomplete service under ERCP" beside a failed ERCP's quoted duodenoscope reach, which the reading reads as performed; the ERCP's failure is read in other sentences (the corpus document svc-34, on the reviewed report). It did the same for a stopped colonoscopy's procedure line, and for "... the examination was completed." beside an impression of an incomplete examination. That is display-1's class: a reading of another passage attached to the quote. Round 11's own pin quoted a reach that is itself one of the incompleteness passages, so it could not see this | A mention is named only with its own status, where the inventory gives the family's service the same one. A performed mention of a service the inventory reads as incomplete names nothing, and the reason says only what makes the service missing |
+| wording-4 (a false green) | No pin held the clause's two stated rules: the first quote whose places name a reading is the entry's, and its passage is the first of those places. Mutants that read only the first quote, or pointed the entry at the quote's first place, passed the whole suite and node | Both rules are pinned. One pin has a banding line, then a transnasal esophagoscopy report's title. The other has one quote found under History, read as historical, and again in today's narrative, read as performed |
+| wording-2, wording-3 (not reproduced) | The clause says "a performed service under <family>" where the reading files a bare "endoscope" under its report part's family, or reads a hedged procedure line, another physician's procedure or a plan line as performed | Recorded, not a defect of the clause: it truly states the reading's own reading of the quoted mention, as services.inventory does. Those readings are the readers' recorded residuals (r1 missed-9 and missed-12, and a plan line promoted as named inside its own report), for the shared-reader repair. HARNESS.md section 5 now says so, and the `located` record's docstring names the bare "endoscope" |
+
+**Moved pins**, each with its reason in the test: round 11's incomplete-colonoscopy pin, now the fallback, and the
+incomplete line of `ReadInGateTests`.
+
+No fixture changes. Each repair has a mutation proof, run in its own copy of the tree from a green baseline (8 Django
+tests, node 134). Four mutants were killed. A fifth was equivalent, and it survived: it renamed statuses that the gate
+had already made equal, so it changed no rule. It was replaced by a mutant that restores round 11's gate and naming
+exactly, which was killed.
+
+**Reported by the lens on the Corti-only path, pre-existing, for the shared-reader repair:**
+- Verified here, identical on `80f2f2dc8` and at this commit: today's colonoscopy report with a prior upper endoscopy
+  report attached below it, under its own date line (2025-03-01). With Corti alone, 43235 citing the prior report's title
+  is selected and ready, and services.inventory says "upper endoscopy (performed)". This is a false READY on the
+  installed path, beside the 12.14 table. It resembles the recorded residual r1 release-7, but it is not under a History
+  heading.
+- Reported, not verified here: a flexible sigmoidoscopy done with an adult colonoscope reads a phantom performed
+  colonoscopy, and 45378 is held.
+
+**Why the review ends here.** This round's repair writes no new sentence. It narrows round 11's clause to the readings
+whose status is the quoted mention's own: fewer inputs name anything, and where nothing is named the reason is the
+fallback, which is true by construction. It also adds pins. The twelfth lens attacked the clause in full, and its
+findings against what remains were not reproduced. So no concrete finding justifies a thirteenth round (owner directive,
+2026-11-03: "initiate further review only when a concrete finding justifies it").
+
+**I1 at the repair commit** (`6270b15e0`):
+- `tests/test_harness_engine_parity.py` is unchanged since `de6418fc6`, and `tests/test_harness_pipeline.py` differs
+  only by round 9's one declared assertion (12.17). `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,278 tests in 220 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
+  ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
