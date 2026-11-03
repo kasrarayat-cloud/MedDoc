@@ -804,12 +804,19 @@ the locating participants in `proposed_by`, the reviewer in `reviewer`/`reviewer
 in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `checks`), `peer_answer` (`settled` or
 `not_settled`, "the value" (superseded, round 5, D10: no value, so `exclusion_reason` stays empty), passages,
 `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
-`peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
+`peer_additional_code` (code, units, "`proposed_after_peer_review`" (superseded, round 6, account-2: the status the
+TXT's wording of the entry gives - `proposed_after_peer_review` where the entry located a passage of a code the
+participant first proposed in its peer review, `repeated_in_peer_review` where its frozen first reading proposed the
+code (round 2, truth-8), and otherwise `listed_in_peer_review`: the entry proposed nothing, because no entry of either
+phase located the code (round 5, D12), because the entry itself located no passage (round 6, account-4), or because
+the code is in no code's shape), passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
 window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a
 retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
 answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
-retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
+retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin` - the row's
+participant and phase, not a proposer: the entry a `listed_in_peer_review` row records proposed nothing, as its status
+says, whoever it names (refutation round 6, account-2) - and none
 carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10):** CONFIRMED FINDINGS and the
 `confirmed_finding` rows are printed only while confirmations are offered; this release offers none, so neither appears
 (the section's "None: no reviewer has confirmed a finding for this revision." implied a reviewer could).
