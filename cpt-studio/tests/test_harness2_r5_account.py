@@ -587,7 +587,9 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         self.assertEqual([(c['code'], c['position']) for c in review_['positions']], [('G0121', 'disputes')])
         self.assertIn('    Position on G0121: disputes', txt)
         self.assertIn('    Additional code G0105 · units 1 — proposed after peer review, never independent', txt)
-        self.assertFalse([line for line in txt if reports.UNREAD_CODE in line])
+        # written out (refutation round 6, falsegreen-3: read through reports.UNREAD_CODE, the constant under test,
+        # this passed whatever that sentence said)
+        self.assertFalse([line for line in txt if 'a code CPT Studio does not read' in line])
         self.assertEqual(rows, [('peer_position', 'G0121', 'disputes'),
                                 ('peer_additional_code', 'G0105', 'proposed_after_peer_review')])
 
@@ -626,8 +628,10 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
         detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'fable')
-        self.assertIn(f'    Position on {reports.UNREAD_CODE}: disputes', txt)
-        self.assertIn(f'    Additional code {reports.UNREAD_CODE} · units 1 — listed in peer review', txt)
+        # the sentences written out (refutation round 6, falsegreen-3: through reports.UNREAD_CODE, the constant under
+        # test, "a code it did not propose" there passed this control)
+        self.assertIn('    Position on a code CPT Studio does not read: disputes', txt)
+        self.assertIn('    Additional code a code CPT Studio does not read · units 1 — listed in peer review', txt)
         self.assertEqual(rows, [('peer_position', '', 'disputes'), ('peer_additional_code', '', 'listed_in_peer_review')])
         self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [(length('G0121;LES'), '')])
         self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], [])
