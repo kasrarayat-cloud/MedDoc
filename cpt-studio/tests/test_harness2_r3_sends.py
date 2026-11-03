@@ -31,6 +31,11 @@ Refutation round 4 (R4-SENDS) adds to LockedSessionTests:
 - sends-3: _finish_loop's fallback (the run's outcome could not be written) settles sent by the rule the sweep and the
   undo use (jobs.may_have_reached_vendor): a replayed run, whose reservation names no endpoint, called no vendor and is
   never recorded sent, whether its loop answered or ended at the lock check.
+
+Refutation round 5 (R5-SENDS, falsegreen-3): the sentence that fallback records for a replay was pinned only through its
+own constant (jobs.UNRECORDED_REPLAY_MESSAGE), so the mutant `UNRECORDED_REPLAY_MESSAGE = UNRECORDED_MESSAGE` - round
+4's defect wording, "what reached the vendor is not known", false of a replay - passed both tests. It is written out
+here (REPLAY_UNRECORDED): the replay called no vendor, so nothing was sent.
 """
 import os
 import socket
@@ -55,6 +60,10 @@ from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
 from tests.test_repairs_r1_m import install, run_app_script
 
 IN_FLIGHT = 'The worker stopped while the request was in flight.'
+# _finish_loop's fallback for Astra's replayed run (jobs.UNRECORDED_REPLAY_MESSAGE), written out (falsegreen-3).
+REPLAY_UNRECORDED = ('The Astra outcome could not be recorded whole (logged). It was replayed from a recorded response '
+                     'and called no vendor, so nothing was sent. The outcome is unknown; reconcile it before any new '
+                     'attempt.')
 CLOSE_NOTE = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
 
 
@@ -321,6 +330,7 @@ class LockedSessionTests(OfflineMixin, TransactionTestCase):
         self.assertEqual((run.state, run.sent, run.endpoint, run.scope['mode']), ('unknown', False, '', 'replay'),
                          'a replay that reached nothing is recorded sent')
         self.assertEqual(run.error, jobs.UNRECORDED_REPLAY_MESSAGE.format(label='Astra'))
+        self.assertEqual(run.error, REPLAY_UNRECORDED)  # the sentence itself, not only its constant (falsegreen-3)
         self.assertFalse(jobs.may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists())
         self.assertEqual(served(run.encounter, run), ('unknown', False))  # the trace's "Sent: No"
         self.assertTrue(jobs._unreconciled_unknown(run.encounter))

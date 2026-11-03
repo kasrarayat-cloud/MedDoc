@@ -221,14 +221,22 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   another request holds it, which fails the check: let the queue drain (or Stop
   the encounters) before `app --access-check`. It writes nothing to the
   database. What the container wrote is recorded - its JSON receipt in this
-  phase's receipt (`access_checks`), everything in a log - only once a root
-  helper has found no value from that participant's credentials file in it
-  (key names only come back from that helper); otherwise nothing it wrote is
-  kept and the check fails. A check that exits non-zero, does not finish
-  (whether its request reached the vendor is then not known) or writes no JSON
-  receipt fails the phase, which then says the pair stays installed with those
-  participants live: fix the credentials or the vendor account and run `app`
-  again with `--access-check`, or install that participant disabled.
+  phase's receipt (`access_checks`), its stdout and the last 8 KiB of its
+  stderr in a log - only once a root helper has found no value from that
+  participant's credentials file in it (key names only come back from that
+  helper); otherwise nothing it wrote is kept and the check fails. A check that
+  exits non-zero, does not finish (whether its request reached the vendor is
+  then not known) or writes no JSON receipt fails the phase. For a non-zero
+  exit the phase repeats what the check's output says: the error its JSON
+  receipt gives, else the last non-empty line of its stderr, each only whole
+  and only up to 300 characters, and otherwise names it, never cut; with
+  neither, it says there is no text on its stderr, and no JSON receipt when
+  there is none. The installer adds no cause of its own. The phase then says
+  that the pair stays installed with those participants live, that this phase's
+  receipt records each check under `access_checks` (its JSON receipt, if it
+  wrote one, and the path of its log, where what it wrote was recorded), and to
+  run `app` again with `--access-check` once the cause is known, or install
+  that participant disabled.
   On any failure before the new pair runs, the recompute does not run: the new
   pair is stopped and, before the parked pair is restored, every stage
   it queued, ran or left resumable since the swap, and every stage of a kind the
@@ -568,9 +576,9 @@ recomputes every state.
   `/etc/cpt-studio/` from an interrupted `secrets`: delete it by hand and rerun;
   `secrets` refuses while one exists.
 - An `app` whose access check failed left the pair installed and running with
-  those participants live (the receipt says so): rerun `app` with
-  `--access-check` once the credentials or the vendor account are fixed, or
-  with that participant disabled.
+  those participants live (the receipt says so; what it could record of each
+  check is under `access_checks`): rerun `app` with `--access-check` once the
+  cause is known, or with that participant disabled.
 
 ## Local build and tests (no host change)
 

@@ -2747,8 +2747,14 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
     ('corti', 'astra' or 'fable'), so it runs only with --access-check, once the new pair runs. A one-shot with the
     worker's mount and network for that participant: its credentials file read-only at the worker's path and
     cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
-    container wrote is recorded (its JSON receipt here, everything in a log) only once a root helper found no
-    credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}."""
+    container wrote is recorded (its JSON receipt here; its stdout and the last 8 KiB of its stderr in a log) only once
+    a root helper found no credential value in it (credential_free). {ok, exit, recorded, receipt, log, problem}.
+
+    A check that exits non-zero is reported by what its output says (refutation round 5, sends-1), never by its exit
+    status alone and never with a cause the installer does not know: its receipt's error, else the last non-empty line
+    of its stderr, each scanned with the rest and repeated only whole and only up to 300 characters (otherwise named,
+    never cut). Only the end of stderr is kept and scanned, so a line that began before it is never taken for a whole
+    one."""
     if name == 'corti':
         environment = runtime_env('live', authorization_ref, credentials=True)
         files = {'credentials': True}
@@ -2772,7 +2778,27 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
     receipt = access_receipt(stdout)
     entry.update(recorded=True, receipt=receipt, log=ctx.log(f'access-check-{name}', stdout + stderr))
     if result.returncode:
-        entry['problem'] = f'it exited {result.returncode}.'
+        limit = 300
+        error = receipt.get('error') if receipt is not None else None
+        error = error.strip() if isinstance(error, str) else ''
+        pieces = stderr.decode('utf-8', 'replace').split('\n')
+        cut = len(result.stderr) > len(stderr)
+        if cut and result.stderr[-len(stderr) - 1:-len(stderr)] != b'\n':
+            pieces = pieces[1:]  # the end of a line that began before what was kept: never taken for a whole line
+        lines = [piece.strip() for piece in pieces if piece.strip()]
+        if error:
+            said = (f'its receipt says: {error}' if len(error) <= limit
+                    else f"its receipt's error is longer than {limit} characters, so it is not repeated here.")
+        elif lines:
+            said = (f'the last line of text on its stderr says: {lines[-1]}' if len(lines[-1]) <= limit
+                    else f'the last line of text on its stderr is longer than {limit} characters, so it is not '
+                         'repeated here.')
+        elif cut:
+            said = 'only the end of its stderr was kept, with no whole line of text in it, so no line is repeated here.'
+        else:
+            said = ('there is no text on its stderr.' if receipt is not None
+                    else 'there is no JSON receipt and no text on its stderr.')
+        entry['problem'] = f'it exited {result.returncode}, and {said}'
     elif receipt is None:
         entry['problem'] = 'its output was not one JSON receipt.'
     else:
@@ -2781,7 +2807,11 @@ def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) 
 
 
 def access_check_failure(image_id, mode, participants, states, checks, error=None) -> str:
-    """The receipt of an app phase whose pair is installed and whose access check did not pass, or stopped."""
+    """The receipt of an app phase whose pair is installed and whose access check did not pass, or stopped. A check
+    that did not pass is named with what its output says (participant_access_check's problem), and no cause is added
+    to it (refutation round 5, sends-1: every failure was told to fix the credentials or the vendor account, beside a
+    receipt recording that the vendor had answered and CPT Studio had stopped the loop, or a refusal that sent
+    nothing)."""
     done = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), the stored list states ' \
            f'recomputed ({len((states or {}).get("changed") or {})} changed) and the previous pair removed, but '
     if error is not None:
@@ -2791,8 +2821,10 @@ def access_check_failure(image_id, mode, participants, states, checks, error=Non
     failed = {name: check.get('problem', '') for name, check in checks.items() if not check.get('ok')}
     return (done + 'the access check did not pass for ' + '; '.join(f'{name} ({problem})'
                                                                   for name, problem in failed.items())
-            + ' The pair stays installed with those participants live: fix the credentials or the vendor account and '
-              'run --phase app again with --access-check, or install with that participant disabled.')
+            + ' The pair stays installed with those participants live. Under access_checks, this phase\'s receipt '
+              'records each check and, where what it wrote was recorded, its JSON receipt (if it wrote one) and the '
+              'path of its log. Once the cause is known, run --phase app again with --access-check, or install with '
+              'that participant disabled.')
 
 
 def phase_app(ctx) -> dict:
