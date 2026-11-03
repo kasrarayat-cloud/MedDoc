@@ -2909,11 +2909,16 @@ const R6_WAITING = { state: 'waiting', badge: 'Waiting', lines: ['Known once the
 const R6_NOT_ASKED = { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] };
 
 // The final fixture as the API serves it after an addendum, before its revision is first assessed: revision 2 current,
-// the earlier revision's assessment with its four open questions (no action offered), the count null and the phase 1
-// (participants configured, no assessment of this revision); busy while its stages run, or stopped.
+// the earlier revision's assessment (no action offered) with four open questions served beside it - one about the
+// encounter and three about its codes, whatever the fixture itself asks - the count null and the phase 1 (participants
+// configured, no assessment of this revision); busy while its stages run, or stopped.
 function r6Unassessed(doc, busy) {
-  const stale = { ...doc, open_clarifications: 4, revision: { ...doc.revision, number: 2, kind: 'addendum', revisions_total: 2 },
-    harness: { ...doc.harness, phase: 1, clarification: { open: null } },
+  const [first, second] = doc.assessment.proposals;
+  const asked = r5Asked(doc, [{ scope: 'encounter', proposal_id: null, fact: 'service_date', family: '' },
+    { scope: 'proposal', proposal_id: first.id, fact: 'extent' }, { scope: 'proposal', proposal_id: second.id, fact: 'extent' },
+    { scope: 'proposal', proposal_id: second.id, fact: 'performed_status' }]);
+  const stale = { ...asked, open_clarifications: 4, revision: { ...doc.revision, number: 2, kind: 'addendum', revisions_total: 2 },
+    harness: { ...asked.harness, phase: 1, clarification: { open: null } },
     assessment: { ...doc.assessment, proposals: doc.assessment.proposals.map(p => ({ ...p, allowed_actions: [] })) } };
   return busy
     ? { ...stale, state: 'processing', pipeline: { ...doc.pipeline, busy: true, can_stop: true },
