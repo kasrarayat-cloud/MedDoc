@@ -1589,7 +1589,9 @@ test('the Review participants card shows each participant\'s first reading, then
   // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; Astra's peer-review code quotes a sentence in
   // no document, which its row says
   assert.ok(astra.includes('<span class="status green">Done</span>') && astra.includes('<p>Answered in peer review, after its first reading was frozen; the review was used. 1 of its quotes was not found in the document, so it is never used as evidence.</p>'));
-  assert.ok(astra.includes('Codes it proposed after peer review, never independent: 45381.'));
+  // moved by refutation round 5 (R5-ACCOUNT, the session's D12): 45381's only quote is in no document, so Astra's peer
+  // review listed it and proposed no code there; the row had called 45381 a code it proposed after peer review
+  assert.ok(astra.includes('It first proposed no code in peer review that can be listed.') && !astra.includes('45381'), astra);
   assert.ok(astra.includes('Its own tool calls retrieved 1 reference; it says it used 2, 1 of them cited, not retrieved.'), 'its peer-review run\'s, not its first reading\'s');
   assert.ok(peerRowOf(final, 'fable').includes('Codes it proposed after peer review, never independent: 45380.'));
   assert.ok(harnessRow(final, 'final').includes('Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.'));
@@ -1829,7 +1831,9 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const later = codeCardOf(render(peerOnly), '45380');
   assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
   assert.ok(app.codeStatusLines({ proposed_by: ['fable'], corti_relation: 'none', reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
-  assert.ok(html.includes('<strong>45381 · Colonoscopy · proposed after peer review</strong>'), 'the alternative a peer review proposed');
+  // moved by refutation round 5 (R5-ACCOUNT, D12): the alternative Astra's peer review only listed (its quote is in no
+  // document) is not titled "proposed after peer review" any more; its line says Astra listed it and did not propose it
+  assert.ok(html.includes('<strong>45381 · Colonoscopy</strong><p>Listed by Astra with no quote found verbatim in the document, so not proposed, and not added as a proposal: '), 'the alternative a peer review listed');
   // the first readings' positions are named as such
   assert.ok(biopsy.includes('<div class="evidence-label">What the participants said in their first readings</div>'));
   // the three kinds of references, apart, in this order
@@ -1907,7 +1911,8 @@ test('the trace shows each run\'s exchanges and tool calls, each peer review in 
   // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the answer quotes the landmarks line
   assert.ok(html.includes(`<li><b>Question ${peer.review.answers[0].question_id}</b><br>Answer: cecum<ul class="trace-quotes"><li>“Landmarks photographed: appendiceal orifice and ileocecal valve.” — found in the document (1 place)</li></ul></li>`));
   assert.ok(html.includes('<li><b>45380 · supports it</b><br>Why: Participant wording.'));
-  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b><br>Basis: Participant wording.<ul class="trace-quotes"><li>“A submucosal injection was given.” — unverified (not found); never used as evidence</li></ul></li>'));
+  // moved by refutation round 5 (R5-ACCOUNT, D12): a code no entry located is listed in peer review, never proposed there
+  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · listed in peer review</b><br>Basis: Participant wording.<ul class="trace-quotes"><li>“A submucosal injection was given.” — unverified (not found); never used as evidence</li></ul></li>'));
   // moved by refutation round 4 (R4-SHAPES, shapes-3): a reference never retrieved is served only by its length
   assert.ok(html.includes('<li><b>a value of 35 characters (not shown) — cited, not retrieved</b><br>Its use: Retrieved only by its first reading.</li>'));
   assert.ok(html.includes('<li><b>Question ' + trace.participants[2].runs[1].review.answers[0].question_id + '</b><br>Answer: Cecum, appendiceal orifice seen'), 'the participant\'s own words, in the trace');
@@ -2312,7 +2317,11 @@ test('R2-WORDING truth-8: a peer review\'s additional code is called never indep
   const trace = fixture(H2_TRACE);
   const astra = trace.participants.find(item => item.name === 'astra');
   const peer = astra.runs.find(run => run.purpose === 'peer_review');
-  const base = peer.review.additional_codes[0];
+  // moved by refutation round 5 (R5-ACCOUNT, the session's D12): the fixture now serves 45381 with phase '' (its only
+  // quote is in no document, so it was listed in peer review, never proposed there), so the code "served without" a
+  // phase is made without one here, where the fixture's own code once carried 'peer_review'
+  const { phase: servedPhase, ...base } = peer.review.additional_codes[0];
+  assert.equal(servedPhase, '');
   const shown = phase => app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review,
     additional_codes: [phase === undefined ? base : { ...base, phase }] } }] }] }, trace.encounter.id);
   const head = '<li><b>45381 · units 1 · confidence low · services s1 · ';
@@ -2701,4 +2710,38 @@ test('R4-SHAPES shapes-3, shapes-4: the trace shows the references a run used an
   const served = { ...first, exchanges: [{ ...first.exchanges[0], tool_calls: [{ ...call, tool: r4Length('Colonoscopy, flexible; diagnostic'), arguments: { codes: [r4Length('Colonoscopy, flexible, diagnostic')], date_of_service: '2026-10-21' } }] }] };
   const shown = app.traceView({ ...trace, participants: [{ ...astra, runs: [served] }] }, trace.encounter.id);
   assert.ok(shown.includes(`<li><b>${r4Length('Colonoscopy, flexible; diagnostic')} (call_1_1)</b><br>${args({ codes: [r4Length('Colonoscopy, flexible, diagnostic')], date_of_service: '2026-10-21' })}<br>`), shown);
+});
+
+// refutation round 5, R5-ACCOUNT
+// The session's D12: "proposed" is said only of a participant whose entry located a quote in the document. A
+// participant-origin alternative's proposed_by names only those participants; the API serves the others as listed_by,
+// and a code status line and the owner's trace name them apart, as having listed the code with no quote found verbatim,
+// so not proposing it - never "not recorded" of who proposed it, which the record states.
+const R5_LISTED = 'with no quote found verbatim in the document, so not proposed';
+
+test('R5-ACCOUNT truth-1: a code status line names a participant that only listed the code apart from its proposers', () => {
+  const status = proposal => app.codeStatusLines({ reference_check: { state: 'not_verified' }, ...proposal });
+  assert.ok(status({ proposed_by: [], listed_by: ['astra'] }).includes(`<li><b>Proposed by:</b> no participant; listed by Astra ${R5_LISTED}</li>`));
+  assert.ok(status({ proposed_by: [], listed_by: ['astra', 'fable'] }).includes(`<li><b>Proposed by:</b> no participant; listed by Astra and Fable ${R5_LISTED}</li>`));
+  const both = status({ proposed_by: ['astra'], listed_by: ['fable'], phases: { astra: 'independent' }, corti_relation: 'none' });
+  assert.ok(both.includes(`<li><b>Proposed by:</b> Astra (independent reading); listed by Fable ${R5_LISTED} by Fable; Corti did not propose this code.</li>`), both);
+  // a payload served without listed_by, or with none, reads as before
+  assert.ok(status({ proposed_by: [] }).includes('<li><b>Proposed by:</b> not recorded</li>'));
+  assert.ok(status({ proposed_by: ['fable'], listed_by: [] }).includes('<li><b>Proposed by:</b> Fable</li>'));
+  // a name the page does not know, or a value that is not a list, is never shown as a lister
+  assert.ok(status({ proposed_by: [], listed_by: 'astra' }).includes('<li><b>Proposed by:</b> not recorded</li>'));
+});
+
+test('R5-ACCOUNT truth-1, truth-3: the trace\'s reconciliation names a participant that only listed the code apart from its proposers', () => {
+  const trace = fixture(H2_TRACE);
+  const row = { code: '45378', family: 'gi.colonoscopy', bucket: 'alternative', status: 'informational', positions: {}, reference_check: { state: 'not_verified' }, approved: false };
+  const lines = rows => app.traceView({ ...trace, reconciliation: rows }, trace.encounter.id);
+  const listed = lines([{ ...row, proposed_by: [], listed_by: ['fable'] }]);
+  assert.ok(listed.includes(`<p>Proposed by: no participant; listed by Fable ${R5_LISTED}</p>`), listed);
+  assert.equal(listed.includes('Proposed by: not recorded'), false);
+  const both = lines([{ ...row, proposed_by: ['astra'], listed_by: ['fable'] }]);
+  assert.ok(both.includes(`<p>Proposed by: Astra; listed by Fable ${R5_LISTED} by Fable</p>`), both);
+  // a row served without listed_by reads as before
+  assert.ok(lines([{ ...row, proposed_by: [] }]).includes('<p>Proposed by: not recorded</p>'));
+  assert.ok(lines([{ ...row, proposed_by: ['corti', 'astra'] }]).includes('<p>Proposed by: Corti, Astra</p>'));
 });

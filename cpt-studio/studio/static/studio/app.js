@@ -1027,8 +1027,9 @@ function codeStatusLines(proposal) {
   const proposers = Array.isArray(proposal.proposed_by) ? proposal.proposed_by.filter(name => typeof name === 'string' && name) : null;
   const check = proposal.reference_check && typeof proposal.reference_check === 'object' ? proposal.reference_check : null;
   if (!proposers && !check) return '';
+  const listed = listedText(proposal.listed_by);
   const lines = [
-    ['Proposed by', proposers?.length ? proposerText(proposal, proposers) : 'not recorded'],
+    ['Proposed by', proposers?.length ? proposerText(proposal, proposers) : listed ? `no participant; ${listed}` : 'not recorded'],
     ['CMS reference checks', referenceCheckText(check)],
     ['Reviewer decision', decisionWords(proposal)],
   ];
@@ -1058,8 +1059,19 @@ function proposerText(proposal, proposers) {
     const phase = Object.hasOwn(phases, name) ? lookup(PROPOSED_PHASES, phases[name], '') : '';
     return `${lookup(PARTICIPANT_LABELS, name, name)}${phase ? ` (${phase})` : ''}`;
   }).join(', ');
+  const listed = listedText(proposal.listed_by, true);
   const corti = proposers.includes('corti') ? '' : lookup(CORTI_RELATIONS, proposal.corti_relation, '');
-  return corti ? `${named}; ${corti}` : named;
+  return [named, listed, corti].filter(Boolean).join('; ');
+}
+
+// The participants the API serves as having only listed a participant's alternative's code (listed_by: no quote of
+// theirs was found verbatim in the document, so they did not propose it; refutation round 5, the session's D12), named
+// apart from its proposers - "listed by Fable with no quote found verbatim in the document, so not proposed", and "by
+// Fable" after it where others proposed the code - never as one of them, and with no proposer as "no participant",
+// never "none" (Corti may have a row of its own for the code); '' when it serves none.
+function listedText(listedBy, apart = false) {
+  const names = joinWords(strings(listedBy).map(name => lookup(PARTICIPANT_LABELS, name, name)));
+  return names ? `listed by ${names} with no quote found verbatim in the document, so not proposed${apart ? ` by ${names}` : ''}` : '';
 }
 
 // The reviewer-confirmed findings this code's checks read (proposal.confirmed, HARNESS.md 11.3): each a fact a reviewer
@@ -2108,6 +2120,9 @@ function traceReconciliation(rows) {
   if (!list.length) return '<div class="check-list-card"><p class="harness-note">No reconciliation is recorded for this assessment.</p></div>';
   return `<div class="check-list-card">${list.map(row => {
     const proposers = strings(row.proposed_by).map(name => lookup(PARTICIPANT_LABELS, name, name));
+    // a participant that only listed the code is named apart, never as a proposer (refutation round 5, D12)
+    const listed = listedText(row.listed_by, proposers.length > 0);
+    const proposed = proposers.length ? [proposers.join(', '), listed].filter(Boolean).join('; ') : listed ? `no participant; ${listed}` : 'not recorded';
     const positions = row.positions && typeof row.positions === 'object' && !Array.isArray(row.positions) ? Object.keys(row.positions).map(name => {
       const value = row.positions[name];
       return value && typeof value === 'object' ? positionText(name, value) : `${lookup(PARTICIPANT_LABELS, name, name)} ${lookup(POSITION_WORDS, value, 'took a position that was not recorded')}`;
@@ -2115,7 +2130,7 @@ function traceReconciliation(rows) {
     const check = row.reference_check;
     const reference = check && typeof check === 'object' ? referenceCheckText(check) : referenceCheckText({ state: check });
     const approved = row.approved === true ? 'approved by a workspace member' : row.approved === false ? 'not approved' : 'not recorded';
-    const lines = [`Proposed by: ${proposers.join(', ') || 'not recorded'}`, ...(positions.length ? positions : ['Positions: none recorded']), `CMS reference checks: ${reference}`, `Reviewer approval: ${approved}`];
+    const lines = [`Proposed by: ${proposed}`, ...(positions.length ? positions : ['Positions: none recorded']), `CMS reference checks: ${reference}`, `Reviewer approval: ${approved}`];
     const title = [textValue(row.code) || 'Code', textValue(row.family), textValue(row.status).replace(/_/g, ' ')].filter(Boolean).join(' · ');
     return checkItem(row.approved === true ? '' : 'muted', row.approved === true ? 'circle-check' : 'info', title, '', lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
   }).join('')}</div>`;

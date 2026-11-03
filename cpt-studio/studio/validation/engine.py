@@ -2764,6 +2764,10 @@ PEER_POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes',
                        'cannot_tell': 'cannot tell whether the document supports'}
 UNLOCATED = ('none of its quotes was found verbatim in the document text, and a quote that is not found is never '
              'evidence')
+# What a participant that gave a code with no entry quoting the document verbatim did: it listed the code and did not
+# propose it (refutation round 1, EV-2 = IND-3), said wherever who proposed an alternative is said (refutation round 5,
+# the session's D12: "Proposed by Astra" was said of a reading the same assessment says did not propose the code).
+LISTED_NOT_PROPOSED = 'with no quote found verbatim in the document, so not proposed'
 LISTED_IN_SUMMARY = 8  # codes a participant's summary sentence names; the rest are counted
 MODIFIER_SHAPE = re.compile(r'[A-Z0-9]{2}', re.A)  # a modifier as a participant may state one; anything else is counted
 OPEN_QUESTION = 'open question'  # the words review.coding_completeness drops a completeness reason for
@@ -2785,6 +2789,16 @@ def participant_listable(code) -> bool:
     from studio.participants.peer import code_shaped  # local: the peer module's rule (it imports the HTTP layer)
 
     return code_shaped(code)
+
+
+def participant_unlisted_count(entries) -> int:
+    """How many of a model participant's code entries - a reading's codes, or a peer review's additional codes - the
+    engine does not read (participant_listable): every entry, a value given twice counted twice, as the proposal
+    provider's codes that cannot be listed are counted one per code its answer returned. The one count of them
+    (refutation round 5, the session's D13): _Harness states it in participants.summary, and a participant row states it
+    re-read from the frozen reading (review.unlisted_count) - the row had counted the assessment's record of the reading,
+    which keeps one entry per code value, so '45385-59' given twice was 2 in the summary and 1 on the row."""
+    return sum(1 for item in entries if not participant_listable(item.code))
 
 
 def participant_unlisted_codes(count: int, who: str = 'It') -> str:
@@ -3041,9 +3055,11 @@ class _Harness:
         self.unread: dict[str, set] = {}
         self.unread_stances: dict[str, set] = {}
         for name, reading in self.readings.items():
+            unlisted = participant_unlisted_count(reading.codes)  # the one count (refutation round 5, D13)
+            if unlisted:
+                self.unlisted[name] = unlisted
             for item in reading.codes:
                 if not participant_listable(item.code):
-                    self.unlisted[name] = self.unlisted.get(name, 0) + 1
                     _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item))
@@ -3053,9 +3069,11 @@ class _Harness:
                 else:
                     _unread(self.unread, name, item.code)
         for name, peer in self.peers.items():
+            unlisted = participant_unlisted_count(peer.additional_codes)
+            if unlisted:
+                self.peer_unlisted[name] = unlisted
             for item in peer.additional_codes:
                 if not participant_listable(item.code):
-                    self.peer_unlisted[name] = self.peer_unlisted.get(name, 0) + 1
                     _unread(self.unread, name, item.code)
                     continue
                 self.codes.setdefault(item.code, {}).setdefault(name, []).append(self._said(item, PEER_REVIEW))
@@ -3083,12 +3101,15 @@ class _Harness:
         return tuple(name for name in PARTICIPANT_ORDER if any(s.good for s in by.get(name, ())))
 
     def phase(self, code: str, name: str) -> str:
-        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read from its
-        entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a first
-        reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
-        proposed after peer review); from all its entries only when none does (an alternative it never located)."""
-        said = self.codes[code][name]
-        counted = [s for s in said if s.good] or said
+        """The phase in which ``name`` first proposed ``code``: its first reading, else its peer review - read only from
+        its entries that quote the document verbatim, as proposers() counts them (refutation round 1, EV-2 = IND-3: a
+        first reading's entry whose quotes were not found proposed nothing, so a code its peer review then located was
+        proposed after peer review); '' for a participant none of whose entries did, which proposed the code in no
+        phase: it listed it (refutation round 5, the session's D12 - the fallback to all its entries named such a
+        participant as an alternative's proposer, with a phase)."""
+        counted = [s for s in self.codes.get(code, {}).get(name, ()) if s.good]
+        if not counted:
+            return ''
         return INDEPENDENT if any(s.phase == INDEPENDENT for s in counted) else PEER_REVIEW
 
     def _who(self, code: str, names: Sequence[str]) -> str:
@@ -3173,19 +3194,33 @@ class _Harness:
         return list(selections) + added, tuple(listed)
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
-        """A participant's code that is not a proposal, saying why: informational, never approvable."""
+        """A participant's code that is not a proposal, saying why: informational, never approvable. ``names``: every
+        participant that gave the code. Only those with an entry that quotes the document verbatim proposed it
+        (proposers()); the others listed it, and are said to have, never to have proposed it (refutation round 5, the
+        session's D12: "Proposed by Astra (independent participant)" was said of a reading whose every quote was not
+        found, beside the same assessment's "so it did not propose it")."""
         code_kind, scope_reason = checks.code_scope(code)
         kept = self._good(code, names)
         family = family_for_code(code)
         found = (checks.scope_check(code_kind, scope_reason),)
         profile_version = PROFILES[family].version
-        who, why = self._who(code, names), why.rstrip('.')
+        located = [name for name in names if name in self.proposers(code)]
+        listed = checks._join([PARTICIPANT_LABELS[name] for name in names if name not in located])
+        why = why.rstrip('.')
+        if not located:
+            exclusion = f'Listed by {listed} {LISTED_NOT_PROPOSED}, and not added as a proposal: {why}.'
+            rationale = f'Listed by {listed} {LISTED_NOT_PROPOSED}; not added as a proposal: {why}.'
+        else:
+            who = self._who(code, located)
+            apart = f' Listed by {listed} {LISTED_NOT_PROPOSED} by {listed}.' if listed else ''
+            exclusion = f'Proposed by {who}, but not added as a proposal: {why}.{apart}'
+            rationale = f'Proposed by {who}; not added as a proposal: {why}.{apart}'
         return ProposalAssessment(
             key=f'altp:{index}', bucket='alternative', code=code, code_kind=code_kind, family=family,
             profile_version=profile_version, status='informational',
-            exclusion_reason=f'Proposed by {who}, but not added as a proposal: {why}. Alternatives cannot be approved.',
+            exclusion_reason=f'{exclusion} Alternatives cannot be approved.',
             reinstatable=False, provider_display='', evidence=kept,
-            rationale=(f'Proposed by {who}; not added as a proposal: {why}. Informational only.'
+            rationale=(f'{rationale} Informational only.'
                        + (f' {checks.plural(len(kept), "exact evidence passage")}.' if kept else '')),
             checks=found, modifier_considerations=(), units=1,
             fingerprint=_fingerprint(code, family, profile_version, kept, found, {}, 1, 'informational'),
@@ -3213,30 +3248,46 @@ class _Harness:
 
     def recorded(self, proposals: Sequence[ProposalAssessment]) -> tuple[ProposalAssessment, ...]:
         """Every proposal with who proposed it (support['proposed_by']), the phase each participant among them first
-        proposed it in (support['phases']: 'independent' or 'peer_review'; only where a participant gave the code) and
-        each participant's position on its code in both phases (support['participants']). Outside the fingerprint: who
-        proposed a code never changes its decision."""
+        proposed it in (support['phases']: 'independent' or 'peer_review'; only for a participant whose entry for the
+        code quotes the document verbatim, phase()), each participant's position on its code in both phases
+        (support['participants']) and, for a participant's alternative, the participants that gave its code with no
+        entry quoting the document verbatim, which listed it and did not propose it (support['listed_by']; refutation
+        round 5, the session's D12). Outside the fingerprint: who proposed a code never changes its decision."""
         out = []
         for p in proposals:
             by = self._proposed_by(p)
             support = {**(p.support or {}), 'proposed_by': by, 'participants': self.positions(p.code)}
-            phases = {name: self.phase(p.code, name) for name in by if name in self.codes.get(p.code, {})}
+            phases = {name: self.phase(p.code, name) for name in by}  # '' for a name that proposed in no phase
+            phases = {name: phase for name, phase in phases.items() if phase}
             if phases:
                 support['phases'] = phases
+            listed = self._listed_by(p)
+            if listed:
+                support['listed_by'] = listed
             out.append(replace(p, support=support))
         return tuple(out)
 
     def _proposed_by(self, p: ProposalAssessment) -> list[str]:
         origin = (p.support or {}).get('origin', 'primary')
         if p.bucket == 'alternative':
-            # an alternative is proposed by no one; a participant's lists every participant that gave the code
-            by = self.codes.get(p.code, {})
-            return [name for name in PARTICIPANT_ORDER if name in by] if origin == 'participant' else []
+            # an alternative is proposed by no one; a participant's names the participants that proposed its code - an
+            # entry quoting the document verbatim (proposers()) - and never one that only listed it (_listed_by;
+            # refutation round 5, the session's D12)
+            return list(self.proposers(p.code)) if origin == 'participant' else []
         if origin == 'participant':
             return list(self.proposers(p.code))
         if p.bucket == 'selected' or p.reinstatable:  # decidable: the participants' proposals were merged into it
             return [PRIMARY, *self.proposers(p.code)]
         return [PRIMARY]  # excluded for scope or evidence: a participant's code of its own stands apart from it
+
+    def _listed_by(self, p: ProposalAssessment) -> list[str]:
+        """The participants that gave a participant's alternative's code with no entry quoting the document verbatim,
+        in stage order: they listed it and did not propose it (refutation round 1, EV-2 = IND-3), so they are never
+        among its proposers; [] for any other proposal (refutation round 5, the session's D12)."""
+        if p.bucket != 'alternative' or (p.support or {}).get('origin') != 'participant':
+            return []
+        proposers = self.proposers(p.code)
+        return [name for name in PARTICIPANT_ORDER if name in self.codes.get(p.code, {}) and name not in proposers]
 
     def positions(self, code: str) -> dict:
         """{participant: {'position', 'detail', 'quote'}} for every configured participant: 'proposed', 'not_proposed',
@@ -3374,9 +3425,14 @@ class _Harness:
             parts.append(participant_unlisted_codes(self.peer_unlisted[p.provider], 'In peer review it'))
         if peer.answers:
             # true whether or not confirmations are offered (refutation round 4, d7-5; HARNESS.md 12.10 as amended): it
-            # said an answer "is read only as the passage a reviewer confirms", in a release that offers no confirmation
-            parts.append(f'It answered {checks.plural(len(peer.answers), "open question")}; an answer is recorded and '
-                         'decides nothing by itself.')
+            # said an answer "is read only as the passage a reviewer confirms", in a release that offers no confirmation.
+            # The questions are counted by the ids its answers name (the reader keeps every answer to a question it
+            # listed, a repeated one with a note), never by its answers: one question answered twice was "It answered 2
+            # open questions" (refutation round 5, d8-3)
+            asked = len({str(answer.question_id) for answer in peer.answers})
+            said = (f'It answered {checks.plural(asked, "open question")}' if asked == len(peer.answers) else
+                    f'It gave {checks.plural(len(peer.answers), "answer")} to {checks.plural(asked, "open question")}')
+            parts.append(f'{said}; an answer is recorded and decides nothing by itself.')
         if peer.unverified_quotes:
             one = peer.unverified_quotes == 1
             parts.append(f'{checks.plural(peer.unverified_quotes, "quote")} it gave in peer review '

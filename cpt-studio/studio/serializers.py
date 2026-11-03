@@ -293,6 +293,9 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
+        # the participants that only listed a participant's alternative's code, with no quote found verbatim: never
+        # among proposed_by (refutation round 5, the session's D12)
+        'listed_by': review.listed_by(proposal),
         # how Corti stands to the code where it is not among the proposers (HARNESS.md 11.4; refutation round 2,
         # truth-6): the page says "Corti did not propose this code" only when Corti has no entry for it at all
         'corti_relation': review.corti_relation(proposal),
@@ -735,8 +738,10 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         if record.get('state') == 'not_configured' and name in configured:
             detail = f'{label} was not configured when these checks ran.'
         # only the codes the engine lists; one it cannot list is counted, never served (I9; refutation r1 IND-1), in
-        # the engine's own sentence for a participant's codes (refutation round 4, shapes-1)
-        codes, unlisted = review.listed_codes(record)
+        # the engine's own sentence for a participant's codes (refutation round 4, shapes-1) and with the engine's own
+        # number, re-read from the frozen reading (refutation round 5, D13): None, and no sentence, where that reading
+        # cannot be read again as recorded
+        codes, unlisted = review.listed_codes(record), review.unlisted_count(assessment, record)
         if unlisted:
             from .validation import engine  # local import: only the engine's wording is needed here
 
@@ -890,40 +895,42 @@ def _peer_progress(jobs, name):
 
 
 def _codes_added(peer_review, assessment, name, record):
-    """(added, repeated): the CPT codes a peer review listed as additional codes, each once, in order, split by the
-    phase participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer
-    review - the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
-    independent reading first proposed, which it listed again."""
+    """(added, repeated): the codes in a code's shape - a CPT or HCPCS code's, participants.peer.code_shaped, the
+    engine's rule for a participant's code (refutation round 5, shapes-1: the CPT shape alone left an HCPCS code the
+    engine read out of codes_added) - a peer review listed as additional codes, each once, in order, split by the phase
+    participant ``name`` first proposed each in (peer_code_phases): ``added``, those first proposed in its peer review -
+    the codes it proposed after peer review, never independent (HARNESS.md 11.1) - and ``repeated``, those its
+    independent reading first proposed, which it listed again. A code none of its entries in either phase located is
+    in neither: it listed the code and proposed it in no phase (refutation round 5, the session's D12). The phase is
+    read from ``record`` and the review alone; ``assessment`` and ``name`` are not read."""
     if peer_review is None or peer_review.refused:
         return [], []
-    listed = list(dict.fromkeys(item.code for item in peer_review.additional_codes
-                                if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code)))
-    phases = peer_code_phases(assessment, name, record, listed)
-    return ([code for code in listed if phases[code] == models.ProviderRun.PEER_REVIEW],
-            [code for code in listed if phases[code] == models.ProviderRun.INDEPENDENT])
+    phases = peer_code_phases(peer_review, record)
+    return ([code for code, phase in phases.items() if phase == models.ProviderRun.PEER_REVIEW],
+            [code for code, phase in phases.items() if phase == models.ProviderRun.INDEPENDENT])
 
 
-def peer_code_phases(assessment, name, record, codes):
-    """{code: 'independent' | 'peer_review'} for ``codes``, additional codes participant ``name``'s peer review listed:
-    the phase the engine records ``name`` first proposed each in on ``assessment`` (support['phases'] of its proposals
-    of that code; 'independent' wherever any records it so), or - for a code no proposal records ``name`` on, which is
-    one none of its quotes for the code located, so not counted among a proposal's proposers - the engine's own reading
-    of such entries (engine._Harness.phase, read from all of them): 'independent' when its frozen first reading, as
-    ``record`` (its Assessment.participants entry) recorded it, lists the code, else 'peer_review'. HARNESS.md 11.1: a
-    code first proposed in phase 2 is marked proposed after peer review, never as independent - and a code its first
-    reading proposed is never marked so (refutation round 2, truth-8: a peer review that listed its own first reading's
-    code again was said to have proposed it "after peer review, never independent"). One reading of that phase, for
-    every place that words a peer review's additional codes."""
-    wanted = list(dict.fromkeys(code for code in codes if isinstance(code, str)))
-    recorded = {}
-    for proposal in assessment.proposals.filter(code__in=wanted) if assessment is not None and wanted else ():
-        phase = _phases(proposal.support).get(name)
-        if phase:
-            recorded.setdefault(proposal.code, set()).add(phase)
-    listed = {item.get('code') for item in (record or {}).get('codes') or [] if isinstance(item, dict)}
+def peer_code_phases(peer_review, record):
+    """{code: 'independent' | 'peer_review' | ''} for each additional code in a code's shape (participants.peer.
+    code_shaped) a participant's ``peer_review`` lists, each once, in order: the phase in which the participant first
+    proposed it, read only from its entries that located a quote in the document (refutation round 1, EV-2 = IND-3: an
+    entry whose quotes were not found proposed nothing; the engine's _Harness.phase reads the same entries) -
+    'independent' where its frozen first reading, as ``record`` (its Assessment.participants entry) recorded it, has a
+    located quote for the code (codes[].quote, its first located quote), else 'peer_review' where an entry of the review
+    locates one, else '' (listed in peer review: proposed in neither phase). HARNESS.md 11.1: a code first proposed in
+    phase 2 is marked proposed after peer review, never as independent - and a code its first reading proposed is never
+    marked so (refutation round 2, truth-8). Refutation round 5 (the session's D12; truth-2, truth-3): a code its first
+    reading only listed was "first proposed in its independent reading", and one its peer review only listed was
+    "proposed after peer review, never independent", beside the engine's "so it did not propose it". One reading of
+    that phase, for every place that words a peer review's additional codes."""
+    first = {item.get('code') for item in (record or {}).get('codes') or []
+             if isinstance(item, dict) and item.get('quote')}
+    located = {}  # code -> whether any entry of the review for it located a quote
+    for item in peer_review.additional_codes:
+        if participant_peer.code_shaped(item.code):
+            located[item.code] = located.get(item.code, False) or any(quote.spans for quote in item.evidence)
     independent, later = models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW
-    return {code: independent if independent in recorded.get(code, ()) or (not recorded.get(code) and code in listed)
-            else later for code in wanted}
+    return {code: independent if code in first else later if found else '' for code, found in located.items()}
 
 
 def _join(items):
@@ -1170,10 +1177,11 @@ def _trace_review(run, assessment=None, ids=None):
     used (each checked against that run's own tool results), the frozen inputs it was shown, its problems - read as the
     adapter version that recorded it; None for any other run and a run with no answer. Each additional code carries
     ``phase``, the phase its participant first proposed it in (peer_code_phases), where ``assessment`` - the current
-    one - read this review, and '' otherwise (refutation round 2, truth-8: a code its first reading proposed was called
-    "proposed after peer review, never independent"). ``ids``: the participant's one participants.peer.ShownIds for the
-    whole trace (_trace_runs): an additional code's service ids name the services of its own frozen first reading, so
-    each has the name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
+    one - read this review, and '' otherwise, and for a code it proposed in neither phase (refutation round 2, truth-8:
+    a code its first reading proposed was called "proposed after peer review, never independent"; round 5, the
+    session's D12: so was a code no entry of its located). ``ids``: the participant's one participants.peer.ShownIds for
+    the whole trace (_trace_runs): an additional code's service ids name the services of its own frozen first reading,
+    so each has the name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1184,9 +1192,10 @@ def _trace_review(run, assessment=None, ids=None):
     data = to_jsonable(peer_review)
     record = review.model_records(assessment).get(run.provider) if assessment is not None else None
     read = record is not None and record.get('peer_state') == 'read' and record.get('peer_run') == str(run.pk)
-    shaped = [item.code if isinstance(item.code, str) and CODE_SHAPE.fullmatch(item.code) else ''
-              for item in peer_review.additional_codes]
-    phases = peer_code_phases(assessment, run.provider, record, [code for code in shaped if code]) if read else {}
+    # a code in a code's shape, CPT or HCPCS, as the engine reads it (participants.peer.code_shaped; refutation round 5,
+    # shapes-1: the CPT shape alone gave an HCPCS code no phase); any other is served by its length (_code_entry)
+    shaped = [item.code if participant_peer.code_shaped(item.code) else '' for item in peer_review.additional_codes]
+    phases = peer_code_phases(peer_review, record) if read else {}
     ids = participant_peer.ShownIds() if ids is None else ids
     return {**data, 'positions': [_code_entry(item, ids) for item in data['positions']],
             'additional_codes': [{**_code_entry(item, ids), 'phase': phases.get(code, '')}
@@ -1257,6 +1266,7 @@ def trace_json(encounter):
         decision = current.get(proposal.pk)
         rows.append({'code': proposal.code, 'family': proposal.family, 'bucket': proposal.bucket,
                      'status': proposal.status, 'proposed_by': review.proposed_by(proposal),
+                     'listed_by': review.listed_by(proposal),
                      'positions': review.participant_positions(proposal, assessment.participants),
                      'reference_check': review.reference_check(proposal),
                      'approved': decision is not None and decision.action == models.Decision.APPROVE})

@@ -56,8 +56,10 @@ TRACE_RUN_KEYS = {'id', 'state', 'sent', 'mode', 'purpose', 'run_identity', 'aut
                   'reconciled', 'reading', 'review', 'exchanges'}
 READING_KEYS = {'refused', 'problems', 'unverified_quotes', 'date_of_service', 'services', 'codes', 'not_coded', 'questions',
                 'extraction_issues', 'references_used'}
-RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 'positions', 'reference_check',
-                           'approved'}
+# moved by refutation round 5 (R5-ACCOUNT, the session's D12): a row also serves listed_by, the participants that only
+# listed a participant's alternative's code with no quote found verbatim, never among its proposers
+RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 'listed_by', 'positions',
+                           'reference_check', 'approved'}
 # The harness fixtures (tests/fixtures/api) were written at b4655e634, before these keys existed. What each shape still
 # lacks is stated here rather than accepted silently, until the website package regenerates the fixtures from the
 # serializer's output: a regenerated fixture fails these tests until its entry is emptied (refutation r1 FG-5).
@@ -72,7 +74,7 @@ FIXTURE_LACKS = {
     'trace_run': {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled', 'review',
                   'exchanges'},
     'reading': {'references_used'},
-    'reconciliation_row': {'bucket'},
+    'reconciliation_row': {'bucket', 'listed_by'},
     'reference_validation': {'detail'},
 }
 # The harness@2 additions (HARNESS.md 12.6, as studio/serializers.py serves them) the website renders.

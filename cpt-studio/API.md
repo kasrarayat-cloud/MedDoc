@@ -141,7 +141,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "clarification_ids": [],
       "decision": null, "decision_state": "undecided",
       "allowed_actions": ["approve", "reject"],
-      "proposed_by": ["corti", "astra"],
+      "proposed_by": ["corti", "astra"], "listed_by": [],
       "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code with evidence located in the document.", "quote": "..."},
                                 "fable": {"position": "advised_not_to_code", "detail": "Fable advised not to code it: not performed at this encounter.", "quote": "..."}},
       "reference_check": {"state": "passed", "detail": "Present in the CMS fee schedule file: passed; ... NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."},
@@ -199,9 +199,18 @@ the encounter `state` is never `provider_failed` for it, and an unknown outcome 
 stopped with an unexpected error before it recorded an outcome included - makes the encounter `provider_unknown` until a
 member reconciles it (`POST reconcile` takes any participant's run). `codes` are the codes that participant proposed
 (Corti's: its selected codes), each once - a participant's only when the engine lists it (1 to 10 characters): a longer
-"code" may carry wording, a CPT descriptor say, so it is never served, and the row's `detail` ends with the engine's own
+"code" may carry wording, a CPT descriptor say, so it is never served (superseded, round 5, shapes-3: 1 to 10
+characters is the rule of Corti's row alone, `engine._listable`, I1; a participant's code is listed only in a CPT or
+HCPCS code's shape, `engine.participant_listable`, and only with a quote found verbatim in the document,
+`review.listed_codes` - one in no code's shape may carry wording, so it is never served and is counted below, and one
+in a code's shape none of whose quotes was found is neither listed nor counted: participants.summary says it was listed
+with no quote found verbatim in the document, so not proposed), and the row's `detail` ends with the engine's own
 sentence ("It returned 1 code that cannot be listed: ... It is not shown and never truncated."); `unlisted_codes`
-counts those (0 wherever none was returned), so the page says the reading proposed no code "that can be listed", never
+counts those (0 wherever none was returned) - a participant's as the engine counts them, every entry of its frozen
+reading that the engine does not read, re-read when serving (the number its participants.summary states), and `null`,
+with no count sentence, where that reading cannot be read again as recorded (refutation round 5, the session's D13: it
+counted the assessment's record of the reading, one entry per value, so '45385-59' given twice was 1 beside the
+summary's 2) - so the page says the reading proposed no code "that can be listed", never
 that it proposed none (refutation round 2, truth-11). Corti's row counts the codes its answers returned that the engine
 cannot list - every code of an answer, whatever its role (selected, a candidate, an alternative), read again as the
 engine read it: its primary answer as the engine's `provider.unlisted` check counts it, and a bounded second review as
@@ -255,7 +264,10 @@ REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation 
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
-alternatives, and the participants the engine recorded), `reference_check` (`passed`, `attention` or `not_verified`,
+alternatives, and the participants the engine recorded - for a participant's alternative only those with an entry that
+quotes the document verbatim; one that gave its code with no quote found verbatim listed it and did not propose it,
+and is served apart in `listed_by`, `[]` on every other proposal, as `support.listed_by` records it: refutation round
+5, the session's D12), `reference_check` (`passed`, `attention` or `not_verified`,
 from its CMS checks `pfs.presence`, `mue.units` and `pfs.endoscopic_base`; its detail always says that NCCI PTP edits
 are not connected) and `decision_state` (a member's). `participant_positions` gives each configured participant's
 position on the code in its first reading (the only reading harness@1 makes; harness@2's frozen phase-1 reading) -
@@ -331,8 +343,11 @@ once assess #2 is recorded, its `state` in the row vocabulary (`done`, `refused`
 `blocked`, `not_configured`) with a `detail` sentence, its `run_id`, the codes the review proposed after peer review
 (`codes_added`, never independent) and its unverified quotes. `codes_added` lists only the additional codes the
 participant first proposed in its peer review - the phase the engine records on the assessment's proposals of the code
-(`phases`), or, for a code no proposal records it on, whether its frozen first reading listed the code
-(`serializers.peer_code_phases`); an additional code its first reading proposed is named in the `detail` instead ("It
+(`phases`), or, for a code no proposal records it on, "whether its frozen first reading listed the code" (superseded,
+round 5, the session's D12: read only from its entries that located a quote, as the engine's `phases` are - its first
+reading's located quote, else its peer review's - so a code no entry of either phase located is neither added nor
+repeated: it was listed in peer review) (`serializers.peer_code_phases`); an additional code its first reading
+proposed is named in the `detail` instead ("It
 listed 45385 again in peer review; it first proposed it in its independent reading."), never as proposed after peer
 review (refutation round 2, truth-8). A final assessment of phase 1 - one that owes no peer
 stage because a member date conflict holds it, or because the participant is not configured now - serves, for each
@@ -414,7 +429,10 @@ the participant's answer. Now every clarification's `candidates` is `[]` for eve
 offered, and on the dormant path candidates are served only to a member who may confirm one (`permissions.can_confirm`
 true); no `why` "CPT Studio does not check what a participant's passage states, ..." is served any more. A
 participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its own words,
-and the reports' PEER REVIEW lists each with its value in CPT Studio's words.
+and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the session's D10 -
+that value was CPT Studio's own reading of the participant's words, which printed 'Cannulation of the bile duct was not
+successful.' as "successful"; each answer is now listed only by whether it is read as settling the question, with the
+passages it located, and no value is printed).
 
 Each confirmation's `current_effect` is what the current assessment made of it, in the words the reports' CONFIRMED
 FINDINGS print as "Effect:" - one reading, `review.confirmation_effect` (refutation round 2, truth-5: the page said
@@ -523,7 +541,8 @@ outside the caller's workspaces.
                   "services": [...], "codes": [...], "not_coded": [...], "questions": [...], "extraction_issues": [...]}}]}],
   "retrieval": [{"code": "45385", "service_date": "2026-10-21", "facts": [...], "passages": [...], "lookups": [...], "notes": [...]}],
   "reconciliation": [{"code": "45385", "family": "gi.colonoscopy", "bucket": "selected", "status": "ready",
-                      "proposed_by": ["corti", "astra"], "positions": {...}, "reference_check": {...}, "approved": false}]
+                      "proposed_by": ["corti", "astra"], "listed_by": [], "positions": {...}, "reference_check": {...},
+                      "approved": false}]
 }
 ```
 
@@ -564,7 +583,7 @@ reading's and its peer review's (refutation round 4, shapes-2, truth-3). Each re
 descriptor.
 `retrieval` is the current assessment's retrieval traces as recorded; a retrieval that failed is its one entry marked
 `"failed": true`, with no code, which the page shows as "Reference validation failed" with its note, never as a code
-with nothing found. `reconciliation` keeps proposed (`proposed_by`,
+with nothing found. `reconciliation` keeps proposed (`proposed_by`, with `listed_by` apart: refutation round 5, D12,
 `positions`), reference-checked (`reference_check`) and approved (`approved`: the member's current decision is an
 approval) apart.
 
@@ -754,8 +773,11 @@ FINDINGS after OPEN CLARIFICATIONS (each reviewer-confirmed finding of the revis
 who confirmed it and when, the confirmation and question ids, its passage with offsets and page, the participants that
 located it, the attestation, and what became of it - the service date through the encounter context, any other fact
 read by the assessment or not, with why), and after REVIEW PARTICIPANTS a PEER REVIEW section (each participant's peer
-review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions with the value in CPT
-Studio's own words, its positions on codes and the codes it proposed "after peer review, never independent", each with
+review: its state and run, the frozen inputs it was shown, its answers to CPT Studio's questions "with the value in CPT
+Studio's own words" (superseded, round 5, D10: each only by whether it is read as settling the question, "Astra says
+the document settles it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the
+codes it proposed
+"after peer review, never independent", each with
 its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
 no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
 and a PARTICIPANT REFERENCES section (by
@@ -765,12 +787,14 @@ gives a tool loop's exchanges and tool calls - for a run that reused a retained 
 the retained run, named as that run's ("Exchanges: 0 · tool calls: 0 (this run reuses the retained answer of run
 <id>, which made 2 exchanges and 1 tool call)"; refutation round 3, truth-4: the retained run's were printed as the
 reuse's own) - and PROVIDER USAGE lists a peer-review run as a "peer review". No
-participant's own wording is printed: questions are CPT Studio's, values CPT Studio's words, passages the revision's
+participant's own wording is printed: questions are CPT Studio's, "values CPT Studio's words" (superseded, round 5, D10:
+no peer answer's value is printed), passages the revision's
 own slices, codes and references only in their shapes. The CSV keeps its columns and adds rows that are not proposals,
 after the encounter rows: `confirmed_finding` (fact in `status`, value in `exclusion_reason`, passages in `evidence`,
 the locating participants in `proposed_by`, the reviewer in `reviewer`/`reviewer_kind`/`decided_at`, the attestation
 in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `checks`), `peer_answer` (`settled` or
-`not_settled`, the value, passages, `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
+`not_settled`, "the value" (superseded, round 5, D10: no value, so `exclusion_reason` stays empty), passages,
+`question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
 `peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
 window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a

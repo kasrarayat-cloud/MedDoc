@@ -1171,33 +1171,46 @@ def record_words(record):
 
 
 def listed_codes(record):
-    """(codes, unlisted) of a participant's Assessment.participants entry: the codes it proposed that may be listed by
-    name, each once, in order - the engine's own rule for a participant's code (engine.participant_listable: a CPT or
-    HCPCS code's shape; refutation round 4, the session's D9, shapes-1: the proposal provider's rule of 1 to
-    MAX_LISTED_CODE characters listed 'W/LES(S)' here), as its participants.summary lists them - and how many it proposed
-    that cannot be. Any other 'code' may carry wording, a CPT descriptor say, so it is counted and never shown, never
-    truncated (I9; refutation r1 IND-1: the participants row served whatever text a participant wrote as a code). Read
-    when serving, so records already stored are covered."""
+    """The codes of a participant's Assessment.participants entry it proposed that may be listed by name, each once,
+    in order - the engine's own rule for a participant's code (engine.participant_listable: a CPT or HCPCS code's shape;
+    refutation round 4, the session's D9, shapes-1: the proposal provider's rule of 1 to MAX_LISTED_CODE characters
+    listed 'W/LES(S)' here), as its participants.summary lists them. Any other 'code' may carry wording, a CPT
+    descriptor say, so it is never shown, never truncated (I9; refutation r1 IND-1: the participants row served whatever
+    text a participant wrote as a code); how many there are is unlisted_count's. Read when serving, so records already
+    stored are covered."""
     from .validation import engine  # local import: only the engine's rule is needed here
 
-    codes, unlisted = [], 0
+    codes = []
     for item in record.get('codes') or []:
         code = item.get('code') if isinstance(item, dict) else None
-        if not engine.participant_listable(code):
-            unlisted += 1
-        elif code not in codes and item.get('quote'):
+        if engine.participant_listable(code) and code not in codes and item.get('quote'):
             # a code its reading listed with no quote found in the document is not one it proposed (the engine counts
             # no such entry; refutation round 4, truth-2: "Codes it proposed: 45385, 45380." beside the card's "Astra
             # did not propose it")
             codes.append(code)
-    return codes, unlisted
+    return codes
 
 
-def unlisted_words(count):
-    """The engine's own sentence for codes a participant returned that cannot be listed ('' for none)."""
-    from .validation import checks, engine  # local import: only the engine's wording is needed here
+def unlisted_count(assessment, record):
+    """How many codes the frozen first reading an Assessment.participants entry of ``assessment`` names gave that the
+    engine does not read: engine.participant_unlisted_count, the number its participants.summary states, of the reading
+    re-read when serving as the assessment read it (jobs.recorded_reading: the run the entry names, read by the adapter
+    version that recorded it, and only when its sha256 is the entry's reading_sha256), so records already stored are
+    covered (refutation round 5, the session's D13: the row counted the entry's codes, which keep one entry per value,
+    so '45385-59' given twice was 1 on the row beside the summary's 2). 0 for an entry whose reading was not used (the
+    engine read none of its codes). None when that reading cannot be read again as recorded: the row then states no
+    count rather than another one."""
+    from .jobs import recorded_reading  # local import: jobs imports this module
+    from .validation import engine  # local import: only the engine's count is needed here
 
-    return checks.unlisted_codes(count, engine.MAX_LISTED_CODE, 'It') if count else ''
+    if record.get('state') != 'read':
+        return 0
+    _, reading = recorded_reading(assessment.revision, record)
+    if reading is None:
+        log.warning('the frozen reading of %s on assessment %s could not be read as recorded', record.get('name'),
+                    assessment.pk)
+        return None
+    return engine.participant_unlisted_count(reading.codes)
 
 
 def proposed_by(proposal):
@@ -1208,6 +1221,17 @@ def proposed_by(proposal):
     named = {name for name in support.get('proposed_by') or [] if isinstance(name, str)}
     corti = (support.get('origin') or 'primary') in ('primary', 'second_review') or CORTI in named
     return ([CORTI] if corti else []) + [name for name in participants.PARTICIPANTS if name in named]
+
+
+def listed_by(proposal):
+    """The participants the engine recorded as having listed a participant's alternative's code with no entry that
+    quotes the document verbatim (support['listed_by']): they did not propose it, so they are never among proposed_by,
+    and each surface that says who proposed the alternative names them apart, as having listed it (refutation round 5,
+    the session's D12). In harness order; [] for any other proposal, and for a record that carries none or no list."""
+    listed = (proposal.support or {}).get('listed_by')
+    named = {name for name in listed if isinstance(name, str)} if isinstance(listed, list) else set()
+    proposers = set(proposed_by(proposal))
+    return [name for name in participants.PARTICIPANTS if name in named and name not in proposers]
 
 
 # How Corti stands to a proposal's code (corti_relation), in the order a Corti entry of the code is looked for.

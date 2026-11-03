@@ -325,29 +325,42 @@ class PeerRepeatedCodeTests(R2WordingCase):
         self.assertEqual(snare['phases']['astra'], 'independent')  # the engine's record the row now follows
 
     def test_the_phase_of_each_additional_code_is_the_engine_s_record(self):
-        from studio import serializers
+        from studio import review, serializers
+        from studio.types import ParticipantCode
 
         assessment = self.encounter(self.encounter_id).current_assessment
         records = self.records(assessment)
-        # recorded by the engine: Astra's repeated 45385 (independent) and Fable's 45378 (after peer review)
-        self.assertEqual(serializers.peer_code_phases(assessment, 'astra', records['astra'], ['45385']),
-                         {'45385': 'independent'})
-        self.assertEqual(serializers.peer_code_phases(assessment, 'fable', records['fable'], ['45378']),
-                         {'45378': 'peer_review'})
-        # a code no proposal records the participant on: its frozen first reading decides, as the engine reads it
-        listed = {**records['astra'], 'codes': [*records['astra']['codes'], {'code': '45399', 'quote': ''}]}
-        self.assertEqual(serializers.peer_code_phases(assessment, 'astra', listed, ['45399', '45398']),
-                         {'45399': 'independent', '45398': 'peer_review'})
+        reviews = {name: review.recorded_peer_review(assessment, records[name]) for name in ('astra', 'fable')}
+        # recorded by the engine: Astra's repeated 45385 (independent) and Fable's 45378 (after peer review) - moved by
+        # refutation round 5 (R5-ACCOUNT, the session's D12): read from the review itself and its record, the located
+        # entries alone, where the call named the assessment and the codes
+        self.assertEqual(serializers.peer_code_phases(reviews['astra'], records['astra']), {'45385': 'independent'})
+        self.assertEqual(serializers.peer_code_phases(reviews['fable'], records['fable']), {'45378': 'peer_review'})
+        self.assertEqual(self.proposals(self.detail(self.encounter_id), '45385')[0]['phases']['astra'], 'independent')
+        # a code no proposal records the participant on: its located entries decide, as the engine reads them - its
+        # first reading's located quote, else its peer review's; a code no entry of either located is '' (listed in peer
+        # review: the record's unlocated listing of 45399 made it 'independent', and 45398's unlocated entry
+        # 'peer_review')
+        located = reviews['astra'].additional_codes[0]
+        listed = {**records['astra'], 'codes': [*records['astra']['codes'], {'code': '45399', 'quote': ''},
+                                                {'code': '45397', 'quote': SNARE}]}
+        more = dataclasses.replace(reviews['astra'], additional_codes=(
+            located, ParticipantCode('45399'), ParticipantCode('45398'), ParticipantCode('45397'),
+            ParticipantCode('45396'), dataclasses.replace(located, code='45396')))
+        self.assertEqual(serializers.peer_code_phases(more, listed), {
+            '45385': 'independent', '45399': '', '45398': '', '45397': 'independent', '45396': 'peer_review'})
 
     def test_the_reports_word_each_additional_code_by_its_phase(self):
-        from studio import reports, serializers
+        from studio import reports, review, serializers
 
         assessment = self.encounter(self.encounter_id).current_assessment
         records = self.records(assessment)
         snap = reports.snapshot(self.encounter(self.encounter_id), 'draft')
         for entry in snap['peer_review']['participants']:
-            phases = serializers.peer_code_phases(assessment, entry['name'], records[entry['name']],
-                                                  [added['code'] for added in entry['additional_codes']])
+            # moved by refutation round 5 (R5-ACCOUNT, the session's D12): the phases are read from the review as the
+            # assessment read it and its record, where the call named the assessment and the codes
+            record = records[entry['name']]
+            phases = serializers.peer_code_phases(review.recorded_peer_review(assessment, record), record)
             for added in entry['additional_codes']:
                 added.setdefault('phase', phases[added['code']])
         text = reports.render_txt(snap).decode('utf-8')

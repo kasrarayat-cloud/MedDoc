@@ -662,9 +662,11 @@ class TraceTests(HarnessCase):
         self.assertEqual([(a['phase'], a['final'], a['current']) for a in trace['assessments']],
                          [(1, False, False), (2, True, True)])
         self.assertEqual([entry['code'] for entry in trace['retrieval']], ['99213'])
+        # moved by refutation round 5 (R5-ACCOUNT, the session's D12): a row also serves listed_by, the participants that
+        # only listed a participant's alternative's code (none for a proposal)
         self.assertEqual(trace['reconciliation'], [{
             'code': '99213', 'family': trace['reconciliation'][0]['family'], 'bucket': 'selected', 'status': 'ready',
-            'proposed_by': ['corti'], 'positions': {
+            'proposed_by': ['corti'], 'listed_by': [], 'positions': {
                 'astra': {'position': 'proposed', 'quote': TIME_QUOTE,
                           'detail': 'Astra proposed this code with evidence located in the document.'},
                 'fable': {'position': 'proposed', 'quote': TIME_QUOTE,

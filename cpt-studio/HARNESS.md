@@ -1110,7 +1110,9 @@ kept:
   bounded second review listed as an alternative: "Corti's second review also listed this code, as an alternative; see
   Alternatives.").
 - **truth-8 (amends 12.6):** `codes_added` holds only codes a participant first proposed in peer review
-  (`serializers.peer_code_phases`, the engine's `support['phases']`); a code repeated there is named in the detail
+  (`serializers.peer_code_phases`, "the engine's `support['phases']`" (superseded, round 5: the session's D12 - read
+  only from the participant's entries that located a quote, as the engine's phases are, so a code no entry of either
+  phase located is neither added nor repeated: "listed in peer review")); a code repeated there is named in the detail
   ("It listed 45385 again in peer review; it first proposed it in its independent reading."), and the reports and the
   trace word each additional code by its `phase`.
 - **truth-9 (amends 12.6):** a final phase-1 assessment serves the peer state `not_sent` with why (a member date
@@ -1222,7 +1224,11 @@ and the page draws a question's candidate block only for such a member (`candida
 it. `review.located_passages`, `review.UNCHECKED_WHY` and the page's located-passage rendering (`locatedPassage`,
 `LOCATED_LABEL`, `LOCATED_NOTE`) are removed, so falsegreen-5 (located_passages' unpinned copy of the candidates' merge)
 is moot. A participant's own answers to the open questions stay in its peer review: the owner's trace shows each in its
-own words, and the reports' PEER REVIEW lists each with its value in CPT Studio's words. The bullets above (candidates
+own words, and the reports' PEER REVIEW lists each "with its value in CPT Studio's words" (superseded, round 5: the
+session's D10, d8-2 - that value was CPT Studio's own reading of the participant's words, `candidates.canonical_value`,
+and it printed 'Cannulation of the bile duct was not successful.' as "successful"; the reports now list each answer only
+by whether it is read as settling the question ("Astra says the document settles it", "Astra's answer is read as not
+settling it"), with the passages it located, and print no value). The bullets above (candidates
 served unchecked, their fixed why, the page's located passages and its note) are superseded, kept so the change can be
 seen. Tests: `tests/test_harness2_r4_conf.py` and the `// refutation round 4, R4-CONF` block of
 `tests/frontend/app.test.cjs`; round 3's pins (`tests/test_harness2_r3_conf.py`, `tests/test_frontend.py`, the `R3-CONF`
@@ -1390,7 +1396,11 @@ diff. Two session decisions, each narrowing what CPT Studio claims or shows:
   says a peer answer "is recorded and decides nothing by itself" (12.10).
 - **truth-2 (amends 12.11 truth-2):** a first reading's code with no quote found in the document is "not proposed" there
   whether or not peer review then proposed it - in the card's positions (`review.participant_positions`), the
-  participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position and its
+  participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position
+  (superseded, round 5, falsegreen-5: that position speaks of both phases, so it is 'not_proposed' only where no entry
+  of either phase located a quote; where peer review then proposed the code with a located quote it is 'proposed', and
+  its detail says the first reading listed the code with no quote found verbatim there and peer review proposed it;
+  the card's positions speak of the first reading alone) and its
   participants.summary ("It listed N codes (...) with no quote found verbatim in the document, so it did not propose
   them."); "It proposed it after peer review." follows only where it did. (The participant row and the engine's two
   sentences were applied at integration from R4-TRUTH's notes; three pins moved with them.)

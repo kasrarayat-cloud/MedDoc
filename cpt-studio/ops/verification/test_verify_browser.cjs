@@ -2516,8 +2516,10 @@ test('summarize records the phase, the peer reviews, the candidates and the conf
   const enc = apiFixture(H2[2]);
   const summary = vb.summarize(enc);
   assert.equal(summary.harness.phase, 2);
+  // moved by refutation round 5 (R5-ACCOUNT, the session's D12): Astra's 45381 quotes a sentence in no document, so its
+  // peer review listed it and proposed no code there; codes_added held it
   assert.deepEqual(summary.harness.participants.map(p => [p.name, p.peer?.state, p.peer?.codes_added]),
-    [['corti', undefined, undefined], ['astra', 'done', ['45381']], ['fable', 'done', ['45380']]]);
+    [['corti', undefined, undefined], ['astra', 'done', []], ['fable', 'done', ['45380']]]);
   assert.deepEqual(summary.harness.participants[1].references, { retrieved: 1, used: 2, cited_not_retrieved: 1 });
   // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's - 45380's status (no candidate
   // verifies on a biopsy the readers leave in doubt) and extent, and the date, stay open after 45385's extent is confirmed
