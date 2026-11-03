@@ -142,7 +142,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "decision": null, "decision_state": "undecided",
       "allowed_actions": ["approve", "reject"],
       "proposed_by": ["corti", "astra"], "listed_by": [],
-      "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code with evidence located in the document.", "quote": "..."},
+      "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code, quoting the document verbatim.", "quote": "..."},
                                 "fable": {"position": "advised_not_to_code", "detail": "Fable advised not to code it: not performed at this encounter.", "quote": "..."}},
       "reference_check": {"state": "passed", "detail": "Present in the CMS fee schedule file: passed; ... NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."},
       "retrieval": [{"kind": "fact", "source_key": "cms-pfs-rvu26d", "release": "RVU26D", "label": "status", "value": "A", "page": "", "section": "", "text": ""},
@@ -471,7 +471,13 @@ is, and the confirm endpoint refuses (409) a question whose proposal records non
 Each proposal gains `phases` (from its support record: the phase each participant first proposed the code in; a code
 first proposed in peer review is `peer_review`, never independent) and `confirmed` (the ids of the confirmations its
 checks read). Its `rationale` and `proposed_by` keep the origin (11.4: "Proposed by Fable; Corti did not propose this
-code."). Every proposal carries `corti_relation` (refutation round 2, truth-6), how Corti stands to its code, read from
+code.") (superseded, refutation round 6: the session's D14 - a code only the participants proposed is never a proposal
+now; it is served as an alternative of `support.origin` `participant`, `allowed_actions` `[]`, whose
+`exclusion_reason` names who proposed it and why it is not added: its scope or evidence reason where one applies,
+otherwise CPT Studio's own, "... but not added as a proposal: a quote found verbatim in the document does not by itself
+show that the coded act was done at this encounter, and in this release a participant's code is never added as a
+proposal of its own. Alternatives cannot be approved."). Every proposal carries
+`corti_relation` (refutation round 2, truth-6), how Corti stands to its code, read from
 the assessment's own proposals of that code (Corti's are those of origin primary or second_review): `proposer` (Corti
 is among `proposed_by`); `selected_without_exact_passage` (Corti's response selected the code and that selection is
 excluded because none of its passages matches the document text exactly: listed apart, carrying no proposal);

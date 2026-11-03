@@ -865,6 +865,10 @@ class PeerRequestTests(ColonCase):
         # its answer failed - but a peer request lists only what it shows, under "the sha256 of each frozen output
         # shown above"
         self.corti.outcomes = ['failed']
+        # moved by refutation round 6 (R6-MEANING, the session's D14): with Corti's answer failed, the participants'
+        # codes are listed and none is a proposal, so assess #1 asks no extent question for Astra's peer review to
+        # answer; its peer review answers nothing here (what the request lists is this test's subject)
+        self.adapters['astra'].peer = [answered('astra', EMPTY_PEER, number=2)]
         encounter_id = self.create(TWO_EXTENTS)
         drain()
         first = self.assessments(encounter_id)[0]
@@ -914,10 +918,14 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(seen, [('45380', '45385'), ('45378', '45380', '45385')])  # assess #2 adds Fable's code
         final = self.encounter(encounter_id).current_assessment
         added = final.proposals.get(code='45378')
-        self.assertEqual((added.support.get('origin'), added.support.get('phases')),
-                         ('participant', {'fable': 'peer_review'}))
-        self.assertIn('Fable after peer review', added.rationale)
-        self.assertIn('Corti did not propose this code', added.rationale)
+        # moved by refutation round 6 (R6-MEANING, the session's D14): Fable's code is listed, never a proposal, its
+        # phase kept (its rationale went on "Corti did not propose this code")
+        self.assertEqual((added.bucket, added.support.get('origin'), added.support.get('phases')),
+                         ('alternative', 'participant', {'fable': 'peer_review'}))
+        self.assertTrue(added.exclusion_reason.startswith('Proposed by Fable after peer review, but not added as a '
+                                                          'proposal: '), added.exclusion_reason)
+        self.assertTrue(added.rationale.startswith('Proposed by Fable after peer review; not added as a proposal: '),
+                        added.rationale)
         summary = next(c for c in final.encounter_checks if c['id'] == 'participants.summary')
         self.assertIn('In peer review', summary['detail'])
         # a peer review's answer is never itself a confirmation: sel:0 stays held until a reviewer confirms (11.3)

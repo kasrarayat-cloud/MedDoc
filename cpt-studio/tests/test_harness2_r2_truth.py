@@ -59,8 +59,10 @@ class PeerProposedPositionTests(ColonCase):
         row = next(item for item in trace['reconciliation'] if item['code'] == '45378')
         self.assertEqual((row['proposed_by'], row['positions']['fable']['detail']), (['fable'], PEER_ONLY))
         # a code a first reading proposed keeps its first reading's own wording
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         self.assertEqual(_proposal(detail, '45385')['participant_positions']['fable']['detail'],
-                         'Fable proposed this code with evidence located in the document.')
+                         'Fable proposed this code, quoting the document verbatim.')
 
     def test_each_first_reading_position_says_it_is_the_first_reading_s_beside_a_later_proposal(self):
         later = SimpleNamespace(code='45378', support={'proposed_by': ['astra', 'fable'],
@@ -297,7 +299,11 @@ class ConfirmationEffectTests(ColonCase):
         checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
         self.assertEqual(checks['confirmations.ignored']['status'], 'warn')
         self.assertNotIn('confirmations.applied', checks)
-        self.assertEqual(final.proposals.get(key='sel:0').status, 'needs_clarification')
+        # moved by refutation round 6 (R6-MEANING, the session's D14): with the member's date in conflict Corti's new
+        # request is not sent, and the participants' codes are listed, none a proposal (their 45385 was sel:0, held),
+        # so nothing reads the confirmation and nothing is ready
+        self.assertEqual(sorted((p.code, p.bucket, p.status) for p in final.proposals.all()),
+                         [('45380', 'alternative', 'informational'), ('45385', 'alternative', 'informational')])
         self.assertFalse(models.Decision.objects.exists())  # I4: a confirmation is no decision
 
 

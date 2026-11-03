@@ -37,6 +37,7 @@
     "run_id": "e2c00000-0000-4000-8000-000000000002",
     "reused": false,
     "codes": [
+     "45380",
      "45385"
     ],
     "unlisted_codes": 0,
@@ -458,7 +459,7 @@
    },
    "usage_basis": "provider_reported_credits_not_usd",
    "request_sha256": "935a870b884eeb1851bbe698a5935ba3c125f1ef01db0535790c7218c8c8a187",
-   "response_sha256": "70baee6528ce769508007fb2ede6a88384c5255d3983c67c895bb29218f8a898",
+   "response_sha256": "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -526,8 +527,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "37f132eaceace3fe9924949d4cfffae2ac411c6fc26c26de04bda89755f5c57a",
-   "response_sha256": "2bd2c62cc2b71244732f115bebffab7f827d8df8918af9c1c4d82f12f12f3631",
+   "request_sha256": "ece4171b31ac363aa87b312b3cc2ad3b80048edcbdd106d230e992adfe38b0e5",
+   "response_sha256": "a95cfe529af715c1a793d0dc03fb9661382082f1032c29fd52d4e3093a749bca",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -549,8 +550,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "99f1d9353ba8e8d01ab02b169a2d10ad0add6305a671afb30c901012fbb8227b",
-   "response_sha256": "6002f11fec23599a968c80d7b9a518522267511865763f6f05e98e42da0fa226",
+   "request_sha256": "cc36195653b6014cdfc6c9214993d605c50aa88ed3033e1f01a1dfe7a3df25ff",
+   "response_sha256": "8d5ebeabac8043c2544cafb68b201923fa6b257b793f325090f27e87e448ace6",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -777,12 +778,12 @@
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      },
      "fable": {
       "position": "proposed",
-      "detail": "Fable proposed this code with evidence located in the document.",
+      "detail": "Fable proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      }
     },
@@ -828,7 +829,7 @@
       "context_index": 0
      }
     ],
-    "rationale": "Proposed by Astra (independent participant) and Fable after peer review; Corti did not propose this code. 1 exact evidence passage. Routed to Colonoscopy; routing also detected this service in the document. Service status: not established as performed. Documented facts: completion = complete; intent = screening; interventions = snare removal (cold snare) of the 6 mm sessile polyp in the ascending colon.",
+    "rationale": "Selected by replay. 1 exact evidence passage. Routed to Colonoscopy; routing also detected this service in the document. Service status: not established as performed. Documented facts: completion = complete; intent = screening; interventions = snare removal (cold snare) of the 6 mm sessile polyp in the ascending colon.",
     "units": 1,
     "checks": [
      {
@@ -929,7 +930,7 @@
      "state": "uncertain",
      "detail": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
      "family": "gi.colonoscopy",
-     "origin": "participant",
+     "origin": "primary",
      "phases": {
       "astra": "independent",
       "fable": "peer_review"
@@ -960,6 +961,7 @@
      ],
      "supporting": [],
      "proposed_by": [
+      "corti",
       "astra",
       "fable"
      ],
@@ -999,15 +1001,16 @@
     ],
     "approve_withheld_by": null,
     "proposed_by": [
+     "corti",
      "astra",
      "fable"
     ],
     "listed_by": [],
-    "corti_relation": "none",
+    "corti_relation": "proposer",
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
      },
      "fable": {
@@ -1124,7 +1127,7 @@
    {
     "id": "provider.status",
     "label": "Proposal provider",
-    "detail": "replay (corti-coding-v2@cptstudio-1) returned 1 selected CPT-labelled code and 0 candidate or alternatives.",
+    "detail": "replay (corti-coding-v2@cptstudio-1) returned 2 selected CPT-labelled codes and 0 candidate or alternatives.",
     "source": "cpt-studio:provider@1",
     "status": "pass"
    },

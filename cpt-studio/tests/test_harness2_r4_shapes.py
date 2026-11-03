@@ -180,9 +180,11 @@ class ParticipantCodeShapeTests(ShapesCase):
         _, trace, detail, txt, rows = self.run_chain()
         proposals = [(p['code'], p['bucket'], (p['support'] or {}).get('origin')) for p in
                      detail['assessment']['proposals']]
-        self.assertEqual(proposals, [('45385', 'selected', 'primary'), ('45380', 'selected', 'participant')])
+        # moved by refutation round 6 (R6-MEANING, the session's D14): the peer review's 45380, in a code's shape, is
+        # read - and listed as its alternative, never a proposal (it was a selected proposal of its own)
+        self.assertEqual(proposals, [('45385', 'selected', 'primary'), ('45380', 'alternative', 'participant')])
         self.assertEqual([(row['code'], row['bucket']) for row in trace['reconciliation']],
-                         [('45385', 'selected'), ('45380', 'selected')])
+                         [('45385', 'selected'), ('45380', 'alternative')])
         self.assertEqual(sorted(entry.get('code') for entry in trace['retrieval']), ['45380', '45385'])
         summary = next(check['detail'] for check in detail['assessment']['encounter_checks']
                        if check['id'] == 'participants.summary')
@@ -212,7 +214,9 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.corti.selections = [('45385', SNARE), (LES, BIOPSY)]
         _, trace, detail, txt, _ = self.run_chain()
         listed = sorted((p['code'], p['bucket'], p['key']) for p in detail['assessment']['proposals'])
-        self.assertEqual(listed, [('45380', 'selected', 'sel:1'), ('45385', 'selected', 'sel:0'),
+        # moved by refutation round 6 (R6-MEANING, the session's D14): the peer review's 45380 is its alternative (it
+        # was sel:1)
+        self.assertEqual(listed, [('45380', 'alternative', 'altp:0'), ('45385', 'selected', 'sel:0'),
                                   (LES, 'excluded', 'exc:0')])
         excluded = next(p for p in detail['assessment']['proposals'] if p['code'] == LES)
         self.assertEqual(excluded['proposed_by'], ['corti'])
@@ -383,8 +387,10 @@ class EngineListingTests(OfflineTestCase):
                                   he.code(colon, '4538', he.BIOPSY), he.code(colon, 'g0121', he.BIOPSY),
                                   he.code(colon, '45380', he.BIOPSY), he.code(colon, 'G0121', he.CECUM)])
         result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [astra])
+        # moved by refutation round 6 (R6-MEANING, the session's D14): 45380, in a code's shape, is read and listed -
+        # never a proposal (it was selected)
         self.assertEqual([(p.code, p.bucket) for p in result.proposals],
-                         [('45385', 'selected'), ('45380', 'selected'), ('G0121', 'alternative')])
+                         [('45385', 'selected'), ('45380', 'alternative'), ('G0121', 'alternative')])
         summary = he.encounter_check(result, 'participants.summary').detail
         self.assertIn('It proposed 3 codes (45385, 45380, G0121), 3 quoting the document verbatim. '
                       + engine.participant_unlisted_codes(3, 'It'), summary)
@@ -399,7 +405,10 @@ class EngineListingTests(OfflineTestCase):
                                                                                          he.SNARE)])
         given = he.reviewed('astra', [he.code(colon, '45385', he.SNARE)], added)
         result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [given])
-        self.assertEqual([(p.code, p.bucket) for p in result.proposals], [('45385', 'selected'), ('45380', 'selected')])
+        # moved by refutation round 6 (R6-MEANING, the session's D14): the peer review's 45380 is read and listed, never
+        # a proposal (it was selected)
+        self.assertEqual([(p.code, p.bucket) for p in result.proposals],
+                         [('45385', 'selected'), ('45380', 'alternative')])
         summary = he.encounter_check(result, 'participants.summary').detail
         self.assertIn('it took 2 positions on codes (1 supports, 1 disputes, 0 cannot tell)', summary)
         self.assertIn('It listed 1 additional code (45380), 1 quoting the document verbatim; a code first proposed in '

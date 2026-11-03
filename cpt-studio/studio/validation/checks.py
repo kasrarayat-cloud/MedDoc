@@ -2567,17 +2567,22 @@ def participants_disagree_check(code: str, items: Sequence[tuple[str, str]],
 
 
 def participants_services_check(items: Sequence[tuple[str, ...]]) -> Check:
-    """``items``: (participant label, service label, its quote[, its status]) for each service a participant reads as
-    performed - or as started and not completed ('attempted_incomplete') - quoting the document verbatim, of a kind of
-    which the documented-service reading reads no performed service. Coding completeness is incomplete beside each
-    (engine._Harness.complete)."""
+    """``items``: (participant label, service label, its quote[, its status[, how the documented-service reading reads
+    a service of that kind as not done]]) for each service a participant reads as performed - or as started and not
+    completed ('attempted_incomplete') - quoting the document verbatim, of a kind of which the documented-service
+    reading reads no performed service. Coding completeness is incomplete beside each (engine._Harness.complete), and
+    stays so in the reviewed report (engine.reviewed_completeness keeps it), so the check says it is, never "until a
+    reviewer checks the document". The reading of a service of that kind as not done - 'the upper endoscopy as
+    negated' - is named where there is one (refutation round 6, R6-MEANING, negation-5)."""
     kinds = 'that kind' if len(items) == 1 else 'those kinds'
     said = '; '.join(f'{item[0]} reads '
-                     f'{"an attempted, incomplete" if item[3:] == ("attempted_incomplete",) else "a performed"} '
-                     f'{item[1]} (“{excerpt(item[2])}”)' for item in items)
+                     f'{"an attempted, incomplete" if item[3:4] == ("attempted_incomplete",) else "a performed"} '
+                     f'{item[1]} (“{excerpt(item[2])}”)'
+                     + (f', where the documented-service reading reads {item[4]}' if item[4:5] and item[4] else '')
+                     for item in items)
     return Check('participants.services', 'Performed services only an independent participant reads', 'warn',
                  f'{said}. The documented-service reading reads no performed service of {kinds}, so coding '
-                 'completeness is incomplete until a reviewer checks the document.', PARTICIPANTS_SOURCE)
+                 'completeness is incomplete.', PARTICIPANTS_SOURCE)
 
 
 def provider_status_beside_participants(provider_status: str, normalized: Optional[NormalizedResponse],

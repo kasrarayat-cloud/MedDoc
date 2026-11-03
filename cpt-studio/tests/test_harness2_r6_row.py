@@ -114,19 +114,24 @@ class StaleMixin(RowMixin):
 
 class StaleRowTests(StaleMixin, ColonCase):
     """(A) Participants on, at the release default (no confirmation offered): R4-CONF's CodeQuestionTests input -
-    TWO_EXTENTS drained to its final assessment, Corti's 45385 and 45380 and the 45378 Fable's peer review adds, four
-    questions each about a code - then an addendum answering 45385's extent question, as the page's own "Answer with an
-    addendum" sends it."""
+    TWO_EXTENTS drained to its final assessment, Corti's 45385 and 45380, two questions each about a code (their
+    extents) - then an addendum answering 45385's extent question, as the page's own "Answer with an addendum" sends it.
 
-    ASKED = [('proposal', 'base_included', '45378'), ('proposal', 'extent', '45378'), ('proposal', 'extent', '45380')]
+    Moved at the integration of R6-MEANING (D14): the 45378 Fable's peer review adds is a participant's code no Corti
+    proposal carries, so it is listed as an alternative and never a proposal, and no question is asked about it. The
+    constants were four open questions before the addendum (45378's base_included and extent among them), three of the
+    earlier revision's in the window, and one open once revision 2 was assessed; measured on the merged tree, they are
+    two, one (45380's extent) and none. The window's pins - no count, never the earlier revision's - are unchanged."""
+
+    ASKED = [('proposal', 'extent', '45380')]
 
     def answer_45385(self, encounter_id):
         drain()
         before = self.detail(encounter_id)
-        self.assertEqual(before['harness']['clarification'], {'open': 4})
+        self.assertEqual(before['harness']['clarification'], {'open': 2})
         self.assertEqual(clarification_row(page(before)),
-                         {'state': 'open', 'badge': '4 open', 'tone': 'amber',
-                          'lines': ['4 open questions are each about a code.'], 'notes': [NOTE]})
+                         {'state': 'open', 'badge': '2 open', 'tone': 'amber',
+                          'lines': ['2 open questions are each about a code.'], 'notes': [NOTE]})
         codes = {p['id']: p['code'] for p in before['assessment']['proposals']}
         (question,) = [item for item in before['clarifications'] if item['state'] == 'open'
                        and item['fact'] == 'extent' and codes.get(item['proposal_id']) == '45385']
@@ -144,13 +149,15 @@ class StaleRowTests(StaleMixin, ColonCase):
         self.assertEqual((stopped['state'], stopped['revision']['number'], stopped['pipeline']['busy']),
                          ('stopped', 2, False))
         self.assert_unassessed(stopped, NOT_ASKED, self.ASKED)
-        # Resume: once revision 2 is assessed, the API counts its open questions again and the row counts them
+        # Resume: once revision 2 is assessed, the API counts its open questions again - none: the addendum's cecum
+        # line settles 45380's extent too - and the row reads the count, now of this revision (CortiOnlyStaleRowTests
+        # pins a count of one after its resume)
         self.resume(encounter_id)
         resumed = self.detail(encounter_id)
-        self.assertEqual(self.assert_counted(resumed), 1)
+        self.assertEqual(self.assert_counted(resumed), 0)
         self.assertEqual(clarification_row(page(resumed)),
-                         {'state': 'open', 'badge': '1 open', 'tone': 'amber',
-                          'lines': ['One open question is about a code.'], 'notes': [NOTE]})
+                         {'state': 'none', 'badge': 'None open', 'tone': 'green',
+                          'lines': ['No question is open for this revision.'], 'notes': [NOTE]})
 
     def test_the_count_is_null_through_every_stage_before_the_revision_s_first_assessment(self):
         encounter_id = self.create(TWO_EXTENTS)

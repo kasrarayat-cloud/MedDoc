@@ -19,6 +19,7 @@ from django.conf import settings
 from django.test import override_settings
 
 from studio import jobs
+from studio.validation import engine
 from tests import test_harness2_api as h2
 from tests import test_harness2_pipeline as hp
 from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
@@ -103,10 +104,24 @@ class CortiRelationTests(R2WordingCase):
     """truth-6 (HARNESS.md 11.4): a participant's own proposal's card read "Corti did not propose this code" whenever
     Corti was not among its proposers - also beside Corti's own excluded selection of the code, which the card's own
     rationale and the Excluded candidates list named. The API serves Corti's relation to the code (corti_relation) and
-    the page words it as the engine's rationale does; "did not propose" is said only when Corti has no entry at all."""
+    the page words it as the engine's rationale does; "did not propose" is said only when Corti has no entry at all.
+    Moved by refutation round 6 (R6-MEANING, the session's D14): a participant's code is never a proposal now, so it has
+    no card and no rationale to word Corti's relation in: it is listed under Alternatives with CPT Studio's own reason,
+    which says nothing of Corti, beside Corti's own entry; the API still serves the relation."""
 
     def proposer_line(self, detail, proposal):
         return browser(f'statusLine(cardOf(page(), {json.dumps(proposal["id"])}), "Proposed by")', detail)
+
+    def assert_listed(self, detail, proposal):
+        """``proposal`` is the participants' alternative: no card, nothing to decide, and a reason that says nothing
+        of Corti; no card on the page says Corti did not propose a code."""
+        self.assertEqual((proposal['bucket'], proposal['status'], proposal['allowed_actions']),
+                         ('alternative', 'informational', []))
+        self.assertIn(engine.PARTICIPANT_NOT_ADDED, proposal['exclusion_reason'])
+        self.assertNotIn('Corti', proposal['exclusion_reason'])
+        page = browser('page()', detail)
+        self.assertNotIn(f'id="card-{proposal["id"]}"', page)
+        self.assertNotIn('Corti did not propose this code', page)
 
     def test_a_code_corti_selected_with_no_exact_passage_is_never_called_unproposed_by_corti(self):
         def inexact(answer, _text):
@@ -117,19 +132,19 @@ class CortiRelationTests(R2WordingCase):
             encounter_id = self.create(TWO_EXTENTS)
             drain()
         detail = self.detail(encounter_id)
-        [own] = self.proposals(detail, '45385', bucket='selected')
+        # moved by refutation round 6 (R6-MEANING, the session's D14): the participants' 45385 is their alternative, not
+        # a selected card worded "Corti also selected this code, with no exact passage; ..."
+        [own] = self.proposals(detail, '45385', bucket='alternative')
         [corti] = self.proposals(detail, '45385', bucket='excluded')
         self.assertEqual((self.origin(own), own['proposed_by'], corti['exclusion_reason']),
                          ('participant', ['astra', 'fable'], 'No exact source evidence'))
-        self.assertEqual(self.proposer_line(detail, own),
-                         'Astra (independent reading), Fable (independent reading); Corti also selected this code, '
-                         'with no exact passage; it is listed apart, excluded.')
+        self.assert_listed(detail, own)
         self.assertEqual((own['corti_relation'], corti['corti_relation']),
                          ('selected_without_exact_passage', 'proposer'))
-        # control: Fable's code after peer review, which Corti never named, still says so
+        # control: Fable's code after peer review, which Corti never named: listed too, its relation 'none'
         [added] = self.proposals(detail, '45378')
-        self.assertEqual((added['corti_relation'], self.proposer_line(detail, added)),
-                         ('none', 'Fable (after peer review); Corti did not propose this code.'))
+        self.assertEqual(added['corti_relation'], 'none')
+        self.assert_listed(detail, added)
 
     def test_a_code_corti_listed_only_as_a_candidate_says_so(self):
         self.corti.selections = [('45385', SNARE)]
@@ -143,15 +158,11 @@ class CortiRelationTests(R2WordingCase):
             encounter_id = self.create(TWO_EXTENTS)
             drain()
         detail = self.detail(encounter_id)
-        [own] = self.proposals(detail, '45380', bucket='selected')
-        [listed] = self.proposals(detail, '45380', bucket='alternative')
+        # moved by refutation round 6 (R6-MEANING, the session's D14): Astra's 45380 is listed beside Corti's candidate
+        # (it was a selected card worded "Corti listed this code as a candidate or an alternative, ...")
+        [own, listed] = sorted(self.proposals(detail, '45380', bucket='alternative'), key=self.origin)
         self.assertEqual((self.origin(own), self.origin(listed)), ('participant', 'primary'))
-        # moved by refutation round 3, R3-TRUTH truth-5, to what the page now says: the engine's record names no role a
-        # code was listed in, so the sentence is true of a candidate and of an alternative (tests/test_harness2_r3_truth
-        # pins both); the Alternatives row says which
-        self.assertEqual(self.proposer_line(detail, own), 'Astra (independent reading); Corti listed this code as a '
-                                                          'candidate or an alternative, not selected; see '
-                                                          'Alternatives.')
+        self.assert_listed(detail, own)
         self.assertEqual((own['corti_relation'], listed['corti_relation']), ('candidate', 'proposer'))
 
     def test_every_proposal_carries_the_relation_and_corti_s_own_are_corti_s(self):
@@ -159,8 +170,10 @@ class CortiRelationTests(R2WordingCase):
         drain()
         detail = self.detail(encounter_id)
         relations = {(p['key'], p['code']): p['corti_relation'] for p in detail['assessment']['proposals']}
+        # moved by refutation round 6 (R6-MEANING, the session's D14): Fable's peer-review 45378 is its alternative (it
+        # was sel:2)
         self.assertEqual(relations, {('sel:0', '45385'): 'proposer', ('sel:1', '45380'): 'proposer',
-                                     ('sel:2', '45378'): 'none'})
+                                     ('altp:0', '45378'): 'none'})
         line = self.proposer_line(detail, next(p for p in detail['assessment']['proposals'] if p['code'] == '45385'))
         self.assertEqual(line, 'Corti, Astra (independent reading), Fable (independent reading)')
 
@@ -407,7 +420,9 @@ class DocumentQuoteTests(R2WordingCase):
         self.assertEqual(card['participant_positions']['fable']['quote'], PLURAL)  # the document's own passage
         lines = browser(f'[...visible(cardOf(page(), {json.dumps(card["id"])})).split("\\n")]'
                         '.filter(line => line.startsWith("Fable proposed it"))', detail)
-        self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code with evidence located in the document. '
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
+        self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code, quoting the document verbatim. '
                                  f'— “{PLURAL}”'])
         self.assertNotIn('its quote is withheld', json.dumps(lines))
 
@@ -425,11 +440,13 @@ class ReferenceLineTests(R2WordingCase):
         drain()
         detail = self.detail(encounter_id)
         cards = [p for p in detail['assessment']['proposals'] if p['bucket'] == 'selected']
-        self.assertEqual(len(cards), 3)
+        # moved by refutation round 6 (R6-MEANING, the session's D14): two cards, Corti's 45385 and 45380 - Fable's
+        # peer-review 45378, the third, is its alternative now, with no card
+        self.assertEqual(len(cards), 2)
         for proposal in cards:
             self.assertTrue(proposal['reference_check']['detail'].endswith(
                 'NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified.'))
         lines = browser('cards(page()).map(card => statusLine(card, "CMS reference checks"))', detail)
-        self.assertEqual(len(lines), 3)
+        self.assertEqual(len(lines), 2)
         for line in lines:
             self.assertEqual(line.count('procedure-to-procedure'), 1, line)

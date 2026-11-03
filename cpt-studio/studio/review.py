@@ -1316,8 +1316,12 @@ def participant_positions(proposal, records):
                                    'in the document, so that reading did not propose it.'}
             again = ''
         elif proposal.code in proposed:
+            # the engine's own words for a located quote (support['participants']): never "with evidence", which called
+            # a denial, a failed act or another procedure's sentence evidence for the code (refutation round 6,
+            # R6-MEANING, negation-4, ownership-7; the owner's 2026-11-03 directive: a quotation existing verbatim must
+            # not itself establish clinical support)
             out[name] = {'position': 'proposed',
-                         'detail': f'{label} proposed this code{first} with evidence located in the document.',
+                         'detail': f'{label} proposed this code{first}, quoting the document verbatim.',
                          'quote': proposed[proposal.code]}
             again = ' again'
         elif proposal.code in advised:

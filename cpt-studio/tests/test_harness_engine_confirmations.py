@@ -697,45 +697,59 @@ class BindingTests(SimpleTestCase):
         self.assertNotIn('confirmed', item.support)
         self.assertNotIn('confirmed from', check(item, 'service.status').detail)
 
-    def test_a_peer_review_that_selects_a_first_reading_code_ahead_never_takes_the_confirmation(self):
+    def test_a_peer_review_never_selects_a_code_ahead_so_the_confirmation_stays_with_its_proposal(self):
+        """Moved by refutation round 6 (R6-MEANING, the session's D14). A peer review's additional code selected
+        ahead of the first reading's 45380 (both the participant's own proposals under Corti's failure), and the
+        confirmation followed 45380 to its new key. A participant's code is never selected now: the peer review's 45385
+        is listed, 45380 is Corti's and keeps its key, and the confirmation made for it is read for it there. That a
+        confirmation follows its proposal wherever its key moves is pinned below by a new answer of the proposal
+        provider, the one way keys still move."""
         first = [participant_code(DOUBTS_STATED, '45385', UNLOCATED_SNARE),
                  participant_code(DOUBTS_STATED, '45380', UNCLEAR)]
-        one = run(DOUBTS_STATED, (), provider_status='failed', participants=[read('astra', first)])
+        codes = (('45380', UNCLEAR),)
+        one = run(DOUBTS_STATED, codes, participants=[read('astra', first)])
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'), ('altp:0', '45385', 'informational')])
         made = made_for(one, 'sel:0', DONE_BX)  # on assess #1: 45380's biopsy, on the passage stating it done
         later = [reviewed('astra', first, peer('astra', additional=[
             participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]))]
-        self.assertEqual(rows(run(DOUBTS_STATED, (), provider_status='failed', participants=later)),
-                         [('sel:0', '45385', 'needs_clarification'), ('sel:1', '45380', 'needs_clarification')])
-        two = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=later)
-        self.assertNeverAnswers(two, 'sel:0', '45385')  # its snare removal is still in doubt
-        moved = proposal(two, 'sel:1')
-        self.assertEqual((moved.code, moved.status, moved.support['confirmed']), ('45380', 'ready', ['conf-1']))
+        self.assertEqual(rows(run(DOUBTS_STATED, codes, participants=later)),
+                         [('sel:0', '45380', 'needs_clarification'), ('altp:0', '45385', 'informational')])
+        two = run(DOUBTS_STATED, codes, [made], participants=later)
+        kept = proposal(two, 'sel:0')
+        self.assertEqual((kept.code, kept.status, kept.support['confirmed']), ('45380', 'ready', ['conf-1']))
         self.assertEqual([(a['code'], a['proposal_key']) for a in two.completeness['confirmations']['applied']],
-                         [('45380', 'sel:1')])
-        self.assertIn('45380 (sel:1): performed on the date of service',
+                         [('45380', 'sel:0')])
+        self.assertIn('45380 (sel:0): performed on the date of service',
                       encounter_check(two, 'confirmations.applied').detail)
 
     def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
+        """Moved by refutation round 6 (R6-MEANING, the session's D14): Astra's reading, read after a reconcile,
+        selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). It is listed
+        now, never selected, so it takes no key and no confirmation, and Corti's 45380 reads its own."""
         fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
         early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
-        one = run(DOUBTS_STATED, (), provider_status='failed', participants=early)
+        codes = (('45380', UNCLEAR),)
+        one = run(DOUBTS_STATED, codes, participants=early)
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification')])
         made = made_for(one, 'sel:0', DONE_BX)
         later = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]), fable]
-        two = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=later)
-        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45385'), ('sel:1', '45380')])
-        self.assertNeverAnswers(two, 'sel:0', '45385')
-        self.assertEqual((proposal(two, 'sel:1').code, proposal(two, 'sel:1').status), ('45380', 'ready'))
+        two = run(DOUBTS_STATED, codes, [made], participants=later)
+        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('altp:0', '45385')])
+        listed = proposal(two, 'altp:0')
+        self.assertEqual((listed.status, listed.support.get('confirmed')), ('informational', None))
+        self.assertEqual((proposal(two, 'sel:0').code, proposal(two, 'sel:0').status), ('45380', 'ready'))
 
     def test_a_new_answer_that_selects_a_code_ahead_never_takes_the_confirmation(self):
+        # moved by refutation round 6 (R6-MEANING, the session's D14): 45385 was Astra's own proposal (sel:1); it is
+        # Corti's here, Astra recorded on it, since a participant's code is never a proposal now
         astra = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)])]
-        one = run(DOUBTS_STATED, (('45380', UNCLEAR),), participants=astra)
+        one = run(DOUBTS_STATED, (('45380', UNCLEAR), ('45385', HEDGED_SNARE)), participants=astra)
         self.assertEqual(rows(one), [('sel:0', '45380', 'needs_clarification'),
                                      ('sel:1', '45385', 'needs_clarification')])
         made = made_for(one, 'sel:1', DONE_SNARE)  # 45385's snare removal, on the passage stating it done
-        # another context: the proposal provider now also selects 45384 on the hedged snare passage
-        two = run(DOUBTS_STATED, (('45380', UNCLEAR), ('45384', HEDGED_SNARE)), [made], participants=astra)
+        # another context: the proposal provider now also selects 45384 on the hedged snare passage, ahead of 45385
+        two = run(DOUBTS_STATED, (('45380', UNCLEAR), ('45384', HEDGED_SNARE), ('45385', HEDGED_SNARE)), [made],
+                  participants=astra)
         self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('sel:1', '45384'),
                                                                       ('sel:2', '45385')])
         self.assertNeverAnswers(two, 'sel:1', '45384')
@@ -743,14 +757,17 @@ class BindingTests(SimpleTestCase):
         self.assertEqual((proposal(two, 'sel:2').code, proposal(two, 'sel:2').status), ('45385', 'ready'))
 
     def test_a_proposal_read_from_other_passages_is_another_proposal(self):
-        """A confirmation made for 45380 read from one passage is not read for 45380 read from more: the reviewer
-        confirmed the question that reading raised (the identity changes with the passages, never with the checks)."""
+        """A confirmation made for 45380 read from one passage is not read for 45380 read from another: the reviewer
+        confirmed the question that reading raised (the identity changes with the passages, never with the checks).
+        Moved by refutation round 6 (R6-MEANING, the session's D14): the participants' 45380 read from more passages
+        (Astra's quote joining Fable's) was the case; a participant's quotes are read by no reader now, so it is Corti's
+        45380 cited on another passage."""
         fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
-        one = run(DOUBTS_STATED, (), provider_status='failed', participants=[fable])
+        one = run(DOUBTS_STATED, (('45380', UNCLEAR),), participants=[fable])
         made = made_for(one, 'sel:0', DONE_BX)
-        more = [read('astra', [participant_code(DOUBTS_STATED, '45380', 'It is unclear whether biopsies')]), fable]
-        before = run(DOUBTS_STATED, (), provider_status='failed', participants=more)
-        after = run(DOUBTS_STATED, (), [made], provider_status='failed', participants=more)
+        other = (('45380', 'It is unclear whether biopsies'),)
+        before = run(DOUBTS_STATED, other, participants=[fable])
+        after = run(DOUBTS_STATED, other, [made], participants=[fable])
         self.assertEqual(without_confirmations(after), before)
         self.assertNeverAnswers(after, 'sel:0', '45380')
         self.assertIn(engine.MOVED, encounter_check(after, 'confirmations.ignored').detail)

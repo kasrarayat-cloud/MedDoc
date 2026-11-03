@@ -2764,6 +2764,16 @@ PEER_POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes',
                        'cannot_tell': 'cannot tell whether the document supports'}
 UNLOCATED = ('none of its quotes was found verbatim in the document text, and a quote that is not found is never '
              'evidence')
+# Why a participant's code that no decidable proposal carries, in scope and quoted verbatim, is listed and never added
+# as a proposal of its own (refutation round 6, the session's D14; HARNESS.md 5 as amended). The owner's directive of
+# 2026-11-03 - "A quotation existing verbatim must not itself establish clinical support." - and the meaning check it
+# asked for: on its quote alone such a code was READY and approvable where the quote states a failed, denied, earlier or
+# another procedure's act (negation-1..3, ownership-1, -4, time-1), and it recast Corti's base code as included in it
+# and cleared CPT Studio's own unresolved-act warning (time-2). Whether a participant's own code may ever be a proposal
+# again, and on what reader guarantee, is the owner's question.
+PARTICIPANT_NOT_ADDED = ('a quote found verbatim in the document does not by itself show that the coded act was done '
+                         "at this encounter, and in this release a participant's code is never added as a proposal of "
+                         'its own')
 # What a participant that gave a code with no entry quoting the document verbatim did: it listed the code and did not
 # propose it (refutation round 1, EV-2 = IND-3), said wherever who proposed an alternative is said (refutation round 5,
 # the session's D12: "Proposed by Astra" was said of a reading the same assessment says did not propose the code).
@@ -3013,19 +3023,20 @@ class _Harness:
       decide, as _second_review reads it) stays that proposal, changed only by the record of who proposed it
       (support['proposed_by'], from 'corti'; support['phases'], each participant's phase; support['participants'],
       each participant's position in both phases).
-    - Any other code is read by the proposal provider's own path (_select, then _proposal), once, from the quotes of
-      every participant that quoted it verbatim, as one selection of one unit (I2). In scope with exact evidence it is a
-      proposal of its own (support['origin'] 'participant'), whose rationale says who proposed it, in which phase, and
-      that Corti did not (11.4); otherwise an alternative saying why ('altp:<n>'). A participant's stated units,
-      modifiers and confidence are recorded in its position and never used.
+    - Any other code is never a proposal (refutation round 6, the session's D14; merge): it is an alternative saying
+      why ('altp:<n>'), its evidence the exact spans of every participant that quoted it verbatim. Before D14 one in
+      scope with exact evidence was read by the proposal provider's own path (_select, then _proposal) and made a
+      proposal of its own (support['origin'] 'participant'), so a verbatim quote of a failed, denied, earlier or another
+      procedure's act made it READY. A participant's stated units, modifiers and confidence are recorded in its position
+      and never used.
     - Peer review (11.1): a code a peer review adds is read exactly as a first reading's code, after every code a
       first reading listed, and is recorded as proposed after peer review, never as independent. Keys still move
-      between assessments (a code a first reading listed with no located quote is selected, at its first reading's
-      place, once its peer review locates it; a later reading or a new answer selects other codes), so a question's
-      key never identifies its proposal across assessments: a confirmation is bound by code and identity.
+      between assessments (a new answer of the proposal provider selects other codes), so a question's key never
+      identifies its proposal across assessments: a confirmation is bound by code and identity.
     - Agreement never promotes (I3): a second proposer adds its quotes to the code's evidence and its name to the
       record; with the same quotes it changes nothing else - not the bucket, status, checks, units or fingerprint (only
-      the rationale's first sentence, which names the proposers). A peer review's 'supports' changes nothing at all.
+      the sentences that name the proposers: a rationale's first one, and an alternative's reason). A peer review's
+      'supports' changes nothing at all.
     - A participant that advises not to code a code because its service was not performed at this encounter, quoting
       the document, or that disputes it in peer review, quoting the document, adds a warn to each decidable proposal of
       that code (participants.disagree, naming the phase); the status stays the readers' own.
@@ -3166,12 +3177,20 @@ class _Harness:
               inventory, *, dated: bool,
               corti_listed: Sequence[str] = (),
               corti_second_listed: Sequence[str] = ()) -> tuple[list, tuple[ProposalAssessment, ...]]:
-        """(``selections`` with the participants' own proposals after them, the participants' alternatives).
-        ``corti_listed``: the codes the proposal provider listed without selecting them (its candidates and
-        alternatives), and ``corti_second_listed`` the codes its bounded second review listed as an alternative, which a
-        participant's own proposal of one names (_lead)."""
+        """(``selections``, unchanged, the participants' alternatives). A participant's code that no decidable proposal
+        carries is never added as a proposal (refutation round 6, the session's D14): it is an alternative saying why -
+        its scope reason, UNLOCATED where none of its quotes was found verbatim, NO_EVIDENCE where none is an exact
+        slice of the text, and otherwise PARTICIPANT_NOT_ADDED. So no participant's code is selected or ready, counts as
+        covering a documented act (the reconciliation reads the selections alone), makes another code included or clears
+        an unresolved item, and each of Corti's proposals keeps the bucket, status and questions it has with no
+        participant configured (a participant's participants.disagree warning beside it decides nothing). Before D14
+        such a code was read by the proposal provider's own path (_select) and, in scope with exact evidence, added as a
+        proposal of its own after the selections, its rationale worded by _lead: on the quote alone that made a failed,
+        denied, earlier or another procedure's act READY (the owner's D10/D12 meaning check of 2026-11-03). ``routing``,
+        ``reference``, ``day``, ``inventory``, ``dated``, ``corti_listed`` and ``corti_second_listed`` are what that
+        path read; nothing here reads them now."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
-        added, listed = [], []
+        listed = []
         for code, by in self.codes.items():
             if code in have:
                 continue  # recorded on that proposal (recorded): nothing else about it changes
@@ -3181,17 +3200,12 @@ class _Harness:
                 why = scope_reason
             elif not proposers:
                 why = UNLOCATED
+            elif not checks.exact_evidence(self._evidence(code, proposers), self.text, self.pages)[0]:
+                why = NO_EVIDENCE  # what _select read as no exact source evidence
             else:
-                group = [ProviderCode('selected', 'participant', code, '', self._evidence(code, proposers))]
-                candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
-                if candidate.evaluation is not None:
-                    added.append(replace(candidate, origin='participant', proposers=proposers,
-                                         lead=self._lead(code, proposers, selections, corti_listed,
-                                                         corti_second_listed)))
-                    continue
-                why = candidate.scope_reason or NO_EVIDENCE
+                why = PARTICIPANT_NOT_ADDED
             listed.append(self._alternative(len(listed), code, tuple(n for n in PARTICIPANT_ORDER if n in by), why))
-        return list(selections) + added, tuple(listed)
+        return list(selections), tuple(listed)
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
         """A participant's code that is not a proposal, saying why: informational, never approvable. ``names``: every
@@ -3474,7 +3488,8 @@ class _Harness:
         missing = self.missing(inventory)
         if missing:
             out.append(checks.participants_services_check([(PARTICIPANT_LABELS[m['participant']], m['label'],
-                                                            m['quote'], m['status']) for m in missing]))
+                                                            m['quote'], m['status'], m['read_as'])
+                                                           for m in missing]))
         return out
 
     def _summary_sentence(self, p: ParticipantInput) -> str:
@@ -3522,7 +3537,12 @@ class _Harness:
     def missing(self, inventory) -> list[dict]:
         """The services a participant reads as performed, or as started and not completed (MISSING_STATUSES), quoting
         the document verbatim, of a kind of which ``inventory`` reads no performed service: one per participant and
-        family, the first quote of its first."""
+        family, the first quote of its first. Where ``inventory`` reads a service of that kind as not done at this
+        encounter (checks.NEGATIVE: negated, cancelled, planned or historical), the reason names that reading
+        ('read_as', which the participants.services check names too), never that the documented-service reading merely
+        "does not read as performed" it (refutation round 6, R6-MEANING, negation-5: Astra's "performed" upper
+        endoscopy, quoting only "An upper endoscopy was not performed.", beside the inventory's own "upper endoscopy
+        (negated)"). Coding completeness is incomplete beside each all the same (complete): the safety net stays."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3539,11 +3559,21 @@ class _Harness:
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
-                    reason = (f'{PARTICIPANT_LABELS[name]} reads {what} that the documented-service reading does not '
-                              'read as performed')
+                    # the inventory's own not-done reading of a service of that kind, in its order: 'the upper
+                    # endoscopy as negated', 'the colonoscopy as planned and as historical'
+                    read = {}
+                    for documented in inventory.services:
+                        if documented.family in families and documented.status in checks.NEGATIVE:
+                            states = read.setdefault(reconcile.service_label(documented), [])
+                            if documented.status not in states:
+                                states.append(documented.status)
+                    read_as = ' and '.join(f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items())
+                    reason = (f'{PARTICIPANT_LABELS[name]} reads {what} '
+                              + (f'where the documented-service reading reads {read_as}' if read_as
+                                 else 'that the documented-service reading does not read as performed'))
                     quoted = f'{reason} ({reconcile.quote(good[0])})'
                     out.append({'participant': name, 'family': service.family, 'families': list(families),
-                                'label': label, 'status': service.status, 'quote': good[0].text,
+                                'label': label, 'status': service.status, 'read_as': read_as, 'quote': good[0].text,
                                 'start': good[0].start, 'end': good[0].end, 'page': good[0].page,
                                 # review.coding_completeness drops every reason that holds "open question" (it
                                 # recounts the open questions): a quote that holds it is kept in the entry and the

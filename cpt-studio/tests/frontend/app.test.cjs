@@ -1824,11 +1824,17 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const final = fixture(H2_FINAL);
   const html = render(final);
   const biopsy = codeCardOf(html, '45380');
-  assert.ok(biopsy.includes('<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review); Corti did not propose this code.</li>'), biopsy);
+  // moved by refutation round 6 (R6-MEANING, the session's D14): a code only participants propose is never a proposal
+  // now, so the fixture's 45380 is Corti's selection with both participants recorded on it (it read "Astra (independent
+  // reading), Fable (after peer review); Corti did not propose this code."); 11.4's sentence is pinned below on a
+  // payload that serves it
+  assert.ok(biopsy.includes('<li><b>Proposed by:</b> Corti, Astra (independent reading), Fable (after peer review)</li>'), biopsy);
   assert.ok(codeCardOf(html, '45385').includes('<li><b>Proposed by:</b> Corti, Astra (independent reading), Fable (independent reading)</li>'));
   assert.equal(html.includes('<span class="small-badge">Proposed after peer review</span>'), false, 'no selected code was first proposed after peer review');
   // a code first proposed after peer review says so and is never called independent; 11.4 holds without phases too
-  const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
+  // (moved by refutation round 6, R6-MEANING, D14: the payload names the participants alone as its proposers, as the API
+  // served a participant's own proposal before D14, since the fixture's 45380 is Corti's now)
+  const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, proposed_by: ['astra', 'fable'], phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
   const later = codeCardOf(render(peerOnly), '45380');
   assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
   assert.ok(app.codeStatusLines({ proposed_by: ['fable'], corti_relation: 'none', reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
@@ -2251,8 +2257,12 @@ test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'
 
 test('R2-WORDING truth-6: a card says "Corti did not propose this code" only when Corti has no entry for it', () => {
   const final = fixture(H2_FINAL);
-  const biopsy = final.assessment.proposals.find(p => p.code === '45380');
-  assert.equal(biopsy.corti_relation, 'none', 'the serializer serves the relation');
+  const served = final.assessment.proposals.find(p => p.code === '45380');
+  // moved by refutation round 6 (R6-MEANING, the session's D14): the fixture's 45380 is Corti's selection now, so the
+  // serializer serves 'proposer' (it served 'none' for the participants' own proposal); the page's wording of each
+  // relation is pinned on that card with the participants alone as its proposers, as the API served it before D14
+  assert.equal(served.corti_relation, 'proposer', 'the serializer serves the relation');
+  const biopsy = { ...served, proposed_by: ['astra', 'fable'] };
   const line = relation => app.codeStatusLines({ ...biopsy, corti_relation: relation });
   const named = '<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review)';
   const said = {
@@ -2371,9 +2381,11 @@ test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated de
     assert.ok(card.includes(`Its use: “${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}”`), code);
   }
   // (b) a position's quote is its first located quote, an exact slice of the document: shown as the document's text
+  // (moved by refutation round 6, R6-MEANING, negation-4: the detail the API serves now, "quoting the document
+  // verbatim", never "with evidence located in the document")
   const quote = 'Polyp(s) in the sigmoid colon were removed with a hot snare.';
-  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code with evidence located in the document.', quote } } });
-  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code with evidence located in the document. — “${app.escapeHtml(quote)}”</p>`), html);
+  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code, quoting the document verbatim.', quote } } });
+  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code, quoting the document verbatim. — “${app.escapeHtml(quote)}”</p>`), html);
   assert.equal(html.includes('withheld'), false);
 });
 
@@ -3049,4 +3061,48 @@ test('R6-ROW falsegreen-2: an alternative a peer review proposed with a located 
   assert.deepEqual(titles(as45381({ proposed_by: ['corti', 'astra'], listed_by: [], phases: { astra: 'peer_review' } })), ['45381 · Colonoscopy']);
   // the fixture's own: listed by Astra's peer review with no quote found verbatim, so not proposed and not marked (D12)
   assert.deepEqual(titles(render(final)), ['45381 · Colonoscopy']);
+});
+
+// refutation round 6, R6-MEANING
+// The session's D14: a participant's code is never a proposal in this release; it is listed as an alternative. Where
+// every code listed is a participant's, the empty-selection panel never says the provider proposed them.
+test('R6-MEANING D14: the panel never says the provider proposed the participants\' alternatives', () => {
+  const theirs = { proposals: [{ bucket: 'alternative', support: { origin: 'participant' } }] };
+  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below is an independent participant\'s, offered only as an alternative.');
+  assert.equal(app.emptySelectionCopy(theirs).includes('The provider proposed'), false);
+  // controls: a provider alternative or exclusion beside them, or alone, reads as before
+  const said = 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative', support: {} }, ...theirs.proposals] }), said);
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'excluded', reinstatable: false, support: {} }, ...theirs.proposals] }), said);
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }), said);
+});
+
+// ownership-5: the source passages CPT Studio selected are "Source passages that show the coded act" only where they
+// are the act's own - the engine matched an act (support.acts), or the act is the service itself (reason 'service'), or
+// the support serves no acts list (the elsewhere path). Where no act was read ('own_passage': the status was read from
+// the cited passage; 'profile_unknown') they are the documented service's passages, and the cited passage is never
+// said not to show the coded act.
+test('R6-MEANING ownership-5: a service\'s own passages are never labelled as showing the coded act', () => {
+  const chips = support => app.evidenceChips({ id: 'p1', evidence: [{ start: 0, end: 38, text: 'Biopsies were taken with cold forceps.' }], support }, { unlocated: new Set() });
+  const source = [{ start: 40, end: 70, text: 'Procedures: EGD and colonoscopy' }];
+  for (const reason of ['own_passage', 'profile_unknown']) {
+    const html = chips({ status: 'warn', reason, acts: [], supporting: [], unrelated: [0], source });
+    assert.equal(html.includes('Source passages that show the coded act'), false, reason);
+    assert.ok(html.includes('Source passages of the documented service'), reason);
+    assert.equal(html.includes('does not show the coded act'), false, reason);
+    assert.ok(html.includes('“Biopsies were taken with cold forceps.” — cited by the provider</span>'), reason);
+    assert.ok(html.includes('“Procedures: EGD and colonoscopy” — selected from the source by CPT Studio</span>'), reason);
+  }
+  // the act's own passages keep the label, and the cited passage that does not overlap them still says so
+  for (const support of [{ status: 'warn', reason: 'service', acts: [{ id: 'A1', kind: 'biopsy', label: 'biopsy' }], supporting: [], unrelated: [0], source },
+    { status: 'warn', reason: 'service', acts: [], supporting: [], unrelated: [0], source },
+    { status: 'warn', supporting: [], unrelated: [0], source }]) {
+    const html = chips(support);
+    assert.ok(html.includes('Source passages that show the coded act'), JSON.stringify(support));
+    assert.ok(html.includes('— cited by the provider; does not show the coded act'), JSON.stringify(support));
+  }
+  // a support that was not checked is as before, whatever its reason
+  const unchecked = chips({ status: 'not_applicable', reason: 'act_missing', acts: [], supporting: [], unrelated: [0], source });
+  assert.ok(unchecked.includes('Passages of the documented service (not checked against the coded act)'));
+  assert.equal(unchecked.includes('does not show the coded act'), false);
 });
