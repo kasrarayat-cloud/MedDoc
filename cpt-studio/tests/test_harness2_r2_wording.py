@@ -344,11 +344,16 @@ class PeerRepeatedCodeTests(R2WordingCase):
         located = reviews['astra'].additional_codes[0]
         listed = {**records['astra'], 'codes': [*records['astra']['codes'], {'code': '45399', 'quote': ''},
                                                 {'code': '45397', 'quote': SNARE}]}
+        # a code the review lists twice, one entry located and one not, in both orders (refutation round 6,
+        # falsegreen-1: only 45396's order, unlocated then located, was pinned, so a rule letting the last entry of a
+        # code decide passed; 45395 is the other order)
         more = dataclasses.replace(reviews['astra'], additional_codes=(
             located, ParticipantCode('45399'), ParticipantCode('45398'), ParticipantCode('45397'),
-            ParticipantCode('45396'), dataclasses.replace(located, code='45396')))
+            ParticipantCode('45396'), dataclasses.replace(located, code='45396'),
+            dataclasses.replace(located, code='45395'), ParticipantCode('45395')))
         self.assertEqual(serializers.peer_code_phases(more, listed), {
-            '45385': 'independent', '45399': '', '45398': '', '45397': 'independent', '45396': 'peer_review'})
+            '45385': 'independent', '45399': '', '45398': '', '45397': 'independent', '45396': 'peer_review',
+            '45395': 'peer_review'})
 
     def test_the_reports_word_each_additional_code_by_its_phase(self):
         from studio import reports, review, serializers
