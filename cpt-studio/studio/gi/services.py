@@ -2938,15 +2938,14 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     its line, or turning its page: ``pages`` are the revision's page spans) is a space (``reflow``); every offset is the
     text's own, and every passage it returns is the text's.
 
-    ``located``, when given, is a list that receives this reader's own reading of each mention it reads, in reading
-    order: ('service', family, kind, status, start, end) for a service mention - a service's name, a report title that
-    names it, or an instrument that names its family - exactly as each service's statuses are drafted, its kind the
-    name's own (the family's for an instrument); and ('act', family, kind, status, start, end) for each act mention set
-    in a service, as the act is drafted. The status is the mention's own after every rule of the reading, and start and
-    end are the mention's own offsets in ``text``. It is a record kept beside the inventory, never an input to it: the
-    inventory is the same with it or without it. A service read as not done keeps no passage (only one read as
-    performed has ``evidence``), and an act keeps only its whole clause, so this is where a reading's own place is read
-    (engine._Harness.missing: refutation round 8, wording-1 and wording-2; round 9, wording-1)."""
+    ``located``, when given, is a list that receives this reader's own reading of each service mention it reads, in
+    reading order, as ('service', family, kind, status, start, end): a service's name, a report title that names it,
+    or an instrument that names its family, exactly as each service's statuses are drafted, its kind the name's own
+    (the family's for an instrument), its status the mention's own after every rule of the reading, and start and end
+    its own offsets in ``text``. It is a record kept beside the inventory, never an input to it: the inventory is the
+    same with it or without it. A service read as not done keeps no passage (only one read as performed has
+    ``evidence``), so this is where a not-done reading's place is read (engine._Harness.missing: refutation round 8,
+    wording-1 and wording-2). Round 9 also recorded act mentions; round 10 removed them with the reason's act arm."""
     flow = reflow(text, pages)
     token = _ORIGINAL.set(text)
     try:
@@ -3890,8 +3889,6 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     unplaced.append((act, _heading_service(part, drafts)))
                     continue
                 d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
-                if located is not None:
-                    located.append(('act', fam, kind, reading.status, ms, me))
                 if kind == 'stent' and reading.status == 'performed' and _pi_indwelling_state(text, bc[0], ms, me):
                     indwelling.append((fam, d.acts[-1].id))  # GI round 4 (W1): weighed once every act is read
             if sentence_lesions:

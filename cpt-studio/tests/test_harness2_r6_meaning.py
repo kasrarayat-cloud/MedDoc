@@ -629,7 +629,9 @@ class MissingServiceWordingTests(SimpleTestCase):
                                        'performed.”), where the documented-service reading reads the upper endoscopy '
                                        'as negated. The documented-service reading reads no performed service of that '
                                        'kind, so coding completeness is incomplete.')
-        self.assertNotIn('that the documented-service reading does not read as performed', json.dumps(complete))
+        # moved by refutation round 10 (wording-2): the fallback's wording (it was "that the documented-service reading
+        # does not read as performed")
+        self.assertNotIn(NO_PERFORMED_SERVICE, json.dumps(complete))
 
     def test_with_no_reading_of_that_family_the_wording_is_as_before(self):
         """A family the inventory reads nothing of keeps the sentence it had: there is no reading to name."""
@@ -638,8 +640,10 @@ class MissingServiceWordingTests(SimpleTestCase):
         result = run(text, corti(('45378', span(text, CECUM))),
                      [read('astra', [code(text, '45378', CECUM)], services=[service(text, 'eus', quote)])])
         (entry,) = result.completeness['participant_services']
-        self.assertEqual(entry['reason'], f'Astra reads a performed endoscopic ultrasound that the documented-service '
-                                          f'reading does not read as performed (“{quote}”)')
+        # moved by refutation round 10 (wording-2): only what makes the service missing (it was "... that the
+        # documented-service reading does not read as performed ...")
+        self.assertEqual(entry['reason'], f'Astra reads a performed endoscopic ultrasound {NO_PERFORMED_SERVICE} '
+                                          f'(“{quote}”)')
         check = next(c for c in result.encounter_checks if c.id == 'participants.services')
         self.assertTrue(check.detail.startswith(f'Astra reads a performed endoscopic ultrasound (“{quote}”). The '
                                                 'documented-service reading reads no performed service'), check.detail)
@@ -654,6 +658,11 @@ class MissingServiceWordingTests(SimpleTestCase):
         self.assertIsNone(next((c for c in result.encounter_checks if c.id == 'participants.services'), None))
 
 
+# the reason for a service only a participant reads where no reading of its quote is named (refutation round 10,
+# wording-2): only what makes the service missing
+NO_PERFORMED_SERVICE = 'where the documented-service reading reads no performed service of that kind'
+
+
 class MissingServicePipelineTests(MeaningCase):
     def test_n11_the_statement_the_reports_and_the_check(self):
         text = doc(COLON, NO_EGD)
@@ -666,7 +675,7 @@ class MissingServicePipelineTests(MeaningCase):
         self.assertIn(NEGATED_REASON, detail['coding']['statement'])
         draft = self.download(encounter_id, 'draft', 'txt')
         self.assertIn(NEGATED_REASON, draft)
-        self.assertNotIn('that the documented-service reading does not read as performed', draft)
+        self.assertNotIn(NO_PERFORMED_SERVICE, draft)  # moved by refutation round 10 (wording-2)
         check = next(c for c in detail['assessment']['encounter_checks'] if c['id'] == 'participants.services')
         self.assertIn('where the documented-service reading reads the upper endoscopy as negated', check['detail'])
 

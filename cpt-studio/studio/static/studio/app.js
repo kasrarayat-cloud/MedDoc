@@ -323,7 +323,7 @@ function paragraphRanges(text, start, end) {
   return ranges;
 }
 
-function paragraphPieces(text, start, end, marks) {
+function paragraphPieces(text, start, end, marks, own = null) {
   const pieces = [];
   let cursor = start;
   for (const mark of marks) {
@@ -331,7 +331,11 @@ function paragraphPieces(text, start, end, marks) {
     const from = Math.max(mark.start, start);
     const to = Math.min(mark.end, end);
     if (from > cursor) pieces.push({ text: text.slice(cursor, from), keys: null });
-    pieces.push({ text: text.slice(from, to), keys: mark.keys });
+    // keys: the whole highlight's (selection); held: the keys whose own span (``own``: key -> [start, end)) lies in this
+    // piece, which its title is made of (renderPieces; refutation round 10, page-1: a highlight split across paragraphs
+    // gave each piece the whole highlight's title)
+    const held = own ? mark.keys.filter(key => own.has(key) && own.get(key)[0] < to && own.get(key)[1] > from) : mark.keys;
+    pieces.push({ text: text.slice(from, to), keys: mark.keys, held });
     cursor = to;
   }
   if (cursor < end) pieces.push({ text: text.slice(cursor, end), keys: null });
@@ -352,10 +356,11 @@ function layoutDocument(text, pages, spans) {
     else unlocated.push(span.key);
   }
   const marks = mergeSpans(located);
+  const own = new Map(located.map(span => [span.key, [span.start, span.end]]));
   return {
     pages: pageRanges(pages, length, unit, source.length).map(page => ({
       page: page.page,
-      paragraphs: paragraphRanges(source, page.start, page.end).map(([from, to]) => paragraphPieces(source, from, to, marks)),
+      paragraphs: paragraphRanges(source, page.start, page.end).map(([from, to]) => paragraphPieces(source, from, to, marks, own)),
     })),
     unlocated,
   };
@@ -809,10 +814,12 @@ function renderPieces(pieces, layout) {
     const cited = layout.cited || new Set();
     const codesIn = keys => [...new Set(keys.map(key => layout.codes.get(key)))];
     const codesOf = keys => codesIn(keys).join(', ');
-    const evidence = piece.keys.filter(key => !unchecked.has(key) && !services.has(key) && !cited.has(key));
-    const notTheAct = piece.keys.filter(key => cited.has(key));
-    const service = piece.keys.filter(key => services.has(key));
-    const notChecked = piece.keys.filter(key => unchecked.has(key));
+    // the title says what this piece holds (paragraphPieces' held keys), never what another piece of its highlight does
+    const held = piece.held || piece.keys;
+    const evidence = held.filter(key => !unchecked.has(key) && !services.has(key) && !cited.has(key));
+    const notTheAct = held.filter(key => cited.has(key));
+    const service = held.filter(key => services.has(key));
+    const notChecked = held.filter(key => unchecked.has(key));
     // A code with both kinds of passage in this highlight is titled once, as holding both (page-1, page-3).
     const both = codesIn(evidence).filter(code => codesIn(notTheAct).includes(code));
     const evidenceOnly = codesIn(evidence).filter(code => !both.includes(code));

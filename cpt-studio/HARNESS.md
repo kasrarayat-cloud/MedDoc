@@ -176,19 +176,26 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   reading does not read it as performed.~~ (superseded, round 8, wording-1, wording-2 and wording-5: routing is
   another reader, which reads "declined" as negated where the inventory reads cancelled, and none of the families
   `other_gi` maps to.) The inventory records where it read each service mention, and how (`gi_services.build`'s
-  `located`, kept beside the inventory and never an input to it). Round 9 added each act mention, the act keeping only
-  its whole clause. The reason names a reading of the quoted words only, at every place they are found verbatim (round
-  9, wording-3: only the first had been read):
+  `located`, kept beside the inventory and never an input to it). ~~Round 9 added each act mention, the act keeping
+  only its whole clause.~~ (superseded, round 10: the act record went with the act arm below.) The reason names a
+  reading of one quote's words only, at every place that quote is found verbatim (round 9, wording-3: only the first
+  had been read; round 10, wording-1: ~~every quote's places~~ were read together, so one quote's reading was printed
+  beside another quote). The first quote whose places name a reading is the entry's:
   - a mention of that family inside the quote, read as not done, where the inventory gives that family's service the
     same status. It is named by the mention's own kind: "the upper endoscopy as cancelled" (round 6, negation-5). A kind
     with no service label is named by its act label: "the gastrostomy (PEG) placement as cancelled" (round 9,
     wording-2).
-  - an act read as performed ~~whose passage overlaps the quote~~ (superseded, round 9, wording-1: its whole clause had
-    only to touch the quote's edge) whose own mention lies inside the quote. The act's service is named by its family's
-    own label (round 9, wording-2: never its first mention's kind): "the band ligation in the colonoscopy as performed".
-  A reading of another passage is never attached to the quote (round 7, display-1). Otherwise the reason says the
+  - ~~an act read as performed whose passage overlaps the quote~~ (superseded, round 9, wording-1: its whole clause had
+    only to touch the quote's edge) ~~whose own mention lies inside the quote. The act's service is named by its
+    family's own label (round 9, wording-2: never its first mention's kind): "the band ligation in the colonoscopy as
+    performed".~~ (removed, round 10, wording-2 to wording-5: naming an act was false where its words lay outside its
+    mention, where its service's family label was not the service's own (an esophagoscopy as "the upper endoscopy"),
+    where the inventory had dropped the act, or where the act kept no passage for the quoted restatement.)
+  A reading of another passage is never attached to the quote (round 7, display-1). Otherwise the reason says ~~the
   documented-service reading does not read the service as performed. That is then true: it reads no performed service
-  of that kind, and none of the quoted words as a performed act.
+  of that kind, and none of the quoted words as a performed act.~~ (superseded, round 10, wording-2: false beside a quote
+  of an act's words) only what makes the service missing, "where the documented-service reading reads no performed
+  service of that kind", which is true of every input by construction.
 - **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 

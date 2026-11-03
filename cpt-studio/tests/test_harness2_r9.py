@@ -187,6 +187,8 @@ PEG_CANCELLED = 'The PEG tube placement was cancelled.'
 EARLIER_BANDING = 'At the last visit (2025-03-02): Two internal hemorrhoids were banded.'
 TODAY_BANDING = 'Today: Two internal hemorrhoids were banded.'
 BANDED = 'Two internal hemorrhoids were banded.'
+REFERRAL = 'Referral for upper endoscopy.'
+UPPER = 'upper endoscopy'
 
 
 def engine(text, quote, family='other_gi', status='performed', head_code='45378', anchor=r6m.CECUM,
@@ -205,28 +207,25 @@ class MissingServiceReadingTests(SimpleTestCase):
 
     def test_wording_1_an_act_is_named_only_by_its_own_mention_in_the_quote(self):
         """wording-1: the snare act's clause reaches the quote's edge ("... failed", "... performed") but its own words
-        lie outside it: nothing is named there, never "the snare removal ... as performed"; where the quote holds the
-        band ligation's own mention, only that act is named."""
-        for line, status, quote, banded in EDGE:
+        lie outside it: never "the snare removal ... as performed" beside it. Moved by refutation round 10 (wording-2 to
+        wording-5): no act is named at all - the band ligation the quote holds included - and the reason says only what
+        makes the service missing."""
+        for line, status, quote, _ in EDGE:
             with self.subTest(quote):
                 text = r6m.doc(r6m.COLON, line)
                 item = self.entry(engine(text, quote, status=status, corti_code=[('45378', r6m.CECUM)]))
                 self.assertNotIn('snare removal', item['reason'])
-                if banded:
-                    self.assertTrue(item['read_as'].startswith('the band ligation'), item['read_as'])
-                    self.assertTrue(item['read_as'].endswith(' in the colonoscopy as performed'), item['read_as'])
-                else:
-                    self.assertEqual(item['read_as'], '')
-                    self.assertIn(r7.NOT_READ, item['reason'])
+                self.assertEqual(item['read_as'], '')
+                self.assertIn(r7.NOT_READ, item['reason'])
 
     def test_wording_2_a_peg_procedure_note(self):
-        """wording-2 (a): the upper-endoscopy service takes its kind from its first mention, the PEG title: its act is
-        named in the service's family's own label, never "in the peg"."""
+        """wording-2 (a): the upper-endoscopy service takes its kind from its first mention, the PEG title, and its act
+        had been named "in the peg". Moved by refutation round 10: no act is named, so neither label is printed."""
         result = engine(PEG_NOTE, r8.PEG_PLACED, head_code='43246', anchor=r6m.D2, head_family='egd',
                         corti_code=[('43246', r6m.D2)])
         item = self.entry(result)
-        self.assertEqual(item['read_as'],
-                         'the gastrostomy (PEG) placement at the stomach in the upper endoscopy as performed')
+        self.assertEqual(item['read_as'], '')
+        self.assertIn(r7.NOT_READ, item['reason'])
         self.assertNotIn('the peg', item['reason'])
 
     def test_wording_2_a_cancelled_peg_line(self):
@@ -238,14 +237,21 @@ class MissingServiceReadingTests(SimpleTestCase):
         self.assertNotIn('the peg', item['reason'])
 
     def test_wording_3_every_place_of_the_quote_is_read(self):
-        """wording-3: the quoted words are found twice; the inventory reads the second place as today's band ligation,
-        so the reason names it, and the entry's passage is that place - never "does not read as performed"."""
+        """wording-3: the quoted words are found twice. Moved by refutation round 10 (the act arm removed, so a repeat
+        banding names nothing; it was "the band ligation in the colonoscopy as performed"): "upper endoscopy" is read
+        as planned at its first place, a status the inventory's cancelled upper endoscopy did not adopt, and as
+        cancelled at its second - so the reason names the second place's reading, and the entry's passage is that
+        place."""
+        text = r6m.doc(r6m.COLON, REFERRAL, r7.IN_QUOTE[2][1])
+        item = self.entry(engine(text, UPPER, family='egd'))
+        self.assertEqual(item['read_as'], 'the upper endoscopy as cancelled')
+        second = text.index(UPPER, text.index(UPPER) + 1)
+        self.assertEqual((item['start'], item['end']), (second, second + len(UPPER)))
+        # and the repeat banding: no act is named; only what makes the service missing
         text = r6m.doc(r6m.COLON, EARLIER_BANDING, TODAY_BANDING)
         item = self.entry(engine(text, BANDED))
-        self.assertEqual(item['read_as'], 'the band ligation in the colonoscopy as performed')
-        self.assertNotIn(r7.NOT_READ, item['reason'])
-        second = text.index(BANDED, text.index(BANDED) + 1)
-        self.assertEqual((item['start'], item['end']), (second, second + len(BANDED)))
+        self.assertEqual(item['read_as'], '')
+        self.assertIn(r7.NOT_READ, item['reason'])
 
 
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):

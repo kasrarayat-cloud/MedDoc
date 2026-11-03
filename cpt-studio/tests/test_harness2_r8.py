@@ -13,7 +13,8 @@
   ``located``): the inventory's not-done reading of the quote itself ("declined", "could not be performed", and every
   family routing does not route, which round 7's routing gate dropped), named by the mention's own kind (never "the
   peg" for a quoted upper endoscopy), and an act it reads as performed in the quote (a PEG, a banding, a dilation,
-  which the fallback had said it does not read as performed).
+  which the fallback had said it does not read as performed). Refutation round 10 removed the act naming and worded the
+  fallback as only what makes the service missing (tests/test_harness2_r10.py).
 - wording-3, page-3: the participants-only blocker and panel never say "not the provider": a provider response refused
   whole, or a second review not yet read, can carry the same code. A refused provider response is said first.
 - wording-4: participants.summary's closing sentence names merge's two kinds of proposal.
@@ -290,13 +291,18 @@ class MissingServiceReadingTests(SimpleTestCase):
                 self.assert_named(engine(text, 'egd', cancelled), 'upper endoscopy',
                                   'the upper endoscopy as cancelled', cancelled)
 
-    def test_wording_5_an_act_read_as_performed_in_the_quote_is_named(self):
-        for base, head_code, anchor, head_family, line, read_as in PERFORMED_HERE:
+    def test_wording_5_an_act_read_as_performed_is_never_said_not_to_be_read(self):
+        """wording-5: a PEG, a banding or a dilation the inventory files under the endoscopy, quoted as another GI
+        service, had been said not to be read as performed. Round 8 named the act; moved by refutation round 10
+        (wording-2 to wording-5): no act is named, and the reason says only what makes the service missing - the
+        documented-service reading reads no performed service of that kind - which is true here."""
+        for base, head_code, anchor, head_family, line, _ in PERFORMED_HERE:
             with self.subTest(line):
                 text = r6m.doc(base, line)
                 result = engine(text, 'other_gi', line, head_code, anchor, head_family)
-                entry = self.assert_named(result, 'other GI service', read_as, line)
-                self.assertNotIn(r7.NOT_READ, entry['reason'])
+                entry = self.assert_named(result, 'other GI service', '', line)
+                self.assertNotIn('does not read as performed', entry['reason'])
+                self.assertNotIn(' as performed', entry['reason'])
 
     def test_the_located_readings_change_no_inventory(self):
         """gi_services.build's ``located`` is a record beside the inventory, never an input: the same inventory with it

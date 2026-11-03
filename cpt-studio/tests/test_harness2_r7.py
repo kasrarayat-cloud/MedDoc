@@ -236,7 +236,9 @@ ELSEWHERE = 'The stomach and duodenum were also examined and were normal.'
 PLAN_LINE = 'Plan: Upper endoscopy in 6 months.'
 BANDED = 'Two internal hemorrhoids were banded.'
 CAPSULE_PLAN = 'Plan: Capsule endoscopy next month.'
-NOT_READ = 'that the documented-service reading does not read as performed'
+# moved by refutation round 10 (wording-2): the fallback says only what makes the service missing, true of every input
+# (it was 'that the documented-service reading does not read as performed', false beside a quote of an act's words)
+NOT_READ = 'where the documented-service reading reads no performed service of that kind'
 
 
 def named(status, line):
@@ -275,9 +277,11 @@ class MissingServiceReadingTests(SimpleTestCase):
         """display-1: the inventory's planned upper endoscopy - read from the Plan line - was named beside Astra's quote
         of another sentence; and for a family of many kinds, another service's kind and time ("the capsule endoscopy as
         planned") beside a banding quote. Moved by refutation round 8 (wording-5): the banding quote is the inventory's
-        own performed band ligation of the colonoscopy, which the reason now names - "does not read as performed" was
-        false of it - and the capsule plan, another passage's reading, is still never named beside it."""
-        banded = 'the band ligation in the colonoscopy as performed'
+        own performed band ligation of the colonoscopy, which the reason named - "does not read as performed" was
+        false of it - and the capsule plan, another passage's reading, is still never named beside it. Moved again by
+        round 10 (wording-2 to wording-5): no act is named, and the fallback says only what makes the service missing,
+        which is true here too."""
+        banded = ''
         for name, lines, family, quote, label, documented, read_as in (
                 ('the plan line', (ELSEWHERE, PLAN_LINE), 'egd', ELSEWHERE, 'upper endoscopy', 'gi.egd', ''),
                 ('a capsule plan', (BANDED, CAPSULE_PLAN), 'other_gi', BANDED, 'other GI service', 'gi.capsule',

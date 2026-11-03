@@ -1992,11 +1992,14 @@ test('older payloads draw exactly as they did before harness@2: every review tab
   // proposals are checked.", no longer why a question is asked; nothing else on that page changed. Refutation round 6,
   // R6-TRACE (account-1): the harness@1 trace moved (from 40ec4c58...) - a reading's codes are headed "Codes it listed",
   // no longer "Codes proposed", over items that each say whether their quotes were found; nothing else on that page
-  // changed.
+  // changed. Refutation round 10 (page-1): the adversarial payload's tabs moved (from c1c6968a..., 4d23591a... and
+  // 8054c9b7...) - its highlight split across two paragraphs titles each piece by the passages it holds, so the piece
+  // "An 8 mm polyp" is no longer titled evidence for 45378, whose passage it does not hold; one title on each tab
+  // changed, nothing else on that page.
   const crypto = require('node:crypto');
   const sha = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
   const BASE = {
-    'encounter-adversarial.json': ['c1c6968adb5e69c275a469e4ba16e17259d0b46a2d011d2bbf40a7e267e3cad8', '4d23591a4ed51cb05f5cbf3a51c71c72f196c08c5d4b218220491cbf95cff20f', '8054c9b72f4eac6939be2bdb1154d0b43109533de080493537b110631d86d7ca'],
+    'encounter-adversarial.json': ['76bf67d93ae4b3572187f20700d6479c13bd48f1427821f540cd5976c113c642', '0950635b127748fc0b77538ba61bd3d32757e1e54114e5ec65e4cd74a96ed620', '16a9d6cfc18f6d6dea8d08123dcdfbdf7ba022f3208fcb2976027ea70bb69d8a'],
     'encounter-clarification.json': ['d26a56230607d07bea0abbc08f940a8ed17dcf882e76924bbe88492fc4b8936e', '550b184b8e67c4129f6bc5be16802d02d89bdf806e10d85a816c5a91a233607f', '786ca5d90bf962a397091523e34cb6ee8bc831a486c7a883ee05f1dc59ed97f7'],
     'encounter-extraction-failed.json': ['dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3'],
     'encounter-harness-degraded.json': ['ae7de29d01dbe4a01943cffed5557159e3cb3735419ef6076a8355f289e687f8', 'ebe5e7a4ef1ffdf16e134a10868996da2bd2aa4687deadd8dc683ab93923b2bb', '193c71f5bb476cec76e30ebc57b7b4609555f17efcaff9bf04e091085ccfe48b'],
@@ -3232,8 +3235,9 @@ test('R8 wording-3, page-3: the participants-only panel never says the provider 
 // refutation round 9
 // page-2: the round-8 title pins held highlights of one code only, so a rule written for those alone passed them.
 // page-3: "Overlapping passages for <code>" was said of two separate passages of one code that another code's passage
-// joins into one highlight; the highlight is said to hold both kinds, which is true of every shape. The pipeline's
-// inputs are pinned in tests/test_harness2_r9.py.
+// joins into one highlight; the highlight is said to hold both kinds. Round 10 (page-1) found that claim false of a
+// piece of a highlight split across paragraphs: each piece is now titled by what it holds. The pipeline's inputs are
+// pinned in tests/test_harness2_r9.py.
 
 test('R9 page-2, page-3: a highlight of two codes says which code\'s passages it holds, never that they overlap', () => {
   const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
@@ -3256,4 +3260,39 @@ test('R9 page-2, page-3: a highlight of two codes says which code\'s passages it
     assert.equal(/verlapping/.test(title), false, title);
     assert.equal(/Evidence for [^;]*45385[^;]*; Passage the provider cited/.test(title), false, title);
   }
+});
+
+// refutation round 10
+// page-1: a highlight split across paragraphs gave each of its pieces the whole highlight's title, so a piece was titled
+// as holding a passage it does not hold; each piece is titled by the passages whose own span lies in it, while its
+// data-keys stay the highlight's. page-2: the round-9 pins held one two-code shape only. The pipeline's inputs are pinned
+// in tests/test_harness2_r10.py.
+
+test('R10 page-1, page-2: each piece of a highlight is titled by the passages it holds', () => {
+  const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
+  const snare = 'The polyp was removed with a hot snare.';
+  const biopsies = 'Biopsies of the rectum were taken with cold forceps.';
+  const notTheAct = code => `Passage the provider cited for ${code}, which does not show the coded act`;
+  const holding = code => `Passages for ${code} in this highlight: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
+  const page = (text, proposals) => {
+    const at = quote => ({ start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, text: quote, exact: true });
+    return { revision: { text, pages: [] }, assessment: { proposals: proposals.map(([id, code, evidence, supporting, unrelated]) => ({ id, key: `sel:${id}`, bucket: 'selected', status: 'ready', code, evidence: evidence.map(at), support: { status: 'pass', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting, unrelated, source: [] } })) } };
+  };
+  const keys = doc => [...app.reviewView(doc, app.documentLayout(doc), 'codes', true).matchAll(/class="evidence-mark" data-evidence="[^"]*" data-keys="([^"]*)" title="[^"]*">/g)].map(match => match[1]);
+  // page-1: 45380's passage runs across the blank line and joins 45385's two separate passages into one highlight
+  const split = `Procedure: Colonoscopy\n${seen}\n\n${snare} ${biopsies}\n`;
+  const across = page(split, [['p1', '45385', [seen, snare], [1], [0]], ['p2', '45380', [`${seen}\n\n${snare} ${biopsies}`], [0], []]]);
+  assert.deepEqual(r7Titles(across), [[seen, `Evidence for 45380; ${notTheAct('45385')}`], [`${snare} ${biopsies}`, 'Evidence for 45380, 45385']]);
+  // both pieces still select the whole highlight
+  assert.deepEqual(keys(across), ['p1:0 p2:0 p1:1', 'p1:0 p2:0 p1:1']);
+  // one code: the first piece holds both kinds, the second only the evidence
+  const one = page(`Procedure: Colonoscopy\n${seen}\n\n${snare}\n`, [['p1', '45385', [seen, `${seen}\n\n${snare}`], [1], [0]]]);
+  assert.deepEqual(r7Titles(one), [[seen, holding('45385')], [snare, 'Evidence for 45385']]);
+  // page-2, shape A: two codes each holding both kinds in one highlight
+  const line = `${seen} ${snare} ${biopsies}`;
+  const shapeA = page(`Procedure: Colonoscopy\n${line}\n`, [['p1', '45385', [seen, `${seen} ${snare}`], [1], [0]], ['p2', '45380', [snare, `${snare} ${biopsies}`], [1], [0]]]);
+  assert.deepEqual(r7Titles(shapeA), [[line, `${holding('45385')}; ${holding('45380')}`]]);
+  // page-2, shape B: one code holding both kinds beside another with only a passage that does not show its act
+  const shapeB = page(`Procedure: Colonoscopy\n${seen} ${snare}\n${biopsies}\n`, [['p1', '45385', [seen, `${seen} ${snare}`], [1], [0]], ['p2', '45380', [snare, biopsies], [1], [0]]]);
+  assert.deepEqual(r7Titles(shapeB), [[`${seen} ${snare}`, `${notTheAct('45380')}; ${holding('45385')}`], [biopsies, 'Evidence for 45380']]);
 });
