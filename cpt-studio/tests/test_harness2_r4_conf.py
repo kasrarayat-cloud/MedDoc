@@ -376,9 +376,11 @@ class FixtureRetrievalTests(SimpleTestCase):
                 checked += 1
         self.assertEqual(checked, 3)
         # the trace's reconciliation retrieval is the stage's for a document with no service date: each code looked up
-        # on an unknown date, nothing applied
+        # on an unknown date, nothing applied. Moved by refutation round 8 (retrieval-1, retrieval-2): an alternative's
+        # code is never traced, and 45381 is a participant's alternative in this fixture (it was ('45380', '45381',
+        # '45385'): the builder passes jobs._retrieval the prefetched codes, the participants' among them)
         trace = _fixture('trace-harness2-final.json')
         self.assertEqual([(e['code'], e['service_date'], e['facts'], e['passages']) for e in trace['retrieval']],
-                         [(code, None, [], []) for code in ('45380', '45381', '45385')])
+                         [(code, None, [], []) for code in ('45380', '45385')])
         self.assertTrue(all('Service date unknown; dated references cannot be applied.' in e['notes']
                             for e in trace['retrieval']))
