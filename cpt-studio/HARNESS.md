@@ -1718,3 +1718,124 @@ own, by the same path". This record's commit corrects it; the change is to the c
   excluded and 42 held, as on the base.
 - The suite passes 5,205 tests in 215 modules, 3 of them skipped because the OCR tools are absent; ops passes 313,
   ops/verification 37, and node 129 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+### 12.16 Refutation round 8 (2026-11-03): what changed, and where it is recorded
+
+The eighth refutation is the narrow pass over round 7's repair commit alone, `84a48c2f1..268921abe`. Three lenses
+(retrieval and I1, the new sentences, the page and the new pins) filed 11 findings. Independent verifiers reproduced
+all 11: two major, nine minor. Four are in round 7's own repairs: wording-1, wording-3 with page-3 (one defect), wording-4
+and page-1. The rest predate round 7, and round 7's new wording or records claimed what they break. **I1 held:** the
+replay is EQUAL and the battery moves nothing, with their positive controls. With Astra and Fable on, every Corti
+proposal's bucket, status, checks and retrieval are the participants-disabled run's.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| retrieval-1 (major), retrieval-2 (major) | `jobs._retrieval` traced every selection of the provider's. So a code its bounded second review selected and CPT Studio did not add (alt2, an alternative) was traced, with Corti alone too. Corti's 45378 card and the reviewed report listed the CMS endoscopy-family rule pairing 45378 with that code, beside 45378's own "No other selected code shares an endoscopic base relationship". Reference validation read "Done 1 code checked" where no proposal could be decided on. Retrieval is harness@1's own addition, not the installed path's (the round-4 head has no `_retrieval`) | Only the codes of the proposals a reviewer can decide, selected or excluded, are traced. `serializers._reference_validation` reads no other trace. The traces are a record beside the engine's result, outside what I1 pins (section 9) |
+| retrieval-3 | An alternative's API card was joined by code to a decidable proposal's trace. Astra's copy of Corti's 45378, which was excluded for evidence, carried that code's 12 facts and passages beside its own "No CMS reference check ran for this code" | An alternative's card lists no retrieval |
+| wording-1 (a regression in round 7's display-1 repair), wording-2, wording-5 | The reason for a service only a participant reads named the inventory's not-done reading only where routing read the same family, with the same status, inside the quote. Routing is another reader. It reads "declined" and "refused" as negated where the inventory reads cancelled, and "could not be performed" as uncertain where the inventory reads negated. It reads none of the families `other_gi` maps to. On the wording lens's own 390-input sweep, 92 inputs that `84a48c2f1` named fell back at `268921abe`. The inventory's upper-endoscopy service takes its kind from its first mention, so a PEG line before the quoted line named "the peg" (wording-2, from round 6). A PEG, a banding or a dilation that the inventory files under the endoscopy, quoted as another GI service, was said not to be read as performed (wording-5) | `gi_services.build` records where it read each service mention, and how (`located`: kept beside the inventory, never an input to it; the inventory is the same with it or without it). `_Harness._read_as` names a mention inside the quote, read as not done, by the mention's own kind, where the inventory gives that family's service the same status. It also names an act read as performed whose passage overlaps the quote: "the band ligation in the colonoscopy as performed". On the 390-input sweep the naming equals `84a48c2f1`'s on every input. It also found a shape that round 7's gate and the base had both named wrongly. "Repeat upper endoscopy in 6 weeks." is read as uncertain by the inventory itself; the "planned" came from a PEG plan line, another passage (display-1's class, masked because routing reads the quoted line as planned). Nothing is named there now |
+| wording-3, page-3 | The participants-only blocker and panel said "given by Astra or Fable, not the provider". That was false beside a provider response refused whole, and beside a second review not yet read, whose stored selection was the same code. The panel put the participants' sentence before the refused provider's own check, while readiness puts the refusal first | Neither says "not the provider". The panel gives a refused or unread provider response's own check first, then whose the listed codes are |
+| wording-4 | participants.summary's closing sentence said a participant's code "that the proposal provider also proposed, in scope and with an exact passage, is recorded on that proposal". A code the provider only listed, or that its second review selected and CPT Studio did not add, carries no proposal | The sentence names merge's two kinds of proposal: a code the provider selected, in scope and with an exact passage, or one its bounded second review added |
+| page-1, page-2 | The source panel titled one highlight "Evidence for 45385; Passage the provider cited for 45385, which does not show the coded act". The highlight held a passage that shows the act and a provider passage that does not: a longer provider passage holding the shorter one, or a source passage CPT Studio selected at the same place. Display-6's pins checked only a warning support, so a mutant that titled a passing support's unrelated passage "Evidence for" passed the whole suite | A highlight holding both kinds for one code is titled "Overlapping passages for <code>: evidence for <code>, and a passage the provider cited for <code> that does not show the coded act". The pins cover a passing support, the overlap and the same place |
+
+**Moved pins**, each with its reason in the test:
+- r6_meaning: the blocker, the panel and the closing sentence.
+- r7: the panel, and display-1's banding quote. The inventory's own performed band ligation is now named there, and
+  the capsule plan, another passage's reading, still is not.
+- r4_conf: the trace fixture's retrieval codes, now ('45380', '45385'). 45381 is a participant's alternative there. The
+  fixture builder passes `jobs._retrieval` the prefetched codes, the participants' among them, so round 7's
+  provider-only rule never reached that fixture. The CI-like run of the repair commit found this, and the pin moved in
+  a commit of its own (`d9383aae4`).
+
+The four harness@2 fixtures change in the closing sentence only. The trace fixture no longer traces 45381, a
+participant's alternative. Each fixture equals a regeneration apart from digests. Each repair has a mutation proof, 13 in
+all, including the page lens's own mutant. Each mutant was applied in its own copy of the tree, from a green baseline (22
+Django tests, node 131), and every mutant was killed. The new pins are in `tests/test_harness2_r8.py` and in the round-8
+block of `tests/frontend/app.test.cjs`.
+
+**Recorded, not repaired:**
+- **page-1 (a) is also an engine contradiction, on the installed Corti-only path.** reconcile.support's office-visit arm
+  reads a time sentence that reviews an earlier, dated report as another time, and lists it as unrelated. It also
+  selects the same sentence as one of the visit's own source passages. So 99213 is Ready with a warning support whose
+  detail says both of one sentence. The page now titles that highlight as overlapping passages. The engine change is
+  Corti-only output, an I1 change, and waits for the shared-reader repair.
+- Notes the lenses made without filing:
+  - a Corti code excluded for evidence, never reinstatable, is counted as a code checked (API.md counts excluded
+    proposals as decidable);
+  - while unassessed and busy under a member's date conflict, the Final row's note names stages that will not run
+    (pre-existing, page-wide);
+  - a participant's `not_coded` entry or peer position is neither listed nor counted, while the summary's "gives"
+    reads as "proposes".
+
+**Round 9.** Four of round 8's findings were defects that round 7's repairs introduced, and this round changes what the
+engine, the API and the page say. So the gate's refutation pass runs once more, narrowly, over this round's repair commit
+alone. It has three lenses: the retrieval and I1, the sentences, and the page together with the new pins.
+
+**I1 at the repair commits** (`b58c7bede`, and `d9383aae4`, which moves one pin):
+- `tests/test_harness_engine_parity.py` and `tests/test_harness_pipeline.py` are unchanged since `de6418fc6`, and
+  `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,227 tests in 216 modules, 3 of them skipped because the OCR tools are absent. On `b58c7bede` one
+  failed, the r4_conf pin above. Its chunk of 1,707 tests ran again on `d9383aae4`: OK. Ops passes 313,
+  ops/verification 37, and node 131 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+### 12.17 Refutation round 9 (2026-11-03): what changed, and where it is recorded
+
+The ninth refutation is the narrow pass over round 8's repair commit alone, `cd914621a..b58c7bede`. Three lenses filed 10
+findings. Independent verifiers reproduced 9: three major and six minor. One was not reproduced: retrieval-3, a trace an
+older build recorded, which no installed system can hold, since no harness build has been installed. Several are in
+round 8's own repairs. The three majors are the trace of a code no reviewer can decide. That trace predates round 8, on
+the harness's own retrieval, and round 8's new wording claimed it was closed. **I1 held:** the replay is EQUAL and the
+battery moves nothing, with their positive controls. The retrieval lens measured round 8's `located` record (of service mentions)
+over the gi4 corpus: 22,750 inventory builds unchanged with it and without it, while a positive control's mutant changed
+7,368 of 14,818.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| retrieval-1 (major), retrieval-2 (major), page-1 (major) | Round 8 traced every proposal that is not an alternative. So a Corti code excluded with no reinstatement (outside CPT-only results, or with no exact source evidence) was traced and counted, with Corti alone too. Reference validation read "Done 1 code checked" where nothing could be decided and that code's own reference check says no CMS check ran. A READY 45378 was paired in a CMS endoscopy-family rule with an excluded 45380, in the reviewed report | `review.decidable` is the reviewable rule: selected, or excluded and reinstatable. Only those codes are traced (`jobs._retrieval`), counted (`serializers._reference_validation`) and listed on a card. One assertion in `tests/test_harness_pipeline.py`, an I1 proof file, moves; it is declared below |
+| wording-1 (a regression in round 8's wording-5 repair) | An act was named wherever its whole clause overlapped the quote. The clause reaches up to 400 characters each side of the act's mention. So "Banding of the internal hemorrhoids was attempted but failed" was printed beside "the snare removal (cold snare) at the rectum in the colonoscopy as performed", in the reviewed report | The `located` record also holds each act mention as the act is drafted, and an act is named only where its own mention lies inside the quote |
+| wording-2 | A PEG mention was named "the peg", and an act's service was named by its first mention's kind: "the gastrostomy (PEG) placement at the stomach in the peg as performed" | A mention kind with no service label is named by its act label, and an act's service by its family's own label. `services.inventory`'s own labels are unchanged (I1) |
+| wording-3 | Only the quote's first place was read. A quote found twice, historical at its first place and performed today at its second, fell back to "does not read as performed" | Every place the quoted words are found verbatim is read. The entry's passage is the first place whose reading is named |
+| wording-4 | The summary's first clause covered a selection in a provider response refused whole, which was never read | It names a response CPT Studio used, and lists a code in one it did not use among the alternatives |
+| page-2, page-3 | "Overlapping passages for 45385" was said of two separate 45385 passages that another code's passage joins into one highlight. The pins held one-code highlights only, so a rule written for those alone passed them | The title says "Passages for <code> in this highlight: evidence for <code>, and a passage the provider cited for <code> that does not show the coded act". The pins cover highlights of two codes, overlapping and joined |
+
+**The declared change to an I1 proof file.** `tests/test_harness_pipeline.py`'s
+`RetrievalFailureTests.test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did`
+asserted that retrieval ran for both codes, the superscript one traced as given. That code is excluded for scope with no
+reinstatement, so it is no longer traced, and the trace is `['45378']`. The test's two sha256 pins are unchanged: the
+engine's result equals the round-4 head's, and the stage's equals the engine's. The trace is a record beside the result,
+outside what I1 pins (section 9). The superscript code can no longer reach the retrieval that round 1's parity-1 failed
+in. `tests/test_harness_engine_parity.py` and the rest of `tests/test_harness_pipeline.py` are unchanged since
+`de6418fc6`.
+
+**Moved pins**, each with its reason in the test:
+- r6_meaning: the closing sentence.
+- r8: the card of a code excluded for evidence, which now lists no retrieval; the highlight's wording; the `located`
+  record's shape.
+
+The four harness@2 fixtures change in the closing sentence only, and each equals a regeneration apart from digests. Each
+repair has a mutation proof, 12 in all, including the page lens's one-code mutant. Each mutant was applied in its own
+copy of the tree, from a green baseline (22 Django tests, node 132), and every mutant was killed. The new pins are in
+`tests/test_harness2_r9.py` and in the round-9 block of `tests/frontend/app.test.cjs`. On round 8's 390-input sweep the
+naming still equals `84a48c2f1`'s on every input, and round 8's 25 engine probe cases read as they did.
+
+**Recorded, not repaired.** The lenses noted these without filing them:
+- The act arm repeats the inventory's own bindings and descriptions of an act, which the Corti-only unresolved list
+  prints the same way. Example: "the band ligation (cold snare) at the rectum", from a clause shared with a snare
+  removal.
+- An unchecked support's provider passage keeps "Evidence for <code>", pre-existing since `80f2f2dc8`.
+- A refused second review is said last by the panel, while readiness names only the primary's refusal.
+
+**Round 10.** Round 9 again found defects that the previous round's repairs introduced, and this round changes what the
+engine, the API and the page say. So the gate's refutation pass runs once more, narrowly, over this round's repair
+commit alone. It has three lenses: the retrieval and I1, the sentences, and the page together with the new pins.
+
+**I1 at the repair commit** (`6a77e7af2`):
+- `tests/test_harness_engine_parity.py` is unchanged since `de6418fc6`, and `tests/test_harness_pipeline.py` differs
+  only by the one declared assertion above. `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,243 tests in 217 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
+  ops/verification 37, and node 132 and 91. `manage.py check` and `makemigrations --check` are clean.

@@ -316,3 +316,36 @@ requested in chat.
   Because round 7 found a defect that a repair itself introduced, a narrow eighth refutation of round 7's repair commit
   runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard question and interpretation
   68 stay open.
+- **2026-11-03 ~11:00Z (session cd048041): refutation round 8 repaired.** The narrow eighth refutation of round 7's repair
+  commit filed 11 findings, all reproduced, two major. I1 held. The repairs, each with a failing pin and a mutation proof
+  (HARNESS.md 12.16):
+  - Only a decidable proposal's code is traced, never an alternative's. A code the bounded second review selected and
+    CPT Studio did not add had been traced, with Corti alone too. That gave 45378 an endoscopy-family rule in the
+    reviewed report, and reference validation read "Done 1 code checked" with nothing to decide on.
+  - An alternative's card lists no retrieval.
+  - A service only a participant reads is worded with the documented-service reading's own located reading of the
+    quoted passage, never routing's. Round 7's gate had dropped "declined", "could not be performed" and every other-GI
+    family, and had named "the peg" for a quoted upper endoscopy. An act read as performed in the quote is named.
+  - The participants-only blocker and panel never say "not the provider". The panel gives a refused or unread
+    provider's own check first.
+  - participants.summary's closing sentence is merge's own rule.
+  - A highlight holding both kinds of passage for one code is titled as overlapping passages.
+  Four findings were defects round 7's repairs introduced, so a narrow ninth refutation of this round's repair commit
+  runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard question and interpretation
+  68 stay open.
+- **2026-11-03 ~12:45Z (session cd048041): refutation round 9 repaired.** The narrow ninth refutation of round 8's repair
+  commit filed 10 findings, 9 reproduced (three major); retrieval-3 was not, since no installed system can hold its
+  input. I1 held. The repairs, each with a failing pin and a mutation proof (HARNESS.md 12.17):
+  - Only a code a reviewer can decide (selected, or excluded and reinstatable) is traced, counted or listed on a card. A
+    code excluded with no reinstatement had been counted "Done 1 code checked", and paired with a READY 45378 in a CMS
+    endoscopy-family rule in the reviewed report.
+  - An act is named beside a participant's quote only where its own mention lies inside the quote. An act whose clause
+    only touched the quote's edge had been printed "as performed" beside an attempt that failed.
+  - Every place of the quote is read. A PEG mention is named by its act label, and an act's service by its family's
+    label.
+  - The summary's first clause names a response CPT Studio used.
+  - A highlight holding both kinds of passage for one code says so, never that they overlap.
+  One assertion in an I1 proof file moved, declared: the superscript code excluded for scope is no longer traced, and
+  its sha256 pins are unchanged. Because round 9 again found defects in the previous round's repairs, a narrow tenth
+  refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the
+  release-standard question and interpretation 68 stay open.
