@@ -3418,3 +3418,37 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             continue
         merged[name] = Fact(name, value, 'user', (), USER_NOTE)
     return merged
+
+
+def document_service_date_fact(text: str, *, facts: Optional[dict] = None) -> dict:
+    """The document's own service date fact BEFORE a member's value is merged in, as plain JSON (P5 FLOW, 2026-11-03;
+    stored as EncounterContext.document_date when a context is made): what a screen shows beside the date a member
+    entered, and whether "Use document date" - clearing the member's value - settles a member conflict. ``facts``: the
+    extract_context(text) the caller already read - the stages read the document only in their bounded child, so they
+    pass what it returned and the text is read here only to check a quote; with None the text is read.
+
+    ``single`` is set only where the document gives one date of its own (origin 'document'): clearing a member's value
+    then leaves exactly that date. ``values`` lists the dates the document itself offers as an answer: that one date,
+    each value of a conflict within the document, or the one date a closing charge block's question takes
+    (charge_date_own) - never a date only another occurrence's or another document's line, a date of birth, a doubt's
+    other side or a merely quoted line states. ``quote`` is the first evidence span of the single date that is an exact
+    slice of ``text`` and none of those (_ElsewhereSpan, _BirthSpan, _DoubtSideSpan, _QuotedSpan): their type is lost
+    once a fact is stored as JSON, which is why this is computed here, from the Fact the reader made."""
+    fact = (extract_context(text) if facts is None else facts).get('service_date')
+    origin = getattr(fact, 'origin', 'missing') if fact is not None else 'missing'
+    value = fact.value if fact is not None and origin == 'document' and fact.value else None
+    asked = charge_date_problem(fact) if fact is not None else None
+    if value:
+        values = [value]
+    elif asked is not None:
+        values = [own] if (own := charge_date_own(fact)) else []
+    else:
+        values = list(documented_values(fact)) if fact is not None else []
+    evidence = tuple(getattr(fact, 'evidence', ()) or ()) if fact is not None else ()
+    usable = [span for span in evidence if not isinstance(span, (_ElsewhereSpan, _DoubtSideSpan, _QuotedSpan))
+              and 0 <= span.start < span.end <= len(text) and text[span.start:span.end] == span.text]
+    stating = [span for span in usable if value and value in _span_dates(span)]
+    quote = (stating or usable)[0] if value and (stating or usable) else None
+    return {'origin': origin, 'value': value, 'single': bool(value), 'values': values, 'asked': asked is not None,
+            'quote': {'start': quote.start, 'end': quote.end, 'text': quote.text} if quote is not None else None,
+            'evidence': [{'start': span.start, 'end': span.end, 'text': span.text} for span in evidence]}

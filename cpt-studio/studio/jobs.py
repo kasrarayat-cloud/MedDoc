@@ -468,7 +468,10 @@ def _record_context(encounter, revision, document_facts, *, created_by=None):
     return models.EncounterContext.objects.create(
         encounter=encounter, revision=revision, facts=facts, user_values=user_values, version=CONTEXT_VERSION,
         sha256=sha256_json({'facts': facts, 'user_values': user_values, 'revision': str(revision.pk)}),
-        created_by=created_by)
+        created_by=created_by,
+        # P5 FLOW: the document's own date before the member's value is merged, read from the facts the bounded child
+        # returned (never the text again here), recorded beside the context and outside its sha256
+        document_date=gi_context.document_service_date_fact(revision.text, facts=document_facts))
 
 
 def _record_routing(revision, data, service_date):
