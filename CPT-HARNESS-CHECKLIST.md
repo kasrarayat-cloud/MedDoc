@@ -349,3 +349,25 @@ requested in chat.
   its sha256 pins are unchanged. Because round 9 again found defects in the previous round's repairs, a narrow tenth
   refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the
   release-standard question and interpretation 68 stay open.
+- **2026-11-03 ~14:00Z (session cd048041): refutation round 10 repaired.** The narrow tenth refutation of round 9's repair
+  commit filed 10 findings, 9 reproduced. One is blocking and predates the harness, on the installed Corti-only path: a
+  diagnostic base is not held again when a reviewer reinstates a therapeutic code of its family, so both can be approved
+  into a reviewed report. It is recorded (HARNESS.md 12.18), left for its own branch, and reported to the owner with the
+  pause question. I1 held. The repairs, each with a failing pin and a mutation proof:
+  - Each quote of a participant's service is read alone.
+  - No act is named beside a participant's quote. The fallback says only what makes the service missing, which is true
+    by construction.
+  - Each piece of a highlight split across paragraphs is titled by what it holds.
+  - Two more title shapes are pinned.
+  The cpt-studio job's time budget is raised to 45 minutes, since the suite outgrew 30. A narrow eleventh refutation of
+  this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard
+  question and interpretation 68 stay open.
+- **2026-11-03 ~15:00Z (session cd048041): refutation round 11 repaired.** The narrow eleventh refutation of round 10's repair
+  commit filed 6 findings. All 6 were reproduced, every one minor. I1 held. The repairs, each with a failing pin and a
+  mutation proof:
+  - Where no quote names a not-done reading, the reason also says what the reading reads as done in the quoted words, of
+    another family, by that family's label. A quoted service is never left looking denied.
+  - An instrument is never named by its family's kind.
+  - Four page shapes are pinned. The page code was right.
+  A narrow twelfth refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner
+  question, the release-standard question and interpretation 68 stay open.

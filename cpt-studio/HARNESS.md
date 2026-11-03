@@ -1856,3 +1856,104 @@ commit alone. It has three lenses: the retrieval and I1, the sentences, and the 
   excluded and 42 held, as on the base.
 - The suite passes 5,243 tests in 217 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
   ops/verification 37, and node 132 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+### 12.18 Refutation round 10 (2026-11-03): what changed, and where it is recorded
+
+The tenth refutation is the narrow pass over round 9's repair commit alone, `d9383aae4..6a77e7af2`. Three lenses filed 10
+findings. Independent verifiers reproduced 9: one blocking finding that predates this release, and eight minor ones.
+page-3 was not reproduced, because `2413020ff` holds the record it cites. Nothing was found against round 9's retrieval
+repair. **I1 held:** the replay is EQUAL and the battery moves nothing, with their positive controls.
+
+**Read first: a defect on the installed path (retrieval-1, blocking, not repaired in this release).** A reviewer can
+reinstate a therapeutic code that a documentation check excluded, such as 45385 on a checked completion box that the
+readers misread as negated (ACCURACY-RESIDUALS, round 7, declared:0). Its diagnostic base, 45378, is then not held again.
+It stays ready, with approve offered, and its pfs.endoscopic_base check still says no other selected code shares its
+base. Both codes can be approved into a reviewed report. When 45385 is selected from the start, the same pair holds 45378
+with a services.base_included question. The behaviour is identical at the I1 baseline `80f2f2dc8` and on the installed
+`80df1831d168`; `review._actions` is byte-identical. The harness neither introduced nor changes it, so it does not block
+this PR. The repair belongs to the review layer, beside the same-day E/M gate (review:0). It holds the base while the
+reinstatement stands, and the reviewed report waits for the base question. It goes on its own branch, with its own
+refutation, beside the shared-reader repair. Whether to pause the live demonstration until then is the owner's decision.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| wording-1 (a regression in round 9's wording-3 repair) | Every quote of the participant's service was read together, so one quote's reading was printed beside another quote: "the upper endoscopy as cancelled and the snare removal ... as performed" beside the snare sentence, in the reviewed report | Each quote's own places are read alone. The entry is the first quote whose places name a reading |
+| wording-2 (a regression in round 9's wording-1 repair), wording-3 (a regression in round 9's wording-2 repair), wording-4, wording-5 | Naming an act read as performed was false four ways. An act whose words lay in the quote while its mention lay outside it went unnamed, so the fallback said the quoted words are not read as performed. An esophagoscopy's act was said of "the upper endoscopy". A stent the inventory drops was named through another stent. A restatement past the six passages an act keeps was missed, and the fallback again said "does not read as performed" | No act is named. The act arm is removed, and so is its record in `gi_services.build`'s `located` list. The fallback says only what makes the service missing: "where the documented-service reading reads no performed service of that kind". `missing()` fires only when the inventory reads no performed or incomplete service of the participant's kind, so the fallback is true by construction. The not-done arm is unchanged |
+| page-1 | A highlight split across paragraphs gave each of its pieces the whole highlight's title. A piece was therefore titled as holding a passage it does not hold, which is display-6's defect in a split highlight | `layoutDocument` keeps each key's own span, and each piece is titled by the passages whose own span overlaps it. Its data-keys stay the highlight's, so selection is unchanged |
+| page-2 | The round-9 title pins held one two-code shape, so a rule that dropped a code's clause passed them | Two more shapes are pinned: two codes each holding both kinds, and one code holding both beside another with only a passage that does not show its act |
+| retrieval-2 (not repaired) | The page draws no CMS facts or passages, and no reference check, for an exclusion a reviewer can reinstate, while reference validation counts it. The API card carries them. This predates the harness | Recorded: the page's candidate rows draw no retrieval section. It is information missing, not a false statement |
+
+**Moved pins**, each with its reason in the test:
+- The fallback's wording, in r6_meaning, r7 (`NOT_READ`), test_harness_engine's MissingServiceTests, r8 and r9.
+- The act namings in r7 (display-1's banding quote), r8 (wording-5) and r9 (wording-1 and wording-2's PEG note).
+- r9's every-place pin. It now reads a not-done reading at a quote's second place: "upper endoscopy" is read as planned
+  at its first place, a status the inventory's cancelled upper endoscopy did not adopt, and as cancelled at its second.
+- The older-payload page pin in tests/frontend/app.test.cjs, for `encounter-adversarial.json` only, by one title on each
+  tab. Its piece "An 8 mm polyp" is no longer titled evidence for 45378, whose passage that piece does not hold. Every
+  other older payload renders byte-identically.
+
+No fixture changes. Each repair has a mutation proof, seven in all, including the page lens's two mutants. Each mutant
+was applied in its own copy of the tree, from a green baseline (11 Django tests, node 133), and every one was killed. One
+first survived, the mutant that reads every quote's places together. Without an act arm, reading quotes together shows
+only when two quotes each name a reading, so a pin of two quotes of two kinds was added. The mutant was run again in a
+fresh copy and killed.
+
+**The cpt-studio job's time budget.** On GitHub, the job for `2413020ff` was cut off at its 30-minute timeout. The Django
+suite had taken 1,740 seconds and passed 5,243 tests, and ops had passed 313; the browser-verifier tests and the
+dependency audit never ran (run 41633767311). The budget is raised to 45 minutes, so every step's evidence is kept.
+
+**Round 11.** Round 10's wording findings were in round 9's repairs, and this round's repair removes a rule and changes
+the page. So the gate's refutation pass runs once more, narrowly, over this round's repair commit alone. It has two
+lenses: the sentences with I1, and the page together with the new pins.
+
+**I1 at the repair commit** (`2153571ec`):
+- `tests/test_harness_engine_parity.py` is unchanged since `de6418fc6`, and `tests/test_harness_pipeline.py` differs
+  only by round 9's one declared assertion (12.17). `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,255 tests in 218 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
+  ops/verification 37, and node 133 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+### 12.19 Refutation round 11 (2026-11-03): what changed, and where it is recorded
+
+The eleventh refutation is the narrow pass over round 10's repair commit alone, `2413020ff..2153571ec`. Two lenses filed 6
+findings. Independent verifiers reproduced all 6, every one minor. One was in round 10's own repair (wording-1) and one
+predates it (wording-2). The other four are test gaps: the page code is right, but a mutant that undoes round 10's piece
+titles passed node and the full Django suite. **I1 held:** the replay is EQUAL and the battery moves nothing, with their
+positive controls.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| wording-1 (a regression in round 10's wording-2 repair) | Where no quote named a reading, the reason said only that the documented-service reading reads no performed service of the participant's kind. That is true by CPT Studio's family map. It was printed beside a quote that the reading itself files under another family, as performed: a transnasal esophagoscopy report's title quoted by Astra as another GI service, which the approved 43197 cites as its source passage, in the reviewed report; the corpus POEM and esophagoscopy procedure lines; a PEG line. The quoted service was left looking denied | `_Harness._read_in`. Where no quote names a not-done reading, a mention of another family inside a quote, read as done, where the inventory reads that family's service as done too, is added to the reason. It is named by the family's own label and the inventory's status of it: "and reads in the quoted words a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)", or "an incomplete service under Colonoscopy" for a colonoscopy stopped short. The participants.services check says the same. A not-done reading of the participant's own kind is still named first |
+| wording-2 (from round 6's negation-5 repair) | An instrument read as not done was named by its family's kind: "the upper endoscopy as negated", beside the inventory's negated esophagoscopy, cancelled POEM or cancelled PEG | `gi_services.build`'s `located` record calls an instrument `'instrument'`. The not-done arm names only a service's own name or a report title, since an instrument names no kind of its own. Its quote falls back to the sentence true of every input |
+| page-1, page-2, page-3, page-4 (test gaps) | Mutants that undo round 10's piece titles passed every pin: a title taken from the highlight's keys for a documented service's passage or an unchecked support's; the API's code-point offsets kept beside the pieces' UTF-16 units; a passage that only touches a piece counted as held by it; only the first of two codes that each hold only a passage that does not show their act named | Each shape is pinned through the pipeline, Corti alone, in `tests/test_harness2_r11.py`, and in the round-11 block of `tests/frontend/app.test.cjs`. `app.js` changes only in a comment: a piece holds the passages whose own span overlaps it |
+
+**Moved pins**, each with its reason in the test:
+- test_harness_engine's two MissingServiceTests reasons. Their quote, "The colonoscope was advanced to the cecum ...", is
+  read as a performed colonoscopy, so the reason now says so.
+- r8's wording-5 pin for its PEG line, a service mention read as performed. Its banding and dilation lines name no
+  service and keep the fallback alone.
+- r8's pin of the `located` record's shape, which now has instrument entries.
+
+No fixture changes. Each repair has a mutation proof, 13 in all, including the page lens's five mutants. Each mutant was
+applied in its own copy of the tree, from a green baseline (23 Django tests and node 134; then 24 and node 134 for the
+thirteenth), and every one was killed.
+
+**Observed by the lenses, not filed.** An unchecked support's piece keeps a bare "Evidence for <code>". That is the
+recorded pre-existing item (12.17), now on its own piece. A chip click still selects every piece of its highlight, by
+design. The internal comment and test docstring that said a piece holds the passages whose span "lies in it" now say
+"overlaps it", as the code does.
+
+**Round 12.** Round 11's wording-1 was in round 10's own repair, and this round's repair adds a sentence to the reason. So
+the gate's refutation pass runs once more, narrowly, over this round's repair commit alone. It has one lens: the
+sentences, with I1, and the new pins.
+
+**I1 at the repair commit** (`09ae39ae5`):
+- `tests/test_harness_engine_parity.py` is unchanged since `de6418fc6`, and `tests/test_harness_pipeline.py` differs
+  only by round 9's one declared assertion (12.17). `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,273 tests in 219 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
+  ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
