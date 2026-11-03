@@ -2,6 +2,9 @@
 "proposed" is said only of an entry with a located quote, entry by entry, on every surface that words one, and no
 phrase is given two meanings.
 
+- account-1: the owner's trace headed a peer review's additional codes "Codes proposed after peer review" and a first
+  reading's codes "Codes proposed", over items whose only quote is unverified and which the same trace says were not
+  proposed. The headings are now neutral ("Additional codes", "Codes it listed"); each item carries its own words.
 - account-3: the engine's support['participants'] detail counted every entry of a code as one of its proposals - "Astra
   proposed 45385 2 times" beside one located entry - and said "again in peer review" of a peer-review entry none of
   whose quotes was found. It now counts only the entries that located a quote and names each other entry as a listing
@@ -10,6 +13,10 @@ phrase is given two meanings.
   quote was not found, beside another entry of the code that located one, was "proposed after peer review, never
   independent" in the TXT (twice, the second with no passage), the CSV (two such rows) and the trace. Each entry is now
   worded by its own quotes: one with none located is never 'peer_review'. codes_added stays per code.
+- account-5: the trace served '' - D12's "listed in peer review", no entry located - for every additional code of a
+  peer review the current assessment did not read, so a context change made the original run's located code "listed"
+  while its reuse, the same bytes, was "proposed after peer review". Such a review's codes are now served phase None
+  and the page says "not read by the current assessment".
 
 Each pipeline class runs the real pipeline (tests.test_harness2_pipeline: the real jobs, loop, tool executor, readers
 and engine, the vendors' HTTP replaced by scripted bytes in their own envelopes), then the real API, the owner's trace,
@@ -264,3 +271,81 @@ class EntryWordingTests(Surfaces, R2WordingCase):
         runs = next(item for item in self.trace(encounter_id)['participants'] if item['name'] == 'astra')['runs']
         self.assertEqual([[(c['code'], c['phase']) for c in run['review']['additional_codes']] for run in runs
                           if run.get('review')], [[('45380', 'independent')]])
+
+
+# --- account-5: a peer review the current assessment did not read is marked so, never "listed" ------------------------
+
+class UnreadReviewTests(Surfaces, R2WordingCase):
+    """account-5: after a member's context change the new chain reuses the identical peer request, so the current
+    assessment reads the reuse run, not the run that holds the bytes. The trace served '' for every additional code of
+    that original run - "listed in peer review" beside a quote found in the document - while the reuse, the same bytes,
+    was "proposed after peer review". The original's codes are now served phase None, and the page says the current
+    assessment did not read them."""
+
+    def fable_reviews(self, encounter_id):
+        runs = next(item for item in self.trace(encounter_id)['participants'] if item['name'] == 'fable')['runs']
+        return {run['id']: [(c['code'], c['phase']) for c in run['review']['additional_codes']] for run in runs
+                if run.get('review')}
+
+    def test_the_original_of_a_reused_review_is_not_read_by_the_current_assessment(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        [original] = self.runs_of(encounter_id, 'fable', 'peer_review')
+        # control: read by the assessment then current, its located code is proposed after peer review
+        self.assertEqual(self.fable_reviews(encounter_id), {str(original.pk): [('45378', 'peer_review')]})
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        runs = self.runs_of(encounter_id, 'fable', 'peer_review')
+        self.assertEqual([(run.sent, run.reused_from_id) for run in runs], [(True, None), (False, original.pk)])
+        record = self.records(self.encounter(encounter_id).current_assessment)['fable']
+        self.assertEqual((record['peer_state'], record['peer_run']), ('read', str(runs[1].pk)))
+        self.assertEqual(self.fable_reviews(encounter_id), {str(original.pk): [('45378', None)],
+                                                            str(runs[1].pk): [('45378', 'peer_review')]})
+        trace = self.trace(encounter_id)
+        head = '45378 · units 1 · confidence high · '
+        self.assertEqual([line for line in self.trace_lines(trace) if line.startswith(head)],
+                         [f'{head}not read by the current assessment {FOUND_LAND}',
+                          f'{head}{PROPOSED_AFTER} {FOUND_LAND}'])
+        self.assertFalse([line for line in self.trace_lines(trace) if LISTED_IN_PEER in line])
+
+
+# --- account-1: the trace's headings are neutral; each item carries its own words -----------------------------------
+
+class TraceHeadingTests(Surfaces, R2WordingCase):
+    """account-1, on the account lens's inputs: Astra's first reading lists 45385 with a quote no document holds (and
+    locates 45380), and Fable's peer review lists 45378 with a quote no document holds. The trace headed them "Codes
+    proposed" and "Codes proposed after peer review", while its reconciliation says neither was proposed."""
+
+    def test_no_trace_heading_says_proposed_over_a_code_whose_only_quote_is_unverified(self):
+        self.adapters['astra'].first = [hp.answered('astra', hp.reading(
+            codes=[('45385', UNLOCATED), ('45380', BIOPSY)], services=[('c1', 'colonoscopy', 'performed', SNARE)]))]
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=[('45378', UNLOCATED_DIAG)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        trace = self.trace(encounter_id)
+        headings = browser(HEADINGS, trace)
+        self.assertFalse([heading for heading in headings if 'propos' in heading.lower()], headings)
+        astra, fable = (next(item for item in trace['participants'] if item['name'] == name)['runs']
+                        for name in ('astra', 'fable'))
+        self.assertEqual([len(run['reading']['codes']) for run in astra if run.get('reading')], [2])
+        self.assertEqual([len(run['review']['additional_codes']) for run in fable if run.get('review')], [1])
+        self.assertIn('Codes it listed · 2', headings)
+        self.assertIn('Additional codes · 1', headings)
+        lines = self.trace_lines(trace)
+        # each item still says what it is
+        self.assertIn(f'45378 · units 1 · confidence high · {LISTED_IN_PEER} {UNVERIFIED_DIAG}', lines)
+        self.assertIn(f'45385 · units 1 · confidence high “{UNLOCATED}” — unverified (not found); never used as '
+                      'evidence', lines)
+        self.assertIn('Proposed by: no participant; listed by Fable with no quote found verbatim in the document, so '
+                      'not proposed', lines)
+
+    def test_an_empty_list_says_none_was_listed(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        trace = self.trace(encounter_id)
+        headings = browser(HEADINGS, trace)
+        self.assertIn('Additional codes · 0', headings)  # Astra's peer review (ColonCase) adds no code
+        self.assertIn('No additional code.', self.trace_lines(trace))
+        self.assertFalse([heading for heading in headings if 'propos' in heading.lower()], headings)

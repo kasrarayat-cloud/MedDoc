@@ -1915,8 +1915,10 @@ function traceQuotes(evidence) {
 }
 
 // A participant's normalized reading in full (HARNESS.md 4): refused whole or read, its problems, the date and services it
-// read, the codes it proposed and those it considered and did not, its questions and the places it says the extraction
-// misreads. Its free text is a model's, so anything in it that reads like a CPT descriptor is withheld.
+// read, the codes it listed (each quote found in the document or unverified) and those it considered and did not, its
+// questions and the places it says the extraction misreads. Its free text is a model's, so anything in it that reads
+// like a CPT descriptor is withheld. Its codes' heading is neutral (refutation round 6, account-1: "Codes proposed"
+// headed a code whose only quote is unverified, which the same trace says that reading did not propose).
 function traceReading(reading) {
   if (!reading || typeof reading !== 'object') return '<div class="trace-reading"><p class="harness-note">No participant reading is recorded for this request.</p></div>';
   const ids = value => strings(value).join(', ');
@@ -1941,7 +1943,7 @@ function traceReading(reading) {
   const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
   // harness@2: the references it says it used, each checked against this run's own tool calls (HARNESS.md 11.2)
   const used = Array.isArray(reading.references_used) ? group('References it says it used', traceReferencesUsed(reading.references_used), 'None cited.') : '';
-  return `<div class="trace-reading">${fields}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Services', services, 'No service listed.')}${group('Codes proposed', codes, 'No code proposed.')}${group('Considered and not coded', notCoded, 'Nothing listed.')}${group('Questions (notes; they never hold the report)', questions, 'No question.')}${group('Extraction issues', issues, 'None reported.')}${used}</div>`;
+  return `<div class="trace-reading">${fields}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Services', services, 'No service listed.')}${group('Codes it listed', codes, 'No code listed.')}${group('Considered and not coded', notCoded, 'Nothing listed.')}${group('Questions (notes; they never hold the report)', questions, 'No question.')}${group('Extraction issues', issues, 'None reported.')}${used}</div>`;
 }
 
 // One code a participant proposed, with what it stated and the quotes it gave; ``after``: said of a code first proposed
@@ -1969,8 +1971,10 @@ function traceReferencesUsed(items) {
 
 // A peer review in full (HARNESS.md 11.1; the PeerReview the trace serves as ``review``): refused whole or read, the
 // frozen inputs it was shown with their sha256, its answers to CPT Studio's open questions (by question id), its
-// positions on codes, the codes it proposed after peer review (never independent), the references it says it used and
-// its problems. Its free text is a model's, so anything that reads like a CPT descriptor is withheld.
+// positions on codes, its additional codes (each worded by the phase served with it), the references it says it used
+// and its problems. Its free text is a model's, so anything that reads like a CPT descriptor is withheld. The
+// additional codes' heading is neutral (refutation round 6, account-1: "Codes proposed after peer review" headed a code
+// listed in peer review, its only quote unverified).
 function traceReview(review) {
   if (!review || typeof review !== 'object') return '<div class="trace-reading"><p class="harness-note">No peer review is recorded for this request.</p></div>';
   const fields = traceFields([
@@ -1983,12 +1987,15 @@ function traceReview(review) {
   const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'Its answer is read as not settling it.')}${traceQuotes(answer.evidence)}</li>`);
   const positions = objects(review.positions).map(item => `<li><b>${escapeHtml(`${textValue(item.code) || 'No code'} · ${lookup(PEER_POSITIONS, item.position, textValue(item.position) || 'position not recorded')}`)}</b>${participantText(item.reason) ? `<br>${escapeHtml(`Why: ${participantText(item.reason)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
   // each additional code by the phase its participant first proposed it in, where the trace serves it (truth-8): a code
-  // its first reading proposed is repeated, never "never independent"; one served without a phase reads as before
-  const addedWords = code => (!Object.hasOwn(code, 'phase') || code.phase === 'peer_review' ? 'proposed after peer review, never independent'
-    : code.phase === 'independent' ? 'repeated in peer review; first proposed in its independent reading' : 'listed in peer review');
+  // its first reading proposed is repeated, never "never independent"; one served without a phase reads as before; null,
+  // a review the current assessment did not read, says so and never "listed in peer review" (refutation round 6,
+  // account-5: '' was served for such a review, and its code read "listed" beside a quote found in the document)
+  const addedWords = code => (code.phase === null ? 'not read by the current assessment'
+    : !Object.hasOwn(code, 'phase') || code.phase === 'peer_review' ? 'proposed after peer review, never independent'
+      : code.phase === 'independent' ? 'repeated in peer review; first proposed in its independent reading' : 'listed in peer review');
   const added = objects(review.additional_codes).map(code => traceCode(code, addedWords(code)));
   const group = (title, items, empty) => `${groupLabel(`${title} · ${items.length}`)}${items.length ? `<ul class="trace-list">${items.join('')}</ul>` : `<p class="harness-note">${escapeHtml(empty)}</p>`}`;
-  return `<div class="trace-reading">${fields}${groupLabel('Frozen inputs it was shown')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded.</p>'}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Answers to the open questions', answers, 'No answer.')}${group('Positions on codes', positions, 'No position.')}${group('Codes proposed after peer review', added, 'No code proposed.')}${group('References it says it used', traceReferencesUsed(review.references_used), 'None cited.')}</div>`;
+  return `<div class="trace-reading">${fields}${groupLabel('Frozen inputs it was shown')}${frozen.length ? traceFields(frozen) : '<p class="harness-note">None recorded.</p>'}${problems.length ? `${groupLabel('Problems')}<ul class="trace-list">${problems.join('')}</ul>` : ''}${group('Answers to the open questions', answers, 'No answer.')}${group('Positions on codes', positions, 'No position.')}${group('Additional codes', added, 'No additional code.')}${group('References it says it used', traceReferencesUsed(review.references_used), 'None cited.')}</div>`;
 }
 
 // Each HTTP exchange of a participant run's tool loop (HARNESS.md 11.2) with the tool calls CPT Studio executed for it:

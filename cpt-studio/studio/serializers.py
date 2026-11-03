@@ -1183,10 +1183,11 @@ def _trace_review(run, assessment=None, ids=None):
     every entry, since "repeated in peer review" claims no proposal there), and '' for a code it proposed in neither
     phase (refutation round 2, truth-8: a code its first reading proposed was called "proposed after peer review, never
     independent"; round 5, the session's D12: so was a code no entry of its located). Where the current assessment did
-    not read this review, every additional code carries ``phase`` ''. ``ids``: the participant's one
-    participants.peer.ShownIds for the whole trace (_trace_runs): an additional code's service ids name the services of
-    its own frozen first reading, so each has the name that reading's run gave it (refutation round 4, shapes-2,
-    truth-3)."""
+    not read this review, every additional code carries ``phase`` None, never D12's '' (refutation round 6, account-5:
+    '' read "listed in peer review" beside a quote found in the document, and the reuse of the same bytes was "proposed
+    after peer review" in the same trace). ``ids``: the participant's one participants.peer.ShownIds for the whole trace
+    (_trace_runs): an additional code's service ids name the services of its own frozen first reading, so each has the
+    name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1203,6 +1204,8 @@ def _trace_review(run, assessment=None, ids=None):
     phases = peer_code_phases(peer_review, record) if read else {}
 
     def phase(item, code):
+        if not read:
+            return None
         said = phases.get(code, '')
         located = any(quote.spans for quote in item.evidence)
         return '' if said == models.ProviderRun.PEER_REVIEW and not located else said

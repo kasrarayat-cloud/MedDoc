@@ -563,7 +563,9 @@ code in (`independent` or `peer_review`), where the current assessment read that
 superseded, round 6: where that review was read, an entry none of whose quotes was located is never `peer_review` -
 each entry is worded by its own quotes, account-4 - so `''` is said of such an entry where the participant first
 proposed the code in its peer review, as it is of a code no entry of either phase located, D12, and of a code in no
-code's shape, while `independent` stays on every entry of a code its frozen first reading proposed). `reading.references_used` checks each reference against that run's own tool results; for a
+code's shape, while `independent` stays on every entry of a code its frozen first reading proposed; where the current
+assessment did not read that review, every additional code carries `null`, account-5, which the page words "not read by
+the current assessment", never "listed in peer review"). `reading.references_used` checks each reference against that run's own tool results; for a
 run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
 carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,
