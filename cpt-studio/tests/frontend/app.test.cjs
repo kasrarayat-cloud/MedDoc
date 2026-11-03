@@ -2821,10 +2821,14 @@ test('R5-ROW D11: every branch of the Clarification row says how many questions 
   assert.deepEqual(lines([encounter, code, service], 2), ['2 questions are open.']);
   // a question that is not open is not counted
   assert.deepEqual(lines([code, { ...encounter, state: 'answered' }], 1), ['One open question is about a code.']);
-  // a count the API does not serve as a whole number is the served questions' own, as before
-  for (const clarification of [undefined, null, {}, { open: null }, { open: '4' }, { open: -1 }, { open: 1.5 }]) {
+  // a count the API does not serve as a whole number is the served questions' own, as before - moved by refutation
+  // round 6 (R6-ROW, row-1): all but a count served as null, which the API serves while the current revision has no
+  // assessment and the row reads as it reads no assessment (here not asked: the fixture's pipeline is idle)
+  for (const clarification of [undefined, null, {}, { open: '4' }, { open: -1 }, { open: 1.5 }]) {
     assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification } }).lines, ['One open question is about the encounter.', '3 open questions are each about a code.'], JSON.stringify(clarification));
   }
+  assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification: { open: null } } }),
+    { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] });
   // none open
   assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification: { open: 0 } } }),
     { state: 'none', badge: 'None open', lines: ['No question is open for this revision.'], notes: [R5_NOTE] });
@@ -2932,4 +2936,117 @@ test('R6-TRACE account-1, account-5: no trace heading says "proposed"; a review 
   assert.ok(read.includes('<li><b>45381 · units 1 · confidence low · services s1 · listed in peer review</b>'));
   assert.ok(read.includes('<li><b>45385 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b>'));
   assert.equal(read.includes('not read by the current assessment'), false);
+});
+
+// refutation round 6, R6-ROW
+// row-1: an addendum makes its revision current, and the encounter's current assessment - which the API serves as
+// assessment, with its clarifications and open_clarifications - stays the earlier revision's until the new revision is
+// first assessed: through its stages, and for good after a Stop before then. harness.clarification.open counted the
+// open questions of the assessment of the current revision (review.live_assessment) and so served 0, and the row's
+// guards read doc.assessment: the row drew "None open" / "No question is open for this revision." in the succeeded
+// look beside the earlier revision's open questions the same payload serves. The API now serves that count as null
+// while the current revision has no assessment, and the row reads null as it reads no assessment: waiting while a
+// stage runs, otherwise not asked. The pipeline's own states, participants on and Corti alone, busy and stopped, are
+// pinned in tests/test_harness2_r6_row.py.
+// falsegreen-4: a participant is named as having listed a code only as review.listed_by serves one - Astra or Fable -
+// never a name the page does not know, nor Corti (the R5-ACCOUNT comment claimed it; only a value that is not a list
+// was tried).
+// falsegreen-2: the " · proposed after peer review" mark on the title of an alternative a peer review proposed with a
+// located quote; round 5 moved its only pin to an alternative D12 made listed-only, so a page without the mark passed.
+
+const R6_WAITING = { state: 'waiting', badge: 'Waiting', lines: ['Known once the proposals are checked.'], notes: [] };
+const R6_NOT_ASKED = { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] };
+
+// The final fixture as the API serves it after an addendum, before its revision is first assessed: revision 2 current,
+// the earlier revision's assessment (no action offered) with four open questions served beside it - one about the
+// encounter and three about its codes, whatever the fixture itself asks - the count null and the phase 1 (participants
+// configured, no assessment of this revision); busy while its stages run, or stopped.
+function r6Unassessed(doc, busy) {
+  const [first, second] = doc.assessment.proposals;
+  const asked = r5Asked(doc, [{ scope: 'encounter', proposal_id: null, fact: 'service_date', family: '' },
+    { scope: 'proposal', proposal_id: first.id, fact: 'extent' }, { scope: 'proposal', proposal_id: second.id, fact: 'extent' },
+    { scope: 'proposal', proposal_id: second.id, fact: 'performed_status' }]);
+  const stale = { ...asked, open_clarifications: 4, revision: { ...doc.revision, number: 2, kind: 'addendum', revisions_total: 2 },
+    harness: { ...asked.harness, phase: 1, clarification: { open: null } },
+    assessment: { ...doc.assessment, proposals: doc.assessment.proposals.map(p => ({ ...p, allowed_actions: [] })) } };
+  return busy
+    ? { ...stale, state: 'processing', pipeline: { ...doc.pipeline, busy: true, can_stop: true },
+      readiness: { draft: false, reviewed: false, blockers: ['Processing has not finished'] }, harness: { ...stale.harness, final: { state: 'processing', label: 'Processing' } } }
+    : { ...stale, state: 'stopped', pipeline: { ...doc.pipeline, busy: false, can_resume: true, stopped_by_member: true },
+      readiness: { draft: false, reviewed: false, blockers: ['Revision 2 has not been assessed yet'] }, harness: { ...stale.harness, final: { state: 'stopped', label: 'Stopped' } } };
+}
+
+test('R6-ROW row-1: a count served as null reads as no assessment of this revision - waiting while a stage runs, otherwise not asked - never as a count of the earlier revision\'s open questions', () => {
+  const doc = fixture(H2_FINAL);
+  const busy = r6Unassessed(doc, true);
+  const stopped = r6Unassessed(doc, false);
+  for (const payload of [busy, stopped]) assert.equal(payload.clarifications.filter(item => item.state === 'open').length, 4);
+  // the finding: { state: 'none', badge: 'None open', lines: ['No question is open for this revision.'], notes: [R5_NOTE] }
+  assert.deepEqual(r5Row(busy), R6_WAITING);
+  assert.deepEqual(r5Row(stopped), R6_NOT_ASKED);
+  for (const payload of [busy, stopped]) assert.equal(harnessRow(render(payload), 'clarification').includes('status green'), false, 'never the succeeded look');
+  // whatever the earlier assessment's codes' decisions, and with Corti alone: the row reads no decision and no
+  // participant
+  const decided = payload => ({ ...payload, assessment: { ...payload.assessment, proposals: payload.assessment.proposals.map(p => (p.bucket === 'selected'
+    ? { ...p, decision_state: 'rejected', allowed_actions: ['revoke'], decision: { action: 'reject', reviewer: 'Synthetic Reviewer', reviewer_kind: 'human', note: 'Synthetic rejection.' } } : p)) } });
+  const cortiOnly = payload => {
+    const alone = withParticipant(withParticipant(payload, 'astra', { state: 'not_configured', peer: {} }), 'fable', { state: 'not_configured', peer: {} });
+    return { ...alone, harness: { ...alone.harness, phase: 0 } };
+  };
+  for (const [name, change] of [['decided', decided], ['corti only', cortiOnly], ['corti only, decided', payload => cortiOnly(decided(payload))]]) {
+    assert.deepEqual(r5Row(change(busy)), R6_WAITING, name);
+    assert.deepEqual(r5Row(change(stopped)), R6_NOT_ASKED, name);
+  }
+  // only a count served as null: any other value that is not a whole number is still the served questions' own (the
+  // R5-ROW pin), a whole number is still the count, and with no assessment at all the row reads as before, null or 0
+  const counted = ['One open question is about the encounter.', '3 open questions are each about a code.'];
+  for (const clarification of [undefined, null, {}, { open: undefined }, { open: 'null' }, { open: '4' }, { open: -1 }, { open: 1.5 }]) {
+    assert.deepEqual(r5Row({ ...stopped, harness: { ...stopped.harness, clarification } }).lines, counted, JSON.stringify(clarification));
+  }
+  assert.deepEqual(r5Row({ ...stopped, harness: { ...stopped.harness, clarification: { open: 4 } } }).lines, counted);
+  assert.deepEqual(r5Row({ ...stopped, clarifications: [], harness: { ...stopped.harness, clarification: { open: 0 } } }),
+    { state: 'none', badge: 'None open', lines: ['No question is open for this revision.'], notes: [R5_NOTE] });
+  for (const open of [null, 0]) {
+    const none = { ...stopped, assessment: null, clarifications: [], open_clarifications: 0, harness: { ...stopped.harness, clarification: { open } } };
+    assert.deepEqual(r5Row(none), R6_NOT_ASKED, String(open));
+    assert.deepEqual(r5Row({ ...none, pipeline: { ...none.pipeline, busy: true } }), R6_WAITING, String(open));
+  }
+});
+
+test('R6-ROW falsegreen-4: a participant is named as having listed a code only as review.listed_by serves one - Astra or Fable - never a name the page does not know, nor Corti', () => {
+  const status = proposal => /<li><b>Proposed by:<\/b> ([^<]*)<\/li>/.exec(app.codeStatusLines({ reference_check: { state: 'not_verified' }, ...proposal }))[1];
+  // the finding: 'no participant; listed by mallory with no quote found verbatim in the document, so not proposed', and
+  // the same of Corti
+  for (const listed of [['mallory'], ['corti'], ['Astra'], ['__proto__'], ['corti', 'mallory']]) {
+    assert.equal(status({ proposed_by: [], listed_by: listed }), 'not recorded', JSON.stringify(listed));
+  }
+  // beside a name it serves, only that one is named
+  assert.equal(status({ proposed_by: [], listed_by: ['mallory', 'astra', 'corti'] }), `no participant; listed by Astra ${R5_LISTED}`);
+  // apart from its proposers (proposerText): a name it does not serve is not named, and Corti's relation stands alone
+  assert.equal(status({ proposed_by: ['fable'], listed_by: ['corti', 'mallory'], phases: { fable: 'independent' }, corti_relation: 'none' }),
+    'Fable (independent reading); Corti did not propose this code.');
+  assert.equal(status({ proposed_by: ['astra'], listed_by: ['mallory', 'fable'], phases: { astra: 'independent' }, corti_relation: 'none' }),
+    `Astra (independent reading); listed by Fable ${R5_LISTED} by Fable; Corti did not propose this code.`);
+  // the owner's trace's reconciliation, by the same function
+  const trace = fixture(H2_TRACE);
+  const row = { code: '45378', family: 'gi.colonoscopy', bucket: 'alternative', status: 'informational', positions: {}, reference_check: { state: 'not_verified' }, approved: false };
+  const proposed = rows => /<p>Proposed by: ([^<]*)<\/p>/.exec(app.traceView({ ...trace, reconciliation: rows }, trace.encounter.id))[1];
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['mallory'] }]), 'not recorded');
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti'] }]), 'not recorded');
+  assert.equal(proposed([{ ...row, proposed_by: ['astra'], listed_by: ['corti'] }]), 'Astra');
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti', 'fable'] }]), `no participant; listed by Fable ${R5_LISTED}`);
+});
+
+test('R6-ROW falsegreen-2: an alternative a peer review proposed with a located quote is titled "proposed after peer review"; one a first reading proposed, or one only listed, is not', () => {
+  const final = fixture(H2_FINAL);
+  const as45381 = fields => render({ ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45381' && p.bucket === 'alternative' ? { ...p, ...fields } : p)) } });
+  const titles = html => [...html.matchAll(/<strong>(45381 · [^<]*)<\/strong>/g)].map(match => match[1]);
+  // the mutant that drops the mark (m_js_titlesuffix) drew '45381 · Colonoscopy' here and passed every test
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra'], listed_by: [], phases: { astra: 'peer_review' } })), ['45381 · Colonoscopy · proposed after peer review'], 'the alternative a peer review proposed');
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra', 'fable'], listed_by: [], phases: { astra: 'peer_review', fable: 'peer_review' } })), ['45381 · Colonoscopy · proposed after peer review']);
+  // a proposer that proposed it in its first reading, or Corti, makes it no code first proposed after peer review
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra', 'fable'], listed_by: [], phases: { astra: 'peer_review', fable: 'independent' } })), ['45381 · Colonoscopy']);
+  assert.deepEqual(titles(as45381({ proposed_by: ['corti', 'astra'], listed_by: [], phases: { astra: 'peer_review' } })), ['45381 · Colonoscopy']);
+  // the fixture's own: listed by Astra's peer review with no quote found verbatim, so not proposed and not marked (D12)
+  assert.deepEqual(titles(render(final)), ['45381 · Colonoscopy']);
 });

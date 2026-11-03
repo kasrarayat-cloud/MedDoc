@@ -1068,9 +1068,11 @@ function proposerText(proposal, proposers) {
 // theirs was found verbatim in the document, so they did not propose it; refutation round 5, the session's D12), named
 // apart from its proposers - "listed by Fable with no quote found verbatim in the document, so not proposed", and "by
 // Fable" after it where others proposed the code - never as one of them, and with no proposer as "no participant",
-// never "none" (Corti may have a row of its own for the code); '' when it serves none.
+// never "none" (Corti may have a row of its own for the code); '' when it serves none. Only Astra and Fable are named,
+// as review.listed_by serves only them: a name the page does not know, or Corti, is never named as having listed the
+// code (refutation round 6, falsegreen-4: 'mallory' and 'corti' were named as served).
 function listedText(listedBy, apart = false) {
-  const names = joinWords(strings(listedBy).map(name => lookup(PARTICIPANT_LABELS, name, name)));
+  const names = joinWords(strings(listedBy).filter(name => name === 'astra' || name === 'fable').map(name => PARTICIPANT_LABELS[name]));
   return names ? `listed by ${names} with no quote found verbatim in the document, so not proposed${apart ? ` by ${names}` : ''}` : '';
 }
 
@@ -1729,13 +1731,17 @@ function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
   const note = 'A participant\'s own questions never hold the reviewed report.';
-  // No assessment: one is coming while a stage runs; otherwise none was made (the text could not be read, processing
-  // stopped, the outcome is unknown), and nothing asks a question until one is. Waiting says only when the questions
-  // are known, no longer why one is asked (refutation round 5, D11): "only where the documentation leaves open
-  // something that changes the coding" did not fit a member's entry that conflicts with the document, or a diagnostic
-  // code asked about beside its interventions.
-  if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
-  if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
+  // No assessment of this revision: none at all (doc.assessment null), or doc.assessment is an earlier revision's - the
+  // API serves the count as null while the current revision has none (after an addendum, until its revision is first
+  // assessed; refutation round 6, row-1: the API served 0 there, and the row drew "None open" beside that assessment's
+  // questions, which the page draws). One is coming while a stage runs; otherwise none was made (the text could not be
+  // read, processing stopped, the outcome is unknown), and nothing asks a question of this revision until one is.
+  // Waiting says only when the questions are known, no longer why one is asked (refutation round 5, D11): "only where
+  // the documentation leaves open something that changes the coding" did not fit a member's entry that conflicts with
+  // the document, or a diagnostic code asked about beside its interventions.
+  const unassessed = !doc.assessment || served === null;
+  if (unassessed && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
+  if (unassessed) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
   if (open > 0) {
     const asked = openClarifications(doc);
     const encounter = asked.filter(item => item.scope === 'encounter' && !item.proposal_id).length;

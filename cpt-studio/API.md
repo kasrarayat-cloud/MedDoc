@@ -261,6 +261,11 @@ that carries no note is served with a sentence that claims neither. `detail` is 
 entry is counted in neither `codes_checked` nor `passages`. The code cards then say that reference validation failed
 for the assessment and that each code's CMS reference checks stand as its status line shows them, and the reports'
 REFERENCE RETRIEVAL section prints the entry as one line, "Reference validation failed: ...".
+`harness.clarification.open` is how many questions are open on the assessment of the current revision, and `null`
+while that revision has none: none was made, or the current assessment - the one `assessment`, `clarifications` and
+`open_clarifications` serve - is an earlier revision's, as after an addendum until its revision is first assessed
+(refutation round 6, row-1: it was `0` there, and the page's Clarification row said "None open" beside those
+questions; the page reads `null` as no assessment of this revision).
 `harness.final` is the encounter's state and its label.
 
 Each proposal keeps three statuses apart (I4): `proposed_by` (who proposed it: `corti` for Corti's own proposals and
