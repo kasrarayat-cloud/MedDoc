@@ -89,12 +89,14 @@ class FirstReadingPositionTests(R2WordingCase):
                   and item['proposed_by'] == snare['proposed_by']]
         self.assertEqual(row['positions']['astra'], {'position': 'not_proposed', 'quote': '', 'detail': LISTED})
         # control: a located first reading keeps its own wording (Astra's 45380, Fable's 45385)
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         [biopsy] = self.proposals(detail, '45380', bucket='selected')
         self.assertEqual(biopsy['participant_positions']['astra'],
                          {'position': 'proposed', 'quote': BIOPSY,
-                          'detail': 'Astra proposed this code with evidence located in the document.'})
+                          'detail': 'Astra proposed this code, quoting the document verbatim.'})
         self.assertEqual(snare['participant_positions']['fable']['detail'],
-                         'Fable proposed this code with evidence located in the document.')
+                         'Fable proposed this code, quoting the document verbatim.')
 
     def test_one_frozen_first_reading_gets_one_position_whatever_peer_review_did(self):
         # variant A: Astra's peer review proposes 45385 on the snare passage (refutation round 3, truth-2's case);
@@ -134,8 +136,10 @@ class FirstReadingPositionTests(R2WordingCase):
         # control: a located quote is a proposal, with or without a later phase
         located = [{'name': 'astra', 'state': 'read', 'codes': [{'code': '45385', 'quote': SNARE}], 'not_coded': []}]
         plain = review.participant_positions(SimpleNamespace(code='45385', support={}), located)
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         self.assertEqual(plain['astra'], {'position': 'proposed', 'quote': SNARE,
-                                          'detail': 'Astra proposed this code with evidence located in the document.'})
+                                          'detail': 'Astra proposed this code, quoting the document verbatim.'})
 
 
 # --- truth-4 and falsegreen-6: Corti's unlisted count is the engine's, per answer, in the row, the TXT and Checks --

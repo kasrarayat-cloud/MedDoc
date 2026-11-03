@@ -59,8 +59,10 @@ class PeerProposedPositionTests(ColonCase):
         row = next(item for item in trace['reconciliation'] if item['code'] == '45378')
         self.assertEqual((row['proposed_by'], row['positions']['fable']['detail']), (['fable'], PEER_ONLY))
         # a code a first reading proposed keeps its first reading's own wording
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         self.assertEqual(_proposal(detail, '45385')['participant_positions']['fable']['detail'],
-                         'Fable proposed this code with evidence located in the document.')
+                         'Fable proposed this code, quoting the document verbatim.')
 
     def test_each_first_reading_position_says_it_is_the_first_reading_s_beside_a_later_proposal(self):
         later = SimpleNamespace(code='45378', support={'proposed_by': ['astra', 'fable'],

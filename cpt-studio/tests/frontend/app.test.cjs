@@ -2364,9 +2364,11 @@ test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated de
     assert.ok(card.includes(`Its use: “${app.escapeHtml(app.DESCRIPTOR_WITHHELD)}”`), code);
   }
   // (b) a position's quote is its first located quote, an exact slice of the document: shown as the document's text
+  // (moved by refutation round 6, R6-MEANING, negation-4: the detail the API serves now, "quoting the document
+  // verbatim", never "with evidence located in the document")
   const quote = 'Polyp(s) in the sigmoid colon were removed with a hot snare.';
-  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code with evidence located in the document.', quote } } });
-  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code with evidence located in the document. — “${app.escapeHtml(quote)}”</p>`), html);
+  const html = app.participantPositions({ code: '45385', participant_positions: { fable: { position: 'proposed', detail: 'Fable proposed this code, quoting the document verbatim.', quote } } });
+  assert.ok(html.includes(`<p class="harness-note">Fable proposed it: Fable proposed this code, quoting the document verbatim. — “${app.escapeHtml(quote)}”</p>`), html);
   assert.equal(html.includes('withheld'), false);
 });
 

@@ -239,12 +239,14 @@ class FirstReadingUnlocatedTests(R2WordingCase):
                   and item['proposed_by'] == snare['proposed_by']]
         self.assertEqual(row['positions']['astra']['detail'], LISTED_FIRST)
         # controls: a located first reading keeps its own wording, Fable's 45385 and Astra's 45380
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         self.assertEqual(snare['participant_positions']['fable']['detail'],
-                         'Fable proposed this code with evidence located in the document.')
+                         'Fable proposed this code, quoting the document verbatim.')
         [biopsy] = self.proposals(detail, '45380', bucket='selected')
         self.assertEqual(biopsy['participant_positions']['astra'],
                          {'position': 'proposed', 'quote': BIOPSY,
-                          'detail': 'Astra proposed this code with evidence located in the document.'})
+                          'detail': 'Astra proposed this code, quoting the document verbatim.'})
 
     def test_a_first_reading_s_unlocated_code_with_no_later_proposal_reads_as_before(self):
         # a participant whose first reading lists a code it never located, and that proposes it in no later phase: it

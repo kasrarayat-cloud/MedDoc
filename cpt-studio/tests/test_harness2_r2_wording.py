@@ -402,7 +402,9 @@ class DocumentQuoteTests(R2WordingCase):
         self.assertEqual(card['participant_positions']['fable']['quote'], PLURAL)  # the document's own passage
         lines = browser(f'[...visible(cardOf(page(), {json.dumps(card["id"])})).split("\\n")]'
                         '.filter(line => line.startsWith("Fable proposed it"))', detail)
-        self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code with evidence located in the document. '
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
+        self.assertEqual(lines, [f'Fable proposed it: Fable proposed this code, quoting the document verbatim. '
                                  f'— “{PLURAL}”'])
         self.assertNotIn('its quote is withheld', json.dumps(lines))
 

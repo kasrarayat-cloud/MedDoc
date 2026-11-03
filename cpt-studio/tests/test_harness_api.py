@@ -123,9 +123,10 @@ class ProposalFieldsTests(FieldCase):
     def test_participant_positions_come_from_the_readings_that_were_used(self):
         proposals = self.proposals(self.detail())
         positions = proposals['43239']['participant_positions']
+        # moved by refutation round 6 (R6-MEANING, negation-4, ownership-7): the 'proposed' detail is the engine's own
+        # wording, "quoting the document verbatim", never "with evidence located in the document"
         self.assertEqual(positions['astra'], {'position': 'proposed', 'quote': pf.EGD_PASSAGE,
-                                              'detail': 'Astra proposed this code with evidence located in the '
-                                                        'document.'})
+                                              'detail': 'Astra proposed this code, quoting the document verbatim.'})
         self.assertEqual(positions['fable']['position'], 'not_run')
         self.assertIn('the reading was not used: The response was cut off', positions['fable']['detail'])
         self.assertEqual(proposals['45385']['participant_positions']['astra']['quote'], '')
@@ -663,12 +664,15 @@ class TraceTests(HarnessCase):
                          [(1, False, False), (2, True, True)])
         self.assertEqual([entry['code'] for entry in trace['retrieval']], ['99213'])
         # moved by refutation round 5 (R5-ACCOUNT, the session's D12): a row also serves listed_by, the participants that
-        # only listed a participant's alternative's code (none for a proposal)
+        # only listed a participant's alternative's code (none for a proposal); and by refutation round 6 (R6-MEANING,
+        # negation-4, ownership-7): a first reading's 'proposed' detail is the engine's own wording, "quoting the
+        # document verbatim" - "with evidence located in the document" called a denial, or another procedure's
+        # sentence, evidence for the code
         self.assertEqual(trace['reconciliation'], [{
             'code': '99213', 'family': trace['reconciliation'][0]['family'], 'bucket': 'selected', 'status': 'ready',
             'proposed_by': ['corti'], 'listed_by': [], 'positions': {
                 'astra': {'position': 'proposed', 'quote': TIME_QUOTE,
-                          'detail': 'Astra proposed this code with evidence located in the document.'},
+                          'detail': 'Astra proposed this code, quoting the document verbatim.'},
                 'fable': {'position': 'proposed', 'quote': TIME_QUOTE,
-                          'detail': 'Fable proposed this code with evidence located in the document.'}},
+                          'detail': 'Fable proposed this code, quoting the document verbatim.'}},
             'reference_check': trace['reconciliation'][0]['reference_check'], 'approved': False}])

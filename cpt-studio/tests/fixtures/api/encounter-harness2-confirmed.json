@@ -526,8 +526,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "37f132eaceace3fe9924949d4cfffae2ac411c6fc26c26de04bda89755f5c57a",
-   "response_sha256": "2bd2c62cc2b71244732f115bebffab7f827d8df8918af9c1c4d82f12f12f3631",
+   "request_sha256": "f702035bb542f0da4953373d5c11c64145bfd59c84d06d0af3af6c1801a93161",
+   "response_sha256": "4a7cfd60ce5dd780038a1a1e56e25ca8a47e198c5d214b395b0e5e9d293dd0ab",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -549,8 +549,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "99f1d9353ba8e8d01ab02b169a2d10ad0add6305a671afb30c901012fbb8227b",
-   "response_sha256": "6002f11fec23599a968c80d7b9a518522267511865763f6f05e98e42da0fa226",
+   "request_sha256": "f14098c0d5c7e4d5566fc238b6d1c6712d873b03322bd6abc2f41b01f11c7e11",
+   "response_sha256": "a5230a09caf78d3bf01a2e1f1bec65ccc98086e36c61f431ddc84e94bcfde66c",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -777,12 +777,12 @@
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      },
      "fable": {
       "position": "proposed",
-      "detail": "Fable proposed this code with evidence located in the document.",
+      "detail": "Fable proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      }
     },
@@ -1007,7 +1007,7 @@
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
      },
      "fable": {

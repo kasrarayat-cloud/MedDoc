@@ -142,7 +142,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "decision": null, "decision_state": "undecided",
       "allowed_actions": ["approve", "reject"],
       "proposed_by": ["corti", "astra"], "listed_by": [],
-      "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code with evidence located in the document.", "quote": "..."},
+      "participant_positions": {"astra": {"position": "proposed", "detail": "Astra proposed this code, quoting the document verbatim.", "quote": "..."},
                                 "fable": {"position": "advised_not_to_code", "detail": "Fable advised not to code it: not performed at this encounter.", "quote": "..."}},
       "reference_check": {"state": "passed", "detail": "Present in the CMS fee schedule file: passed; ... NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."},
       "retrieval": [{"kind": "fact", "source_key": "cms-pfs-rvu26d", "release": "RVU26D", "label": "status", "value": "A", "page": "", "section": "", "text": ""},

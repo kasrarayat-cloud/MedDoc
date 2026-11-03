@@ -673,12 +673,12 @@
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      },
      "fable": {
       "position": "proposed",
-      "detail": "Fable proposed this code with evidence located in the document.",
+      "detail": "Fable proposed this code, quoting the document verbatim.",
       "quote": "was removed with a cold snare"
      }
     },
@@ -886,7 +886,7 @@
     "participant_positions": {
      "astra": {
       "position": "proposed",
-      "detail": "Astra proposed this code with evidence located in the document.",
+      "detail": "Astra proposed this code, quoting the document verbatim.",
       "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
      },
      "fable": {
