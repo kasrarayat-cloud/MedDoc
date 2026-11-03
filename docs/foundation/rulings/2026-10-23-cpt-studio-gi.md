@@ -1806,3 +1806,204 @@ under it, checklist 4.6's holds stay recorded limits.
 (f) **The release gates of interpretation (e) of 2026-11-03 stand**, with round 7's reproduced findings repaired and
 the gates re-run on the final head. The pypdf audit stays red with its seven advisories (interpretation 68) and is
 stated, never waived.
+
+## Owner directive, 2026-11-03 (second message) — the shared-reader core repair and the customer interface
+
+Received by session a12d8fb3 at about 22:30Z, verbatim:
+
+> Implement the CPT Studio core repair and customer-interface improvements below on https://cpt.quillmd.com. Complete the work through installation and verification.
+>
+> **Keep the existing website and demo accessible while you work. Do not pause the demo, introduce a maintenance page, or disable customer access as the default approach.** Develop in isolation, keep the current release serving, and install a compatible update with health checks and rollback. Preserve active jobs and saved work. If an installation method would cause interruption, find an alternative before proceeding.
+>
+> Maintain a checklist with PASS, FAIL, BLOCKED and NOT RUN states. Tick an item only after verifying it. Continue authorized routine work without asking me for approval at every step.
+>
+> ## 1. Fix the shared document-reading logic
+>
+> Repair the general interpretation rules, not individual documents or expected-code fixtures.
+>
+> The live Mara encounter is:
+> https://cpt.quillmd.com/#doc/effe4d0b-b449-4efd-b208-635ca1d09984
+>
+> Observed facts:
+> - Its incorrect manual service date was 1998-01-01. That override has been cleared; the effective date is now 2026-11-03.
+> - Corti, Astra, Fable, both peer reviews and the reference stage completed.
+> - Suggestions are 43239, 45380 and 45385.
+> - 45380 is ready for review; 43239 and 45385 remain held.
+> - Five questions remain: two code questions and three office E/M questions.
+> - No codes have been approved.
+>
+> Confirmed interpretation defects:
+> - The app uses “No biopsy forceps were used on COL-2” to contradict affirmative esophageal/gastric biopsies. COL-2 is a sigmoid-colon lesion, not the upper-endoscopy procedure.
+> - It treats “The forceps removal was not a biopsy of, or a completion step for, the snare-treated sigmoid lesion” as negating the documented snare removal. That sentence distinguishes two separate lesions.
+> - It assigns the prophylactic sigmoid resection-site clip to the upper endoscopy.
+> - It asks office setting, new/established status and E/M level questions despite the explicit statement: “No separate office evaluation and management encounter or office-visit time is documented on this date.”
+>
+> Bind each statement to its procedure, lesion, anatomy, action, time and responsible provider. Keep negation within its actual scope.
+>
+> When the document already supplies the answer, repair the reader and reassess from the source. Do not require doctors to rewrite an adequate report to overcome a parsing bug. Preserve genuine uncertainty and conflicting documentation.
+>
+> Also reproduce and repair the previously reported shared safety defects if they remain present:
+> - Failed, negated, historical or wrong-procedure evidence allowing a code to become ready.
+> - Restoring a therapeutic code such as 45385 without recomputing its conflict with a diagnostic base code such as 45378.
+>
+> Recompute relevant checks after every selection, restoration, context change, reload and export. Do not approve codes through model agreement or hardcoded expected results.
+>
+> ## 2. Remove provider identities from the customer experience
+>
+> Doctors and customers must not see Corti, Astra, Fable, OpenAI, Anthropic, Claude, model IDs or internal orchestration details in ordinary product screens or reports.
+>
+> Use functional labels such as:
+> - Document review
+> - Independent checks
+> - Coding validation
+>
+> Prefer one compact progress panel over a long list of individual agents. These labels describe software functions; do not invent human reviewers or certifications.
+>
+> Remove customer-facing:
+> - Participant/model lists and peer-review machinery.
+> - Tool-call counts, token usage, internal credits and request IDs.
+> - Raw reference retrieval logs, source hashes and technical rule IDs.
+> - Trace links, raw provider responses and developer diagnostics.
+> - Provider names in downloads, notifications, accessibility labels and error messages.
+>
+> **Enforce this on the server. CSS hiding or collapsed panels are insufficient.** Customer API responses and customer bundles must not expose these internal details.
+>
+> Keep complete provenance, exact provider/model identities, usage, failures and audit history available through authenticated platform-operator diagnostics. A customer practice administrator or tenant owner must not automatically gain platform-operator access. Verify direct diagnostic URLs and API authorization.
+>
+> Keep legally required privacy/subprocessor disclosures accurate. This request concerns routine product presentation, not falsifying required disclosures.
+>
+> ## 3. Make the result simple and codes-first
+>
+> The main result should be a short numbered list:
+>
+> 1. CPT number
+> 2. CPT number
+> 3. CPT number
+>
+> Each row should show:
+> - Code.
+> - Units and modifier when applicable.
+> - Clear status: Ready for review, Needs a detail, Approved or Excluded.
+> - One short, document-based explanation.
+>
+> Put the supporting quotation and any material qualification behind an optional “Why this code?” control. Keep engineering logs out of this view.
+>
+> Provide clear review and download actions. Distinguish suggested codes from approved codes. Approved exports must exclude unresolved or unapproved items and match persisted decisions.
+>
+> Retain concise, meaningful limitations. Do not imply complete validation when reference coverage is incomplete, and do not show unlicensed descriptions as official CPT content.
+>
+> ## 4. Replace cumbersome clarification cards with a short confirmation flow
+>
+> Doctors should not have to write an addendum for every routine context question.
+>
+> - Suppress irrelevant questions, including E/M questions when no separate E/M service is documented.
+> - Resolve facts already stated unambiguously through the repaired reader.
+> - Group genuinely missing details into one compact “A few details needed” panel.
+> - Use relevant choices, date selectors and brief confirmations instead of repeated free-text forms.
+> - Allow “Not documented” or “Cannot confirm” where appropriate.
+> - Ask each material question once and preserve the saved answer.
+> - Allow supported, independent services to remain reviewable while a different service awaits clarification.
+>
+> For a date conflict, show the document date and entered date together, with a clear “Use document date” action. Do not silently choose between genuinely conflicting dates or prefill an unsupported date.
+>
+> Store member-provided context separately from the original document, with attribution and audit history. Do not manufacture physician-authored addenda, clinical facts or approvals.
+>
+> For separately treated forceps/snare colon lesions, provide appropriate modifier review using available dated sources. Do not automatically append both 59 and XS or claim complete payer validation without the necessary coverage.
+>
+> ## 5. Show unmistakable upload and processing progress
+>
+> Immediately acknowledge a successful upload and show visible progress while the document is processed.
+>
+> Use plain stages tied to actual backend state, for example:
+> - Reading your document
+> - Identifying procedures
+> - Checking suggested codes
+> - Preparing your results
+>
+> Show the active stage, completed stages, elapsed time and a truthful status update. Make it clear when the user can leave the page and return.
+>
+> Requirements:
+> - Distinguish uploading, queued, processing, awaiting a detail, completed, partially completed and failed.
+> - Do not invent percentages or display an exact ETA without reliable measurements.
+> - If processing takes longer than expected, explain what is actually happening.
+> - Do not keep an animation running after the job has failed.
+> - Display actionable errors in plain language without provider names or technical payloads.
+> - If a date conflict prevents submission, show “Action needed” immediately rather than implying processing has begun.
+> - Preserve progress and job identity after reload or reconnect.
+> - Provide a working Stop path and safe recovery.
+> - Reconcile unknown outcomes before retrying. Refreshing, reconnecting or opening results must not create duplicate paid requests.
+>
+> ## 6. Verify and install the complete repair
+>
+> Use existing authorized accounts and standing private synthetic-testing authority. Keep purposeful, bounded execution and provider-call concurrency one. Preserve originals, raw responses, historical failures, decisions, usage and rollback evidence.
+>
+> Acceptance checklist:
+> - [ ] Shared procedure/lesion/negation binding repaired.
+> - [ ] Absent separate E/M no longer creates unnecessary questions.
+> - [ ] Unsupported evidence and diagnostic/therapeutic conflicts remain correctly blocked.
+> - [ ] Customer screens, API responses and downloads omit provider identities and technical traces.
+> - [ ] Operator diagnostics remain intact and protected from customer accounts.
+> - [ ] Compact code results and clarification controls work on desktop and mobile.
+> - [ ] Upload acknowledgement, real progress, failure, Stop and recovery states work.
+> - [ ] Reload/reconnect preserves the existing job without duplicate submissions.
+> - [ ] Mara is reassessed using retained responses where possible, with no fabricated answers or approvals.
+> - [ ] One fresh synthetic GI case passes the installed workflow with actual provider responses.
+> - [ ] Review decisions persist after reload.
+> - [ ] An actual approved report is downloaded and independently compared with saved selections, units, modifiers and source evidence.
+> - [ ] Existing records and exports remain preserved.
+> - [ ] The live site remains accessible during development and after installation.
+>
+> Label any test approvals as agent-executed synthetic reviews. Do not present them as a doctor’s clinical approval.
+>
+> Use focused regression tests and a bounded independent review of the changed paths. Avoid endless broad audit rounds without new evidence.
+>
+> Finish by reporting the installed revision, checklist results, customer-facing screenshots, actual download evidence, measured usage and remaining limitations. Report functional completion, clinical accuracy validation and content-use permissions separately. Do not describe a passing synthetic case as guaranteed accuracy.
+
+### Session interpretation, 2026-11-03 (a12d8fb3, on receipt) — recorded, not owner-ruled
+
+(a) **The live demonstration is not paused** while this work runs, and no install method that interrupts it is used.
+This answers the open item of interpretation (d) of 2026-11-03 (after the sixth refutation): the owner's instruction is
+to keep the site and the demonstration available. Development happens in isolated worktrees and throwaway databases; the
+installed release keeps serving until a successor has passed its health checks.
+
+(b) **The shared-reader repair is one I1-declared change.** Its expected movements are written down before the code
+(the gi4 harness's declaration files), and measured after it (replay, battery, mutants). The four Mara defects are
+repaired as classes: statement-to-procedure and statement-to-lesion binding, negation scope, act-to-procedure
+assignment, and an explicitly absent separate E/M service. No document, patient name or expected code is special-cased.
+The round-4 release standard keeps governing (a must-stay-held input stays held); the parity-standard question of
+2026-11-03 stays open and is not answered by this directive.
+
+(c) **The bounded independent review is the standing refutation pass, bounded.** One round of distinct lenses over the
+finished diff, each finding verified before it is believed, the reproduced findings repaired, then one narrow check of
+those repairs only. A further round runs only on new evidence (the directive's "avoid endless broad audit rounds").
+
+(d) **Platform-operator access is a grant on the user, never a consequence of a workspace role.** The workspace owner
+role stops opening the administrative trace. Customer API responses, customer downloads and the customer bundle are
+built without provider identities, model ids, usage, request ids, hashes, rule ids or traces, on the server; operator
+diagnostics are served separately and keep the full record.
+
+(e) **Existing records stay as they are.** Assessments, provider runs and their raw bytes, decisions and the 122
+stored report artifacts are neither rewritten nor deleted. Older artifacts name participants, so they are served
+through operator diagnostics; a customer download is a newly generated customer report of the persisted state.
+
+(f) **Member answers are context, never clinical documentation.** Routine encounter context (the date of service, the
+setting, new or established status) is answered with choices or a date selector and stored as member-provided context,
+attributed and audited, apart from the document. A clinical fact (an act, its status, an E/M level or time) is never
+supplied by a member answer: the choices are "Not documented" or "Cannot confirm", or the physician's own addendum.
+Genuinely conflicting documentation stays held. Checklist 4.6 (a reviewer override) stays an open owner decision; this
+directive is not read as choosing it.
+
+(g) **Mara is reassessed from its retained responses** (no new provider request), as a declared act after the install.
+The session answers none of its questions and approves none of its codes.
+
+(h) **Test approvals are agent-executed synthetic reviews**, labelled so wherever they appear, on a fresh synthetic
+document only.
+
+(i) **Disclosures.** CPT Studio serves no privacy or subprocessor disclosure today (no such text in its templates,
+static files or views). This change removes none and writes none; whether one is legally required is not decided here.
+
+(j) **Requests and money.** Provider-call concurrency stays one. Mara's reassessment sends nothing. One fresh synthetic
+document costs one Corti request and the participants' bounded exchanges (about US$0.3 to US$0.5 at the 2026-11-01
+rates), plus the install's access checks; the US$10 stop of 2026-11-01 stands.
+
+The working checklist is `CPT-CORE-UX-CHECKLIST.md` at the repository root.
