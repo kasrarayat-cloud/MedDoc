@@ -1679,3 +1679,70 @@ open question.
 
 The install's declaration draft is corrected before it is committed: Astra's and Fable's access check is one tool-loop
 run each, at most four exchanges, so the act sends three to nine requests, not "exactly three".
+
+## Owner directive, 2026-11-03 — finish round 6, check D10/D12's meaning, pursue the shared-reader repair, then install and walk
+
+Received by session cd048041 at about 01:40Z, verbatim:
+
+> Finish the currently declared round-6 review and repair any demonstrated defects. Keep the scope stable; initiate
+> further review only when a concrete finding justifies it.
+>
+> For D10/D12, verify that the displayed conclusion preserves the quotation's meaning, negation, procedure ownership and
+> time context. A quotation existing verbatim must not itself establish clinical support.
+>
+> Keep unresolved reviewer-confirmation functionality disabled until verified. Pursue the shared-reader repair for the
+> known false holds; do not claim those holds are resolved by changing report wording.
+>
+> Once the applicable release gates pass, continue the declared installation and focused authenticated live walk.
+> Demonstrate a clear synthetic case through actual Corti/Astra/Fable responses, reference retrieval, saved review,
+> reload and a downloaded reviewed report. Report legitimate holds separately from software failures.
+>
+> Keep the pypdf audit result explicit. Do not silently waive it.
+>
+> In the next report, consolidate the exact wording, recommended choice and affected stages for checklist 4.6, D3–D5 and
+> interpretation 68. Do not treat unresolved owner decisions as approved.
+>
+> Report actual requests, latency and usage. Completion requires the installed workflow—not test volume or another
+> written contract.
+
+### Session interpretation, 2026-11-03 (cd048041, on receipt) — recorded, not owner-ruled
+
+(a) **Round 6 runs as declared and is not widened.** Five lenses attack round 5's repairs
+(`0ca5e6623..ee570e4bc`), sandbox `.lens-harness-r6`, workflow `wf_0aecfe24-e67`, launched 01:19Z. Only reproduced
+findings are repaired. A further round runs only if a concrete finding justifies it, and its scope is that finding.
+
+(b) **The D10/D12 meaning check is a bounded verification the owner asked for, not a new review round.** It renders
+every surface that states a conclusion about a participant's quotation (the cards and their evidence, positions,
+alternatives, peer rows, the reports, the trace). It feeds them synthetic quotations that are verbatim in the document
+but negated, about another procedure in the same document, or about another time (history, a prior visit, a plan).
+For each surface it checks:
+- that the displayed conclusion keeps the quotation's meaning;
+- that nothing reads verbatim presence as clinical support.
+
+HARNESS.md I2 already makes readiness the local readers' alone. This check is about what the displays say. Defects it
+demonstrates are repaired under the same rule.
+
+(c) **Reviewer confirmation stays disabled** (D7, `STUDIO_OFFER_CONFIRMATIONS = False`). Nothing here changes that.
+
+(d) **The shared-reader repair for the three retained false holds is pursued as its own change.** The holds are h4-01
+99204, h4-03 43244 and h4-06 45385. The change goes on a branch from `main` after the harness merges, with its own
+refutation and an I1 declaration, since the readers are shared with the Corti-only path. No report wording is offered
+as resolving them. Checklist 4.6 stays NOT DONE and an open owner decision. This directive's instruction to pursue the
+reader repair is acted on as work. It is not recorded as the owner choosing option (ii) over option (i).
+
+(e) **The release gates, before the declared install:**
+- round 6 repaired;
+- the CI-like suite green;
+- I1's replay EQUAL and battery 0 on the final head;
+- the PR's CI, with the cpt-studio job's pypdf audit stated as red with its seven advisories (interpretation 68),
+  never waived;
+- the merge through `scripts/merge-pr.sh`;
+- the install declaration committed on `main` through its own PR before the act.
+
+Then the install phases through `scripts/run-ruled-mutation.sh`, and the focused authenticated walk on a clear
+synthetic case. The walk reports legitimate holds apart from software failures.
+
+(f) **The next report gives:**
+- the exact wording, a recommended choice and the affected stages of checklist 4.6, D3, D4, D5 and interpretation 68,
+  each as still open;
+- the access check's and the walk's actual requests, latency and usage, from the receipts and the recorded runs.
