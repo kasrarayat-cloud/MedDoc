@@ -742,10 +742,26 @@ function supportChecked(proposal) {
   return proposal?.support?.status !== 'not_applicable';
 }
 
+// The source passages CPT Studio selected are the coded act's own only where the engine matched the code to the act
+// (support.acts) or where the act is the service itself (reason 'service': a base or E/M code); a support served with
+// no acts list (the elsewhere path) is checked against the act's own passages too. Otherwise - no act read
+// ('own_passage': the status was read from the cited passage itself; 'profile_unknown') - they are the documented
+// service's own passages, which the provider's were checked against, so neither is said to show, or not to show, the
+// coded act (refutation round 6, R6-MEANING, ownership-5: a combined report's "Procedures: EGD and colonoscopy" was
+// listed under "Source passages that show the coded act" beside the cited "Biopsies were taken with cold forceps.",
+// said not to show it, the very passage the code's status was read from). One rule for the chips (evidenceChips) and
+// the source panel's highlights (documentLayout), which titled those passages "Evidence for <code>" (found at the
+// integration of R6-MEANING).
+function serviceOnlySupport(proposal) {
+  const acts = proposal?.support?.acts;
+  return supportChecked(proposal) && Array.isArray(acts) && !acts.length && proposal?.support?.reason !== 'service';
+}
+
 function documentLayout(doc) {
   const spans = [];
   const codes = new Map();
   const unchecked = new Set();
+  const services = new Set();
   for (const proposal of proposalsIn(doc.assessment, 'selected')) {
     (proposal.evidence || []).forEach((evidence, index) => {
       const key = `${proposal.id}:${index}`;
@@ -753,26 +769,30 @@ function documentLayout(doc) {
       codes.set(key, proposal.code);
     });
     // Source passages CPT Studio selected because the provider's passages do not show the coded act - or, for a support
-    // that was not checked, the documented service's passages, which are never marked as evidence for the code.
+    // that was not checked, the documented service's passages, which are never marked as evidence for the code; nor are
+    // the documented service's passages of a support that read no act (serviceOnlySupport).
     (proposal.support?.source || []).forEach((evidence, index) => {
       const key = `${proposal.id}:s${index}`;
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
       if (!supportChecked(proposal)) unchecked.add(key);
+      else if (serviceOnlySupport(proposal)) services.add(key);
     });
   }
   const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked };
+  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked, services };
 }
 
 function renderPieces(pieces, layout) {
   return pieces.map(piece => {
     if (!piece.keys) return escapeHtml(piece.text);
     const unchecked = layout.unchecked || new Set();
+    const services = layout.services || new Set();
     const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
-    const evidence = piece.keys.filter(key => !unchecked.has(key));
-    const service = piece.keys.filter(key => unchecked.has(key));
-    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    const evidence = piece.keys.filter(key => !unchecked.has(key) && !services.has(key));
+    const service = piece.keys.filter(key => services.has(key));
+    const notChecked = piece.keys.filter(key => unchecked.has(key));
+    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
     return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
@@ -886,16 +906,8 @@ function modifierNote(proposal) {
 function evidenceChips(proposal, layout) {
   // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
   const checked = supportChecked(proposal);
-  // The source passages CPT Studio selected are the coded act's own only where the engine matched the code to the act
-  // (support.acts) or where the act is the service itself (reason 'service': a base or E/M code); a support served with
-  // no acts list (the elsewhere path) is checked against the act's own passages too. Otherwise - no act read
-  // ('own_passage': the status was read from the cited passage itself; 'profile_unknown') - they are the documented
-  // service's own passages, which the provider's were checked against, so neither is said to show, or not to show, the
-  // coded act (refutation round 6, R6-MEANING, ownership-5: a combined report's "Procedures: EGD and colonoscopy" was
-  // listed under "Source passages that show the coded act" beside the cited "Biopsies were taken with cold forceps.",
-  // said not to show it, the very passage the code's status was read from).
-  const acts = proposal.support?.acts;
-  const serviceOnly = checked && Array.isArray(acts) && !acts.length && proposal.support?.reason !== 'service';
+  // Whose passages CPT Studio's source passages are: serviceOnlySupport (ownership-5).
+  const serviceOnly = serviceOnlySupport(proposal);
   const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
   const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;

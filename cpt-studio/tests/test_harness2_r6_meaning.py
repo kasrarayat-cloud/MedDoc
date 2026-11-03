@@ -20,6 +20,7 @@ configured are not changed (I1): tests/test_harness_engine_parity.py and CortiOn
 only; nothing is sent.
 """
 import json
+from html import unescape
 
 from django.test import SimpleTestCase, override_settings
 
@@ -749,3 +750,74 @@ class D14BlockerTests(MeaningCase):
                          [('45385', 'alternative', 'participant'), ('G0121', 'excluded', 'primary')])
         self.assert_blocker(encounter_id, 'No code is selected for approval: the provider proposed only codes that were '
                             'excluded or offered as alternatives', 'independent participant')
+
+
+# --- the integration of R6-MEANING (its NEEDS 2): the source panel's highlight title is ownership-5's label ------------
+
+def title_codes(title):
+    """A highlight's title as {what it says: the codes it says it of}: "Evidence for", "Passage of the documented service
+    for", and that clause "not checked against the coded act". The codes of a clause are listed in the order the API
+    serves the proposals, which is not fixed, so they are read as a set."""
+    said = {}
+    for clause in title.split('; '):
+        for prefix in ('Evidence for ', 'Passage of the documented service for '):
+            if clause.startswith(prefix):
+                codes, kind = clause[len(prefix):], prefix.strip()
+                if codes.endswith(', not checked against the coded act'):
+                    codes, kind = codes[:-len(', not checked against the coded act')], f'{kind} (not checked)'
+                said.setdefault(kind, set()).update(codes.split(', '))
+    return said
+
+
+def marks(detail):
+    """Each highlighted passage of the source panel as the page draws it: (its keys, its title, its text)."""
+    found = browser('[...page().matchAll(/class="evidence-mark" data-evidence="[^"]*" data-keys="([^"]*)" '
+                    'title="([^"]*)">([^<]*)<\\/button>/g)].map(m => [m[1], m[2], m[3]])', detail)
+    return [(keys.split(' '), unescape(title), unescape(text)) for keys, title, text in found]
+
+
+class SourceHighlightTitleTests(MeaningCase):
+    """ownership-5's chip label has a second reader: the source panel titles every highlighted passage, and gave the
+    documented service's passages of an own-passage support "Evidence for <code>" - the claim the chip no longer makes.
+    Each such passage is now titled as the chip labels it; the act's own passages, and the provider's cited passages,
+    keep "Evidence for"."""
+
+    card = EvidenceChipLabelTests.card
+
+    def titles(self, detail, item):
+        """The titles of the highlighted pieces of ``item``'s source passages (keys <id>:s<n>) and of its cited ones."""
+        source, cited = set(), set()
+        for keys, title, _ in marks(detail):
+            for key in keys:
+                if key.startswith(f'{item["id"]}:s'):
+                    source.add(title)
+                elif key.startswith(f'{item["id"]}:'):
+                    cited.add(title)
+        return source, cited
+
+    def test_e1_and_f7n_the_service_s_passages(self):
+        for text, corti, value in ((C6, [('45380', COL_BX), ('43251', 'A sessile polyp was removed with a hot snare.')],
+                                    '45380'), (F7N, [('43239', EGD7_BX), ('45378', COLON7N)], '43239')):
+            with self.subTest(value):
+                detail = self.corti_alone(text, corti)
+                item, _ = self.card(detail, value)
+                source, cited = self.titles(detail, item)
+                self.assertTrue(item['support']['source'])
+                self.assertTrue(source)
+                for title in source:
+                    said = title_codes(title)
+                    self.assertIn(value, said.get('Passage of the documented service for', set()), title)
+                    self.assertNotIn(value, said.get('Evidence for', set()), title)
+                self.assertTrue(cited)
+                for title in cited:
+                    self.assertIn(value, title_codes(title).get('Evidence for', set()), title)
+
+    def test_the_matched_act_s_passage_keeps_evidence_for(self):
+        detail = self.corti_alone(MATCHED, [('45380', 'Procedure: Colonoscopy')])
+        item, _ = self.card(detail, '45380')
+        source, _ = self.titles(detail, item)
+        self.assertTrue(source)
+        for title in source:
+            said = title_codes(title)
+            self.assertIn('45380', said.get('Evidence for', set()), title)
+            self.assertNotIn('45380', said.get('Passage of the documented service for', set()), title)
