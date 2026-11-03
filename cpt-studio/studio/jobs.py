@@ -1994,17 +1994,20 @@ RETRIEVAL_LOAD_FAILED_UNCHECKED = ("Reference validation failed: CPT Studio coul
 
 
 def _retrieval(result, service_date, reference, provider_codes):
-    """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that can be
-    decided on - each proposal that is not an alternative, selected or excluded - among the codes the proposal provider
-    selected (``provider_codes``: its first and its bounded second review's selections), from the checks' own lookup,
+    """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals a reviewer
+    can decide (review.decidable: selected, or excluded and reinstatable) among the codes the proposal provider selected
+    (``provider_codes``: its first and its bounded second review's selections), from the checks' own lookup,
     with the CMS passages that govern its facts, read here in the parent, which has the database. [] only when no such
     proposal has such a code. An alternative's code is never traced, whoever gave it: a participant's (refutation round
     7, d14-1: in this release it is never a proposal, D14), the provider's candidate, or a code its bounded second
     review selected that CPT Studio did not add (alt2; refutation round 8, retrieval-1 and retrieval-2). Tracing one
     beside the proposals' codes gave a proposal's code CMS endoscopy-family rules and passages that pair it with a code
     no proposal carries, and counted that code as checked against the CMS reference files, even where no proposal could
-    be decided on. The lookup is still prefetched for every selection, which the checks read (_second_review evaluates
-    the second review's). The traces are a record kept beside the engine's result, never part of what I1 pins
+    be decided on. Nor is a code excluded with no reinstatement - outside CPT-only results, or with no exact source
+    evidence - whose CMS checks never ran and which no reviewer can decide (refutation round 9, retrieval-1,
+    retrieval-2, page-1: it was traced, paired a READY 45378 with it in a CMS endoscopy-family rule, and was counted
+    "Done 1 code checked"). The lookup is still prefetched for every selection, which the checks read (_second_review
+    evaluates the second review's). The traces are a record kept beside the engine's result, never part of what I1 pins
     (HARNESS.md 9), so tracing only the decidable codes changes no result, with no participant configured or with one.
 
     A retrieval that fails never stops the assessment (I1, I10; refutation round 1, parity-1: a Corti code ending in a
@@ -2014,8 +2017,7 @@ def _retrieval(result, service_date, reference, provider_codes):
     CMS reference file applied to the service date - so that the codes' checks read the CMS facts - is the engine's own
     record of the lookup (``result.reference_sources``), read here in memory, never asked of the database again. The
     entry names the step that failed: loading the stored passages, or the retrieval (refutation round 4, truth-5)."""
-    codes = sorted({proposal.code for proposal in result.proposals if proposal.bucket != 'alternative'}
-                   & set(provider_codes))
+    codes = sorted({proposal.code for proposal in result.proposals if review.decidable(proposal)} & set(provider_codes))
     if not codes:
         return []
     step = RETRIEVAL_STEP_LOAD
@@ -2117,7 +2119,7 @@ def stage_assess(job):
         tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
         confirmed, seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
-    retrieval = _retrieval(result, service_date, reference, provider_codes)  # never an alternative's (r7, r8)
+    retrieval = _retrieval(result, service_date, reference, provider_codes)  # a decidable code's only (r7, r8, r9)
     records = {record['name']: record for _, record in read}
     if names and mode != AGAIN:  # HARNESS.md 12.3: assess #1 and #2 record every frozen phase-1 output they read
         frozen = _frozen(revision, run, records)

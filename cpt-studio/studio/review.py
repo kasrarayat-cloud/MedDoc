@@ -690,6 +690,15 @@ def _unreconciled_unknown(encounter):
     return encounter.provider_runs.filter(state=ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
 
 
+def decidable(proposal) -> bool:
+    """Whether a reviewer can decide ``proposal``, an engine ProposalAssessment or a stored Proposal (both carry its
+    bucket and reinstatable): selected, or excluded and reinstatable - _reviewable's rule before any decision. Never an
+    alternative, nor a code excluded with no reinstatement (outside CPT-only results, or with no exact source evidence),
+    which no action reaches (_actions) and whose CMS checks never ran. The assess stage traces only these codes and the
+    API reads only their traces (jobs._retrieval, serializers; refutation round 9, retrieval-1, retrieval-2, page-1)."""
+    return proposal.bucket == SELECTED or (proposal.bucket == EXCLUDED and bool(proposal.reinstatable))
+
+
 def _reviewable(proposal, decision):
     """Selected proposals need an approve or reject. A documentation check's exclusion (reinstatable) needs the
     reviewer to confirm it or to reinstate the code and decide it; a reinstated exclusion needs an approve or reject."""

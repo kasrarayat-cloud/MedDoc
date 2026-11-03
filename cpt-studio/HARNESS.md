@@ -17,9 +17,10 @@ adversarial pass are held to the INVARIANTS below; a change to one is a change t
 **After the three participants:**
 - ~~authoritative references are retrieved for every code any participant proposed;~~ (superseded, round 7, d14-1:
   ~~authoritative references are retrieved for the proposal provider's codes;~~ (superseded, round 8, retrieval-1 and
-  retrieval-2: authoritative references are retrieved for the codes of the proposals a reviewer can decide, selected or
-  excluded; no alternative's code is traced, whoever gave it) a participant's code is never a proposal in this release,
-  the session's D14, and is never traced);
+  retrieval-2: authoritative references are retrieved for the codes of the proposals a reviewer can decide, ~~selected
+  or excluded~~ (superseded, round 9, retrieval-1: selected, or excluded and reinstatable; a code excluded with no
+  reinstatement is no code a reviewer can decide); no alternative's code is traced, whoever gave it) a participant's
+  code is never a proposal in this release, the session's D14, and is never traced);
 - the proposals are validated against the documented services and the CMS rules;
 - disagreements are reconciled by source evidence and rules, never by counting votes.
 
@@ -175,13 +176,19 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   reading does not read it as performed.~~ (superseded, round 8, wording-1, wording-2 and wording-5: routing is
   another reader, which reads "declined" as negated where the inventory reads cancelled, and none of the families
   `other_gi` maps to.) The inventory records where it read each service mention, and how (`gi_services.build`'s
-  `located`, kept beside the inventory and never an input to it). The reason names a reading of the quoted passage only:
+  `located`, kept beside the inventory and never an input to it). Round 9 added each act mention, the act keeping only
+  its whole clause. The reason names a reading of the quoted words only, at every place they are found verbatim (round
+  9, wording-3: only the first had been read):
   - a mention of that family inside the quote, read as not done, where the inventory gives that family's service the
-    same status. It is named by the mention's own kind: "the upper endoscopy as cancelled" (round 6, negation-5).
-  - an act read as performed whose passage overlaps the quote: "the band ligation in the colonoscopy as performed".
+    same status. It is named by the mention's own kind: "the upper endoscopy as cancelled" (round 6, negation-5). A kind
+    with no service label is named by its act label: "the gastrostomy (PEG) placement as cancelled" (round 9,
+    wording-2).
+  - an act read as performed ~~whose passage overlaps the quote~~ (superseded, round 9, wording-1: its whole clause had
+    only to touch the quote's edge) whose own mention lies inside the quote. The act's service is named by its family's
+    own label (round 9, wording-2: never its first mention's kind): "the band ligation in the colonoscopy as performed".
   A reading of another passage is never attached to the quote (round 7, display-1). Otherwise the reason says the
   documented-service reading does not read the service as performed. That is then true: it reads no performed service
-  of that kind, and nothing in the quote as a performed act.
+  of that kind, and none of the quoted words as a performed act.
 - **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 
@@ -193,7 +200,10 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   with source key, release, effective dates, page or section, and sha256.
 - **Trace.** Each lookup and each passage is recorded as a retrieval trace on the assessment (`Assessment.retrieval`),
   ~~for the proposal provider's codes only~~ (superseded, round 8: for the codes of the proposals a reviewer can
-  decide, selected or excluded, never an alternative's) (round 7, d14-1: `jobs._retrieval` traced every prefetched code
+  decide, ~~selected or excluded~~ (superseded, round 9: selected, or excluded and reinstatable - `review.decidable`, the
+  reviewable rule; retrieval-1, retrieval-2 and page-1: a code excluded with no reinstatement, whose CMS checks never
+  ran, was traced, paired a READY 45378 with it in an endoscopy-family rule, and was counted as checked), never an
+  alternative's) (round 7, d14-1: `jobs._retrieval` traced every prefetched code
   a proposal row carried, so a participant's alternative was traced beside Corti's codes - its endoscopy-family rule
   and passages were listed under Corti's base code, which its own check said shared no endoscopic base with another
   selected code, and reference validation counted the alternative as a code checked against the CMS reference files,
@@ -202,7 +212,8 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   decided on). The lookup stays prefetched for every selection, which the engine's checks read. ~~with no participant
   configured the traced codes are exactly the prefetched ones (I1).~~ (superseded, round 8: the traces are a record
   beside the engine's result, outside what I1 pins.) The API reads only a decidable code's trace: reference validation
-  is never `done` with no code to decide on, and an alternative's card lists no retrieval (round 8, retrieval-3).
+  is never `done` with no code to decide on, and no card of a proposal a reviewer cannot decide lists retrieval (round
+  8, retrieval-3; round 9).
 - **A retrieval that fails** (refutation round 1, parity-1) never stops the assessment, which is recorded as the engine
   made it (I1, I10). Its retrieval is one entry `{'code': '', 'failed': True, 'notes': [...]}`
   (`jobs.retrieval_failure`) whose note, CPT Studio's own sentence, says reference validation failed; the exception's

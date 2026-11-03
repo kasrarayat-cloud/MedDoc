@@ -169,19 +169,21 @@ class SecondReviewRetrievalTests(r6m.MeaningCase):
 
     def test_retrieval_3_a_participant_s_copy_of_corti_s_code_excluded_for_evidence(self):
         """retrieval-3 (a): Corti's 45378 has no exact passage and is excluded; Astra's 45378 is its own alternative,
-        which carried the excluded code's 12 facts and passages beside its own "No CMS reference check ran"."""
+        which carried the excluded code's 12 facts and passages beside its own "No CMS reference check ran". Moved by
+        refutation round 9 (retrieval-1): a code excluded with no reinstatement is no code a reviewer can decide, so it
+        is not traced either, with Corti alone or with participants (its card kept 12 facts and passages)."""
         text = r6m.doc(r6m.COLON, r6m.SEEN)
         with r7.inexact(0, '45378'):
             encounter_id = self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45378', r6m.CECUM)]))
             detail = self.detail(encounter_id)
             alone = self.corti_alone(text, [('45378', r6m.CECUM)])
         rows = {kind(p): p for p in r6m.proposals(detail)}
-        self.assertEqual(sorted((key, p['bucket']) for key, p in rows.items()),
-                         [('altp', 'alternative'), ('exc', 'excluded')])
+        self.assertEqual(sorted((key, p['bucket'], p['reinstatable']) for key, p in rows.items()),
+                         [('altp', 'alternative', False), ('exc', 'excluded', False)])
         self.assertEqual(rows['altp']['retrieval'], [])
         (excluded,) = [p for p in r6m.proposals(alone) if kind(p) == 'exc']
-        self.assertEqual(rows['exc']['retrieval'], excluded['retrieval'])
-        self.assertTrue(excluded['retrieval'])
+        self.assertEqual((rows['exc']['retrieval'], excluded['retrieval']), ([], []))
+        self.assertEqual(traced(encounter_id), [])
 
 
 # --- wording-1, wording-2, wording-5: what a participant's quote of a service is said to be read as -----------------
@@ -313,9 +315,11 @@ class MissingServiceReadingTests(SimpleTestCase):
                 self.assertEqual(with_record, gi_services.build(text, service_date=he.DAY, routing=routing,
                                                                 context_facts=facts))
                 self.assertTrue(located)
-                for family, kind_, status, start, end in located:
+                # moved by refutation round 9 (wording-1): each entry names what it is, a service or an act mention
+                for what, family, kind_, status, start, end in located:
                     self.assertTrue(0 <= start < end <= len(text))
-                    self.assertIn(status, gi_services.SERVICE_STATUSES)
+                    self.assertIn((what, status in (gi_services.SERVICE_STATUSES if what == 'service'
+                                                    else gi_services.ACT_STATUSES)), (('service', True), ('act', True)))
 
 
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):
@@ -462,8 +466,10 @@ EM_NOTE = (hp.HEAD + 'Office visit (fictional)\nDate of service: 2026-10-14\nPla
            'Established patient seen today for follow-up of GERD.\nShe reports heartburn twice weekly on omeprazole.\n'
            + EM_TIME + '\nAssessment: GERD, partially controlled.\nPlan: increase omeprazole; return in 3 months.\n')
 NOT_THE_ACT = 'Passage the provider cited for {code}, which does not show the coded act'
-OVERLAPPING = ('Overlapping passages for {code}: evidence for {code}, and a passage the provider cited for {code} that '
-               'does not show the coded act')
+# moved by refutation round 9 (page-3): "Overlapping passages" was false of two separate passages another code's passage
+# joins into one highlight (it was "Overlapping passages for {code}: evidence for {code}, and ...")
+OVERLAPPING = ('Passages for {code} in this highlight: evidence for {code}, and a passage the provider cited for {code} '
+               'that does not show the coded act')
 
 
 def titles_of(detail, value):

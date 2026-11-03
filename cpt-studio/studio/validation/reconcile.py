@@ -66,6 +66,13 @@ def kind_label(kind: str) -> str:
     return SERVICE_LABELS.get(kind, kind.replace('_', ' '))
 
 
+def mention_label(kind: str) -> str:
+    """A service mention's kind as a sentence names it: its service label, else - a kind named as an act, such as a PEG
+    placement, which services files under the upper endoscopy - its act label (refutation round 9, wording-2: "the peg
+    as cancelled"). service_label is never changed by it: services.inventory names a service that way on every path."""
+    return SERVICE_LABELS.get(kind) or ACT_LABELS.get(kind) or kind.replace('_', ' ')
+
+
 def service_label(service: DocumentedService) -> str:
     return kind_label(service.kind)
 

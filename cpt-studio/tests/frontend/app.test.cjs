@@ -3180,7 +3180,8 @@ test('R7 parity-1: with no assessment of this revision the Final status row neve
 test('R8 page-1, page-2: a highlight holding both kinds of passage for one code is titled as overlapping passages', () => {
   const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
   const snare = 'The polyp was removed with a hot snare.';
-  const overlapping = code => `Overlapping passages for ${code}: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
+  // moved by refutation round 9 (page-3): never "Overlapping passages" (it was "Overlapping passages for <code>: ...")
+  const overlapping = code => `Passages for ${code} in this highlight: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
   const notTheAct = code => `Passage the provider cited for ${code}, which does not show the coded act`;
   const doc = (text, evidence, support, code = '45385') => {
     const at = quote => ({ start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, text: quote, exact: true });
@@ -3226,4 +3227,33 @@ test('R8 wording-3, page-3: the participants-only panel never says the provider 
   // controls: Corti alone - a refused response with no code listed, and a provider alternative - read as before
   assert.equal(app.emptySelectionCopy({ proposals: [], encounter_checks: [check('fail')], summary: { provider_status: 'succeeded' } }), refused);
   assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative', support: {} }], encounter_checks: [check('pass')], summary: { provider_status: 'succeeded' } }), 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
+});
+
+// refutation round 9
+// page-2: the round-8 title pins held highlights of one code only, so a rule written for those alone passed them.
+// page-3: "Overlapping passages for <code>" was said of two separate passages of one code that another code's passage
+// joins into one highlight; the highlight is said to hold both kinds, which is true of every shape. The pipeline's
+// inputs are pinned in tests/test_harness2_r9.py.
+
+test('R9 page-2, page-3: a highlight of two codes says which code\'s passages it holds, never that they overlap', () => {
+  const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
+  const snare = 'The polyp was removed with a hot snare.';
+  const biopsies = 'Biopsies of the rectum were taken with cold forceps.';
+  const line = `${seen} ${snare} ${biopsies}`;
+  const text = `Procedure: Colonoscopy\n${line}\n`;
+  const at = quote => ({ start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, text: quote, exact: true });
+  const support = (supporting, unrelated) => ({ status: 'pass', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting, unrelated, source: [] });
+  const doc = proposals => ({ revision: { text, pages: [] }, assessment: { proposals } });
+  const proposal = (id, code, evidence, supported) => ({ id, key: `sel:${id}`, bucket: 'selected', status: 'ready', code, evidence: evidence.map(at), support: supported });
+  const holding = code => `Passages for ${code} in this highlight: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
+  // page-2: 45385's passages overlap; 45380's passage joins the biopsy sentence on
+  const page2 = doc([proposal('p1', '45385', [seen, `${seen} ${snare}`], support([1], [0])), proposal('p2', '45380', [`${snare} ${biopsies}`], support([0], []))]);
+  assert.deepEqual(r7Titles(page2), [[line, `Evidence for 45380; ${holding('45385')}`]]);
+  // page-3: 45385's two passages are separate sentences; 45380's whole-line passage joins them
+  const page3 = doc([proposal('p1', '45385', [seen, snare], support([1], [0])), proposal('p2', '45380', [line], support([0], []))]);
+  assert.deepEqual(r7Titles(page3), [[line, `Evidence for 45380; ${holding('45385')}`]]);
+  for (const [, title] of [...r7Titles(page2), ...r7Titles(page3)]) {
+    assert.equal(/verlapping/.test(title), false, title);
+    assert.equal(/Evidence for [^;]*45385[^;]*; Passage the provider cited/.test(title), false, title);
+  }
 });

@@ -1448,10 +1448,12 @@ class RetrievalFailureTests(HarnessCase):
                          [('45378', 'selected', 'needs_clarification'), ('4538²', 'excluded', 'excluded')])
         self.assertEqual(assessment.sha256, ROUND_4_SUPERSCRIPT_SHA256)
         self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))
-        # retrieval ran for both codes; the superscript one is traced as given and meets no code-range rule
-        self.assertEqual([entry['code'] for entry in assessment.retrieval], ['45378', '4538²'])
-        self.assertEqual([entry.get('failed') for entry in assessment.retrieval], [None, None])
-        self.assertEqual(assessment.retrieval[1]['passages'], [])
+        # retrieval ran for the one code a reviewer can decide. Moved by refutation round 9 (retrieval-1; declared in
+        # HARNESS.md 12.17, the trace being a record outside what I1 pins - the two sha256 pins above are unchanged): the
+        # superscript code, excluded for scope with no reinstatement, is never traced, so it no longer reaches the
+        # retrieval round 1's parity-1 failed in (it was traced as given: ['45378', '4538²'])
+        self.assertEqual([entry['code'] for entry in assessment.retrieval], ['45378'])
+        self.assertEqual([entry.get('failed') for entry in assessment.retrieval], [None])
 
     def test_a_retrieval_that_raises_leaves_the_assessment_as_made_and_says_reference_validation_failed(self):
         with mock.patch('studio.jobs.reference_passages.retrieve', side_effect=RuntimeError('synthetic defect')), \

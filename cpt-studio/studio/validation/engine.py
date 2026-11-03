@@ -3551,16 +3551,17 @@ class _Harness:
         family, the first quote of its first. Coding completeness is incomplete beside each all the same (complete):
         the safety net stays.
 
-        The reason names what the documented-service reading itself reads in the quoted passage ('read_as', which the
-        participants.services check names too: _read_as), from where that reading read each service mention
-        (``located``), never from another reader's reading: a mention of a service of that kind inside the quote that
-        it reads as not done at this encounter (checks.NEGATIVE: negated, cancelled, planned or historical) with the
-        status its inventory gives that service, named by the mention's own kind - 'the upper endoscopy as negated'
-        (refutation round 6, R6-MEANING, negation-5) - and an act it reads as performed whose passage overlaps the quote
-        - 'the band ligation in the colonoscopy as performed'. A not-done reading of another passage is never attached to
-        the quote (refutation round 7, display-1). Where it reads neither, the reason says that the documented-service
-        reading does not read the service as performed, which is then true: it reads no performed service of that kind
-        (that is what makes the service missing), and nothing in the quote as a performed act."""
+        The reason names what the documented-service reading itself reads in the quoted words, at every place they are
+        found verbatim ('read_as', which the participants.services check names too: _read_as), from where that reading
+        read each mention (``located``), never from another reader's reading: a mention of a service of the quoted
+        kind inside the quote that it reads as not done at this encounter (checks.NEGATIVE: negated, cancelled,
+        planned or historical), with the status its inventory gives that family's service - 'the upper endoscopy as
+        negated' (refutation round 6, R6-MEANING, negation-5) - and an act it reads as performed whose own mention lies
+        inside the quote - 'the band ligation in the colonoscopy as performed'. A reading of another passage is never
+        attached to the quote (refutation round 7, display-1). Where it reads neither, the reason says that the
+        documented-service reading does not read the service as performed, which is then true: it reads no performed
+        service of that kind (that is what makes the service missing), and none of the quoted words as a performed
+        act. The entry's passage is the first place whose own reading is named, else the first place."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3577,14 +3578,15 @@ class _Harness:
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
-                    read_as = self._read_as(good[0], families, inventory)
+                    read_as = self._read_as(good, families, inventory)
+                    place = next((span for span in good if self._read_as((span,), families, inventory)), good[0])
                     reason = (f'{PARTICIPANT_LABELS[name]} reads {what} '
                               + (f'where the documented-service reading reads {read_as}' if read_as
                                  else 'that the documented-service reading does not read as performed'))
-                    quoted = f'{reason} ({reconcile.quote(good[0])})'
+                    quoted = f'{reason} ({reconcile.quote(place)})'
                     out.append({'participant': name, 'family': service.family, 'families': list(families),
-                                'label': label, 'status': service.status, 'read_as': read_as, 'quote': good[0].text,
-                                'start': good[0].start, 'end': good[0].end, 'page': good[0].page,
+                                'label': label, 'status': service.status, 'read_as': read_as, 'quote': place.text,
+                                'start': place.start, 'end': place.end, 'page': place.page,
                                 # review.coding_completeness drops every reason that holds "open question" (it
                                 # recounts the open questions): a quote that holds it is kept in the entry and the
                                 # check, never in the reason, so the reason cannot be dropped with the count
@@ -3593,35 +3595,51 @@ class _Harness:
             self._missing = out
         return self._missing
 
-    def _read_as(self, span, families, inventory) -> str:
-        """What the documented-service reading reads in ``span`` (half-open, the revision's text), for missing; '' when
-        it reads none of these there:
-        - each mention of ``families`` it read inside the span (``located``) as not done at this encounter
+    def _read_as(self, spans, families, inventory) -> str:
+        """What the documented-service reading reads in the quoted words, at each place ``spans`` (half-open, the
+        revision's text) gives, for missing; '' when it reads none of these there:
+        - each service mention of ``families`` it read inside a place (``located``) as not done at this encounter
           (checks.NEGATIVE), where its inventory gives that family's service that status, named by the mention's own
-          kind, each status once, in reading order: 'the upper endoscopy as cancelled'. Refutation round 8, wording-1:
-          round 7 named a reading only where routing read the same family with the same status in the quote, and
-          routing reads "declined" and "refused" as negated where this reading reads cancelled, "could not be performed"
-          as uncertain where it reads negated, and none of the families other_gi maps to, so the reading of the quoted
-          passage itself went unnamed. Wording-2: the inventory's upper-endoscopy service takes its kind from its first
-          mention, so with a PEG line first a quoted upper endoscopy had been named "the peg".
-        - each act its inventory reads as performed whose passage overlaps the span, as describe_act and the service it
-          belongs to word it: 'the band ligation in the colonoscopy as performed'. Refutation round 8, wording-5: a PEG
-          placement, a banding or a dilation that the inventory files under the endoscopy it reads, quoted as another GI
-          service, had been said not to be read as performed."""
+          kind (reconcile.mention_label), each status once, in reading order: 'the upper endoscopy as cancelled'.
+          Refutation round 8, wording-1: round 7 named a reading only where routing read the same family with the same
+          status in the quote, which routing never does for "declined", "could not be performed" or a family it does
+          not route. Wording-2: the inventory's upper-endoscopy service takes its kind from its first mention, so with
+          a PEG line first a quoted upper endoscopy had been named "the peg"; round 9, wording-2: a quoted PEG line's
+          own kind has no service label, and is named by its act label.
+        - each act its inventory reads as performed whose own mention lies inside a place, as describe_act words it,
+          in its service's family's own label: 'the band ligation in the colonoscopy as performed'. Refutation round 8,
+          wording-5: a PEG placement, a banding or a dilation that the inventory files under the endoscopy, quoted as
+          another GI service, had been said not to be read as performed. Round 9, wording-1: an act was named wherever
+          its whole clause overlapped the quote, so a quote that only touched the clause's edge ("... was attempted but
+          failed") was printed beside another act "as performed"; wording-2: the act's service had been named by its
+          first mention's kind ("in the peg"); wording-3: only the first place was read, so a quote found twice, read
+          as performed today at its second place, fell back to "does not read as performed"."""
         statuses = {(s.family, s.status) for s in inventory.services}
+
+        def inside(start: int, end: int) -> bool:
+            return any(span.start <= start and end <= span.end for span in spans)
+
         read: dict[str, list[str]] = {}
-        for family, kind, status, start, end in self.located:
-            if span.start <= start and end <= span.end and family in families and status in checks.NEGATIVE \
+        acts = []
+        for what, family, kind, status, start, end in self.located:
+            if not inside(start, end):
+                continue
+            if what == 'service' and family in families and status in checks.NEGATIVE \
                     and (family, status) in statuses:
-                states = read.setdefault(reconcile.kind_label(kind), [])
+                states = read.setdefault(reconcile.mention_label(kind), [])
                 if status not in states:
                     states.append(status)
+            elif what == 'act' and status == 'performed':
+                acts.append((family, kind, start, end))
         phrases = [f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items()]
         for documented in inventory.services:
+            service_name = reconcile.kind_label(gi_services.FAMILY_KINDS.get(documented.family, documented.kind))
             for act in documented.acts:
-                if act.status == 'performed' and any(e.start < span.end and span.start < e.end for e in act.evidence):
-                    phrase = (f'the {reconcile.describe_act(documented, act)} in the '
-                              f'{reconcile.service_label(documented)} as performed')
+                if act.status == 'performed' and any(
+                        family == documented.family and kind == act.kind
+                        and any(e.start <= start and end <= e.end for e in act.evidence)
+                        for family, kind, start, end in acts):
+                    phrase = f'the {reconcile.describe_act(documented, act)} in the {service_name} as performed'
                     if phrase not in phrases:
                         phrases.append(phrase)
         return ' and '.join(phrases)

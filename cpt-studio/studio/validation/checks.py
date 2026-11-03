@@ -2536,14 +2536,17 @@ PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
 # the provider only listed as a candidate, or that its bounded second review selected and CPT Studio did not add (alt2),
 # carries no decidable proposal, so merge lists the participant's code as an alternative of its own. The sentence now
 # names the two kinds of proposal merge records a participant's code on (``have``: a selection with an evaluation).
+# Refutation round 9 (wording-4): a selection in a provider response that was refused whole, never read, is no
+# selection merge sees, so the clause names a response CPT Studio used, and such a code is among the alternatives.
 PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's "
-                             'code that the proposal provider selected, in scope and with an exact passage, or that its '
-                             'bounded second review added as a proposal, is recorded on that proposal, which CPT '
-                             "Studio's own readers judge on the provider's passages alone; any other code a participant "
-                             "gives in a CPT or HCPCS code's shape, including one the provider only listed and one its "
-                             'second review listed without adding, is listed as an alternative and never added as a '
-                             "proposal, and one in neither shape is counted and never listed; and a participant's "
-                             'questions are notes that never block.')
+                             'code that the proposal provider selected, in scope and with an exact passage, in a response '
+                             'CPT Studio used, or that its bounded second review added as a proposal, is recorded on '
+                             "that proposal, which CPT Studio's own readers judge on the provider's passages alone; any "
+                             "other code a participant gives in a CPT or HCPCS code's shape, including one the provider "
+                             'only listed, one its second review listed without adding and one in a provider response '
+                             'CPT Studio did not use, is listed as an alternative and never added as a proposal, and one '
+                             "in neither shape is counted and never listed; and a participant's questions are notes that "
+                             'never block.')
 
 
 def participants_summary_check(sentences: Sequence[str]) -> Check:

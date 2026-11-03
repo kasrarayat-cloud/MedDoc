@@ -762,10 +762,11 @@ function serviceOnlySupport(proposal) {
 // show the coded act" (evidenceChips), and the source panel titles them so too, never "Evidence for <code>" (refutation
 // round 7, display-6: a Ready 45385 whose cited "A 9 mm pedunculated polyp in the sigmoid colon was seen." was titled
 // "Evidence for 45385" beside that chip). Where one highlight also carries a passage of the same code that shows the act
-// - a longer passage of the provider's that holds it, or a source passage CPT Studio selected at the same place - the
-// title says it holds overlapping passages of both kinds, never "Evidence for <code>" and that passage's own title side by
-// side as if of one passage (refutation round 8, page-1; renderPieces). A service-only support's unrelated passages are
-// only "cited by the provider".
+// - a longer passage of the provider's that holds it, a source passage CPT Studio selected at the same place, or a
+// separate passage that another code's passage joins into one highlight - the title says the highlight holds passages
+// of both kinds for that code, never "Evidence for <code>" and that passage's own title side by side as if of one
+// passage (refutation round 8, page-1; round 9, page-3: "Overlapping passages" was said of two separate sentences;
+// renderPieces). A service-only support's unrelated passages are only "cited by the provider".
 function passagesNotShowingTheAct(proposal) {
   const unrelated = proposal?.support?.unrelated;
   return new Set(supportChecked(proposal) && !serviceOnlySupport(proposal) && Array.isArray(unrelated) ? unrelated : []);
@@ -812,11 +813,11 @@ function renderPieces(pieces, layout) {
     const notTheAct = piece.keys.filter(key => cited.has(key));
     const service = piece.keys.filter(key => services.has(key));
     const notChecked = piece.keys.filter(key => unchecked.has(key));
-    // A code with both kinds of passage here is titled once, as overlapping passages of both kinds (page-1).
+    // A code with both kinds of passage in this highlight is titled once, as holding both (page-1, page-3).
     const both = codesIn(evidence).filter(code => codesIn(notTheAct).includes(code));
     const evidenceOnly = codesIn(evidence).filter(code => !both.includes(code));
     const notTheActOnly = codesIn(notTheAct).filter(code => !both.includes(code));
-    const title = [evidenceOnly.length ? `Evidence for ${evidenceOnly.join(', ')}` : '', notTheActOnly.length ? `Passage the provider cited for ${notTheActOnly.join(', ')}, which does not show the coded act` : '', ...both.map(code => `Overlapping passages for ${code}: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`), service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    const title = [evidenceOnly.length ? `Evidence for ${evidenceOnly.join(', ')}` : '', notTheActOnly.length ? `Passage the provider cited for ${notTheActOnly.join(', ')}, which does not show the coded act` : '', ...both.map(code => `Passages for ${code} in this highlight: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`), service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
     return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }

@@ -301,11 +301,11 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'corti_relation': review.corti_relation(proposal),
         'participant_positions': review.participant_positions(proposal, assessment.participants),
         'reference_check': review.reference_check(proposal),
-        # an alternative is never traced: none of a decidable proposal's trace of the same code is served on its card
-        # (refutation round 8, retrieval-3: a participant's copy of Corti's code excluded for evidence carried that
-        # code's 12 facts and passages beside its own "No CMS reference check ran for this code.")
-        'retrieval': ([] if proposal.bucket == models.Proposal.ALTERNATIVE
-                      else review.proposal_retrieval(proposal, assessment.retrieval)),
+        # only a proposal a reviewer can decide is traced (review.decidable): no other card is served another's trace
+        # of the same code (refutation round 8, retrieval-3: a participant's copy of Corti's code excluded for evidence
+        # carried that code's 12 facts and passages beside its own "No CMS reference check ran for this code.")
+        'retrieval': (review.proposal_retrieval(proposal, assessment.retrieval) if review.decidable(proposal)
+                      else []),
         # harness@2 (HARNESS.md 11.1, 11.3, 12.6), from the engine's support record: the phase in which each participant
         # first proposed the code (a code first proposed in peer review is never independent), and the reviewer
         # confirmations this proposal's checks read - a confirmed fact, never a decision
@@ -834,19 +834,19 @@ def _no_source(retrieval) -> str:
 def _reference_validation(assessment, active):
     """'waiting' while processing; 'failed' when the assessment's retrieval failed - any entry is a failed one
     (retrieval_failed) - with that entry's note as ``detail``: never 'not_run' or 'done' (refutation round 1,
-    parity-1); 'done' when retrieval ran for the assessment, its traces cover every code a proposal can be decided on
-    (selected or excluded), and an installed CMS reference file applied to its service date (_source_applied);
+    parity-1); 'done' when retrieval ran for the assessment, its traces cover every code a reviewer can decide
+    (review.decidable: selected, or excluded and reinstatable), and an installed CMS reference file applied to its
+    service date (_source_applied);
     'not_verified' when they cover every such code but no CMS reference file applied - no service date established, or
     none covering it - so no code was checked against one, with why as ``detail`` (refutation round 2, truth-3: that was
     'done', its codes counted as checked); 'not_run' when there is no assessment, it predates the harness, or no
     retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what
     an absent passages module records too). ``detail`` is '' in every other state. ``codes_checked`` counts the traced
     codes only when a CMS reference file applied (0 otherwise), and a failed entry is no code checked, so it is counted
-    in neither ``codes_checked`` nor ``passages``. Only a trace of a code a proposal can be decided on is read: an
-    alternative's code is never traced (jobs._retrieval), so a trace of one, which an assessment recorded before
-    refutation round 8 can hold (retrieval-2: a second review's code CPT Studio did not add, counted "Done 1 code
-    checked" where no proposal could be decided on), is never counted as a code checked or as a passage retrieved, and
-    with no code to decide on the state is never 'done'."""
+    in neither ``codes_checked`` nor ``passages``. Only the trace of a code a reviewer can decide is read, the one rule
+    jobs._retrieval traces by, so with no code to decide on the state is never 'done' (refutation round 8,
+    retrieval-2: a second review's code CPT Studio did not add read "Done 1 code checked"; round 9, retrieval-1 and
+    page-1: so did a code excluded with no reinstatement, whose own reference check says none ran)."""
     out = {'state': 'not_run', 'detail': '', 'codes_checked': 0, 'passages': 0, 'sources': [],
            'not_connected': list(review.NOT_CONNECTED)}
     if active:
@@ -855,7 +855,7 @@ def _reference_validation(assessment, active):
         return out
     entries = [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
     failures = [entry for entry in entries if retrieval_failed(entry)]
-    decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
+    decidable = {p.code for p in assessment.proposals.all() if review.decidable(p)}
     retrieval = [entry for entry in entries if not retrieval_failed(entry) and entry.get('code') in decidable]
     traced = {entry.get('code') for entry in retrieval}
     applied = _source_applied(assessment)

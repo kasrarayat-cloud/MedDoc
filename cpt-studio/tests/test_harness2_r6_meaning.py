@@ -861,14 +861,17 @@ class SourceHighlightTitleTests(MeaningCase):
 # scope or evidence carries no participant's code, and a code in no code's shape is counted, never listed; moved by round
 # 8 (wording-4): the first clause names merge's two kinds of proposal - a code the provider only listed, or that its
 # second review selected and CPT Studio did not add, carries none (it was "a participant's code that the proposal
-# provider also proposed, in scope and with an exact passage, is recorded on that proposal")
+# provider also proposed, in scope and with an exact passage, is recorded on that proposal"); moved by round 9
+# (wording-4): a selection in a response refused whole is no selection merge sees, so the clause names a response CPT
+# Studio used (it was "... selected, in scope and with an exact passage, or that its bounded second review added ...")
 NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
-                'proposal provider selected, in scope and with an exact passage, or that its bounded second review added '
-                "as a proposal, is recorded on that proposal, which CPT Studio's own readers judge on the provider's "
-                "passages alone; any other code a participant gives in a CPT or HCPCS code's shape, including one the "
-                'provider only listed and one its second review listed without adding, is listed as an alternative and '
-                "never added as a proposal, and one in neither shape is counted and never listed; and a participant's "
-                'questions are notes that never block.')
+                'proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its '
+                "bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers "
+                "judge on the provider's passages alone; any other code a participant gives in a CPT or HCPCS code's "
+                'shape, including one the provider only listed, one its second review listed without adding and one in a '
+                'provider response CPT Studio did not use, is listed as an alternative and never added as a proposal, and '
+                "one in neither shape is counted and never listed; and a participant's questions are notes that never "
+                'block.')
 SAME_RULES = "by the same rules as the proposal provider's"
 
 
