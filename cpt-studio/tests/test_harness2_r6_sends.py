@@ -12,12 +12,12 @@ names the vendor's own error code, else its error type, when the body's "error" 
 letters and underscores, and never the vendor's message, which OpenAI's answer to a wrong key fills with part of the
 key.
 
-The answers are OpenAI's and Anthropic's error shapes and a body with no error object, with synthetic values, as the
-round-6 lens and its verifier fed them (refute-harness-r6/parity, verify-harness-r6/v3-parity-rest). Each message
-carries a marker that must never be printed. Every sentence is written out as the command must print it. Offline:
-requests.Session is a fake session and the credentials are the suite's synthetic ones. The command runs through
-tests.test_participants_access_check's own helper, which asserts that nothing is written to the database, that no
-credential value is printed and that nothing printed says "retained".
+The answers are in the shapes the round-6 lens and its verifier fed the command (refute-harness-r6/parity,
+verify-harness-r6/v3-parity-rest) - OpenAI's and Anthropic's error objects, and a body with none - with synthetic
+values. Each message carries a marker that must never be printed. Every sentence is written out as the command must
+print it. Offline: requests.Session is a fake session and the credentials are the suite's synthetic ones. The command
+runs through tests.test_participants_access_check's own helper, which asserts that nothing is written to the database,
+that no credential value is printed and that nothing printed says "retained".
 """
 from __future__ import annotations
 
@@ -224,7 +224,7 @@ class VendorAnswerReceiptTests(OfflineDatabaseTestCase):
         self.assertEqual((receipt['outcome'], receipt['sent']), ('not_sent', False))
         self.assertEqual(receipt['error'], 'Corti authentication was refused (HTTP 401); no coding request was sent.')
 
-    def test_the_longest_sentence_is_repeated_whole_by_the_installer(self):
+    def test_the_longest_sentence_is_within_the_installer_s_bound(self):
         # The installer repeats a receipt's error only whole and only up to 300 characters (round 5, sends-1). The
         # longest this repair writes: Fable's label, at the last exchange a run may make (PARTICIPANT_MAX_EXCHANGES, 4),
         # a redirect, a 48-character error type.
