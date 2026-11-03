@@ -620,8 +620,10 @@ verified inside the image under that setting.
   container's own task count) is accounted per host uid. `preflight` and
   `verify` refuse if any task outside CPT Studio runs as 10150.
 - The installer reads a participant's credentials by key NAME only; whether a
-  key works is known only from the opt-in access check (one real, paid request
-  per live participant, Corti included), or from the first live send. A check
+  key works is known only from the opt-in access check (for each live
+  participant: one real, paid coding request for Corti, and for Astra and for
+  Fable one run of the tool loop, one real, paid request per exchange and at
+  most `PARTICIPANT_MAX_EXCHANGES` (4)), or from the first live send. A check
   that fails leaves the pair installed: retrying it means running `app` again,
   which parks and replaces the pair.
 - The scan that keeps credential values out of receipts and logs matches each

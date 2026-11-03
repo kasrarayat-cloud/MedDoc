@@ -342,7 +342,9 @@ def parse_args(argv=None):
     parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
     parser.add_argument('--access-check', action='store_true', default=None,
-                        help='after the app phase, send each live participant one real access-check request')
+                        help='after the app phase, check each live participant with real requests: one coding '
+                             'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
+                             'per exchange and at most PARTICIPANT_MAX_EXCHANGES (4)')
     parser.add_argument('--owner-username')
     parser.add_argument('--owner-display-name')
     parser.add_argument('--agent-username')

@@ -420,3 +420,37 @@ class TheInputsAreTheCommandsOwnTests(unittest.TestCase):
         self.assertEqual('OpenAI answered HTTP 401' + constants['NAMED'].format(field='code', value='invalid_api_key')
                          + constants['KEPT'], VENDOR_401_ERROR)
         self.assertNotIn('retained', (VENDOR_401_ERROR + json.dumps(VENDOR_401_RECEIPT)).lower())
+
+
+class TheAccessCheckRequestCountTests(unittest.TestCase):
+    """Refutation round 6, R6-SENDS (parity-2): how many real requests --access-check sends, where the operator reads it
+    before passing the flag - its help (ops/install.py parse_args) and INSTALL.md's Known limits - as install.py's own
+    comments and INSTALL.md's app phase already say: one coding request for Corti, and for Astra and for Fable one run
+    of the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES, read back here from
+    cptstudio/settings.py. Both said one request per participant; the passing Astra check above made two exchanges."""
+
+    def exchanges(self):
+        return module_constants(APP_ROOT / 'cptstudio' / 'settings.py',
+                                ('PARTICIPANT_MAX_EXCHANGES',))['PARTICIPANT_MAX_EXCHANGES']
+
+    def test_the_flag_s_help_gives_the_count(self):
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, {'COLUMNS': '400'}), mock.patch('sys.stdout', out), \
+                self.assertRaises(SystemExit):
+            install.parse_args(['--help'])
+        (line,) = [line for line in out.getvalue().splitlines() if line.strip().startswith('--access-check')]
+        self.assertEqual(' '.join(line.split()), (
+            '--access-check after the app phase, check each live participant with real requests: one coding request '
+            'for Corti, and for Astra and for Fable one run of the tool loop, one request per exchange and at most '
+            f'PARTICIPANT_MAX_EXCHANGES ({self.exchanges()})'))
+
+    def test_install_md_s_known_limits_give_the_count(self):
+        text = (APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8')
+        limits = text.split('\n## Known limits\n', 1)[1].split('\n## ', 1)[0]
+        (bullet,) = [' '.join(item.split()) for item in limits.split('\n- ') if 'access check' in item]
+        self.assertEqual(bullet, (
+            "The installer reads a participant's credentials by key NAME only; whether a key works is known only from "
+            'the opt-in access check (for each live participant: one real, paid coding request for Corti, and for '
+            'Astra and for Fable one run of the tool loop, one real, paid request per exchange and at most '
+            f'`PARTICIPANT_MAX_EXCHANGES` ({self.exchanges()})), or from the first live send. A check that fails '
+            'leaves the pair installed: retrying it means running `app` again, which parks and replaces the pair.'))
