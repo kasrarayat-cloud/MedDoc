@@ -76,7 +76,9 @@ class RowMixin:
 
 class AfterRejectionTests(RowMixin, ColonCase):
     """d8-1 (a), truth-4: R4-CONF's CodeQuestionTests input - TWO_EXTENTS, Corti's 45385 and 45380 and the 45378 Fable's
-    peer review adds, four questions each about a code - and then reject_selected."""
+    peer review adds, four questions each about a code - and then reject_selected. Moved by refutation round 6
+    (R6-MEANING, the session's D14): the 45378 Fable's peer review adds is its alternative, never a proposal, so its two
+    questions are not asked: two questions, each about one of Corti's codes."""
 
     def test_every_code_rejected_and_the_encounter_reviewed_the_row_says_only_what_is_open(self):
         self.assertIs(review.confirmations_offered(), False)
@@ -85,14 +87,13 @@ class AfterRejectionTests(RowMixin, ColonCase):
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment
         self.assertEqual((jobs.assessment_phase(final), review.is_final(final)), (2, True))
-        asked = [('proposal', 'base_included', '45378'), ('proposal', 'extent', '45378'),
-                 ('proposal', 'extent', '45380'), ('proposal', 'extent', '45385')]
+        asked = [('proposal', 'extent', '45380'), ('proposal', 'extent', '45385')]
         before = self.detail(encounter_id)
         self.assertEqual(self.open_questions(before), asked)
         # readiness says what holds the reviewed report: each code its open question holds
         self.assertEqual(self.still_needed(before),
                          'Draft — not reviewed. Still needed: 45385 has an open clarification; '
-                         '45380 has an open clarification; 45378 has an open clarification.')
+                         '45380 has an open clarification.')
         reject_selected(encounter, final, self.reviewer, self.ws)
         after = self.detail(encounter_id)
         # the state round 4's row was false in: every code rejected, only revoke offered, the encounter reviewed, and
@@ -100,15 +101,15 @@ class AfterRejectionTests(RowMixin, ColonCase):
         self.assertEqual(self.open_questions(after), asked)
         self.assertEqual(sorted((p['code'], p['decision_state'], p['allowed_actions'])
                                 for p in after['assessment']['proposals'] if p['bucket'] == 'selected'),
-                         [(code, 'rejected', ['revoke']) for code in ('45378', '45380', '45385')])
+                         [(code, 'rejected', ['revoke']) for code in ('45380', '45385')])
         self.assertEqual(after['readiness'], {'draft': True, 'reviewed': True, 'blockers': []})
         self.assertEqual(after['harness']['final']['state'], 'reviewed')
         self.assertEqual(self.still_needed(after), REVIEWED)
         # the finding: the row still said "4 questions about codes are open; each holds its code, which can still be
         # rejected."
-        self.assert_counts(after, ['4 open questions are each about a code.'])
+        self.assert_counts(after, ['2 open questions are each about a code.'])
         # and it says the same before any decision: it reads no decision, so it says nothing a decision changes
-        self.assert_counts(before, ['4 open questions are each about a code.'])
+        self.assert_counts(before, ['2 open questions are each about a code.'])
 
 
 class StoppedTests(RowMixin, ColonCase):

@@ -129,19 +129,35 @@ constrains its answer, and CPT Studio's own validation below is the only check o
 
 The engine (`studio/validation/engine.py`) gains one input, `participants: tuple[ParticipantInput, ...]`.
 
-- **I2: participants never decide a status.** Every code a participant proposes is evaluated by the same per-code path
-  as Corti's (`_select`: scope, exact evidence, family, status from the documented service and act, required facts,
-  E/M rules, PFS, MUE, endoscopic base).
+- **I2: participants never decide a status.** ~~Every code a participant proposes is evaluated by the same per-code
+  path as Corti's (`_select`: scope, exact evidence, family, status from the documented service and act, required facts,
+  E/M rules, PFS, MUE, endoscopic base).~~ (superseded, round 6: the session's D14 - a code only participants proposed
+  is no longer evaluated as a proposal at all, see the next bullets; a participant's entry on a code Corti selected is
+  recorded on Corti's proposal, which the per-code path evaluates from Corti's own passages.)
 - **Corti's codes that a participant also proposed.** A code Corti selected stays Corti's proposal, and the
   participant is recorded in `support['proposed_by']`.
-- **Codes no decidable proposal carries.** A participant code that no decidable proposal carries becomes a proposal of
-  its own, with origin `participant` and its proposers named, when it is in scope with exact (located) evidence.
-  Otherwise it is listed as informational, with why.
+- **Codes no decidable proposal carries.** ~~A participant code that no decidable proposal carries becomes a proposal
+  of its own, with origin `participant` and its proposers named, when it is in scope with exact (located) evidence.
+  Otherwise it is listed as informational, with why.~~ (superseded, round 6: the session's D14.) In this release such a
+  code is never a proposal: it is listed as informational (an alternative of origin `participant`), with why - its
+  scope reason, that none of its quotes was found verbatim, that none is an exact slice of the text, or else CPT
+  Studio's own reason, "a quote found verbatim in the document does not by itself show that the coded act was done at
+  this encounter, and in this release a participant's code is never added as a proposal of its own"
+  (`engine.PARTICIPANT_NOT_ADDED`, `_Harness.merge`). So no participant's code is selected or ready, counts as covering
+  a documented act, makes another code included or clears an unresolved item, and each of Corti's proposals keeps the
+  bucket, status and questions it has with no participant configured (beside the record of who proposed it and a
+  participant's participants.disagree warning, which decides nothing). The owner's D10/D12 meaning check (2026-11-03)
+  found such codes READY and approvable on their quotes alone where the quote states a failed, denied, earlier or
+  another procedure's act (negation-1..3, ownership-1, -4, time-1), and recasting Corti's base code as included in them
+  and clearing CPT Studio's own unresolved-act warning (time-2). Whether a participant's own code may again be a
+  proposal, and on what reader guarantee, is an owner question.
 - **I3: agreement never promotes** (worded, after refutation round 1's EV-5, as the engine guarantees it). A second or
   third participant proposing a code with the same located quotes changes nothing but the record of who proposed it.
-  Its own other located quotes join the code's evidence and are read with it by the same local readers, exactly as
-  Corti's passages would be (I2), so a passage that hedges holds the code; agreement itself never makes a code READY or
-  approvable. A peer review's `supports` changes nothing.
+  ~~Its own other located quotes join the code's evidence and are read with it by the same local readers, exactly as
+  Corti's passages would be (I2), so a passage that hedges holds the code;~~ (superseded, round 6: the session's D14 -
+  no reader reads a participant's quotes now: a code Corti selected is read from Corti's passages alone, and a code only
+  participants proposed is listed with their located quotes as its passages and read by no reader;) agreement itself
+  never makes a code READY or approvable. A peer review's `supports` changes nothing.
 - **Contradictions are kept, never voted on** (amended by 11.3: a contradiction offered with a located passage can also become a correction candidate). When a participant says a code should not be coded because its service
   was not performed at this encounter, and gives located evidence, that proposal gets a WARN check
   `participants.disagree` quoting it.
@@ -333,10 +349,11 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
-  the same located quotes changes nothing but the record of who proposed it; another proposer's other located quotes
+  the same located quotes changes nothing but the record of who proposed it; ~~another proposer's other located quotes
   join the code's evidence and are read with it by the same local readers, exactly as Corti's passages would be (I2),
-  so a hedging passage holds the code. A peer review's `supports` changes nothing. (Refutation round 1, EV-5: "never
-  changes its status" was wider than the engine's guarantee; a proposer's hedging passage holds a code.)
+  so a hedging passage holds the code~~ (superseded, round 6: the session's D14 - no reader reads a participant's
+  quotes now, section 5). A peer review's `supports` changes nothing. (Refutation round 1, EV-5: "never changes its
+  status" was wider than the engine's guarantee; a proposer's hedging passage holds a code.)
 - **I4 Proposed, reference-checked and approved are never conflated,** in the UI, the API or either report.
 - **I5 Independence.** No participant request contains another participant's output or any CPT Studio reading. Fable
   never sees Astra's or Corti's conclusions.
@@ -509,8 +526,12 @@ keeps:
 - its actual origin: the participant's name, and its phase (independent, or after peer review);
 - its own located evidence.
 
-**It is never relabelled as Corti's.** It is never approved automatically. The UI says plainly: "Proposed by Fable; Corti
-did not propose this code."
+**It is never relabelled as Corti's.** It is never approved automatically. ~~The UI says plainly: "Proposed by Fable;
+Corti did not propose this code."~~ (superseded, round 6: the session's D14 - such a code is never a proposal in this
+release: it is listed as informational, with its participant origin and its located quotes, and the page and both
+reports give CPT Studio's reason, "Proposed by Fable after peer review, but not added as a proposal: a quote found
+verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a
+participant's code is never added as a proposal of its own."; section 5.)
 
 ### 11.5 Verification and verdicts
 
@@ -866,7 +887,9 @@ negation, an attempt or a doubt).".
 - each clarification gains `candidates: [...]` (12.5) and `confirmation: {id, value, fact, located_by, confirmed_by,
   attestation, created_at, spans}|null`; `permissions.can_confirm` = can_review.
 - each proposal gains `phases: {name: independent|peer_review}` and `confirmed: [confirmation ids]` (from support);
-  its rationale and `proposed_by` keep 11.4's wording ("Proposed by Fable; Corti did not propose this code.").
+  its rationale and `proposed_by` keep 11.4's wording ("Proposed by Fable; Corti did not propose this code.")
+  (superseded, round 6: the session's D14 - no participant's code is a proposal, so none has that rationale; its
+  alternative's reason names who proposed it, section 5).
 - the trace gains, per run, `exchanges: [{turn, state, http_status, latency_ms, usage, request_sha256, response_sha256,
   provider_request_id, response_id, tool_calls: [{call_id, tool, arguments, refs, result_sha256, executed_at}]}]`, peer
   runs with their `review` (the `PeerReview` as JSON), and each assessment's `frozen` list.

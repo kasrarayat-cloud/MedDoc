@@ -148,7 +148,8 @@ class Harness2Case(TestCase):
     def document(self):
         """The revision as the extract stage records a paste; its context as the analyze stage records it (the
         document's facts, read by the context reader: two dates of service that disagree, so no service date); and
-        Corti's run as a replayed Corti answer that selects 45385 on the snare passage, read by Corti's own normalizer.
+        Corti's run as a replayed Corti answer that selects 45385 on the snare passage and 45380 on the rectum's biopsy
+        left in doubt, read by Corti's own normalizer.
         """
         self.revision = f.pasted_revision(self.encounter, self.reviewer, NOTE, extract=False)
         f.record(self.revision, ExtractionResult(status='ok', method='paste', text=NOTE, pages=PAGES))
@@ -157,7 +158,11 @@ class Harness2Case(TestCase):
         self.encounter.current_context = self.context
         self.encounter.save(update_fields=['current_context', 'updated_at'])
         request = ReplayProvider('/nonexistent/never-read').build_request(NOTE, jobs.context_service_date(self.context))
-        data = corti_like_response(NOTE, [('45385', SNARE)])
+        # moved by refutation round 6 (R6-MEANING, the session's D14): Corti selects 45380 too. A code only the
+        # participants propose is never a proposal now - it is their alternative (tests/test_harness2_r6_meaning.py) -
+        # so the 45380 hold the case's questions, candidates and fixtures read is Corti's proposal's, with both
+        # participants recorded on it; read on the same passage, its hold is the one the participants' code had (I2)
+        data = corti_like_response(NOTE, [('45385', SNARE), ('45380', RECTUM_QUOTE)])
         self.corti = models.ProviderRun.objects.create(
             encounter=self.encounter, revision=self.revision, provider=request.provider,
             adapter_version=request.adapter_version, request_sha256=request.canonical_sha256,
@@ -706,9 +711,11 @@ class DetailTests(Harness2Case):
         # moved by refutation round 3 (falsegreen-11): the engine records 45380's phases from the readings: this case's
         # Fable proposes it in its first reading (the website fixtures' Fable first proposes it in its peer review)
         self.assertEqual(biopsy['phases'], {'astra': 'independent', 'fable': 'independent'})
-        # 11.4: a participant's own proposal keeps its origin, never Corti's
-        self.assertEqual(biopsy['proposed_by'], ['astra', 'fable'])
-        self.assertIn('Corti did not propose this code.', biopsy['rationale'])
+        # moved by refutation round 6 (R6-MEANING, the session's D14): 11.4's participant's own proposal ("Corti did not
+        # propose this code.") is never a proposal now - tests/test_harness2_r6_meaning.py pins its alternative - and
+        # this case's 45380 is Corti's selection, with both participants recorded on it and its origin Corti's own
+        self.assertEqual((biopsy['proposed_by'], biopsy['support']['origin']), (['corti', 'astra', 'fable'], 'primary'))
+        self.assertNotIn('Corti did not propose this code.', biopsy['rationale'])
         # I4: proposed, reference-checked and approved stay apart; a candidate or a confirmation approves nothing
         self.assertEqual((biopsy['decision_state'], biopsy['decision']), ('undecided', None))
         # moved by refutation round 3 (falsegreen-11): no status candidate verifies on this note: 45380's extent is

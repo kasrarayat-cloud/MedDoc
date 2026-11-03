@@ -143,7 +143,9 @@ class ConfirmationEndToEndTests(ColonCase):
 # confirmed only on a sentence the readers read as the code's own act done; the specimen lines name neither act).
 # Corti selects nothing; Astra's first reading lists 45385 with a quote that is not in the text and 45380 with a located
 # one, and its peer review locates 45385: assess #1 selects 45380 alone (sel:0), and assess #2 selects 45385 ahead of it
-# (sel:0, then 45380 at sel:1).
+# (sel:0, then 45380 at sel:1). (Superseded, refutation round 6, R6-MEANING, the session's D14: a participant's code is
+# never selected now, so Corti selects both on their hedges, 45385 at sel:0 and 45380 at sel:1, in every assessment;
+# Astra's entries are recorded on them.)
 JAR_1 = 'Specimen log: jar 1, sigmoid polyp, hot snare.'
 DONE_SNARE = 'The sigmoid polyp was removed with a hot snare.'
 DOUBTS = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
@@ -162,7 +164,14 @@ ASTRA_DOUBTS = reading(codes=[('45385', 'hot snare polypectomy of the sigmoid po
 # run that path with its setting on and keep their assertions.
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationBindingTests(Harness2Case):
-    corti_codes = ()
+    """Moved by refutation round 6 (R6-MEANING, the session's D14): the participants' codes were these proposals, and
+    a context change made assess #1 select 45380 alone at the key 45385's confirmation named, which it never answered.
+    A participant's code is never selected now, and Corti's answer is the same in every assessment of the revision, so
+    no key moves here: the confirmation is read for its own proposal in each later assessment and never for the other
+    code. That a confirmation follows its proposal when a key does move - a new answer of the proposal provider - is
+    pinned by tests/test_harness_engine_confirmations.py BindingTests."""
+    corti_codes = (('45385', 'the sigmoid polyp was removed with a hot snare'),
+                   ('45380', 'biopsies of the ascending colon lesion were taken'))
 
     def setUp(self):
         super().setUp()
@@ -175,7 +184,7 @@ class ConfirmationBindingTests(Harness2Case):
     def rows(self, assessment):
         return [(p.key, p.code, p.status) for p in assessment.proposals.filter(bucket='selected').order_by('position')]
 
-    def test_a_confirmation_is_never_read_for_the_proposal_that_holds_its_key_after_a_context_change(self):
+    def test_a_confirmation_is_read_for_its_own_proposal_after_a_context_change_and_never_for_another(self):
         encounter_id = self.create(DOUBTS)
         drain()
         final = self.encounter(encounter_id).current_assessment
@@ -191,24 +200,24 @@ class ConfirmationBindingTests(Harness2Case):
         drain()
         again = self.encounter(encounter_id).current_assessment
         self.assertEqual(self.rows(again)[0], ('sel:0', '45385', 'ready'))
-        # a member's save of another billing context: assess #1 runs again (45380 alone, at sel:0), then phase 2
+        # a member's save of another billing context (no part of a colonoscopy code's identity): assess #1 runs again,
+        # then phase 2
         before = len(self.assessments(encounter_id))
         response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'professional'})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         first, last = self.assessments(encounter_id)[before:]
         self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(last)), (1, 2))
-        # assess #1 holds 45380 at the key the confirmation names: the confirmation, made for 45385, never answers it
-        biopsy = first.proposals.get(key='sel:0')
-        self.assertEqual((biopsy.code, biopsy.status), ('45380', 'needs_clarification'))
-        self.assertNotIn('confirmed', biopsy.support)
-        self.assertNotIn(DONE_SNARE, json.dumps([biopsy.rationale, biopsy.checks]))
-        ignored = next(c for c in first.encounter_checks if c['id'] == 'confirmations.ignored')
-        self.assertIn('proposal sel:0 (45385)', ignored['detail'])
-        # assess #2 selects 45385 again, read from the same passages: the confirmation answers it there
-        snare = last.proposals.get(key='sel:0')
-        self.assertEqual((snare.code, snare.status, snare.support['confirmed']), ('45385', 'ready', [str(confirmation.pk)]))
-        self.assertEqual(last.proposals.get(key='sel:1').status, 'needs_clarification')
+        for assessment in (first, last):
+            # 45385 keeps its key and is read from the same passages: the confirmation answers it; 45380 never
+            snare = assessment.proposals.get(key='sel:0')
+            self.assertEqual((snare.code, snare.status, snare.support['confirmed']),
+                             ('45385', 'ready', [str(confirmation.pk)]))
+            biopsy = assessment.proposals.get(key='sel:1')
+            self.assertEqual((biopsy.code, biopsy.status), ('45380', 'needs_clarification'))
+            self.assertNotIn('confirmed', biopsy.support)
+            self.assertNotIn(DONE_SNARE, json.dumps([biopsy.rationale, biopsy.checks]))
+            self.assertFalse(any(c['id'] == 'confirmations.ignored' for c in assessment.encounter_checks))
         # what binds it: the code and identity of its question's own proposal, which jobs.confirmed_findings reads
         (finding,) = jobs.confirmed_findings(last.revision)
         self.assertEqual((finding.proposal_key, finding.proposal_code, finding.proposal_identity),

@@ -1824,11 +1824,17 @@ test('a code card says who proposed it in which phase, 11.4\'s sentence, the con
   const final = fixture(H2_FINAL);
   const html = render(final);
   const biopsy = codeCardOf(html, '45380');
-  assert.ok(biopsy.includes('<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review); Corti did not propose this code.</li>'), biopsy);
+  // moved by refutation round 6 (R6-MEANING, the session's D14): a code only participants propose is never a proposal
+  // now, so the fixture's 45380 is Corti's selection with both participants recorded on it (it read "Astra (independent
+  // reading), Fable (after peer review); Corti did not propose this code."); 11.4's sentence is pinned below on a
+  // payload that serves it
+  assert.ok(biopsy.includes('<li><b>Proposed by:</b> Corti, Astra (independent reading), Fable (after peer review)</li>'), biopsy);
   assert.ok(codeCardOf(html, '45385').includes('<li><b>Proposed by:</b> Corti, Astra (independent reading), Fable (independent reading)</li>'));
   assert.equal(html.includes('<span class="small-badge">Proposed after peer review</span>'), false, 'no selected code was first proposed after peer review');
   // a code first proposed after peer review says so and is never called independent; 11.4 holds without phases too
-  const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
+  // (moved by refutation round 6, R6-MEANING, D14: the payload names the participants alone as its proposers, as the API
+  // served a participant's own proposal before D14, since the fixture's 45380 is Corti's now)
+  const peerOnly = { ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45380' ? { ...p, proposed_by: ['astra', 'fable'], phases: { astra: 'peer_review', fable: 'peer_review' } } : p)) } };
   const later = codeCardOf(render(peerOnly), '45380');
   assert.ok(later.includes('<span class="small-badge">Proposed after peer review</span>') && !later.includes('independent reading'));
   assert.ok(app.codeStatusLines({ proposed_by: ['fable'], corti_relation: 'none', reference_check: { state: 'passed' } }).includes('<li><b>Proposed by:</b> Fable; Corti did not propose this code.</li>'));
@@ -2248,8 +2254,12 @@ test('R2-TRUTH truth-13: a reuse\'s references are said to be the retained run\'
 
 test('R2-WORDING truth-6: a card says "Corti did not propose this code" only when Corti has no entry for it', () => {
   const final = fixture(H2_FINAL);
-  const biopsy = final.assessment.proposals.find(p => p.code === '45380');
-  assert.equal(biopsy.corti_relation, 'none', 'the serializer serves the relation');
+  const served = final.assessment.proposals.find(p => p.code === '45380');
+  // moved by refutation round 6 (R6-MEANING, the session's D14): the fixture's 45380 is Corti's selection now, so the
+  // serializer serves 'proposer' (it served 'none' for the participants' own proposal); the page's wording of each
+  // relation is pinned on that card with the participants alone as its proposers, as the API served it before D14
+  assert.equal(served.corti_relation, 'proposer', 'the serializer serves the relation');
+  const biopsy = { ...served, proposed_by: ['astra', 'fable'] };
   const line = relation => app.codeStatusLines({ ...biopsy, corti_relation: relation });
   const named = '<li><b>Proposed by:</b> Astra (independent reading), Fable (after peer review)';
   const said = {
@@ -2885,4 +2895,18 @@ test('R5 integration: an unknown unlisted count never reads as "proposed no code
   const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review, answers: [{ question_id: 'q-1', settled: false, value: '', evidence: [] }] } }] }], assessments: undefined }, trace.encounter.id);
   assert.ok(html.includes('<li><b>Question q-1</b><br>Its answer is read as not settling it.</li>'), html);
   assert.equal(html.includes('It says the document does not settle it.'), false);
+});
+
+// refutation round 6, R6-MEANING
+// The session's D14: a participant's code is never a proposal in this release; it is listed as an alternative. Where
+// every code listed is a participant's, the empty-selection panel never says the provider proposed them.
+test('R6-MEANING D14: the panel never says the provider proposed the participants\' alternatives', () => {
+  const theirs = { proposals: [{ bucket: 'alternative', support: { origin: 'participant' } }] };
+  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below is an independent participant\'s, offered only as an alternative.');
+  assert.equal(app.emptySelectionCopy(theirs).includes('The provider proposed'), false);
+  // controls: a provider alternative or exclusion beside them, or alone, reads as before
+  const said = 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative', support: {} }, ...theirs.proposals] }), said);
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'excluded', reinstatable: false, support: {} }, ...theirs.proposals] }), said);
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }), said);
 });

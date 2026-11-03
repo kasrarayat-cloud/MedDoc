@@ -201,6 +201,10 @@ class SpecimenLineTests(EvidenceCase):
     """(B) The suite's DOUBTS document: each act is left in doubt, and Astra's colonoscopy service quotes both specimen
     lines - which the readers read as no snare removal and no biopsy at all. Round 1's EV-1 wrong output (45385 ready on
     the cold-forceps jar) is unreachable through the endpoint."""
+    # moved by refutation round 6 (R6-MEANING, the session's D14): Corti selects the codes the held questions are
+    # about - the participants' own proposals of them were the holds, and a participant's code is never a proposal
+    # now; read on the same passages, the holds are the ones those proposals had (I2)
+    corti_codes = (('45385', SLICE_SN), ('45380', SLICE_BX))
 
     def setUp(self):
         super().setUp()
@@ -228,6 +232,10 @@ class SpecimenLineTests(EvidenceCase):
 class UnsettledTests(EvidenceCase):
     """(C) Nothing documents either act as done; Astra reads the colonoscopy as performed, quoting the cecum sentence.
     Neither 45380 nor 45385 becomes ready on it."""
+    # moved by refutation round 6 (R6-MEANING, the session's D14): Corti selects the codes the held questions are
+    # about - the participants' own proposals of them were the holds, and a participant's code is never a proposal
+    # now; read on the same passages, the holds are the ones those proposals had (I2)
+    corti_codes = (('45385', SLICE_SN), ('45380', SLICE_BX))
 
     def setUp(self):
         super().setUp()
@@ -260,6 +268,10 @@ def answers_with_slice(name, number=2):
 class HedgeSliceTests(EvidenceCase):
     """(D) Astra's peer review answers 45380's question 'performed', quoting a slice of the hedge sentence. The readers
     read the whole sentence, which leaves the biopsy in doubt; the page shows the slice with that whole sentence."""
+    # moved by refutation round 6 (R6-MEANING, the session's D14): Corti selects the codes the held questions are
+    # about - the participants' own proposals of them were the holds, and a participant's code is never a proposal
+    # now; read on the same passages, the holds are the ones those proposals had (I2)
+    corti_codes = (('45385', SLICE_SN), ('45380', SLICE_BX))
 
     def setUp(self):
         super().setUp()
@@ -631,58 +643,55 @@ def lead_run(text, corti, participants, **second):
 
 
 class CortiLeadTests(SimpleTestCase):
+    """How a participant's code that Corti did not select is worded beside Corti's own entry of the code. Moved by
+    refutation round 6 (R6-MEANING, the session's D14): it was a proposal of its own whose rationale's first sentence
+    (_Harness._lead) said how Corti stood to the code - listed as a candidate, selected with no exact passage, listed by
+    its second review, or "Corti did not propose this code." only where Corti had no entry. A participant's code is
+    never a proposal now: it is listed as an alternative, with CPT Studio's own reason, and its sentences say nothing of
+    Corti, so none can misstate Corti's entry; Corti's own entry is listed as before."""
     TEXT = COLON_HEAD + 'Procedure: Colonoscopy\n' + CECUM + '\n' + POLYP + '\n' + FLAT + '\n'
 
     def participant(self, value, quote):
         from tests.test_harness_engine import code as participant_code, read
         return [read('astra', [participant_code(self.TEXT, value, quote)])]
 
-    def lead(self, corti):
-        result = lead_run(self.TEXT, corti, self.participant('45380', BIOPSY_QUOTE))
-        added = next(p for p in result.proposals if p.code == '45380' and p.bucket != 'alternative'
-                     and p.support.get('origin') == 'participant')
-        return added.rationale, result
+    def listed(self, corti, **second):
+        result = lead_run(self.TEXT, corti, self.participant('45380', BIOPSY_QUOTE), **second)
+        (theirs,) = [p for p in result.proposals if p.code == '45380' and p.support.get('origin') == 'participant']
+        self.assertEqual((theirs.key, theirs.bucket, theirs.status), ('altp:0', 'alternative', 'informational'))
+        self.assertEqual(theirs.exclusion_reason, 'Proposed by Astra (independent participant), but not added as a '
+                                                  f'proposal: {engine.PARTICIPANT_NOT_ADDED}. Alternatives cannot be '
+                                                  'approved.')
+        for said in (theirs.exclusion_reason, theirs.rationale):
+            self.assertNotIn('Corti', said)
+        self.assertFalse(any(p.code == '45380' and p.bucket == 'selected' for p in result.proposals))
+        return result
 
     def test_a_code_corti_listed_only_as_a_candidate_is_said_so(self):
-        rationale, result = self.lead((('selected', '45385', SNARE_QUOTE), ('candidate', '45380', BIOPSY_QUOTE)))
-        # moved by refutation round 3, R3-TRUTH truth-5, to what _Harness._lead now says: it is told the codes Corti
-        # listed, never the role, so its sentence is true of a candidate and of an alternative
-        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti listed this code as a '
-                                             'candidate or an alternative, not selected; see Alternatives.'), rationale)
-        self.assertNotIn('Corti did not propose this code', rationale)
-        self.assertEqual([(p.key, p.code) for p in result.proposals if p.bucket == 'alternative'], [('alt:0', '45380')])
+        result = self.listed((('selected', '45385', SNARE_QUOTE), ('candidate', '45380', BIOPSY_QUOTE)))
+        self.assertEqual([(p.key, p.code) for p in result.proposals if p.bucket == 'alternative'],
+                         [('alt:0', '45380'), ('altp:0', '45380')])
 
     def test_a_code_corti_selected_with_no_exact_passage_is_said_so(self):
-        rationale, result = self.lead((('selected', '45385', SNARE_QUOTE),
-                                       ('selected', '45380', 'a passage the document does not hold')))
-        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti also selected this '
-                                             'code, with no exact passage; it is listed apart, excluded.'), rationale)
+        result = self.listed((('selected', '45385', SNARE_QUOTE),
+                              ('selected', '45380', 'a passage the document does not hold')))
+        self.assertEqual([(p.key, p.bucket, p.exclusion_reason) for p in result.proposals if p.key == 'exc:0'],
+                         [('exc:0', 'excluded', engine.NO_EVIDENCE)])
 
     def test_corti_did_not_propose_a_code_only_where_it_has_no_entry_for_it(self):
-        rationale, _ = self.lead((('selected', '45385', SNARE_QUOTE),))
-        self.assertTrue(rationale.startswith('Proposed by Astra (independent participant); Corti did not propose this '
-                                             'code.'), rationale)
+        result = self.listed((('selected', '45385', SNARE_QUOTE),))
+        self.assertEqual([p.code for p in result.proposals], ['45385', '45380'])
 
     def test_a_code_only_corti_s_second_review_listed_is_said_so(self):
         # Corti's bounded second review lists 45380 only as a candidate (alt2:0) and Astra proposes it from the biopsy
-        # passage: the lead says the second review listed it - the page's corti_relation 'second_review' - never that
-        # Corti did not propose it (R2-WORDING's NEEDS 2 on truth-7)
+        # passage: both are listed, each saying whose it is (R2-WORDING's NEEDS 2 on truth-7)
         text = self.TEXT
         second = NormalizedResponse('corti', 'test@1', (ProviderCode('candidate', 'cpt', '45380', '',
                                                                      (span(text, BIOPSY_QUOTE),)),))
         scope = {'start': text.index('Procedure: Colonoscopy'), 'end': len(text), 'items': ['the flat lesion biopsy']}
-        result = lead_run(text, (('selected', '45385', SNARE_QUOTE),), self.participant('45380', BIOPSY_QUOTE),
-                          second=second, second_scope=scope)
+        result = self.listed((('selected', '45385', SNARE_QUOTE),), second=second, second_scope=scope)
         self.assertEqual([(p.key, p.code) for p in result.proposals if p.support.get('origin') == 'second_review'],
                          [('alt2:0', '45380')])
-        added = next(p for p in result.proposals if p.code == '45380' and p.bucket != 'alternative'
-                     and p.support.get('origin') == 'participant')
-        # moved by refutation round 3, R3-TRUTH truth-5: the second review listed 45380 as a candidate, and its alt2 row
-        # says so; the lead says it was listed without being added, never "as an alternative"
-        self.assertTrue(added.rationale.startswith("Proposed by Astra (independent participant); Corti's second review "
-                                                   'also listed this code without adding it as a proposal; see '
-                                                   'Alternatives.'), added.rationale)
-        self.assertNotIn('Corti did not propose this code', added.rationale)
 
 
 # --- FG2-1: a confirmation's identity binds its context too (HARNESS.md 12.5, 12.7) ----------------------------------

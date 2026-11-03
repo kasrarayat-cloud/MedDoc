@@ -299,7 +299,11 @@ class ConfirmationEffectTests(ColonCase):
         checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
         self.assertEqual(checks['confirmations.ignored']['status'], 'warn')
         self.assertNotIn('confirmations.applied', checks)
-        self.assertEqual(final.proposals.get(key='sel:0').status, 'needs_clarification')
+        # moved by refutation round 6 (R6-MEANING, the session's D14): with the member's date in conflict Corti's new
+        # request is not sent, and the participants' codes are listed, none a proposal (their 45385 was sel:0, held),
+        # so nothing reads the confirmation and nothing is ready
+        self.assertEqual(sorted((p.code, p.bucket, p.status) for p in final.proposals.all()),
+                         [('45380', 'alternative', 'informational'), ('45385', 'alternative', 'informational')])
         self.assertFalse(models.Decision.objects.exists())  # I4: a confirmation is no decision
 
 

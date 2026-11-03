@@ -227,7 +227,9 @@ class EncounterQuestionTests(h2.Harness2Case):
 
 class CodeQuestionTests(ColonCase):
     """Two colonoscopy codes Corti selects on a note with no extent reached, and 45378 Fable's peer review adds: four
-    questions, each about a code; none about the encounter."""
+    questions, each about a code; none about the encounter. Moved by refutation round 6 (R6-MEANING, the session's D14):
+    the 45378 Fable's peer review adds is its alternative, never a proposal, so two questions, each about one of Corti's
+    codes."""
 
     def test_a_question_about_a_code_holds_that_code_which_can_still_be_rejected(self):
         encounter_id = self.create(TWO_EXTENTS)
@@ -238,7 +240,7 @@ class CodeQuestionTests(ColonCase):
         # moved by refutation round 5 (R5-ROW, the session's D11): the row says only how many questions are open and
         # what each is about; that each holds its code, which can still be rejected, is the readiness rules', pinned
         # below as before (and the row after the rejections in tests/test_harness2_r5_row.py)
-        self.assertEqual(clarification_row(page(detail)), (['4 open questions are each about a code.'], [NOTE]))
+        self.assertEqual(clarification_row(page(detail)), (['2 open questions are each about a code.'], [NOTE]))
         membership = membership_of(self.reviewer, self.ws)
         held = {q.proposal for q in final.clarifications.filter(state='open')}
         self.assertNotIn(None, held)

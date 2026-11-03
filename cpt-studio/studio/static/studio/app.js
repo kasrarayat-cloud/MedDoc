@@ -1456,6 +1456,11 @@ function emptySelectionCopy(assessment, doc) {
   if (waiting === 1) return and('One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
   if (waiting) return and(`${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`);
   if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
+  // A participant's code is never a proposal in this release (refutation round 6, R6-MEANING, the session's D14): it is
+  // listed as an alternative. Where every code listed is a participant's, the provider proposed none of them, so the
+  // panel never says it did.
+  const listed = [...excluded, ...proposalsIn(assessment, 'alternative')];
+  if (listed.length && listed.every(proposal => proposal?.support?.origin === 'participant')) return and('No code is selected for approval. Each code listed below is an independent participant\'s, offered only as an alternative.');
   if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
   // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
