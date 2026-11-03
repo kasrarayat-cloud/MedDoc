@@ -559,7 +559,11 @@ as it ends, so a run still sending, or swept to unknown, can list exchanges
 (sends-r2-4). Then `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references
 used checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
 `reading` it is instead). Each of its `additional_codes` carries `phase`, the phase its participant first proposed the
-code in (`independent` or `peer_review`), where the current assessment read that review, and `''` otherwise (truth-8). `reading.references_used` checks each reference against that run's own tool results; for a
+code in (`independent` or `peer_review`), where the current assessment read that review, and "`''` otherwise" (truth-8;
+superseded, round 6: where that review was read, an entry none of whose quotes was located is never `peer_review` -
+each entry is worded by its own quotes, account-4 - so `''` is said of such an entry where the participant first
+proposed the code in its peer review, as it is of a code no entry of either phase located, D12, and of a code in no
+code's shape, while `independent` stays on every entry of a code its frozen first reading proposed). `reading.references_used` checks each reference against that run's own tool results; for a
 run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
 carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,
@@ -777,7 +781,10 @@ review: its state and run, the frozen inputs it was shown, its answers to CPT St
 Studio's own words" (superseded, round 5, D10: each only by whether it is read as settling the question, "Astra says
 the document settles it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the
 codes it proposed
-"after peer review, never independent", each with
+"after peer review, never independent" (superseded, round 6, account-4: its additional codes, each worded by its phase
+and its own quotes - "proposed after peer review, never independent" of an entry with a located passage of a code
+the participant first proposed in its peer review, "repeated in peer review; first proposed in its independent
+reading" of every entry of a code its frozen first reading proposed, and otherwise "listed in peer review"), each with
 its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
 no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
 and a PARTICIPANT REFERENCES section (by

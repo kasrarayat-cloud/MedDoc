@@ -6,6 +6,10 @@ phrase is given two meanings.
   proposed 45385 2 times" beside one located entry - and said "again in peer review" of a peer-review entry none of
   whose quotes was found. It now counts only the entries that located a quote and names each other entry as a listing
   in its phase.
+- account-4: the reports and the trace gave every entry of an additional code the code's one phase, so an entry whose
+  quote was not found, beside another entry of the code that located one, was "proposed after peer review, never
+  independent" in the TXT (twice, the second with no passage), the CSV (two such rows) and the trace. Each entry is now
+  worded by its own quotes: one with none located is never 'peer_review'. codes_added stays per code.
 
 Each pipeline class runs the real pipeline (tests.test_harness2_pipeline: the real jobs, loop, tool executor, readers
 and engine, the vendors' HTTP replaced by scripted bytes in their own envelopes), then the real API, the owner's trace,
@@ -185,3 +189,78 @@ class PositionCountPipelineTests(Surfaces, R2WordingCase):
                          'Fable proposed 45378 after peer review, not in its independent reading, and also listed it '
                          f'in peer review with no quote found verbatim in the document ({STATED_TWO}), {ONE_PASSAGE}')
         self.assertIn('It listed 1 additional code (45378), 1 quoting the document verbatim', self.summary(detail))
+
+
+# --- account-4: each additional-code entry is worded by its own quotes ------------------------------------------------
+
+class EntryWordingTests(Surfaces, R2WordingCase):
+    """account-4: Fable's peer review gives 45378 twice, one entry quoting the landmarks line and one with a quote no
+    document holds, in either order. Per code, as before, Fable first proposed 45378 in its peer review (codes_added,
+    the engine's phases); per entry, the one whose quote was not found is listed in peer review, in the TXT, the CSV
+    and the trace. Both orders, so a rule that let the first or the last entry of a code decide fails (falsegreen-1's
+    pipeline half). The engine's own count of the same input is account-3's (PositionCountPipelineTests)."""
+
+    def surfaces(self, *codes):
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=list(codes)), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        block = _block(_section(self.download(encounter_id), reports.PEER_TITLE), '  - Fable · ')
+        start = next(index for index, line in enumerate(block) if line.startswith('    Additional code '))
+        added = [line for line in block[start:] if line.startswith(('    Additional code ', '      "'))]
+        rows = [(row['code'], row['status'], bool(row['evidence'])) for row in csv_rows(self.download(encounter_id,
+                                                                                                         fmt='csv'))
+                if row['item_list'] == 'peer_additional_code' and row['proposed_by'] == 'fable']
+        trace = self.trace(encounter_id)
+        runs = next(item for item in trace['participants'] if item['name'] == 'fable')['runs']
+        served = [[(c['code'], c['phase']) for c in run['review']['additional_codes']] for run in runs
+                  if run.get('review')]
+        head = '45378 · units 1 · confidence high · '
+        lines = [line for line in self.trace_lines(trace) if line.startswith(head)]
+        return detail, added, rows, served, lines
+
+    def assertPerCode(self, detail):
+        self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], ['45378'])
+        [proposal] = self.proposals(detail, '45378')
+        self.assertEqual((proposal['proposed_by'], proposal['phases']), (['fable'], {'fable': 'peer_review'}))
+        self.assertIn('Codes it proposed after peer review, never independent: 45378.', self.peer_row(detail, 'fable'))
+
+    def test_the_located_entry_first(self):
+        detail, added, rows, served, lines = self.surfaces(('45378', LAND), ('45378', UNLOCATED_DIAG))
+        self.assertPerCode(detail)
+        self.assertEqual(added, [f'    Additional code 45378 · units 1 — {PROPOSED_AFTER}',
+                                 f'      "{LAND}" [chars 354–418, page 1]',
+                                 f'    Additional code 45378 · units 1 — {LISTED_IN_PEER}'])
+        self.assertEqual(rows, [('45378', 'proposed_after_peer_review', True),
+                                ('45378', 'listed_in_peer_review', False)])
+        self.assertEqual(served, [[('45378', 'peer_review'), ('45378', '')]])
+        self.assertEqual(lines, [f'45378 · units 1 · confidence high · {PROPOSED_AFTER} {FOUND_LAND}',
+                                 f'45378 · units 1 · confidence high · {LISTED_IN_PEER} {UNVERIFIED_DIAG}'])
+
+    def test_the_located_entry_last(self):
+        detail, added, rows, served, lines = self.surfaces(('45378', UNLOCATED_DIAG), ('45378', LAND))
+        self.assertPerCode(detail)
+        self.assertEqual(added, [f'    Additional code 45378 · units 1 — {LISTED_IN_PEER}',
+                                 f'    Additional code 45378 · units 1 — {PROPOSED_AFTER}',
+                                 f'      "{LAND}" [chars 354–418, page 1]'])
+        self.assertEqual(rows, [('45378', 'listed_in_peer_review', False),
+                                ('45378', 'proposed_after_peer_review', True)])
+        self.assertEqual(served, [[('45378', ''), ('45378', 'peer_review')]])
+        self.assertEqual(lines, [f'45378 · units 1 · confidence high · {LISTED_IN_PEER} {UNVERIFIED_DIAG}',
+                                 f'45378 · units 1 · confidence high · {PROPOSED_AFTER} {FOUND_LAND}'])
+
+    def test_an_unlocated_entry_of_a_code_its_first_reading_proposed_is_still_repeated(self):
+        # control: 'independent' claims no proposal in peer review, so it stays, located or not (ColonCase: Astra's
+        # first reading locates 45380 on the biopsy line)
+        self.adapters['astra'].peer = [hp.answered('astra', hp.peer_answer(codes=[('45380', UNLOCATED_DIAG)]),
+                                                   number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        block = _block(_section(self.download(encounter_id), reports.PEER_TITLE), '  - Astra · ')
+        self.assertIn(f'    Additional code 45380 · units 1 — {REPEATED}', block)
+        rows = [(row['code'], row['status']) for row in csv_rows(self.download(encounter_id, fmt='csv'))
+                if row['item_list'] == 'peer_additional_code' and row['proposed_by'] == 'astra']
+        self.assertEqual(rows, [('45380', 'repeated_in_peer_review')])
+        runs = next(item for item in self.trace(encounter_id)['participants'] if item['name'] == 'astra')['runs']
+        self.assertEqual([[(c['code'], c['phase']) for c in run['review']['additional_codes']] for run in runs
+                          if run.get('review')], [[('45380', 'independent')]])
