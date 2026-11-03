@@ -2902,6 +2902,8 @@ test('R5 integration: an unknown unlisted count never reads as "proposed no code
 // falsegreen-4: a participant is named as having listed a code only as review.listed_by serves one - Astra or Fable -
 // never a name the page does not know, nor Corti (the R5-ACCOUNT comment claimed it; only a value that is not a list
 // was tried).
+// falsegreen-2: the " · proposed after peer review" mark on the title of an alternative a peer review proposed with a
+// located quote; round 5 moved its only pin to an alternative D12 made listed-only, so a page without the mark passed.
 
 const R6_WAITING = { state: 'waiting', badge: 'Waiting', lines: ['Known once the proposals are checked.'], notes: [] };
 const R6_NOT_ASKED = { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] };
@@ -2979,4 +2981,18 @@ test('R6-ROW falsegreen-4: a participant is named as having listed a code only a
   assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti'] }]), 'not recorded');
   assert.equal(proposed([{ ...row, proposed_by: ['astra'], listed_by: ['corti'] }]), 'Astra');
   assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti', 'fable'] }]), `no participant; listed by Fable ${R5_LISTED}`);
+});
+
+test('R6-ROW falsegreen-2: an alternative a peer review proposed with a located quote is titled "proposed after peer review"; one a first reading proposed, or one only listed, is not', () => {
+  const final = fixture(H2_FINAL);
+  const as45381 = fields => render({ ...final, assessment: { ...final.assessment, proposals: final.assessment.proposals.map(p => (p.code === '45381' && p.bucket === 'alternative' ? { ...p, ...fields } : p)) } });
+  const titles = html => [...html.matchAll(/<strong>(45381 · [^<]*)<\/strong>/g)].map(match => match[1]);
+  // the mutant that drops the mark (m_js_titlesuffix) drew '45381 · Colonoscopy' here and passed every test
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra'], listed_by: [], phases: { astra: 'peer_review' } })), ['45381 · Colonoscopy · proposed after peer review'], 'the alternative a peer review proposed');
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra', 'fable'], listed_by: [], phases: { astra: 'peer_review', fable: 'peer_review' } })), ['45381 · Colonoscopy · proposed after peer review']);
+  // a proposer that proposed it in its first reading, or Corti, makes it no code first proposed after peer review
+  assert.deepEqual(titles(as45381({ proposed_by: ['astra', 'fable'], listed_by: [], phases: { astra: 'peer_review', fable: 'independent' } })), ['45381 · Colonoscopy']);
+  assert.deepEqual(titles(as45381({ proposed_by: ['corti', 'astra'], listed_by: [], phases: { astra: 'peer_review' } })), ['45381 · Colonoscopy']);
+  // the fixture's own: listed by Astra's peer review with no quote found verbatim, so not proposed and not marked (D12)
+  assert.deepEqual(titles(render(final)), ['45381 · Colonoscopy']);
 });

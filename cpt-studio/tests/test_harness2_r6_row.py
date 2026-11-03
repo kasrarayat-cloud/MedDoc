@@ -1,5 +1,6 @@
-"""Refutation round 6, R6-ROW: the Clarification row while the current revision has no assessment (row-1). The row's
-branches are pinned in the `// refutation round 6, R6-ROW` block of tests/frontend/app.test.cjs.
+"""Refutation round 6, R6-ROW: the Clarification row while the current revision has no assessment (row-1), and the title
+mark of an alternative a peer review proposed with a located quote (falsegreen-2). falsegreen-4 (the page's listedText)
+is pinned in the `// refutation round 6, R6-ROW` block of tests/frontend/app.test.cjs, with the row's branches.
 
 row-1. An addendum makes its revision current, and the encounter's current assessment stays the earlier revision's until
 the new revision is first assessed: through its extract, analyze, predict, astra and fable stages, and for good after a
@@ -12,6 +13,12 @@ null while the current revision has no assessment, and the row reads null as it 
 once the proposals are checked." while a stage runs, otherwise "Not asked" / "No question was asked: the proposals were
 not checked for this revision." - never a count. The earlier revision's questions are drawn as before: recorded, not
 repaired here, and not pinned here.
+
+falsegreen-2. HARNESS.md 11.1: a code first proposed in phase 2 is marked proposed after peer review. Round 5 moved the
+only pin of the " · proposed after peer review" mark on an alternative's title to an alternative D12 made listed-only,
+so a page that drops the mark passed every test. Pinned here on the real pipeline: Fable's peer review adds the HCPCS
+code G0121 quoting the landmarks line, which the engine keeps as an alternative proposed by Fable in peer review with a
+located quote.
 
 Each pin runs the real pipeline and renders the served detail with the shipped app.js (node). The row-1 pins failed on
 the base de6418fc6 for the finding's reason. Synthetic data only; nothing is sent: Corti is the suite's in-process fake
@@ -27,9 +34,11 @@ from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
 from studio import jobs, models, review
+from tests import test_harness2_pipeline as hp
 from tests.support import factories as f
-from tests.test_harness2_pipeline import SNARE, TWO_EXTENTS, ColonCase
+from tests.test_harness2_pipeline import LAND, SNARE, TWO_EXTENTS, ColonCase
 from tests.test_harness2_r2_evidence import page
+from tests.test_harness2_r2_wording import R2WordingCase
 from tests.test_harness2_r4_conf import NOTE
 from tests.test_harness2_r5_row import CECUM, COLON, RowMixin
 from tests.test_pipeline_api import FakeProvider, drain
@@ -218,3 +227,23 @@ class CortiOnlyStaleRowTests(StaleMixin, TestCase):
                          ('stopped', None, 0))
         self.assertEqual(stopped['harness']['clarification'], {'open': None})
         self.assertEqual(clarification_row(page(stopped)), NOT_ASKED)
+
+
+class PeerProposedAlternativeTitleTests(R2WordingCase):
+    """falsegreen-2: ColonCase, except Fable's peer review adds G0121 quoting the landmarks line. G0121 is an HCPCS code
+    outside the GI profiles, so the engine keeps it as an alternative, proposed by Fable in peer review with a located
+    quote; its title on the page carries the mark (HARNESS.md 11.1)."""
+
+    def test_an_alternative_a_peer_review_proposed_is_titled_proposed_after_peer_review(self):
+        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=[('G0121', LAND)]), number=2)]
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        detail = self.detail(encounter_id)
+        (alternative,) = self.proposals(detail, 'G0121')
+        self.assertEqual((alternative['bucket'], alternative['proposed_by'], alternative['listed_by'],
+                          alternative['phases'], alternative['family_label']),
+                         ('alternative', ['fable'], [], {'fable': 'peer_review'}, 'Service outside the GI profiles'))
+        # the mutant m_js_titlesuffix (no mark on an alternative's title) drew '<strong>G0121 · Service outside the GI
+        # profiles</strong>' and passed every test
+        self.assertEqual(re.findall(r'<strong>(G0121 · [^<]*)</strong>', page(detail)),
+                         ['G0121 · Service outside the GI profiles · proposed after peer review'])
