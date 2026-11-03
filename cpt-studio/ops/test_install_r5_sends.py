@@ -24,12 +24,12 @@ long stderr, nothing at all) is written here. A guard reads the captured sentenc
 studio/jobs.py, so they stay the command's.
 
 Refutation round 6, R6-SENDS (parity-1): the vendor-refusal receipt's error is no longer the captured one, "OpenAI
-answered HTTP 401; the response body is retained." - the adapters' clause for the pipeline, which keeps the answer,
-and false in the access check, which keeps no copy of it - but what the command prints for the captured answer
-since round 6: the error code that answer gives, and that the access check keeps no copy of the response body. The
-guard reads that sentence back from the command's own constants, and tests.test_harness2_r6_sends has the command
-print it for the captured answer and compares it with VENDOR_401_ERROR here. Run from cpt-studio/ (no Docker, sudo,
-network or database):
+answered HTTP 401; the response body is retained." - whose last clause is the adapters' for the pipeline, which
+keeps the answer, and false in the access check, which keeps no copy of it - but what the command prints for the
+captured answer since round 6: the error code that answer gives, and that the access check keeps no copy of the
+response body. The guard reads that sentence back from the command's own constants, and
+tests.test_harness2_r6_sends has the command print it for the captured answer and compares it with VENDOR_401_ERROR
+here. Run from cpt-studio/ (no Docker, sudo, network or database):
 
     python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 """
@@ -424,10 +424,11 @@ class TheInputsAreTheCommandsOwnTests(unittest.TestCase):
 
 class TheAccessCheckRequestCountTests(unittest.TestCase):
     """Refutation round 6, R6-SENDS (parity-2): how many real requests --access-check sends, where the operator reads it
-    before passing the flag - its help (ops/install.py parse_args) and INSTALL.md's Known limits - as install.py's own
-    comments and INSTALL.md's app phase already say: one coding request for Corti, and for Astra and for Fable one run
-    of the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES, read back here from
-    cptstudio/settings.py. Both said one request per participant; the passing Astra check above made two exchanges."""
+    before passing the flag - its help (ops/install.py parse_args) and INSTALL.md's Known limits - with the count
+    install.py's own comments and INSTALL.md's app phase already give: for Corti one request, its coding request, and
+    for Astra and for Fable one run of the pipeline's tool loop, one request per exchange and at most
+    PARTICIPANT_MAX_EXCHANGES, read back here from cptstudio/settings.py. Both said one request per participant; the
+    passing Astra check above made two exchanges."""
 
     def exchanges(self):
         return module_constants(APP_ROOT / 'cptstudio' / 'settings.py',
