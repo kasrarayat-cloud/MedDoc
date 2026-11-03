@@ -1,0 +1,60 @@
+{
+  "source": {
+    "key": "cms-claims-manual-100-04-ch12",
+    "kind": "cms-claims-manual",
+    "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+    "title": "Medicare Claims Processing Manual (Pub. 100-04), Chapter 12: Physicians/Nonphysician Practitioners",
+    "release": "Rev. 13753; Issued: 05-07-26",
+    "url": "https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/clm104c12.pdf",
+    "sha256": "71689eed983a6ef4a5a5d9313655ea732ff0329adf03b85183e9755f025e74a8",
+    "retrieved_at": "2026-11-01T21:30:00Z",
+    "effective_start": "2026-05-07",
+    "effective_end": "2026-12-31",
+    "license_note": "The file carries no copyright or licence notice. Verbatim CMS text; passages that quote a CPT code description are not imported.",
+    "scope_note": "Section 40.6 \"Claims for Multiple Surgeries\", subsection C, items 13 and 14 (multiple endoscopies); the section is marked \"(Rev. 1, 10-01-03)\". Item 13 is three passages (the rule, its example and its note); its fee schedule illustration is not imported. The window starts on the chapter's issue date; its end is CPT Studio's, not the manual's. Pages are the PDF's page numbers."
+  },
+  "passages": [
+    {
+      "passage_key": "item-13",
+      "section": "Chapter 12, §40.6.C (A/B MAC (B) Claims Processing System Requirements), item 13",
+      "page": "98",
+      "topic": "claims.multiple_endoscopy",
+      "topic_value": "13",
+      "text": "13. If Field 21 contains an indicator of “3,” and multiple endoscopies are billed, the special rules for multiple endoscopic procedures apply. Pay the full value of the highest valued endoscopy, plus the difference between the next highest and the base endoscopy. Access Field 31A of the MFSDB to determine the base endoscopy."
+    },
+    {
+      "passage_key": "item-13-example",
+      "section": "Chapter 12, §40.6.C (A/B MAC (B) Claims Processing System Requirements), item 13, example",
+      "page": "98",
+      "topic": "claims.multiple_endoscopy",
+      "topic_value": "13",
+      "text": "EXAMPLE In the course of performing a fiber optic colonoscopy (CPT code 45378), a physician performs a biopsy on a lesion (code 45380) and removes a polyp (code 45385) from a different part of the colon. The physician bills for codes 45380 and 45385. The value of codes 45380 and 45385 have the value of the diagnostic colonoscopy (45378) built in. Rather than paying 100 percent for the highest valued procedure (45385) and 50 percent for the next (45380), pay the full value of the higher valued endoscopy (45385), plus the difference between the next highest endoscopy (45380) and the base endoscopy (45378)."
+    },
+    {
+      "passage_key": "item-13-note",
+      "section": "Chapter 12, §40.6.C (A/B MAC (B) Claims Processing System Requirements), item 13, note",
+      "page": "98",
+      "topic": "claims.multiple_endoscopy",
+      "topic_value": "13",
+      "text": "NOTE: If an endoscopic procedure with an indicator of “3” is billed with the “-51” modifier with other procedures that are not endoscopies (procedures with an indicator of “1” in Field 21), the standard multiple surgery rules apply. See §§40.6.C.6-8 above for required actions."
+    },
+    {
+      "passage_key": "item-14",
+      "section": "Chapter 12, §40.6.C (A/B MAC (B) Claims Processing System Requirements), item 14",
+      "page": "98-99",
+      "topic": "claims.multiple_endoscopy",
+      "topic_value": "14",
+      "text": "14. Apply the following rules where endoscopies are performed on the same day as unrelated endoscopies or other surgical procedures: • Two unrelated endoscopies (e.g., 46606 and 43217): Apply the usual multiple surgery rules; • Two sets of unrelated endoscopies (e.g., 43202 and 43217; 46606 and 46608): Apply the special endoscopy rules to each series and then apply the multiple surgery rules. Consider the total payment for each set of endoscopies as one service; • Two related endoscopies and a third, unrelated procedure: Apply the special endoscopic rules to the related endoscopies, and, then apply the multiple surgery rules. Consider the total payment for the related endoscopies as one service and the unrelated endoscopy as another service."
+    }
+  ],
+  "excluded": [
+    {
+      "topic": "claims.multiple_endoscopy",
+      "topic_value": "13",
+      "section": "Chapter 12, §40.6.C (A/B MAC (B) Claims Processing System Requirements), item 13, fee schedule illustration",
+      "page": "98",
+      "anchor": "A/B MACs (B) assume the following fee schedule amounts for these codes:",
+      "reason": "It follows code 45385 with an opening parenthesis (a dollar amount, not a description); the import refuses that pattern in any passage, so that no code-and-parenthesis descriptor form is ever stored."
+    }
+  ]
+}

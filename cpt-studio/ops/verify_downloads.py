@@ -48,6 +48,17 @@ And only where the encounter JSON records it: a bounded second review (its
 Origin lines, alternatives and usage entry), and a member date conflict's hold
 (PROVIDER USAGE lists it as recorded with nothing sent, no usage and no hashes,
 beside every other persisted run with its state, usage and hashes).
+
+harness@2 (cpt-studio/HARNESS.md 12.6), only where a file or the encounter
+JSON carries it, so every other report is read exactly as before:
+  TXT      every passage printed in CONFIRMED FINDINGS and PEER REVIEW quotes
+           the revision text exactly at its offsets; CONFIRMED FINDINGS lists
+           exactly the persisted confirmations of the revision (by id)
+  CSV      the rows that are not proposals (confirmed_finding, peer_answer,
+           peer_position, peer_additional_code, participant_reference) are
+           never read as items; every passage in their evidence quotes the
+           revision text exactly; the confirmed_finding rows name exactly the
+           persisted confirmations
 """
 from __future__ import annotations
 
@@ -114,6 +125,8 @@ FORMULA_START = ('=', '+', '-', '@', '\t', '\r')
 FORMULA_START_EXTRA = ('\n', '＝', '＋', '－', '＠')  # LF and fullwidth forms: warned, not required
 ITEM_LISTS = ('approved', 'rejected', 'undecided', 'excluded', 'alternative')
 ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')  # rows that are not proposals (@4)
+# harness@2's rows that are not proposals (reports.HARNESS2_LISTS): never items, read only by _csv_harness2
+HARNESS2_LISTS = ('confirmed_finding', 'peer_answer', 'peer_position', 'peer_additional_code', 'participant_reference')
 FORMAT_4 = 'cpt-studio-report@4'
 SELECTED_LISTS = ('approved', 'rejected', 'undecided')
 COLUMN_CANDIDATES = {
@@ -136,6 +149,7 @@ COLUMN_CANDIDATES = {
     'exclusion_reason': ('exclusion_reason',),
     'source_passages': ('source_passages',),
     'proposal_origin': ('proposal_origin',),
+    'checks': ('checks',),  # harness@2: a confirmed_finding row's ids
 }
 
 
@@ -382,6 +396,7 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
         out.extend(_txt_documented(doc, name, text, sections, api, revision_text))
         out.extend(_txt_second_review(doc, name, sections, api))
         out.extend(_txt_member_date_hold(doc, name, sections, api))
+    out.extend(_txt_harness2(doc, name, sections, api, revision_text))
     return out
 
 
@@ -433,7 +448,11 @@ def _txt_second_review(doc, name, sections, api) -> list[Result]:
     out.append(Result(doc, name, 'txt.second_review.origin', 'pass' if marked == want else 'fail',
                       f'{len(marked)} numbered item(s) say they came from the second review, as persisted'
                       if marked == want else f'Origin line on {sorted(marked)}; the second review added {sorted(want)}'))
-    # 2. every alternative worded by its origin
+    # 2. every alternative of the provider's worded by its origin. A harness participant's alternative (origin
+    # 'participant') is worded as its participant's ('proposed by ...' or 'listed by ...'), never as the provider's or
+    # the second review's, so it is not counted here - and a participant alternative worded as either would add a line
+    # nothing expects, which fails (walk-tool repair W1: it was expected as a 'provider alternative' and failed a
+    # right report)
     heading = next((h for h in body if h.startswith('ALTERNATIVES')), None)
     seen = Counter()
     for line in body.get(heading, []) if heading else []:
@@ -441,7 +460,8 @@ def _txt_second_review(doc, name, sections, api) -> list[Result]:
         if match:
             seen[(match.group('code'), match.group('origin'))] += 1
     expected = Counter((str(p.get('code')), 'second-review alternative' if proposal_origin(p) == 'second_review'
-                        else 'provider alternative') for p in proposals if p.get('bucket') == 'alternative')
+                        else 'provider alternative') for p in proposals
+                       if p.get('bucket') == 'alternative' and proposal_origin(p) != 'participant')
     out.append(Result(doc, name, 'txt.second_review.alternatives', 'pass' if seen == expected else 'fail',
                       f'{sum(seen.values())} alternative(s), each worded by its origin' if seen == expected else
                       f'listed {sorted(seen.items())}; persisted {sorted(expected.items())}'))
@@ -568,6 +588,73 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
                       f'source passages that do not quote the revision text at their offsets: {wrong}' if wrong
                       else f'{len(entries)} source passage(s) quote the revision text exactly at their offsets'))
     return out
+
+
+# --- harness@2 (cpt-studio/HARNESS.md 12.6) -------------------------------------------------------------------------
+#
+# Checked only where the file carries the sections or rows, or the encounter JSON a confirmation, so every other report
+# is read exactly as before. The renderer prints a confirmed finding's passage as '    Passage: "..." [chars a–b, page
+# n]' and a peer answer's, position's or additional code's as '      "..." [chars a–b, page n]', each continuing at
+# CONTINUATION depth; and a confirmation's id on its '    Confirmation: <id> · question <id>' line (the CSV: its checks
+# cell 'confirmation=<id>;...').
+
+CONFIRMED_HEADING, PEER_HEADING = 'CONFIRMED FINDINGS', 'PEER REVIEW'
+HARNESS2_OPENERS = {CONFIRMED_HEADING: ('    Passage: "', '    Passage: '), PEER_HEADING: ('      "', '      ')}
+CONFIRMATION_LINE = re.compile(r'^    Confirmation: (?P<id>[0-9a-f-]{36}) · question ')
+CONFIRMATION_CELL = re.compile(r'(?:^|;)confirmation=(?P<id>[0-9a-f-]{36})(?:;|$)')
+
+
+def _api_confirmations(api) -> set:
+    return {str(item.get('id')) for item in (api or {}).get('confirmations') or [] if isinstance(item, dict)}
+
+
+def _txt_harness2(doc, name, sections, api, revision_text) -> list[Result]:
+    body = {heading: lines for heading, lines in sections}
+    persisted = _api_confirmations(api)
+    out = []
+    if CONFIRMED_HEADING in body or PEER_HEADING in body:
+        entries, unclosed = [], 0
+        for heading, (opener, prefix) in HARNESS2_OPENERS.items():
+            found, missing_close = scan_entries(body.get(heading, []), opener, prefix)
+            entries += found
+            unclosed += missing_close
+        wrong = [f'{start}-{end}' for entry, start, end in entries if not quotes_exactly(entry, start, end,
+                                                                                         revision_text)]
+        wrong += ['a passage line with no closing citation'] * unclosed
+        out.append(Result(doc, name, 'txt.harness2_passages', 'fail' if wrong else 'pass',
+                          f'passages that do not quote the revision text at their offsets: {wrong}' if wrong
+                          else f'{len(entries)} passage(s) quote the revision text exactly at their offsets'))
+    if CONFIRMED_HEADING in body or persisted:
+        listed = {m.group('id') for line in body.get(CONFIRMED_HEADING, []) for m in [CONFIRMATION_LINE.match(line)]
+                  if m}
+        ok = CONFIRMED_HEADING in body and listed == persisted
+        out.append(Result(doc, name, 'txt.confirmed_findings', 'pass' if ok else 'fail',
+                          f'{len(listed)} confirmation(s) listed, as persisted' if ok else
+                          f'section {"missing" if CONFIRMED_HEADING not in body else "differs"}: listed '
+                          f'{sorted(listed)}, persisted {sorted(persisted)}'))
+    return out
+
+
+def _csv_harness2(doc, name, rows, columns, api, revision_text) -> list[Result]:
+    persisted = _api_confirmations(api)
+    if not rows and not persisted:
+        return []
+    wrong = []
+    for row in rows:
+        cell = _cell(row, columns, 'evidence')
+        for match in CSV_EVIDENCE_OFFSETS.finditer(cell):
+            start, end = int(match.group(1)), int(match.group(2))
+            passage = cp_slice(revision_text, start, end)
+            if passage is None or not cell[:match.start()].endswith(f'"{escaped(passage)}" '):
+                wrong.append(f'{start}-{end}')
+    named = {m.group('id') for row in rows if norm_list(row[columns['item_list']]) == 'confirmed_finding'
+             for m in [CONFIRMATION_CELL.search(_cell(row, columns, 'checks'))] if m}
+    return [Result(doc, name, 'csv.harness2_passages', 'fail' if wrong else 'pass',
+                   f'offsets not quoting the revision text: {wrong}' if wrong
+                   else f'{len(rows)} harness@2 row(s); every passage quotes the revision text exactly'),
+            Result(doc, name, 'csv.confirmed_findings', 'pass' if named == persisted else 'fail',
+                   f'{len(named)} confirmed_finding row(s), as persisted' if named == persisted else
+                   f'rows name {sorted(named)}, persisted {sorted(persisted)}')]
 
 
 def _marker(doc, name, text) -> Result:
@@ -847,8 +934,10 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     placeholder = [row for row in rows if 'item_list' in columns and norm_list(row[columns['item_list']]) == 'none']
     encounter_rows = [row for row in rows if 'item_list' in columns
                       and norm_list(row[columns['item_list']]) in ENCOUNTER_LISTS]
+    harness2_rows = [row for row in rows if 'item_list' in columns
+                     and norm_list(row[columns['item_list']]) in HARNESS2_LISTS]
     items_rows = [row for row in rows if not ('item_list' in columns and norm_list(row[columns['item_list']])
-                                              in ('none',) + ENCOUNTER_LISTS)]
+                                              in ('none',) + ENCOUNTER_LISTS + HARNESS2_LISTS)]
     if placeholder:
         identity = {'report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
                     'item_list', 'not_verified', 'synthetic'}
@@ -872,6 +961,7 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
         out.extend(_csv_documented(doc, name, encounter_rows, items_rows, columns, api, revision_text))
     if has_second_review(api):
         out.append(_csv_second_review(doc, name, items_rows, columns, api))
+    out.extend(_csv_harness2(doc, name, harness2_rows, columns, api, revision_text))
     return out
 
 

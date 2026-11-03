@@ -1,0 +1,372 @@
+{
+  "source": {
+    "key": "cms-pfs-rvu26d-documentation",
+    "kind": "cms-pfs-documentation",
+    "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+    "title": "National Physician Fee Schedule Relative Value File, Calendar Year 2026: file documentation (RVU26D.pdf)",
+    "release": "RVU26D",
+    "url": "https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip",
+    "sha256": "8aba8efb62e86a804bd8791ecefeef254da94de37a2391156de1415ce6a7e278",
+    "retrieved_at": "2026-11-01T21:30:00Z",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "license_note": "Notice in the file: \"CPT codes and descriptions only are copyright 2026 American Medical Association. All rights reserved. Applicable FARS/DFARS apply.\" Verbatim CMS text; passages that quote a CPT code description are not imported.",
+    "scope_note": "RVU26D.pdf, the documentation member of the pinned rvu26d-updated-08-26-2026.zip (sha256 521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6; the url and window are that release's, the sha256 is the PDF's): the definitions of the status codes, the global surgery values, the multiple procedure indicators, the endoscopic base code field and the PC/TC indicators. PC/TC indicators 2 and 3 are not imported: their definitions quote CPT code descriptions. Indicator 3 of the multiple procedure field is two passages, because its text runs on past a field label onto the next page. Pages are the PDF's page numbers."
+  },
+  "passages": [
+    {
+      "passage_key": "status-A",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "A",
+      "text": "A = Active Code. These codes are paid separately under the physician fee schedule, if covered. There will be RVUs for codes with this status. The presence of an \"A\" indicator does not mean that Medicare has made a national coverage determination regarding the service; A/B MACs (B) remain responsible for coverage decisions in the absence of a national Medicare policy."
+    },
+    {
+      "passage_key": "status-B",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "B",
+      "text": "B = Bundled Code. Payment for covered services are always bundled into payment for other services not specified. If RVUs are shown, they are not used for Medicare payment. If these services are covered, payment for them is subsumed by the payment for the services to which they are incident. (An example is a telephone call from a hospital nurse regarding care of a patient)."
+    },
+    {
+      "passage_key": "status-C",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "C",
+      "text": "C = Contractors price the code. A/B MACs (B) will establish RVUs and payment amounts for these services, generally on an individual case basis following review of documentation such as an operative report."
+    },
+    {
+      "passage_key": "status-D",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "D",
+      "text": "D = Deleted Codes. These codes are deleted effective with the beginning of the applicable year. These codes will not appear on the 2006 file as the grace period for deleted codes is no longer applicable."
+    },
+    {
+      "passage_key": "status-E",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "E",
+      "text": "E = Excluded from Physician Fee Schedule by regulation. Thesecodes are for items and/or services that CMS chose to exclude from the fee schedule payment by regulation. No RVUs are shown, and no payment may be made under the fee schedule for these codes. Payment for them, when covered, generally continues under reasonable charge procedures."
+    },
+    {
+      "passage_key": "status-F",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "F",
+      "text": "F = Deleted/Discontinued Codes. (Code not subject to a 90 day grace period). These codes will not appear on the 2006 file as the grace period for deleted codes is no longerapplicable."
+    },
+    {
+      "passage_key": "status-G",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "G",
+      "text": "G = Not valid for Medicare purposes. Medicare uses another code for reporting of, and payment for, these services. (Code subject to a 90 day grace period.) These codes will not appear on the 2006 file as the grace period for deleted codes is no longer applicable."
+    },
+    {
+      "passage_key": "status-H",
+      "section": "Attachment A: Status Code",
+      "page": "18",
+      "topic": "pfs.status",
+      "topic_value": "H",
+      "text": "H = Deleted Modifier. This code had an associated TC and/or 26 modifier in the previous year. For the current year, the TC or 26 component shown for the code has been deleted, and the deleted component is shown with a status code of \"H\". These codes will not appear on the 2006 file as the grace period for deleted codes is no longer applicable."
+    },
+    {
+      "passage_key": "status-I",
+      "section": "Attachment A: Status Code",
+      "page": "18-19",
+      "topic": "pfs.status",
+      "topic_value": "I",
+      "text": "I = Not valid for Medicare purposes. Medicare uses another code for reporting of, and payment for, these services. (Code NOT subject to a 90 day grace period.)"
+    },
+    {
+      "passage_key": "status-J",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "J",
+      "text": "J = Anesthesia Services. There are no RVUs and no payment amounts for these codes. The intent of this value is to facilitate the identification of anesthesia services."
+    },
+    {
+      "passage_key": "status-M",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "M",
+      "text": "M = Measurement codes. Used for reporting purposes only."
+    },
+    {
+      "passage_key": "status-N",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "N",
+      "text": "N = Non-covered Services. These services are not covered by Medicare."
+    },
+    {
+      "passage_key": "status-P",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "P",
+      "text": "P = Bundled/Excluded Codes. There are no RVUs and no payment amounts for these services. No separate payment should be made for them under the fee schedule. --If the item or service is covered as incident to a physician service and is provided on the same day as a physician service, payment for it is bundled into the payment for the physician service to which it is incident. (An example is an elastic bandage furnished by a physician incident to physician service.) --If the item or service is covered as other than incident to a physician service, it is excluded from the fee schedule (i.e., colostomy supplies) and should be paid under the other payment provision of the Act."
+    },
+    {
+      "passage_key": "status-R",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "R",
+      "text": "R = Restricted Coverage. Special coverage instructions apply. If covered, the service is contractor priced. (NOTE: The majority of codes to which this indicator will be assigned are the alpha-numeric dental codes, which begin with \"D\". We are assigning the indicator to a limited number of CPT codes which represent services that are covered only in unusual circumstances.)"
+    },
+    {
+      "passage_key": "status-T",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "T",
+      "text": "T = Injections. There are RVUS and payment amounts for these services, but they are only paid if there are no other services payable under the physician fee schedule billed on the same date by the same provider. If any other services payable under the physician fee schedule are billed on the same date by the same provider, these services are bundled into the physician services for which payment is made. (NOTE: This is a change from the previous definition, which states that injection services are bundled into any other services billed on the same date.)"
+    },
+    {
+      "passage_key": "status-X",
+      "section": "Attachment A: Status Code",
+      "page": "19",
+      "topic": "pfs.status",
+      "topic_value": "X",
+      "text": "X = Statutory Exclusion. These codes represent an item or service that is not in the statutory definition of \"physician services\" for fee schedule payment purposes. No RVUS or payment amounts are shown for these codes, and no payment may be made under the physician fee schedule. (Examples are ambulance services and clinical diagnostic laboratory services.)"
+    },
+    {
+      "passage_key": "global-000",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "000",
+      "text": "000=Endoscopic or minor procedure with related preoperative and postoperative relative values on the day of the procedure only included in the fee schedule payment amount; evaluation and management services on the day of the procedure generally not payable."
+    },
+    {
+      "passage_key": "global-010",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "010",
+      "text": "010=Minor procedure with preoperative relative values on the day of the procedure and postoperative relative values during a 10 day postoperative period included in the fee schedule amount; evaluation and management services on the day of the procedure and during the 10-day postoperative period generally not payable."
+    },
+    {
+      "passage_key": "global-090",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "090",
+      "text": "090=Major surgery with a 1-day preoperative period and 90-day postoperative period included in the fee schedule amount."
+    },
+    {
+      "passage_key": "global-MMM",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "MMM",
+      "text": "MMM=Maternity codes; usual global period does not apply."
+    },
+    {
+      "passage_key": "global-XXX",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "XXX",
+      "text": "XXX=The global concept does not apply to the code."
+    },
+    {
+      "passage_key": "global-YYY",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "YYY",
+      "text": "YYY=The carrier is to determine whether the global concept applies and establishes postoperative period, if appropriate, at time of pricing."
+    },
+    {
+      "passage_key": "global-ZZZ",
+      "section": "Data record: Global Surgery (positions 104-106)",
+      "page": "8",
+      "topic": "pfs.global_days",
+      "topic_value": "ZZZ",
+      "text": "ZZZ=The code is related to another service and is always included in the global period of the other service."
+    },
+    {
+      "passage_key": "mult-proc-0",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "9",
+      "topic": "pfs.mult_proc",
+      "topic_value": "0",
+      "text": "0=No payment adjustment rules for multiple procedures apply. If procedure is reported on the same day as another procedure, base the payment on the lower of (a) the actual charge, or (b) the fee schedule amount for the procedure."
+    },
+    {
+      "passage_key": "mult-proc-1",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "9",
+      "topic": "pfs.mult_proc",
+      "topic_value": "1",
+      "text": "1=Standard payment adjustment rules in effect before January 1, 1995 for multiple procedures apply. In the 1995 file, this indicator only applies to codes with a status code of \"D\". If procedure is reported on the same day as another procedure that has an indicator of 1, 2, or 3, rank the procedures by fee schedule amount and apply the appropriate reduction to this code (100%, 50%, 26%, and by report). Base the payment on the lower of (a) the actual charge, or (b) the fee schedule amount reduced by the appropriate percentage."
+    },
+    {
+      "passage_key": "mult-proc-2",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "9",
+      "topic": "pfs.mult_proc",
+      "topic_value": "2",
+      "text": "2=Standard payment adjustment rules for multiple procedures apply. If procedure is reported on the same day as another procedure with an indicator of 1, 2, or 3, rank the procedures by fee schedule amount and apply the appropriate reduction to this code (100%, 50%, 50%, 50%, 50% and by report). Base the payment on the lower of (a) the actual charge, or (b) the fee schedule amount reduced by the appropriate percentage."
+    },
+    {
+      "passage_key": "mult-proc-3-part-1",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "9",
+      "topic": "pfs.mult_proc",
+      "topic_value": "3",
+      "text": "3=Special rules for multiple endoscopic procedures apply if procedure is billed with another endoscopy in the same family (i.e., another endoscopy that has the same base procedure). The base procedure for each code with this indicator is identified in the Endobase field of this file. Apply the multiple endoscopy rules to a family before ranking the family with the other procedures performed on the same day (for example, if multiple endoscopies in the same family are reported on the same day as endoscopies in another family or on the same day as a non-endoscopic procedure). If an endoscopic procedure is reported with"
+    },
+    {
+      "passage_key": "mult-proc-3-part-2",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "10",
+      "topic": "pfs.mult_proc",
+      "topic_value": "3",
+      "text": "only its base procedure, do not pay separately for the base procedure. Payment for the base procedure is included in the payment for the other endoscopy."
+    },
+    {
+      "passage_key": "mult-proc-4",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "10",
+      "topic": "pfs.mult_proc",
+      "topic_value": "4",
+      "text": "4=Special rules for the technical component (TC) of diagnostic imaging procedures apply if procedure is billed with another diagnostic imaging procedure in the same family (per the diagnostic imaging family indicator, below). If procedure is reported in the same session on the same day as another procedure with the same family indicator, rank the procedures by fee schedule amount for the TC. Pay 100% for the highest priced procedure, and 50% for each subsequent procedure. Base the payment for subsequent procedures on the lower of (a) the actual charge, or (b) the fee schedule amount reduced by the appropriate percentage. Subject to 50% reduction of the TC diagnostic imaging (effective for services July 1, 2010 and after). Subject to 25% reduction of the PC of diagnostic imaging (effective for services January 1, 2012 through December 31, 2016). Subject to 5% reduction of the PC of diagnostic imaging (effective for services January 1, 2017 and after)."
+    },
+    {
+      "passage_key": "mult-proc-5",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "10",
+      "topic": "pfs.mult_proc",
+      "topic_value": "5",
+      "text": "5=Subject to 50% of the practice expense component for certain therapy services."
+    },
+    {
+      "passage_key": "mult-proc-6",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "10",
+      "topic": "pfs.mult_proc",
+      "topic_value": "6",
+      "text": "6=Subject to 25% reduction of the second highest and subsequent procedures to the TC of diagnostic cardiovascular services, effective for services January 1, 2013, and thereafter."
+    },
+    {
+      "passage_key": "mult-proc-7",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "10",
+      "topic": "pfs.mult_proc",
+      "topic_value": "7",
+      "text": "7=Subject to 20% reduction of the second highest and subsequent procedures to the TC of diagnostic ophthalmology services, effective for services January 1, 2013, and thereafter."
+    },
+    {
+      "passage_key": "mult-proc-9",
+      "section": "Data record: Multiple Procedure (Modifier 51) (position 116)",
+      "page": "11",
+      "topic": "pfs.mult_proc",
+      "topic_value": "9",
+      "text": "9=Concept does not apply."
+    },
+    {
+      "passage_key": "endo-base",
+      "section": "Data record: Endoscopic Base Code (positions 128-132)",
+      "page": "13-14",
+      "topic": "pfs.endo_base",
+      "topic_value": "",
+      "text": "Code which identifies an endoscopic base code for each code with a multiple surgery indicator of 3."
+    },
+    {
+      "passage_key": "pctc-0",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "20",
+      "topic": "pfs.pctc",
+      "topic_value": "0",
+      "text": "0 = Physician Service Codes--Identifies codes that describe physician services. Examples include visits, consultations, and surgical procedures. The concept of PC/TC does not apply since physician services cannot be split into professional and technical components. Modifiers 26 and TC cannot be used with these codes. The RVUS include values for physician work, practice expense and malpractice expense. There are some codes with no work RVUs."
+    },
+    {
+      "passage_key": "pctc-1",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "20",
+      "topic": "pfs.pctc",
+      "topic_value": "1",
+      "text": "1 = Diagnostic Tests for Radiology Services--Identifies codes that describe diagnostic tests. Examples are pulmonary function tests or therapeutic radiology procedures, e.g., radiation therapy. These codes have both a professional and technical component. Modifiers 26 and TC can be used with these codes. The total RVUs for codes reported with a 26 modifier include values for physician work, practice expense, and malpracticeexpense. The total RVUs for codes reported with a TC modifier include values for practice expense and malpractice expense only. The total RVUs for codes reported without a modifier include values for physician work, practice expense, and malpractice expense."
+    },
+    {
+      "passage_key": "pctc-4",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "20-21",
+      "topic": "pfs.pctc",
+      "topic_value": "4",
+      "text": "4 = Global Test Only Codes--This indicator identifies stand-alone codes that describe selected diagnostic tests for which there are associated codes that describe (a) the professional component of the test only, and (b) the technical component of the test only. Modifiers 26 and TC cannot be used with these codes. The total RVUs for global procedure only codes include values for physician work, practice expense, and malpractice expense. The total RVUs for global procedure only codes equals the sum of the total RVUs for the professional and technical components only codes combined."
+    },
+    {
+      "passage_key": "pctc-5",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "21",
+      "topic": "pfs.pctc",
+      "topic_value": "5",
+      "text": "5 = Incident To Codes--This indicator identifies codes that describe services covered incident to a physician's service when they are provided by auxiliary personnel employed by the physician and working under his or her direct personal supervision. Payment may not be made by A/B MACs (B) for these services when they are provided to hospital inpatients or patients in a hospital outpatient department. Modifiers 26 and TC cannot be used with these codes."
+    },
+    {
+      "passage_key": "pctc-6",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "21",
+      "topic": "pfs.pctc",
+      "topic_value": "6",
+      "text": "6 = Laboratory Physician Interpretation Codes--This indicator identifies clinical laboratory codes for which separate payment for interpretations by laboratory physicians may be made. Actual performance of the tests is paid for under the lab fee schedule. Modifier TC cannot be used with these codes. The total RVUs for laboratory physician interpretation codes include values for physician work, practice expense, and malpractice expense."
+    },
+    {
+      "passage_key": "pctc-7",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "21",
+      "topic": "pfs.pctc",
+      "topic_value": "7",
+      "text": "7 = Physical therapy service, for which payment may not be made-- Payment may not be made if the service is provided to either a patient in a hospital outpatient department or to an inpatient of the hospital by an independently practicing physical or occupational therapist."
+    },
+    {
+      "passage_key": "pctc-8",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "22",
+      "topic": "pfs.pctc",
+      "topic_value": "8",
+      "text": "8 = Physician interpretation codes: This indicator identifies the professional component of clinical laboratory codes for which separate payment may be made only if the physician interprets an abnormal smear for hospital inpatient. This applies to CPT codes 85060. No TC billing is recognized because payment for the underlying clinical laboratory test is made to the hospital, generally through the PPS rate. No payment is recognized for CPT codes 85060 furnished to hospital outpatients or non-hospital patients. The physician interpretation is paid through the clinical laboratory fee schedule payment for the clinical laboratory test."
+    },
+    {
+      "passage_key": "pctc-9",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "22",
+      "topic": "pfs.pctc",
+      "topic_value": "9",
+      "text": "9 = Not Applicable--Concept of a professional/technical component does not apply"
+    }
+  ],
+  "excluded": [
+    {
+      "topic": "pfs.pctc",
+      "topic_value": "2",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "20",
+      "anchor": "2 = Professional Component Only Codes--This indicator identifies stand-alone codes",
+      "reason": "Its example quotes a CPT code description: code 93010 is followed by its description."
+    },
+    {
+      "topic": "pfs.pctc",
+      "topic_value": "3",
+      "section": "Attachment A: PC/TC Indicator",
+      "page": "20",
+      "anchor": "3 = Technical Component Only Codes--This indicator identifies stand- alone codes",
+      "reason": "Its example quotes a CPT code description: code 93005 is followed by its description."
+    }
+  ]
+}

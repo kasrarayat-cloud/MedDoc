@@ -1,0 +1,823 @@
+"""GI round 4, package PI: the inventory's own reading of reach and of an indwelling stent (studio/gi/services.py).
+Declared before coding in tests/fixtures/gi4/declarations/pi.json. Synthetic documents only; no database, nothing sent.
+
+- S1 (inventory half): the instrument as the subject of its own reach ("The colonoscope reached the cecum") states its
+  service performed - only in a procedure report's own document (its head fields, no note written around a procedure,
+  no office visit routing reads done), never under another occurrence, never in a clause carrying a date.
+- W1 (hold-only): an indwelling stent's state is no performed act, dropped only beside another stent performed.
+- E1 and A1 were DROPPED in Wave 1 repair cycle 2 (pi.json amendment_20261101_cycle2; refutation PI-E1-NEG-ENDPOINT and
+  PI-A1-HEADING-LAPSE-REBINDS), code and all: the extent is routing's alone again and an act or lesion no part, name or
+  site gives a family binds as installed binds it. Their tests are KEPT on their own inputs and pin installed's reading
+  of each (a test whose expected value changed was renamed so its name says what it pins); the findings' own inputs are
+  pinned the same way (DroppedE1Tests, DroppedA1Tests).
+- S1's binding rule (cycle 2, because S1's reading of h4-04 depended on A1): where more than one family is read
+  performed, a family S1 alone reads performed takes no part in installed's one-performed-family fallback, so those
+  shapes bind exactly as installed binds them; where S1's family is the only one read performed it still takes such an
+  act or lesion (S1BindingTests).
+
+The mutants that must fail these tests, one per guard, are registered in ops/gi4/mutants.py (PI_MUTANTS, checked by
+tests/test_gi4_pi_mutants.py and kept apart, so that a mutant is killed by the behaviour its guard pins, never by its own
+anchor going missing).
+"""
+import datetime as dt
+import inspect
+from types import SimpleNamespace
+
+from django.test import SimpleTestCase
+
+from ops.gi4 import battery, regression
+from studio.gi import context, detect, sections, services
+from studio.types import Fact
+from studio.validation import checks
+
+B = battery.B
+HEAD = 'Endoscopist: Synthetic Endoscopist, MD (fictional)\nSedation: propofol by a CRNA (fictional)\n'
+DAY = dt.date(2026, 10, 19)
+TOP = B + 'Upper and Lower Endoscopy\nDate of service: 10/19/2026\n' + HEAD
+LOWER = B + 'Lower Endoscopy\nDate of service: 10/19/2026\n' + HEAD
+BOTH = 'The gastroscope was advanced to the second part of the duodenum. The colonoscope was advanced to the cecum.'
+DOCS = regression.load_fixtures()
+
+
+def read(text, day=DAY):
+    routing = detect.route(text, day)
+    return services.build(text, service_date=day, routing=routing, context_facts=context.extract_context(text))
+
+
+def service(inv, family):
+    return next((s for s in inv.services if s.family == family), None)
+
+
+def acts(inv, kind, family=None):
+    return [a for s in inv.services if family is None or s.family == family for a in s.acts if a.kind == kind]
+
+
+def assess(name, text, codes, answer=None):
+    """One battery row through the analyze and assess children (ops.gi4.battery), with a member's date answer."""
+    return battery.run_row(battery.modules(), name, text, codes, {'service_date': answer} if answer else None)
+
+
+class InstrumentReachTests(SimpleTestCase):
+    """The instrument as the subject of its own reach, read as performed only with positive evidence: a strong head that
+    NAMES the instrument's family (pi.json amendment_20261101_cycle1_b), in today's narrative. S1 is needed only where the
+    instrument's own clause is otherwise silent - a part no family's name heads, as in h4-04's two-procedure report - so
+    each text is that shape (BOTH_TITLE, UPPER_PART, then a 'Large Bowel' part) with one guard broken."""
+    REACH = 'The colonoscope reached the cecum. A polyp was removed with a cold snare.\n'
+
+    def text(self, head=None, before='Large Bowel\n', reach=None):
+        return (head or BOTH_TITLE) + UPPER_PART + before + (reach or self.REACH)
+
+    def s1(self, text):
+        s = service(read(text), 'gi.colonoscopy')
+        return s is not None and services._PI_REACH_CUE in s.cues
+
+    def test_a_procedure_report_naming_the_family_reads_the_reach_as_performed(self):
+        inv = read(self.text())
+        s = service(inv, 'gi.colonoscopy')
+        # cycle 2 (pi.json amendment_20261101_cycle2): E1 dropped, so no extent is read from the reach statement
+        # (routing reads none here: installed's '' - was 'cecum'), and A1 dropped, so the unsited cold snare binds as
+        # installed binds it: to the upper endoscopy, the one family installed reads performed (was the colonoscopy's)
+        self.assertEqual((s.status, s.completion, s.extent), ('performed', 'complete', ''))
+        self.assertIn(services._PI_REACH_CUE, s.cues)
+        self.assertEqual([(a.kind, a.status) for a in s.acts], [])
+        self.assertEqual([(a.kind, a.status) for a in service(inv, 'gi.egd').acts], [('snare', 'performed')])
+
+    def test_a_head_naming_no_family_leaves_it_silent(self):
+        # the recorded cost of amendment_20261101_cycle1_b: no positive evidence that today's report documents the
+        # colonoscopy, so the installed reading stands (the cold snare then goes to the one performed family, as installed)
+        for title in ('Upper and Lower Endoscopy', 'Procedure Note', 'Lower Endoscopy', 'Endoscopy Report'):
+            with self.subTest(title):
+                text = self.text(B + title + '\n' + FIELDS)
+                self.assertEqual(services._pi_head_families(text), frozenset(), title)
+                self.assertFalse(self.s1(text), title)
+
+    def test_without_a_strong_head_it_stays_silent(self):
+        self.assertFalse(self.s1(self.text(B + 'Gastroscopy Then Colonoscopy in One Sitting\nDate performed: October 19, '
+                                           '2026\n')))
+
+    def test_never_in_a_note_written_around_a_procedure(self):
+        self.assertFalse(self.s1(self.text(B + 'Gastroscopy and Colonoscopy Consent\n' + FIELDS)))
+
+    def test_never_under_another_occurrence(self):
+        self.assertFalse(self.s1(self.text(before='Outside Records Reviewed\n')))
+
+    def test_never_in_an_office_visit_note(self):
+        # an office visit's own "Sedation: none" line is no sedation field (the strong head fails there)
+        text = B + 'GI Office Visit\nDate of service: 10/19/2026\nSedation: none (office visit)\n' + self.REACH
+        self.assertIn(detect.route(text, DAY).finding('gi.office_em').status, services.POSITIVE)
+        self.assertIsNone(service(read(text), 'gi.colonoscopy'))
+
+    def test_never_in_a_clause_carrying_a_date(self):
+        self.assertFalse(self.s1(self.text(reach='The colonoscope reached the cecum after the CT of 09/28/2026 showed a '
+                                                 'mass.\n')))
+
+    def test_the_records_review_and_the_handout_stay_as_installed(self):
+        for name in ('J1 records review, unnamed family, long gap', 'J3 teaching handout'):
+            text, _ = battery.CASES[name]
+            self.assertIsNone(service(read(text), 'gi.colonoscopy'), name)
+
+    def test_h4_04_the_colonoscopy_is_held_not_excluded(self):
+        doc = DOCS['h4-04']
+        self.assertIn('gi.colonoscopy', services._pi_head_families(doc['text']))  # its title names both procedures
+        s = service(read(doc['text']), 'gi.colonoscopy')
+        self.assertEqual(s.status, 'uncertain')  # the reach read as performed, routing's past negation then doubts it
+        self.assertIn(services._PI_REACH_CUE, s.cues)
+        quote = 'The colonoscope reached the cecum, where its landmarks, the'
+        row = assess('h4-04', doc['text'], [('45378', quote, 'done')], '2026-10-19')
+        p = row['proposals']['45378']
+        self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'))
+        self.assertIn('performed_status', p['clarifications'])
+
+
+class ParagraphCarryTests(SimpleTestCase):
+    """A1 (the service a paragraph is about takes an act or lesion nothing else gives a family) was DROPPED in Wave 1
+    repair cycle 2 (pi.json amendment_20261101_cycle2, refutation PI-A1-HEADING-LAPSE-REBINDS). Every test below keeps
+    its own input and pins installed's binding of it (measured on installed 80df1831d168); those whose expected value
+    changed were renamed: test_h4_04_the_rectal_polyps_belong_to_the_colonoscopy, test_the_paragraph_carries_its_service
+    and test_the_bidirectional_report_binds_no_lower_site_to_the_egd."""
+    SNARE = 'A polyp was removed with a hot snare.\n'
+
+    def snares(self, text):
+        return [(s.family, a.status) for s in read(text).services for a in s.acts if a.kind == 'snare']
+
+    def test_h4_04_the_rectal_polyps_bind_as_installed(self):
+        # was test_h4_04_the_rectal_polyps_belong_to_the_colonoscopy (A1 bound them to the colonoscopy). Installed binds
+        # them to the upper endoscopy, the one family installed reads performed (a known limit of the drop: MUST
+        # binding.lower-not-on-upper as installed); S1 reads the colonoscope's reach but never decides this binding
+        inv = read(DOCS['h4-04']['text'])
+        egd, colon = service(inv, 'gi.egd'), service(inv, 'gi.colonoscopy')
+        self.assertEqual([l.region for l in egd.lesions], ['stomach', 'rectum'])
+        self.assertEqual([l.region for l in colon.lesions], [])
+        self.assertEqual([(a.kind, a.status) for a in egd.acts], [('snare', 'performed')])  # the antral polyp's snare
+        self.assertEqual(services.validate(inv, DOCS['h4-04']['text']), ())
+
+    def test_no_paragraph_carries_its_service(self):
+        # was test_the_paragraph_carries_its_service (A1 gave the snare to the colonoscopy): with both families read
+        # performed by installed's own readings, installed leaves the unsited snare unattributed
+        self.assertEqual(self.snares(TOP + BOTH + '\n' + self.SNARE), [])
+
+    def test_a_blank_line_ends_the_paragraph(self):
+        self.assertEqual(self.snares(TOP + BOTH + '\n\n' + self.SNARE), [])
+
+    def test_beyond_the_carry_reach(self):
+        # A1's CARRY_REACH (1,500 characters) is gone with A1's code; the input still reads as installed reads it
+        filler = 'The mucosa looked healthy and smooth throughout the whole examined length. ' * 25
+        self.assertGreater(len(filler), 1500)
+        self.assertFalse(hasattr(services, 'CARRY_REACH'))
+        self.assertEqual(self.snares(TOP + BOTH + ' ' + filler + self.SNARE), [])
+
+    def test_never_a_field_row(self):
+        self.assertEqual(self.snares(TOP + BOTH + '\nPolypectomy by hot snare: performed\n'), [])
+
+    def test_never_to_a_family_not_performed(self):
+        text = (B + 'Upper Endoscopy and Flexible Sigmoidoscopy\nDate of service: 10/19/2026\n' + HEAD
+                + 'The gastroscope was advanced to the second part of the duodenum. The sigmoidoscope was advanced to '
+                  '40 cm. Colonoscopy was deferred. ' + self.SNARE)
+        inv = read(text)
+        self.assertEqual(self.snares(text), [])
+        self.assertNotIn(service(inv, 'gi.colonoscopy').status, services.POSITIVE)
+
+    def test_two_families_named_clear_the_carry(self):
+        text = TOP + BOTH + ' Both the EGD and the colonoscopy were tolerated well. ' + self.SNARE
+        self.assertEqual(self.snares(text), [])
+
+    def test_never_in_a_history_part(self):
+        text = (TOP + 'History\nShe had both examinations in 2023.\nThe colonoscope reached the cecum then.\n'
+                + self.SNARE + '\nProcedure\n' + BOTH + '\n')
+        self.assertEqual(self.snares(text), [])
+
+    def test_never_into_another_part(self):
+        self.assertEqual(self.snares(TOP + BOTH + '\nNursing record\n' + self.SNARE), [])
+
+    def test_a_site_the_carried_family_cannot_reach(self):
+        # both families performed by the passive reach installed reads (amendment_20261101_cycle1_b: under a head that
+        # names neither, S1 no longer reads 'The colonoscope reached the cecum.'), so the paragraph carries the upper
+        # endoscopy, whose reach no sigmoid site lies in
+        text = (TOP + 'The colonoscope was advanced to the cecum. The gastroscope was advanced to the second part of the '
+                'duodenum. A polyp in the sigmoid colon was removed with a cold snare.\nNext colonoscopy in ten years.\n')
+        self.assertEqual([s.status for s in read(text).services], ['performed', 'performed'])
+        self.assertEqual([f for f, _ in self.snares(text)], [])  # never the upper endoscopy's
+
+    BIDIRECTIONAL = ('Stomach and Duodenum\nThe gastroscope was advanced to the second part of the duodenum. In the '
+                     'gastric antrum sat a 14 mm pedunculated polyp; a hot snare was closed around the stalk and the polyp '
+                     'was removed and retrieved.\nLarge Bowel\nThe colonoscope reached the cecum, where its landmarks were '
+                     'photographed. In the rectum, 4 and 6 cm from the anal verge, there were two 3 mm pale polyps, left in '
+                     'place: no polypectomy was performed in the colon.\n')
+
+    def test_the_bidirectional_report_binds_as_installed(self):
+        # was test_the_bidirectional_report_binds_no_lower_site_to_the_egd (A1 gave the rectal lesion to the
+        # colonoscopy). A strong head whose fields the layout reads no section heading in, and whose title names both
+        # procedures (as h4-04's): S1 reads the reach as today's, so the colonoscopy is performed, but the rectal polyps
+        # bind as installed binds them - to the upper endoscopy, the one family installed reads performed (the drop's
+        # known limit, MUST binding.lower-not-on-upper as installed)
+        head = (B + 'Gastroscopy Then Colonoscopy in One Sitting\nDate of service: 10/19/2026\nEndoscopist: Synthetic '
+                'Endoscopist, MD (fictional)\nSedation and airway: propofol by a CRNA (fictional)\n')
+        inv = read(head + self.BIDIRECTIONAL)
+        egd, colon = service(inv, 'gi.egd'), service(inv, 'gi.colonoscopy')
+        self.assertEqual({x.region for x in egd.acts + egd.lesions}, {'stomach', 'rectum'})
+        self.assertEqual([l.region for l in colon.lesions], [])
+        self.assertEqual(colon.status, 'performed')
+        self.assertIn(services._PI_REACH_CUE, colon.cues)
+        # the recorded cost of amendment_20261101_cycle1_b: under a title that names neither procedure ('Upper and Lower
+        # Endoscopy') S1 has no evidence, the colonoscopy is not read performed and the acts bind as installed bound them
+        generic = read(head.replace('Gastroscopy Then Colonoscopy in One Sitting', 'Upper and Lower Endoscopy')
+                       + self.BIDIRECTIONAL)
+        self.assertIsNone(service(generic, 'gi.colonoscopy'))
+
+    def test_beyond_heading_reach_the_reach_is_held(self):
+        # The cost of the Wave 1 repair's beyond-heading-reach guard (pi.json, amendment_20261101_cycle1, recorded after
+        # measurement): the head's own "Sedation:" field is read by the layout as a section heading, so the unread
+        # "Large Bowel" line puts the reach beyond its heading's reach (sections.beyond_heading_reach). S1 holds: the
+        # colonoscopy is not read performed, as installed.
+        # (amendment_20261101_cycle1_b: the head names both procedures, so beyond heading reach alone holds it)
+        text = TOP.replace('Upper and Lower Endoscopy', 'Gastroscopy Then Colonoscopy in One Sitting') + self.BIDIRECTIONAL
+        self.assertIn('gi.colonoscopy', services._pi_head_families(text))
+        pos = text.index('The colonoscope reached')
+        self.assertTrue(sections.beyond_heading_reach(text, sections.layout(text), pos))
+        self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
+
+
+class EndpointExtentTests(SimpleTestCase):
+    """E1 (the inventory's own endpoint statement supplies the extent routing does not read) was DROPPED in Wave 1
+    repair cycle 2 (pi.json amendment_20261101_cycle2, refutation PI-E1-NEG-ENDPOINT): the extent is routing's alone
+    again. Every test below keeps its own input and pins installed's reading of it (measured on installed 80df1831d168);
+    those whose expected value changed were renamed: test_the_completion_statement_names_the_endpoint,
+    test_the_service_extent_counts_only_where_routing_does_not_read_the_family_done,
+    test_only_in_a_procedure_report_with_its_own_head and test_h4_03_and_h4_06_are_ready_with_the_walk_date
+    (test_regression_documents keeps its name)."""
+    TODAY = 'The colonoscope was inserted and a polyp was removed with a cold snare.'
+
+    def extent(self, text):
+        return service(read(text), 'gi.colonoscopy').extent
+
+    def test_the_completion_statement_gives_no_extent(self):
+        # was test_the_completion_statement_names_the_endpoint ('cecum')
+        self.assertEqual(self.extent(LOWER + self.TODAY + ' The cecum was normal.\n'), '')
+
+    def test_regression_documents(self):
+        # was 'second part of duodenum' (h4-03) and 'terminal ileum' (h4-06): installed reads no extent in either
+        self.assertEqual(service(read(DOCS['h4-03']['text'], dt.date(2026, 10, 6)), 'gi.egd').extent, '')
+        self.assertEqual(service(read(DOCS['h4-06']['text'], dt.date(2026, 10, 27)), 'gi.colonoscopy').extent, '')
+
+    def test_never_from_a_history_section(self):
+        text = (LOWER + 'History: an outside colonoscopy in 2023 was normal.\nThe colonoscope was advanced to the cecum. '
+                'A polyp was removed with a cold snare.\n')
+        s = service(read(text), 'gi.colonoscopy')
+        self.assertEqual((s.completion, s.extent), ('complete', ''))
+
+    def test_never_under_another_occurrence(self):
+        self.assertEqual(self.extent(LOWER + self.TODAY + '\nRecords Copied From Mercy\nCecum: normal.\n'), '')
+
+    def test_never_after_an_earlier_occurrence_word_in_the_statement(self):
+        text = LOWER + self.TODAY[:-1] + '; at the index examination the cecum was reached.\n'
+        self.assertEqual(self.extent(text), '')
+
+    def test_never_from_an_extent_word(self):
+        self.assertEqual(self.extent(LOWER + self.TODAY + ' Cecum, the furthest point.\n'), '')
+
+    def test_the_extent_is_routing_s_alone(self):
+        # was test_the_service_extent_counts_only_where_routing_does_not_read_the_family_done: required_fact_states has
+        # installed's signature again (no service parameter), so a documented service never supplies the extent
+        profile = SimpleNamespace(required_facts=('extent',))
+        silent = SimpleNamespace(facts=(), missing=('extent',), status='historical')
+        done = SimpleNamespace(facts=(), missing=('extent',), status='performed')
+        self.assertEqual(list(inspect.signature(checks.required_fact_states).parameters),
+                         ['profile', 'finding', 'context'])
+        self.assertEqual(checks.required_fact_states(profile, silent, {})[0].problem, 'missing')
+        self.assertEqual(checks.required_fact_states(profile, None, {})[0].problem, 'missing')
+        self.assertEqual(checks.required_fact_states(profile, done, {})[0].problem, 'missing')
+        reached = SimpleNamespace(facts=(Fact('extent', 'incomplete: stomach', 'document'),), missing=(), status='uncertain')
+        self.assertEqual(checks.required_fact_states(profile, reached, {})[0].fact.value, 'incomplete: stomach')
+        self.assertFalse(any(hasattr(services, n) for n in ('_endpoint_named', '_ENDPOINT_TABLE', 'EXTENT_WORD')))
+
+    # an outside banding narrative pasted below its occurrence words, more than OCCURRENCE_HEAD_LINES lines above it
+    EVL = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+    PASTED = ('\nNotes\nThe patient brought copies from Mercy GI.\n' + battery.FILL
+              + 'The gastroscope was passed down the esophagus, through the stomach and pylorus, into the descending '
+                'duodenum. The duodenal bulb and descending duodenum were normal.\n' + EVL + ' Six bands were placed.\n')
+
+    def egd_extent(self, text):
+        return service(read(text), 'gi.egd').extent
+
+    def test_never_from_the_inventory_even_in_a_procedure_report_with_its_own_head(self):
+        # was test_only_in_a_procedure_report_with_its_own_head ('second part of duodenum' under the head's own fields):
+        # with E1 dropped the extent stays a question everywhere, as installed
+        today = B + 'Variceal Banding Session\nDate of service: 10/19/2026\n'
+        self.assertEqual(self.egd_extent(today + HEAD + self.PASTED), '')
+        self.assertEqual(self.egd_extent(today + self.PASTED), '')
+        self.assertEqual(self.egd_extent(B + 'GI Records Review\nDate of service: 10/19/2026\n' + HEAD + self.PASTED), '')
+
+    def test_never_in_an_office_visit_note(self):
+        # an office note's own "Sedation: none" line passes the head test; routing's office visit holds E1 there
+        note = B + 'Hepatology Office Visit\nDate of service: 10/19/2026\nSedation: none (office visit)\n' + self.PASTED
+        self.assertIn(detect.route(note, DAY).finding('gi.office_em').status, services.POSITIVE)
+        self.assertEqual(self.egd_extent(note), '')
+
+    def test_a_pasted_outside_banding_narrative_is_never_ready(self):
+        for title, extra in (('Hepatology Office Visit', ''), ('GI Records Review', ''),
+                             ('Hepatology Office Visit', 'Sedation: none (office visit)\n')):
+            text = B + title + '\nDate of service: 10/19/2026\n' + extra + self.PASTED
+            p = assess(title, text, [('43244', self.EVL, 'not_done')], '2026-10-19')['proposals']['43244']
+            self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), title + extra)
+            self.assertIn('extent', p['clarifications'], title + extra)
+
+    def test_h4_03_and_h4_06_are_held_on_extent_as_installed(self):
+        # was test_h4_03_and_h4_06_are_ready_with_the_walk_date (E1's two regression releases): held on extent again,
+        # as installed - the known limit E1's drop leaves
+        for doc_id, code, quote, day in (
+                ('h4-03', '43244', 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed '
+                                   'again.', '2026-10-06'),
+                ('h4-06', '45385', 'Transverse colon polyp, 5 mm, removed by cold snare.', '2026-10-27')):
+            p = assess(doc_id, DOCS[doc_id]['text'], [(code, quote, 'done')], day)['proposals'][code]
+            self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), doc_id)
+            self.assertIn('extent', p['clarifications'], doc_id)
+            self.assertIn('facts.required', p['checks'], doc_id)
+            self.assertIn('routing.family', p['checks'], doc_id)  # routing's own reading is still shown
+
+    def test_copied_reports_stay_held(self):
+        for name in ('J4 records review, colonoscopy named in plan only', 'J7 records review, completion rows only',
+                     'K2 office note with copied EGD named', 'K3 copied colonoscopy, completion statement'):
+            text, codes = battery.CASES[name]
+            for code, p in assess(name, text, codes)['proposals'].items():
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
+                self.assertIn('performed_status', p['clarifications'], name)
+
+
+class IndwellingStentTests(SimpleTestCase):
+    """W1 (hold-only): an indwelling stent's state is no performed act - dropped only beside another stent placed."""
+    ERCP = B + 'ERCP Procedure Note\nDate of service: 10/19/2026\n' + HEAD + '\nProcedure\nThe duodenoscope was advanced to the major papilla. '
+
+    def stents(self, text):
+        return [(a.status, a.evidence[0].text) for a in acts(read(text), 'stent')]
+
+    def test_h2_10_the_indwelling_stent_is_no_act_and_43274_stays_ready(self):
+        text = DOCS['h2-10']['text']
+        found = [t for _, t in self.stents(text) if t.startswith('The existing stent')]
+        self.assertEqual(found, [])
+        self.assertIn('performed', [s for s, t in self.stents(text) if t.startswith('A new 10 French')])
+        quote = 'A new 10 French by 9 cm plastic biliary stent was placed across the stricture, with good drainage of bile and contrast.'
+        p = assess('h2-10', text, [('43274', quote, 'MAY')])['proposals']['43274']
+        self.assertEqual((p['bucket'], p['status']), ('selected', 'ready'))
+
+    def test_alone_it_stays_as_installed(self):
+        text = self.ERCP + 'The existing stent was in position and draining. The bile duct was cannulated.\n'
+        self.assertEqual(self.stents(text), [('performed', 'The existing stent was in position and draining.')])
+
+    def test_a_new_stent_placed_beside_it_still_counts(self):
+        text = self.ERCP + 'The existing stent was in good position and a second stent was placed beside it.\n'
+        self.assertEqual([s for s, _ in self.stents(text)], ['performed'])
+
+
+# --- GI round 4 Wave 1 repair, cycle 1 (pi.json, amendment_20261101_cycle1): the refutation of b840ae756 (F1, F2, F5),
+# each input reproduced first, and one behaviour per new or re-anchored guard (ops/gi4/mutants.py: pi-reach-head,
+# pi-reach-occurrence, pi-reach-family, pi-e1-section, pi-e1-occurrence, pi-carry-lesion*), and the further holds of
+# amendment_20261101_cycle1_b (the head must NAME the family; a sentence naming one service never clears the lesion
+# carry), each with the probe inputs that leaked through cycle 1's guards ---
+FIELDS = ('Date performed: October 19, 2026\nGastroenterologist: Synthetic Gastroenterologist, MD (fictional)\n'
+          'Sedation and airway: propofol given by a CRNA (fictional)\n')
+BOTH_TITLE = B + 'Gastroscopy Then Colonoscopy in One Sitting\n' + FIELDS  # a strong head the layout reads no heading in
+UPPER_PART = 'Stomach and Duodenum\nThe gastroscope was advanced to the second part of the duodenum. The stomach was normal.\n'
+ATTACHED = ''.join(f'Line {i} of the attached pages lists medications and allergies in detail.\n' for i in range(8))
+EGD_NOTE = (B + 'Procedure Note\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by CRNA\n\n'
+            'History\nColonoscopy in 2023 at Mercy GI.\n\nProcedure: EGD with biopsy.\nThe gastroscope was advanced to the '
+            'second part of the duodenum. Cold forceps biopsies of the antrum were taken.\n\n')
+EGD_BX = ('43239', 'Cold forceps biopsies of the antrum were taken.', 'done')
+
+
+def unresolved(text, codes):
+    """The completeness items of one battery row (ops.gi4.battery's path: analyze, merge, assess)."""
+    from types import SimpleNamespace
+    m = battery.modules()
+    read_ = m.jobs._analyze_child(text, {}, 1000)
+    facts = m.jobs._merged_facts(read_[0], {})
+    context_ = m.jobs.context_facts(SimpleNamespace(facts=facts))
+    _, result = m.jobs._assess_child(text, read_[1], (m.PageSpan(1, 0, len(text)),), context_,
+                                     battery.response(m, text, codes), m.Lookup([], {}), 'succeeded', 'ok', ())
+    m.jobs.release_routing_caches()
+    return [(u['family'], u['label'], u['second_review']) for u in result.completeness.get('unresolved_items', [])]
+
+
+class RefutationF1Tests(SimpleTestCase):
+    """F1: S1 promoted a reach in an attached outside report, or in unit statistics, inside today's EGD note, and E1
+    supplied the extent: 45378 EXCLUDED became READY. It reads as installed again: excluded."""
+
+    def shapes(self):
+        reach = 'Bowel preparation: adequate.\nThe colonoscope reached the cecum. No polyps were seen.\n'
+        yield 'S1-f2 attached, signed', EGD_NOTE + 'Attached Report\n' + ATTACHED + reach + (
+            'Report signed by the Mercy GI endoscopist on 03/02/2024.\n'), 'The colonoscope reached the cecum.'
+        yield 'S1-a2 attached', EGD_NOTE + 'Attached Report\n' + ATTACHED + reach, 'The colonoscope reached the cecum.'
+        yield 'S1-e2 attached, adjacent', EGD_NOTE + 'Attached Report\n' + reach, 'The colonoscope reached the cecum.'
+        yield 'S1-h2 outside, far', EGD_NOTE + 'Outside Report\n' + ATTACHED + reach, 'The colonoscope reached the cecum.'
+        yield 'S1-k2 dated facility heading', EGD_NOTE + 'Mercy GI, March 2023\n' + ATTACHED + reach, \
+            'The colonoscope reached the cecum.'
+        yield 'S1-l2 EGD-titled', EGD_NOTE.replace('Procedure Note', 'Upper Endoscopy Report') + 'Attached Report\n' \
+            + ATTACHED + reach, 'The colonoscope reached the cecum.'
+        yield 'ED3 unit statistics', EGD_NOTE + 'Next Steps\nBowel preparation: split dose the evening before.\nIn our unit ' \
+            'the colonoscope reached the cecum in 98 of 100 patients.\n', \
+            'In our unit the colonoscope reached the cecum in 98 of 100 patients.'
+        # amendment_20261101_cycle1_b: the probes that leaked through cycle 1's guards - the EGD named only by a plain
+        # 'Procedure' heading, the pasted block under a heading no closed list names, or under none
+        plain = EGD_NOTE.replace('Procedure: EGD with biopsy.\n', 'Procedure\n')
+        assert plain.count('Procedure\n') == 1 and 'EGD with biopsy' not in plain
+        for heading in ('Additional Pages\n', 'Report from Dr. Okafor\n', 'Pages the patient brought\n',
+                        'From the chart\n', ''):
+            yield f'neutral heading {heading.strip() or "(none)"}', plain + heading + NEUTRAL_8 + reach, \
+                'The colonoscope reached the cecum.'
+        yield 'Endoscopy Report signed by name only', plain + 'Endoscopy Report\n' + NEUTRAL_8 + reach + \
+            'Electronically signed by J. Doe, MD\n', 'The colonoscope reached the cecum.'
+
+    def test_45378_is_excluded_as_installed(self):
+        for name, text, quote in self.shapes():
+            with self.subTest(name):
+                row = assess(name, text, [EGD_BX, ('45378', quote, 'not_done')])
+                p = row['proposals']['45378']
+                self.assertEqual((p['bucket'], p['status']), ('excluded', 'excluded'), name)
+                # where the EGD is named ('Procedure: EGD with biopsy.') 43239 is READY; under a plain 'Procedure'
+                # heading routing names no EGD, so it is held as on installed (never excluded)
+                want = 'ready' if 'EGD with biopsy' in text else 'needs_clarification'
+                self.assertEqual(row['proposals']['43239']['status'], want, name)
+
+    def test_the_reach_is_read_only_inside_today_s_narrative(self):
+        # a head that names both procedures (so the head rule adds no hold): the attached report alone holds S1
+        text = BOTH_TITLE + UPPER_PART + '\nAttached Report\n' + FILL_8 + 'The colonoscope reached the cecum.\n'
+        self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
+        today = BOTH_TITLE + UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum. No polyps were seen.\n'
+        self.assertIn(services._PI_REACH_CUE, service(read(today), 'gi.colonoscopy').cues)
+
+    def test_only_for_a_family_the_head_names(self):
+        # amendment_20261101_cycle1_b: positive evidence (it replaced cycle 1's hold-only 'the head excludes')
+        text = B + 'Upper Endoscopy Report\n' + FIELDS + 'The colonoscope reached the cecum. No polyps were seen.\n'
+        self.assertIsNone(service(read(text), 'gi.colonoscopy'))
+        self.assertEqual(services._pi_head_families(text), frozenset({'gi.egd'}))
+        self.assertEqual(services._pi_head_families(BOTH_TITLE), frozenset({'gi.egd', 'gi.colonoscopy'}))
+        # "Procedure: EGD with biopsy." stands after the body's first heading ('History'): the body's, never the head's
+        self.assertEqual(services._pi_head_families(EGD_NOTE), frozenset())
+        field = B + 'Procedure Note\n' + FIELDS + 'Procedure: Colonoscopy\n'  # a procedure field of the head itself
+        self.assertEqual(services._pi_head_families(field), frozenset({'gi.colonoscopy'}))
+        # a head that names no family: the neutral heading's pasted reach (the probe that leaked through cycle 1) is
+        # silent although every copy guard of today's narrative passes there
+        neutral = EGD_NOTE.replace('Procedure: EGD with biopsy.\n', 'Procedure\n') + 'Additional Pages\n' + NEUTRAL_8 + \
+            'Bowel preparation: adequate.\nThe colonoscope reached the cecum. No polyps were seen.\n'
+        pos = neutral.index('The colonoscope reached')
+        day = dt.date(2026, 10, 20)
+        self.assertTrue(detect.in_todays_narrative(neutral, pos, day, (pos, neutral.index('.', pos) + 1)))
+        self.assertTrue(detect.todays_procedure_report(neutral))
+        s = service(read(neutral, day), 'gi.colonoscopy')
+        self.assertTrue(s is None or services._PI_REACH_CUE not in s.cues)
+
+    def test_never_in_a_clause_dated_even_today(self):
+        # the clause's own date holds S1 even where the date is today's (the narrative's block check passes there)
+        text = BOTH_TITLE + UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum on 10/19/2026.\n'
+        self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
+
+    def test_never_for_a_family_the_head_names_only_as_not_done_today(self):
+        # amendment_20261101_cycle1_d: 'colonoscopy next year' in the head's procedure field names nothing
+        reach = UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum. No polyps were seen.\n'
+        planned = B + 'Procedure Note\n' + FIELDS + 'Procedure: EGD; colonoscopy next year\n' + reach
+        self.assertIn('gi.colonoscopy', services._pi_head_families(planned))  # by name alone
+        self.assertNotIn('gi.colonoscopy', services._pi_head_families(planned, detect.route(planned, DAY)))
+        s = service(read(planned), 'gi.colonoscopy')
+        self.assertTrue(s is None or services._PI_REACH_CUE not in s.cues)
+        # named as today's, the colonoscopy counts (here the procedure line itself already states it performed)
+        both = planned.replace('Procedure: EGD; colonoscopy next year', 'Procedure: EGD and colonoscopy')
+        self.assertIn('gi.colonoscopy', services._pi_head_families(both, detect.route(both, DAY)))
+
+    def test_never_in_an_office_visit_note_with_procedure_fields(self):
+        # a strong head whose title names both procedures, but routing reads the office visit done: the office-visit
+        # check alone holds the reach
+        text = (B + 'Office Visit, Gastroscopy and Colonoscopy\nDate of service: 10/19/2026\nGastroenterologist: '
+                'Synthetic MD (fictional)\nSedation and airway: midazolam (fictional)\n' + UPPER_PART + 'Large Bowel\n'
+                'The colonoscope reached the cecum. A polyp was removed with a cold snare.\n')
+        self.assertTrue(detect.todays_procedure_report(text))
+        self.assertIn('gi.colonoscopy', services._pi_head_families(text))
+        self.assertIn(detect.route(text, DAY).finding('gi.office_em').status, services.POSITIVE)
+        self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
+
+
+FILL_8 = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
+NEUTRAL_8 = ''.join(f'Line {i} of the pages lists medications and allergies in detail.\n' for i in range(8))
+
+
+def review(edits):
+    """h4-06 rewritten as the refutation's later pathology review (F2): titled a review, dated 11/03 in its head, its
+    report copied below, the head's proceduralist and sedation lines replaced by ``edits``; every replacement asserted
+    to apply exactly once."""
+    text = DOCS['h4-06']['text']
+    for old, new in [('Post-Resection Colon Surveillance', 'Colon Surveillance Pathology Review'),
+                     ('Day of procedure: Oct 27, 2026', 'Date of service: Nov 3, 2026'),
+                     ('Colonoscopist: Evander Quarshie-Moll, MD (fictional)\n\nPropofol given by: Saskia Lindgren-Afful, '
+                      'CRNA (fictional), of Brackenfield Anesthesia Associates (fictional), which\nreports its own service',
+                      edits),
+                     ('This is his one-year surveillance colonoscopy. He took the split-dose preparation as instructed.',
+                      'His one-year surveillance colonoscopy was performed here on Oct 27, 2026; its report is copied '
+                      'below for this pathology review.'),
+                     ('Oct 27, 2026 12:31', 'Nov 3, 2026 09:10')]:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
+    return text
+
+
+class RefutationF2Tests(SimpleTestCase):
+    """F2: E1 took sections.procedure_report_head's loose word match as evidence of today's report, so a later pathology
+    review that copies a colonoscopy report made 45385 READY for the review's date. It is held on extent again. (E1 was
+    dropped in Wave 1 repair cycle 2: these inputs read as installed; the one test whose expected value changed was
+    renamed, test_e1_reads_only_inside_today_s_narrative.)"""
+    QUOTE = 'Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered.'
+
+    def test_45385_is_held_on_extent(self):
+        for name, edits in (('G1b attending', 'Attending: Evander Quarshie-Moll, MD (fictional)'),
+                            ('G1e gastroenterologist', 'Gastroenterologist: Evander Quarshie-Moll, MD (fictional)'),
+                            ('G3b sedation in an allergy line', 'Author: Evander Quarshie-Moll, MD (fictional)\n'
+                                                                'Allergies: none; no reaction to sedation in the past.')):
+            with self.subTest(name):
+                text = review(edits)
+                self.assertFalse(detect.todays_procedure_report(text), name)
+                p = assess(name, text, [('45385', self.QUOTE, 'not_done')])['proposals']['45385']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'), name)
+                self.assertIn('extent', p['clarifications'], name)
+
+    def test_even_with_the_copied_head_fields_the_review_is_held(self):
+        # the review keeps the copied report's proceduralist and sedation lines: its title and its copy statement hold
+        for title in ('Colon Surveillance Pathology Review', 'Colon Surveillance'):
+            text = review('Colonoscopist: Evander Quarshie-Moll, MD (fictional)\n\nPropofol given by: Saskia '
+                          'Lindgren-Afful, CRNA (fictional)').replace('Colon Surveillance Pathology Review', title)
+            self.assertEqual(service(read(text, dt.date(2026, 11, 3)), 'gi.colonoscopy').extent, '', title)
+
+    def test_no_extent_inside_or_outside_today_s_narrative(self):
+        # was test_e1_reads_only_inside_today_s_narrative ('cecum' inside today's narrative): E1 dropped in cycle 2,
+        # so neither statement gives an extent, as installed
+        lower = B + 'Lower Endoscopy\n' + FIELDS
+        today = 'The colonoscope was inserted and a polyp was removed with a cold snare.'
+        self.assertEqual(service(read(lower + today + ' The cecum was normal.\n'), 'gi.colonoscopy').extent, '')
+        attached = lower + today + '\n\nAttached Report\n' + FILL_8 + 'The cecum was normal.\n'
+        self.assertEqual(service(read(attached), 'gi.colonoscopy').extent, '')
+
+    def test_e1_never_from_a_history_section_even_undated(self):
+        # the narrative's block check passes here (no date): the history section alone holds E1
+        text = (LOWER + 'History: an outside colonoscopy last week was normal.\nThe colonoscope was advanced to the cecum. '
+                'A polyp was removed with a cold snare.\n')
+        s = service(read(text), 'gi.colonoscopy')
+        self.assertEqual((s.status, s.completion, s.extent), ('performed', 'complete', ''))
+
+
+class RefutationF5Tests(SimpleTestCase):
+    """F5: A1's paragraph carry followed a sentence that names the colonoscopy in passing past a gastric lesion, bound
+    the unsited snare of 'the polyp' to the colonoscopy, and turned a correct 45378 READY into a hold with a new
+    second-review item. A1 itself was dropped in Wave 1 repair cycle 2: every input below reads as installed (the act
+    stays unattributed); the two tests whose expected value changed were renamed,
+    test_the_lesion_carry_stands_only_within_its_paragraph and test_the_lesion_carry_lapses_at_a_line_written_as_a_heading."""
+    A1 = (B + 'Gastroscopy and Colonoscopy\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol by '
+          'CRNA\n\nFindings\nThe colonoscope was advanced to the cecum. The colon was normal.\nThe gastroscope was advanced '
+          'to the second part of the duodenum. A 12 mm polyp was seen in the gastric body. ')
+    ASIDES = {'done first': 'The colonoscopy had been done first, under the same sedation. ',
+              'similar': 'It looked similar to the polyps found at the colonoscopy just completed. ',
+              'set aside': 'The colonoscope was cleaned and set aside meanwhile. ',
+              # amendment_20261101_cycle1_b: asides that name the colonoscopy's own sites (cycle 1 read each as the start
+              # of the colonoscopy's narrative and cleared the lesion carry)
+              'reached the cecum': 'The colonoscopy, done first, had reached the cecum. ',
+              'a normal colon': 'The colonoscopy, done first, had shown a normal colon. ',
+              'the rectum': 'The colonoscope had been withdrawn from the rectum before this. ',
+              'the terminal ileum': 'The colonoscope had intubated the terminal ileum earlier. '}
+    SNARE = 'A hot snare was used to remove the polyp.\n'
+
+    def snares(self, text):
+        return [(s.family, a.status) for s in read(text, dt.date(2026, 10, 20)).services for a in s.acts
+                if a.kind == 'snare']
+
+    def test_the_snare_never_binds_to_the_colonoscopy(self):
+        for name, aside in self.ASIDES.items():
+            with self.subTest(name):
+                self.assertNotIn('gi.colonoscopy', [f for f, _ in self.snares(self.A1 + aside + self.SNARE)])
+
+    def test_45378_stays_ready_with_no_colonoscopy_snare_item(self):
+        codes = [('45378', 'The colonoscope was advanced to the cecum.', 'done'),
+                 ('43251', 'A hot snare was used to remove the polyp.', 'done')]
+        for name in ('done first', 'similar', 'reached the cecum', 'a normal colon'):
+            with self.subTest(name):
+                text = self.A1 + self.ASIDES[name] + self.SNARE
+                p = assess(name, text, codes)['proposals']['45378']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'ready'), name)
+                self.assertNotIn('gi.colonoscopy', [f for f, _, _ in unresolved(text, codes)], name)
+        for name in ('the rectum', 'the terminal ileum'):  # 45378 is held on installed here too: no base_included, no item
+            with self.subTest(name):
+                text = self.A1 + self.ASIDES[name] + self.SNARE
+                p = assess(name, text, codes)['proposals']['45378']
+                self.assertNotIn('base_included', p['clarifications'], name)
+                self.assertNotIn('gi.colonoscopy', [f for f, _, _ in unresolved(text, codes)], name)
+
+    def test_even_the_colonoscopy_s_own_narrative_never_clears_the_lesion_carry(self):
+        # amendment_20261101_cycle1_b, a recorded cost: the paragraph moves on to the colonoscopy, but its lesion carry is
+        # the gastric polyp's, so the unsited snare stays unattributed (as installed) rather than risk the wrong service.
+        # Cycle 2 dropped A1 and its lesion carry; the input still reads as installed (expected value unchanged)
+        text = self.A1 + 'The colonoscope was advanced again to the cecum. A polyp was removed with a hot snare.\n'
+        self.assertEqual(self.snares(text), [])
+
+    def test_after_a_blank_line_the_unsited_snare_stays_unattributed(self):
+        # was test_the_lesion_carry_stands_only_within_its_paragraph (A1's paragraph carry gave it to the colonoscopy):
+        # both families are read performed by installed's own readings, so installed leaves it unattributed
+        text = self.A1 + '\n\nThe colonoscopy followed under the same sedation. A hot snare was used to remove a polyp.\n'
+        self.assertEqual(self.snares(text), [])
+
+    def test_after_a_heading_line_the_unsited_snare_stays_unattributed(self):
+        # was test_the_lesion_carry_lapses_at_a_line_written_as_a_heading (amendment_20261101_cycle1_c's heading lapse,
+        # dropped with A1 together with its helper _pi_heading_between): installed leaves the snare unattributed
+        text = self.A1 + '\nLarge Bowel\nThe colonoscopy followed under the same sedation. A hot snare was used to remove ' \
+            'a polyp.\n'
+        self.assertEqual(self.snares(text), [])
+        self.assertFalse(any(hasattr(services, n) for n in ('_pi_heading_between', '_pi_lesion_against', '_pi_carried',
+                                                             'PARAGRAPH_BREAK')))
+
+
+# --- GI round 4 Wave 1 repair, cycle 2 (pi.json amendment_20261101_cycle2): E1 and A1 DROPPED. The refutation's own
+# inputs (PI-E1-NEG-ENDPOINT, PI-A1-HEADING-LAPSE-REBINDS), each reproduced on fbc59ee53 before the drop, and independent
+# variants read as installed; S1's binding rule (S1BindingTests, killing pi-reach-binding*) and the S1-TITLE-HOLD-FOLLOWUP
+# limit (S1TitleHoldLimitTests) are pinned ---
+
+
+def replaced(text, *pairs):
+    """``text`` with each (old, new) applied, every old asserted to occur exactly once."""
+    for old, new in pairs:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
+    return text
+
+
+class DroppedE1Tests(SimpleTestCase):
+    """PI-E1-NEG-ENDPOINT: an endpoint line saying the endpoint was not examined (or seen on CT, or by someone else) was
+    E1's extent, and two regression-shaped reports that never reached their endpoint went READY. With E1 dropped every
+    such report is held on extent, as installed; the 'not reached' controls were held throughout."""
+    EVL = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+
+    def h4_03(self, duodenum):
+        # the finding's input (a): the pylorus out of view, the duodenum line rewritten
+        return replaced(DOCS['h4-03']['text'],
+                        ('The gastroscope went in through a bite block and was passed down the esophagus, through the '
+                         'stomach and pylorus, into the descending duodenum.',
+                         'The gastroscope went in through a bite block and was passed down the esophagus into the stomach; '
+                         'retained food in the antrum kept the pylorus out of view.'),
+                        ('The duodenal bulb and descending duodenum were normal.', duodenum))
+
+    def h4_06(self, ileum):
+        # the finding's input (b): the examination ended in the sigmoid colon, the neoterminal ileum line rewritten
+        return replaced(DOCS['h4-06']['text'],
+                        ('Reach of the examination: ileocolic anastomosis, with 6 cm of neoterminal ileum viewed through '
+                         'it.\nCecal intubation: not applicable, because the cecum and ascending colon were removed in '
+                         '2025.\n', ''),
+                        ('All of the remaining colon was inspected on withdrawal.',
+                         'The examination ended in the sigmoid colon because of a fixed angulation.'),
+                        ('Anastomosis: widely patent, with healthy mucosa, an intact staple line and no nodularity or '
+                         'recurrence.\n', ''),
+                        ('Transverse colon: one 5 mm sessile polyp, resected whole by cold snare and recovered.',
+                         'Sigmoid colon: one 5 mm sessile polyp, resected whole by cold snare and recovered.'),
+                        ('Descending and sigmoid colon: a few diverticula.', 'Sigmoid colon: a few diverticula.'),
+                        ('1. Healthy ileocolic anastomosis without recurrence.\n\n2. Transverse colon polyp, 5 mm, '
+                         'removed by cold snare.', '1. Sigmoid colon polyp, 5 mm, removed by cold snare.\n\n2. The '
+                                                   'anastomosis was not seen.'),
+                        ('Neoterminal ileum: normal.', ileum))
+
+    def test_an_egd_that_never_passed_the_pylorus_is_held_on_extent(self):
+        for line in ('Duodenal bulb and descending duodenum: not assessed today.',  # the finding's
+                     'The duodenal bulb and descending duodenum were not evaluated.',
+                     'Duodenal bulb and descending duodenum: normal on the CT.',
+                     'Duodenal bulb and descending duodenum: normal per the referring physician.',  # a variant
+                     'Duodenal bulb and descending duodenum: not reached.'):  # the control
+            with self.subTest(line):
+                text = self.h4_03(line)
+                self.assertEqual(service(read(text, dt.date(2026, 10, 6)), 'gi.egd').extent, '')
+                p = assess(line, text, [('43244', self.EVL, 'done_incomplete')], '2026-10-06')['proposals']['43244']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'))
+                self.assertIn('extent', p['clarifications'])
+                self.assertIn('facts.required', p['checks'])
+
+    def test_a_colonoscopy_that_stopped_in_the_sigmoid_is_held_on_extent(self):
+        for line in ('Neoterminal ileum: not assessed today.',  # the finding's
+                     'Neoterminal ileum: not evaluated.', 'Neoterminal ileum: normal on CT enterography.',
+                     'Neoterminal ileum: normal per the surgeon.',
+                     'Neoterminal ileum: deferred to the next examination.',  # a variant
+                     'Neoterminal ileum: not reached.'):  # the control
+            with self.subTest(line):
+                text = self.h4_06(line)
+                self.assertEqual(service(read(text, dt.date(2026, 10, 27)), 'gi.colonoscopy').extent, '')
+                p = assess(line, text, [('45385', 'Sigmoid colon polyp, 5 mm, removed by cold snare.',
+                                         'done_incomplete')], '2026-10-27')['proposals']['45385']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'needs_clarification'))
+                self.assertIn('extent', p['clarifications'])
+
+
+class DroppedA1Tests(SimpleTestCase):
+    """PI-A1-HEADING-LAPSE-REBINDS: after a sub-heading the paragraph carry bound the gastric polyp's hot snare to the
+    colonoscopy (the reverse text: the colonic snare to the upper endoscopy), held a correct READY on base_included and
+    offered a snare item for a second review. With A1 dropped the snare is unattributed, as installed: no READY is held
+    and no item is offered."""
+    HEAD = (B + 'Gastroscopy and Colonoscopy\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol '
+            'by CRNA\n\nFindings\n')
+    FORWARD = ('The colonoscope was advanced to the cecum. The colon was normal.\nThe gastroscope was advanced to the '
+               'second part of the duodenum. A 12 mm polyp was seen in the gastric body. {aside}\n{heading}\nA hot snare '
+               'was used to remove the polyp.\n')
+    REVERSE = ('The gastroscope was advanced to the second part of the duodenum. The stomach was normal.\nThe colonoscope '
+               'was advanced to the cecum. A 7 mm polyp was seen in the transverse colon. The gastroscopy had been done '
+               'first, under the same sedation.\n{heading}\nA hot snare was used to remove the polyp.\n')
+    SNARE = 'A hot snare was used to remove the polyp.'
+    HEADINGS = ('Polypectomy', 'Intervention', 'Treatment', 'Removal', 'Therapeutic Intervention', 'Polyp Removal',
+                'Snare Polypectomy')  # the finding's six, and a variant
+    ASIDES = ('The colonoscopy had been done first, under the same sedation.',  # the finding's
+              'It looked similar to the polyps found at the colonoscopy just completed.',
+              'Colonoscopy findings are listed above.')
+
+    def snares(self, text):
+        return [(s.family, a.status) for s in read(text, dt.date(2026, 10, 20)).services for a in s.acts
+                if a.kind == 'snare']
+
+    def test_the_gastric_snare_is_never_the_colonoscopy_s(self):
+        codes = [('45378', 'The colonoscope was advanced to the cecum.', 'done'), ('43251', self.SNARE, 'done')]
+        for heading in self.HEADINGS:
+            for aside in self.ASIDES:
+                with self.subTest(heading=heading, aside=aside):
+                    text = self.HEAD + self.FORWARD.format(aside=aside, heading=heading)
+                    self.assertEqual(self.snares(text), [])
+                    p = assess(heading, text, codes, '2026-10-20')['proposals']['45378']
+                    self.assertEqual((p['bucket'], p['status']), ('selected', 'ready'))
+        text = self.HEAD + self.FORWARD.format(aside=self.ASIDES[0], heading='Polypectomy')
+        self.assertNotIn('gi.colonoscopy', [f for f, _, _ in unresolved(text, codes)])
+
+    def test_the_reverse_text_never_binds_the_colonic_snare_to_the_upper_endoscopy(self):
+        codes = [('43235', 'The gastroscope was advanced to the second part of the duodenum.', 'done'),
+                 ('45385', self.SNARE, 'done')]
+        for heading in self.HEADINGS:
+            with self.subTest(heading):
+                text = self.HEAD + self.REVERSE.format(heading=heading)
+                self.assertEqual(self.snares(text), [])
+                p = assess(heading, text, codes, '2026-10-20')['proposals']['43235']
+                self.assertEqual((p['bucket'], p['status']), ('selected', 'ready'))
+        text = self.HEAD + self.REVERSE.format(heading='Polypectomy')
+        self.assertNotIn('gi.egd', [f for f, _, _ in unresolved(text, codes)])
+
+
+class S1BindingTests(SimpleTestCase):
+    """S1's binding rule (cycle 2: S1's reading of h4-04 depended on A1). Where more than one family is read performed,
+    a family S1 alone reads performed takes no part in installed's one-performed-family fallback (pi-reach-binding);
+    an installed performed reading of the family puts it back (pi-reach-binding-installed); where S1's family is the only
+    one read performed it still takes an act or lesion nothing else gives a family (pi-reach-binding-own)."""
+    UNSITED = 'A hot snare was closed around the stalk and the polyp was removed.'
+
+    def test_h4_04_keeps_s1_and_binds_its_acts_as_installed(self):
+        inv = read(DOCS['h4-04']['text'])
+        egd, colon = service(inv, 'gi.egd'), service(inv, 'gi.colonoscopy')
+        self.assertIn(services._PI_REACH_CUE, colon.cues)  # S1 kept: the colonoscope's reach read as performed
+        self.assertEqual(colon.status, 'uncertain')
+        # the narrative's unsited snare is the upper endoscopy's, with its own passage, as installed and as on the
+        # cycle-1 tree (A1's carry bound it there; without the rule it would bind to no service)
+        [snare] = [a for a in egd.acts if a.kind == 'snare']
+        self.assertEqual(snare.status, 'performed')
+        self.assertIn('A hot\nsnare was closed around the stalk 5 mm below the head', [e.text for e in snare.evidence])
+
+    def test_h4_04_43251_stays_ready_with_its_cycle_1_fingerprint(self):
+        from ops.gi4 import replay
+        walk = {p['code']: p for p in replay.replay({'h4-04': DOCS['h4-04']})['documents']['h4-04']['states']['walk'][
+            'proposals']}
+        self.assertEqual((walk['43251']['bucket'], walk['43251']['status']), ('selected', 'ready'))
+        self.assertNotIn('evidence.support', [c for c, _ in walk['43251']['checks']])
+        self.assertEqual(walk['43251']['fingerprint'][:8], '9d6bff8e')
+        self.assertEqual((walk['45378']['bucket'], walk['45378']['status']), ('selected', 'needs_clarification'))
+
+    def test_an_unsited_gastric_snare_stays_the_upper_endoscopy_s(self):
+        text = (BOTH_TITLE + 'Stomach and Duodenum\nThe gastroscope was advanced to the second part of the duodenum. In '
+                'the gastric antrum sat a 14 mm pedunculated polyp. ' + self.UNSITED + '\nLarge Bowel\nThe colonoscope '
+                'reached the cecum. No polyps were seen.\n')
+        inv = read(text)
+        self.assertIn(services._PI_REACH_CUE, service(inv, 'gi.colonoscopy').cues)
+        self.assertEqual([(a.kind, a.status) for a in service(inv, 'gi.egd').acts], [('snare', 'performed')])
+        self.assertEqual(list(service(inv, 'gi.colonoscopy').acts), [])
+
+    def test_an_installed_reading_after_the_reach_puts_the_family_back(self):
+        # both families read performed by installed's own readings (the passive 'was then advanced' after S1's reach):
+        # installed leaves the unsited cold snare unattributed, and so does this rule
+        text = (BOTH_TITLE + UPPER_PART + 'Large Bowel\nThe colonoscope reached the cecum. The colonoscope was then '
+                'advanced into the terminal ileum. A polyp was removed with a cold snare.\n')
+        inv = read(text)
+        self.assertIn(services._PI_REACH_CUE, service(inv, 'gi.colonoscopy').cues)
+        self.assertEqual([(s.family, a.kind) for s in inv.services for a in s.acts], [])
+
+    def test_s1_s_own_domain_keeps_its_family(self):
+        # the colonoscopy is the only family read performed (the title names the upper endoscopy, nothing states it
+        # done): the unsited cold snare is the colonoscopy's, as on the cycle-1 tree (installed reads neither performed)
+        text = BOTH_TITLE + 'Large Bowel\nThe colonoscope reached the cecum. A polyp was removed with a cold snare.\n'
+        inv = read(text)
+        self.assertNotEqual(service(inv, 'gi.egd').status, 'performed')
+        self.assertEqual([(a.kind, a.status) for a in service(inv, 'gi.colonoscopy').acts], [('snare', 'performed')])
+
+
+class S1TitleHoldLimitTests(SimpleTestCase):
+    """S1-TITLE-HOLD-FOLLOWUP, recorded as a known limit (pi.json amendment_20261101_cycle2): the strong head's closed
+    title-hold list matches anywhere in today's own title, so h4-04 titled 'Gastroscopy Then Follow-up Colonoscopy' loses
+    S1 and reads as installed - 45378 EXCLUDED on 'She has never had a colonoscopy.'. A cost of failing closed, never
+    worse than installed; pinned so a change that lifts it must say so."""
+
+    def test_a_follow_up_title_loses_s1_as_installed(self):
+        text = replaced(DOCS['h4-04']['text'], ('Gastroscopy Then Colonoscopy in One Sitting',
+                                                'Gastroscopy Then Follow-up Colonoscopy'))
+        self.assertFalse(detect.todays_procedure_report(text))
+        self.assertNotIn(services._PI_REACH_CUE, service(read(text), 'gi.colonoscopy').cues)
+        p = assess('follow-up', text, [('45378', 'The colonoscope reached the cecum, where its landmarks, the', 'done')],
+                   '2026-10-19')['proposals']['45378']
+        self.assertEqual((p['bucket'], p['status']), ('excluded', 'excluded'))

@@ -48,7 +48,7 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@4'
+ROUTING_VERSION = 'gi-routing@5'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -3622,13 +3622,15 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             cut_denials.append((blocked[-1], m.start(), m.end(), ws, we,
                                                 status in ('negated', 'cancelled', 'incomplete')))
                     elif status in ('performed', 'incomplete') and (
-                            cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
+                            _pe_reached_before(an, pre, depth, table, m.start(), post)  # GI round 4 PE
+                            or cues.REACHED_AFTER.search(post)
                             or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we)
                                 and not _P2_label_denied(an, m.end(), depth, table))  # round 4c-2 plan:D
                             or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
                         if cut is not None and _S2_read_by_the_cut(an, m.end(), we) \
-                                and not (cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
+                                and not (_pe_reached_before(an, pre, depth, table, m.start(), post)
+                                         or cues.REACHED_AFTER.search(post)
                                          or _straight_after_service(an, ws, m.start())):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
                     elif status in ('performed', 'incomplete') and _depth_reach_today(an, ws, pre):
@@ -3665,6 +3667,496 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
         doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
         reached = [hit for hit in reached if id(hit) not in doubted_reaches]
     return reached, blocked
+
+
+def _pe_reached_before(an: Analysis, pre: str, depth: int, table, at: int, post: str) -> bool:
+    """Whether ``pre``, the clause window before a landmark at ``depth`` of ``table`` starting at ``at`` (``post``: the
+    window after it), ends with a reach to it, for _landmarks (GI round 4, package PE: synthesis E2). As installed
+    (cues.REACHED_BEFORE), or by one of routing's own reach verbs (cues.REACHED_BEFORE_ROUTING adds "steered" and
+    "navigated": h4-04's "The gastroscope was introduced by mouth under visual guidance and steered through the stomach
+    and pylorus into the second part of the duodenum" read "incomplete: stomach"), and then only where _pe_routing_reach
+    holds. Wherever a routing-only verb is not read, the installed reading stands, so the new vocabulary can only add a
+    reach to a family's endpoint: never a denial, never an incompleteness, and nothing on the request side (sections
+    reads cues.REACHED_BEFORE, unchanged)."""
+    if cues.REACHED_BEFORE.search(pre):
+        return True
+    if not re.search(r'steered|navigated', pre, re.A | re.I):
+        return False  # no routing-only verb: the installed reading, at the installed cost
+    found = cues.REACHED_BEFORE_ROUTING.search(pre)
+    return found is not None and _pe_routing_reach(an, pre, post, found, depth, table, at)
+
+
+def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth: int, table, at: int) -> bool:
+    """Whether a reach that only a routing-only verb reads (``found``: cues.REACHED_BEFORE_ROUTING's match in ``pre``,
+    where cues.REACHED_BEFORE read none) is the endoscope's own reach, today, to the landmark at ``at`` (GI round 4,
+    package PE). The status vocabulary knows neither verb (cues._HEDGE_ACT and the 'could not', 'unable to' and 'not
+    advanced' cues list "advanced", never "steered"), so the hit's own reading may rest on its section alone. Fail
+    closed, each guard giving back the installed reading:
+    - the landmark lies at or beyond the depth the family calls for (_S2_expected_depth: the cecum for the lower tract,
+      the depth the named upper endoscopies call for), so a routing-only verb never reads a shallower landmark and never
+      makes a procedure incomplete ("steered into the stomach" before "Normal duodenal mucosa."; "navigated to the
+      hepatic flexure, where a polyp was removed with a cold snare, and then on to the cecum");
+    - nothing denies, hedges, plans, conditions or generalises the reach (_pe_reach_doubted: "could not be steered into
+      the duodenum", "steered toward but not into the duodenum", "We hoped the scope would be steered to the cecum",
+      "The colonoscope, to be navigated to the cecum later, was withdrawn");
+    - the instrument moved is an endoscope (_pe_endoscope_moved): "A guidewire was navigated through the pylorus into
+      the duodenum" says nothing of where the gastroscope went;
+    - the document is no note written around a procedure (_pe_around_procedure: a letter, a booking, a handout, a records
+      review quoting a report);
+    - the document's head names the family whose endpoint the verb reaches (_pe_head_names, routing's own names in its
+      title lines and procedure fields; GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an 'Upper Endoscopy
+      Report' whose pasted colonoscopy block sat under 'Additional Pages', or under no heading, had read the cecum
+      reached);
+    - the verb lies inside today's procedure narrative (in_todays_narrative, the copy guards PI's S1 reads too:
+      never in an attached or outside report, under a line naming another occurrence's record - "Outside Records" over
+      "At Mercy GI the colonoscope was navigated to the cecum" - after a sign-off or a statement that a copy follows, in a
+      block dated another day, or in unit statistics; GI round 4 Wave 1 repair, F3: "Attached Report" ten lines above
+      "The colonoscope was navigated to the cecum", signed 03/02/2024, had read the cecum reached)."""
+    if not re.match(r'(?:steered|navigated)\b', found.group(0), re.A | re.I):
+        return False  # every other verb of the pattern is cues.REACHED_BEFORE's, which read no reach here
+    if depth < _S2_expected_depth(an, table):
+        return False  # short of the family's endpoint: never a new incompleteness
+    before, span = pre[:found.start()], pre[found.start():]
+    if _pe_reach_doubted(before, span, post):
+        return False
+    if not _pe_endoscope_moved(before, span):
+        return False
+    if _pe_around_procedure(an):
+        return False
+    if not _pe_head_names(an, table):
+        return False  # the head names no family this reach completes: no positive evidence of today's report of it
+    verb = at - len(pre) + found.start()
+    return in_todays_narrative(an.text, verb, an.service_date, (at - len(pre), at + len(post)))
+
+
+def _pe_reach_doubted(before: str, span: str, post: str) -> bool:
+    """Whether a routing-only verb's reach is denied or doubted (GI round 4, package PE), standing in for the status cues
+    that know the installed verbs only. Broad on purpose: a doubt only gives back the installed reading.
+    - ``before`` (the clause window up to the verb) ends, at most three words before the verb, with a negation ("could
+      not be steered", "was not successfully navigated", "couldn't be navigated", "never steered", "unable to be
+      steered", "failed to be navigated"), a modal ("would be steered", "may have been navigated", "will be steered",
+      "can be navigated"), an infinitive ("to be navigated"), a hedge or a generalising adverb ("probably",
+      "reportedly", "usually", "typically") or a present-tense auxiliary ("is then steered": a template or a handout);
+    - or right before the verb with a falling-short adverb (cues._FALLING_SHORT: "partially steered");
+    - or ``before`` holds a wish, a plan, an attempt or a condition anywhere ("We hoped the scope would be ...", "if the
+      scope can be ...", "whether ...", "once ...");
+    - or ``span`` (the verb up to the landmark) holds a negation, a hedge, a falling-short adverb or an attempt ("steered
+      toward but not into the duodenum", "steered, and an attempt was made to pass into the duodenum");
+    - or ``post`` (the clause window after the landmark) puts the reach at another time or under a condition ("to the
+      cecum later", "next time", "at the next procedure", "if ...", "will ...")."""
+    short = '|'.join(cues._FALLING_SHORT)
+    hedge = (r'possibly|probably|likely|presumably|apparently|perhaps|maybe|reportedly|supposedly|seemingly|allegedly|'
+             r'hopefully|ideally|usually|typically|normally|generally|routinely|often|sometimes')
+    if re.search(r"(?:\b(?:not|never|cannot|unable[ \t\n]+to|fail(?:s|ed)?[ \t\n]+to|no[ \t\n]+longer|neither|nor|may|"
+                 r"might|could|would|should|must|will|shall|can|ought|to[ \t\n]+be|is|are|gets?|" + hedge + r")|n't)"
+                 r"(?:[ \t\n]+[\w'-]+){0,3}[ \t\n]+$", before, re.A | re.I):
+        return True  # a negation, a modal, an infinitive, a hedge or the present tense governs the verb
+    if re.search(r'\b(?:' + short + r')[ \t\n]+$', before, re.A | re.I):
+        return True  # it fell short
+    if re.search(r'\b(?:hope[ds]?|hoping|plan(?:s|ned|ning)?|intend(?:s|ed|ing)?|expect(?:s|ed|ing)?|aim(?:s|ed|ing)?|'
+                 r'want(?:s|ed|ing)?|wish(?:es|ed|ing)?|tr(?:y|ies|ied|ying)|attempt(?:s|ed|ing)?|goal|if|unless|'
+                 r'whether|once|until|scheduled|booked|recommend(?:s|ed|ing)?)\b', before, re.A | re.I):
+        return True  # a wish, a plan, an attempt or a condition
+    if re.search(r"\b(?:not|never|no|nor|neither|without|unable|fail(?:s|ed|ing|ure)?|cannot|instead|attempt\w*|"
+                 r"tr(?:y|ies|ied|ying)|" + hedge + '|' + short + r")\b|n't", span, re.A | re.I):
+        return True  # denied or doubted between the verb and the landmark
+    return re.search(r'\b(?:later|tomorrow|upcoming|future|if|unless|when|once|will|would|next[ \t\n]+(?:time|week|'
+                     r'month|year|visit|procedure|attempt|session|examination|exam)|at[ \t\n]+(?:the|a)[ \t\n]+'
+                     r'(?:next|later|future|subsequent|repeat)|on[ \t\n]+repeat)\b', post, re.A | re.I) is not None
+
+
+def _pe_around_procedure(an: Analysis) -> bool:
+    """Whether the document is a note written around a procedure rather than its report (sections.around_procedure_title:
+    a booking, scheduling, pre-procedure, telephone, consent, instructions, education or handout note, a letter, a
+    records review): a reach it narrates is a quoted or a planned one, never read by a routing-only verb (GI round 4,
+    package PE; hold-only). Memoised per analysis."""
+    key = ('pe-around-procedure',)
+    if key not in an.memo:
+        an.memo[key] = gi_sections.around_procedure_title(an.text)
+    return an.memo[key]
+
+
+def _pe_endoscope_moved(before: str, span: str) -> bool:
+    """Whether the instrument a routing-only verb moves is an endoscope (GI round 4, package PE): a scope word
+    ("gastroscope", "colonoscope", "scope", "instrument": the endoscope as cues.REACHED_DEPTH reads it) as the verb's
+    object with no accessory between the verb and the landmark ("We steered the gastroscope into the second part of the
+    duodenum"), or as the nearest instrument word before the verb in its clause window ("The gastroscope was introduced
+    by mouth under visual guidance and steered ..."). An accessory nearer to the verb (a guidewire, a catheter, a
+    balloon, a dilator, a stent, a probe, a snare ...) or no scope word at all is no reach of the endoscope, and the
+    installed reading stands."""
+    accessory = (r'guide-?wires?|wires?|catheters?|balloons?|dilators?|bougies?|stents?|probes?|cannula[es]?|'
+                 r'sphincterotomes?|papillotomes?|baskets?|overtubes?|tubes?|sheaths?|needles?|clips?|snares?|forceps|'
+                 r'devices?|caps?|lasers?|fib(?:er|re)s?|nets?|endoloops?|loops?|ligators?|bands?|capsules?')
+    scope = r'\w*scopes?|instruments?'
+    if re.search(r'\b(?:' + accessory + r')\b', span, re.A | re.I):
+        return False
+    if re.search(r'\b(?:' + scope + r')\b', span, re.A | re.I):
+        return True
+    last = None
+    for last in re.finditer(r'\b(?:(?P<scope>' + scope + r')|' + accessory + r')\b', before, re.A | re.I):
+        pass
+    return last is not None and last.group('scope') is not None
+
+
+# --- GI round 4 Wave 1 repair, cycle 1 (packages PE and PI): today's procedure report and today's narrative ---------
+# One implementation of the copy guards the round's releasing readers share: PE's routing-only reach (_pe_routing_reach,
+# above) and PI's instrument reach (S1) in studio/gi/services.py, which reads them from here. PI's endpoint extent
+# (E1) read them too until Wave 1 repair cycle 2 dropped it (pi.json amendment_20261101_cycle2).
+# The refutation of b840ae756 read each release inside another record: an attached outside colonoscopy report in today's
+# EGD note (F1, F3), unit statistics under a plan heading (F1) and a later pathology review copying a colonoscopy report
+# (F2). A releasing reader therefore reads only inside TODAY'S procedure narrative - never in an attached, pasted,
+# copied, quoted or outside report, unit statistics, education, plan narration or a later review. Everything below only
+# HOLDS: False keeps the installed reading. The document is read once per text (cached; jobs.release_routing_caches
+# clears it), and each passage then in bounded windows.
+
+_GI4_MARKUP = re.compile(r'[ \t]*+[#*_>]*+[ \t]*+')  # a line's markdown lead, never a list bullet
+_GI4_FIELD = re.compile(r"(?P<label>[A-Za-z][A-Za-z0-9 \t/&()'’-]{0,59}?)[ \t]*+:[ \t]*+(?P<value>\S)", re.A)
+_GI4_FIELD_VALUE = re.compile(r':[ \t]*+\S')  # a colon with a value after it: a field line, never a heading
+_GI4_LIST_ITEM = re.compile(r'(?:\(?\d{1,3}[.)]|[a-z][.)]|[-*\u2022\u2013\u2014])[ \t]', re.A)
+# The head's own fields (the binding rule of the repair: the proceduralist and sedation fields as FIELDS, never words
+# anywhere). A proceduralist field is labelled with sections.PROCEDURE_HEAD's field names, without 'attending' (a review's
+# or a visit's attending is no proceduralist: F2's 'Attending:' review); a sedation field's label names sedation, a
+# sedative, anesthesia or an anesthetic, propofol, midazolam, fentanyl, MAC or a CRNA, and its value is no denial.
+_GI4_PROCEDURALIST = re.compile(r'(?:proceduralist|endoscopist|operator|performing (?:physician|endoscopist)'
+                                r'|gastroenterologist|colonoscopist)s?', re.A)
+_GI4_SEDATION = re.compile(r'\b(?:sedation|sedatives?|an(?:a)?esthe(?:sia|tics?|tists?|siology|siologists?)|propofol'
+                           r'|midazolam|fentanyl|mac|crna)\b', re.A)
+_GI4_NO_SEDATION = re.compile(r'(?:none|no|nil|n/?a|not[ \t]+(?:applicable|given|used|required|needed|administered|done)'
+                              r'|unsedated|without)\b|-+[ \t]*$', re.A | re.I)
+# A head title that names a later review, a result or another record: the document is no procedure's own report of
+# today (a closed list, read only to hold; sections.around_procedure_title holds the notes written around a procedure).
+_GI4_TITLE_HOLD = re.compile(r'\b(?:review(?:ed|s)?|pathology|histology|histopathology|results?|addend(?:um|a)'
+                             r'|follow[- ]?up|discharge|transfer|cop(?:y|ies|ied)|attached|attachments?|scanned|outside'
+                             r'|external|prior|previous|transcripts?|transcribed|excerpts?)\b', re.A | re.I)
+# A heading-like line that opens a foreign block, which runs on to the end of the document: an attachment or a copy, an
+# outside or external report or record (a closed list, read only to hold).
+_GI4_ATTACHED = re.compile(r'\b(?:attached|attachments?|scanned|enclosed|enclosures?|cop(?:y|ies|ied)|pasted|imported'
+                           r'|forwarded|faxed|appended|appendix|excerpts?|excerpted|quoted|transcribed|transcripts?'
+                           r'|reproduced|uploaded)\b|\b(?:outside|external)[ \t]+(?:[\w-]+[ \t]+){0,2}?(?:reports?'
+                           r'|records?|pages?|documents?|notes?|letters?|results?|studies|study|summar(?:y|ies))\b',
+                           re.A | re.I)
+# A sign-off line: today's report, or another one, ends there (its signer, a colon, "by" or a date follows the word).
+_GI4_SIGN_OFF = re.compile(r'(?:(?:report|note|document|study)[ \t]+)?(?:(?:electronically|digitally)[ \t]+)?(?:e-?)?'
+                           r'(?:signed|co-?signed|counter-?signed|attested|authenticated|dictated|finali[sz]ed|verified)'
+                           r'\b|(?:signature|attestation|authentication)\b', re.A | re.I)
+_GI4_SIGNER = re.compile(r':|\bby\b|\d{1,2}[/:.]\d{1,2}|\b(?:19|20)\d{2}\b|\b(?:MD|DO|RN|NP|PA-C|CRNA|MBBS|FRCP)\b', re.A)
+# A statement that a copy follows (a closed list, read only to hold): "its report is copied below", "see attached".
+_GI4_COPY = re.compile(
+    r'\b(?:cop(?:y|ied)|pasted|attached|enclosed|reproduced|appended|scanned|transcribed|quoted|excerpted|imported)'
+    r'[ \t]+(?:below|here(?:in|with)?|hereafter|as[ \t]+follows)\b'
+    r'|\b(?:reports?|records?|notes?|pages?|documents?|letters?|summar(?:y|ies)|results?|copies)[ \t]+(?:is|are|was'
+    r'|were|has[ \t]+been|have[ \t]+been)[ \t]+(?:copied|pasted|attached|enclosed|reproduced|appended|scanned|imported'
+    r'|forwarded|faxed|included|transcribed)\b'
+    r'|\bsee[ \t]+(?:the[ \t]+)?(?:attached|enclosed|scanned)\b'
+    r'|\b(?:a|the)[ \t]+cop(?:y|ies)[ \t]+of[ \t]+(?:the|her|his|their|its|an?|this|that)\b', re.A | re.I)
+# A governing heading that names education or instructions (a closed list, read only to hold).
+_GI4_EDUCATION = re.compile(r'\b(?:education(?:al)?|instructions?|handouts?|leaflets?|what[ \t]+(?:happens|to[ \t]+'
+                            r'expect)|preparing[ \t]+for|how[ \t]+to|faq|frequently[ \t]+asked)\b', re.A | re.I)
+# A governing heading below the head's own fields that names a facility: another place's record (closed, hold-only).
+_GI4_FACILITY = re.compile(r'(?i:\b(?:hospitals?|cent(?:er|re)s?|clinics?|institutes?|associates|infirmary|healthcare'
+                           r'|medical[ \t]+(?:group|cent(?:er|re))|health[ \t]+(?:system|care)|partners|practice)\b)'
+                           r'|\b(?!(?:Upper|Lower|UPPER|LOWER|The|Our|Your|His|Her)\b)[A-Z][A-Za-z]+[ \t]+GI\b', re.A)
+# Unit statistics or a generalisation in the passage's own sentence ("In our unit the colonoscope reached the cecum in
+# 98 of 100 patients"): no account of today's examination (a closed list, read only to hold).
+_GI4_GENERAL = re.compile(
+    r'\b(?:in|of|for|among)[ \t]+(?:\d+|most|many|all|nearly[ \t]+all|almost[ \t]+all|the[ \t]+majority[ \t]+of|some'
+    r'|few|our|these|such)[ \t]+(?:of[ \t]+)?(?:\d+[ \t]+)?(?:patients|cases|procedures|examinations|exams|studies'
+    r'|people|adults|individuals|colonoscopies|endoscopies)\b'
+    r'|\b\d+(?:\.\d+)?[ \t]*(?:%|percent\b)'
+    r'|\b(?:in|at|across)[ \t]+our[ \t]+(?:unit|practice|cent(?:er|re)|department|hospital|experience|series|clinic)\b'
+    r'|\b(?:usually|typically|generally|normally|routinely|commonly|often|sometimes|rarely|ordinarily)\b', re.A | re.I)
+_GI4_BLOCK_CHARS = 2000  # a passage's block is read at most this far on each side (bounded work per passage)
+_GI4_SENTENCE_CHARS = 1000  # and its own sentence this far
+_GI4_HEADING_CHARS = 60  # a heading-like line is short
+
+
+@dataclass
+class _Gi4Head:
+    own_dates: tuple  # the calendar dates of the head's own-date fields
+    proceduralist: bool
+    sedation: bool
+    fields_end: int  # the end of the head's last own field line (0: none)
+    titles: tuple  # (start, end) of the head's title lines
+
+
+@dataclass
+class _Gi4Marks:
+    line_starts: list
+    heads: list  # starts of the heading-like lines
+    head_ends: list
+    flags: list  # per heading-like line: (names another record or education, a facility, a history/plan/indication kind)
+    blanks: list  # starts of the blank lines
+    signoffs: list  # starts of the sign-off lines below the head's own fields
+    dates: tuple  # context.find_dates(text)
+    date_starts: list
+    foreign: int  # where the first foreign block opens (len(text) + 1: none)
+    beyond: dict = field(default_factory=dict)  # line start -> sections.beyond_heading_reach (memo)
+
+
+def _gi4_line(text: str, start: int, end: int) -> str:
+    """The line [start, end) without its markdown lead and surrounding blanks ('' for a long line: never a heading)."""
+    if end - start > 4 * _GI4_HEADING_CHARS:
+        return ''
+    body = _GI4_MARKUP.match(text, start, end).end()
+    return text[body:end].strip().rstrip('#*_').strip()
+
+
+def _gi4_heading_like(line: str) -> bool:
+    """A short stand-alone line written as a heading: letters, no sentence end, no field value, no list item."""
+    return (0 < len(line) <= _GI4_HEADING_CHARS and line[-1] not in '.;!?,' and any(c.isalpha() for c in line)
+            and not _GI4_FIELD_VALUE.search(line) and not _GI4_LIST_ITEM.match(line))
+
+
+@functools.lru_cache(maxsize=16)
+def _gi4_head(text: str) -> _Gi4Head:
+    """The head's own fields (its first sections.PROCEDURE_HEAD_LINES non-empty lines) and its title lines (the
+    title-shaped lines among its first sections.AROUND_PROCEDURE_TITLE_LINES non-empty lines, before its first field)."""
+    end = gi_sections.head_lines_end(text, gi_sections.PROCEDURE_HEAD_LINES)
+    own, proceduralist, sedation, fields_end, titles = [], False, False, 0, []
+    start, seen, fielded = 0, 0, False
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, line_end).end()
+        if body < line_end:
+            seen += 1
+            date_m = ctx.SERVICE_DATE.match(text, body, line_end) or ctx.WIDE_SERVICE_DATE.match(text, body, line_end)
+            field_m = _GI4_FIELD.match(text, body, line_end)
+            own_field = False
+            if date_m is not None and ctx.date_from_match(date_m) is not None:
+                own.append(ctx.date_from_match(date_m))
+                own_field = True
+            if field_m is not None:
+                fielded = True
+                label = ' '.join(field_m.group('label').lower().split())
+                if _GI4_PROCEDURALIST.fullmatch(label):
+                    proceduralist = own_field = True
+                if _GI4_SEDATION.search(label) \
+                        and not _GI4_NO_SEDATION.match(text, field_m.start('value'), line_end):
+                    sedation = own_field = True
+            if own_field:
+                fields_end = line_end
+            if not fielded and seen <= gi_sections.AROUND_PROCEDURE_TITLE_LINES:
+                line = _gi4_line(text, start, line_end)
+                if line and len(line) <= gi_sections.AROUND_PROCEDURE_TITLE_CHARS and line[-1] not in '.!?;,':
+                    titles.append((start, line_end))
+        if nl < 0:
+            break
+        start = nl + 1
+    return _Gi4Head(tuple(own), proceduralist, sedation, fields_end, tuple(titles))
+
+
+def todays_procedure_report(text: str) -> bool:
+    """Positive evidence that ``text`` (as written) is today's procedure report, by a STRONG head: among its first
+    sections.PROCEDURE_HEAD_LINES non-empty lines, each a labelled field at the start of its line, an own-date field
+    (a label the date reader reads as the service date, installed or wide, with a calendar date as its value), a
+    proceduralist field and a sedation field (_gi4_head); its own-date fields name one day only; and no title line names
+    a later review, a result or another record (_GI4_TITLE_HOLD). GI round 4 Wave 1 repair (F2): sections.
+    procedure_report_head took any 'Attending:' line, or the word 'sedation' anywhere in a head line, as that evidence."""
+    head = _gi4_head(text)
+    if not head.own_dates:  # an own-date field
+        return False
+    if len(set(head.own_dates)) > 1:  # one own date only (a second one names another day: whose report is it?)
+        return False
+    if not head.proceduralist:  # a proceduralist field
+        return False
+    if not head.sedation:  # a sedation field
+        return False
+    return not any(_GI4_TITLE_HOLD.search(text, s, e) for s, e in head.titles)
+
+
+# The head's procedure fields, whose value names the procedures the report documents ("Procedure: EGD with biopsy.";
+# services._PI_PROCEDURE_FIELD until the Wave 1 repair's amendment_20261101_cycle1_b, which made it one head for PE and PI).
+_GI4_PROCEDURE_FIELD = re.compile(r'[ \t]*+[#*_>]*+[ \t]*+(?:procedures?(?:[ \t]*+\(s\))?+(?:[ \t]++(?:performed|done))?+'
+                                  r'|operations?|examinations?|exams?|study|studies)[ \t]*+:', re.A | re.I)
+_GI4_PROCEDURE_FIELD_CHARS = 400  # a procedure field is read this far (a field's value is short: bounded work)
+
+
+@functools.lru_cache(maxsize=16)
+def head_procedure_spans(text: str) -> tuple:
+    """(start, end) of the head's lines that name the procedures the document reports (GI round 4 Wave 1 repair,
+    amendment_20261101_cycle1_b: one implementation, read by PI's S1 and PE's routing-only reach): its title lines
+    (_gi4_head: the title-shaped lines among its first sections.AROUND_PROCEDURE_TITLE_LINES non-empty lines, before its
+    first field) and its procedure fields ('Procedure:', 'Procedures performed:', 'Operation:', 'Examination:', 'Exam:',
+    'Study:'; each read at most _GI4_PROCEDURE_FIELD_CHARS characters) among its first sections.PROCEDURE_HEAD_LINES
+    non-empty lines - but never past the first heading-like line after its first field: the body starts there, so a
+    'Procedure: Colonoscopy.' line under a later heading or inside a pasted block is the body's, never the head's (the
+    refutation's S1-f2 note has its 'Procedure: EGD with biopsy.' under 'History', and a short pasted block can bring
+    its 'Procedure: Colonoscopy.' within the first 12 non-empty lines). A reader that needs the head to name a family
+    reads only these spans: positive evidence that today's report documents that family."""
+    spans = list(_gi4_head(text).titles)
+    end = gi_sections.head_lines_end(text, gi_sections.PROCEDURE_HEAD_LINES)
+    start, fielded = 0, False
+    while start < end:
+        nl = text.find('\n', start, end)
+        line_end = end if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, line_end).end()
+        if body < line_end:
+            if fielded and _gi4_heading_like(_gi4_line(text, start, line_end)):
+                break  # the body's first heading: nothing after it is the head's
+            if _GI4_PROCEDURE_FIELD.match(text, start, line_end):
+                spans.append((start, min(line_end, start + _GI4_PROCEDURE_FIELD_CHARS)))
+            if _GI4_FIELD.match(text, body, line_end):
+                fielded = True
+        if nl < 0:
+            break
+        start = nl + 1
+    return tuple(spans)
+
+
+def _pe_head_names(an: Analysis, table) -> bool:
+    """Whether the document's head names a family whose endpoint ``table`` reads, by routing's own service mentions
+    (cues.SERVICE_PATTERNS, the Analysis' mentions) inside head_procedure_spans: gi.egd for the upper landmarks,
+    gi.colonoscopy or gi.flex_sig for the lower. Positive evidence that today's report documents the family a
+    routing-only reach would complete (GI round 4 Wave 1 repair, amendment_20261101_cycle1_b: an EGD report's pasted
+    colonoscopy block under a heading no closed list names had read the cecum reached). A mention routing reads as not
+    done today names nothing (amendment_20261101_cycle1_d: 'Procedure: EGD with biopsy; colonoscopy next year' over a
+    pasted colonoscopy block). Memoised per analysis."""
+    key = ('pe-head-names', table is cues.UPPER_LANDMARKS)
+    if key not in an.memo:
+        families = ('gi.egd',) if table is cues.UPPER_LANDMARKS else ('gi.colonoscopy', 'gi.flex_sig')
+        named = False
+        for s, e in head_procedure_spans(an.text):
+            i = bisect.bisect_left(an._service_starts, s)
+            while i < len(an.services) and an.services[i].start < e:
+                m = an.services[i]
+                if m.family in families and _generic_reading(an, m.start, m.end).status not in NOT_TODAY:
+                    named = True
+                    break
+                i += 1
+            if named:
+                break
+        an.memo[key] = named
+    return an.memo[key]
+
+
+def _gi4_today(text: str, service_date: Optional[date]) -> Optional[date]:
+    """The day a passage's dates are read against: the head's one own date, else the effective service date."""
+    own = set(_gi4_head(text).own_dates)
+    return next(iter(own)) if len(own) == 1 else service_date
+
+
+def _gi4_other_day(mention, today: Optional[date]) -> bool:
+    return today is None or ctx.compare_to_service(mention, today) != 0
+
+
+@functools.lru_cache(maxsize=16)
+def _gi4_marks(text: str, today: Optional[date]) -> _Gi4Marks:
+    """The document read once for in_todays_narrative: its lines, heading-like lines with their verdicts, blank lines,
+    sign-off lines, dates and where its first foreign block opens."""
+    head = _gi4_head(text)
+    lay = layout(text)
+    dates = ctx.find_dates(text)
+    date_starts = [d.start for d in dates]
+    line_starts, heads, head_ends, flags, blanks, signoffs = [], [], [], [], [], []
+    foreign = len(text) + 1
+    start, size = 0, len(text)
+    while start <= size:
+        nl = text.find('\n', start)
+        end = size if nl < 0 else nl
+        line_starts.append(start)
+        body = _GI4_MARKUP.match(text, start, end).end()
+        if body >= end:
+            blanks.append(start)
+        else:
+            line = _gi4_line(text, start, end)
+            if _gi4_heading_like(line):
+                lo = bisect.bisect_left(date_starts, start)
+                dated = False
+                for d in dates[lo:]:
+                    if d.start >= end:
+                        break
+                    dated = dated or _gi4_other_day(d, today)
+                section = lay.section_at(start)
+                kind = section.heading is not None and section.start == start \
+                    and section.kind in ('history', 'plan', 'indication')
+                words = bool(gi_sections.ANOTHER_OCCURRENCE_HEAD.search(line) or _GI4_ATTACHED.search(line)
+                             or _GI4_EDUCATION.search(line))
+                facility = start >= head.fields_end and _GI4_FACILITY.search(line) is not None
+                heads.append(start)
+                head_ends.append(end)
+                flags.append((words, facility, kind))
+                if _GI4_ATTACHED.search(line) and start < foreign:  # a foreign block: an attachment or a copy
+                    foreign = start
+                if dated and start < foreign:  # a foreign block: a heading dated another day
+                    foreign = start
+            if start >= head.fields_end and _GI4_SIGN_OFF.match(text, body, end) \
+                    and _GI4_SIGNER.search(text, body, min(end, body + 400)):
+                signoffs.append(start)
+                if start < foreign:  # a foreign block: today's report, or another, signed off above the passage
+                    foreign = start
+        if nl < 0:
+            break
+        start = nl + 1
+    copy = _GI4_COPY.search(text, head.fields_end)
+    if copy is not None and copy.start() < foreign:  # a foreign block: a statement that a copy follows
+        foreign = copy.start()
+    return _Gi4Marks(line_starts, heads, head_ends, flags, blanks, signoffs, dates, date_starts, foreign)
+
+
+def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None, span=None) -> bool:
+    """Whether the passage at ``pos`` of ``text`` (as written) lies inside today's procedure narrative, for a releasing
+    reader (GI round 4 Wave 1 repair, cycle 1: PE's routing-only reach and PI's S1; PI's E1 read it too until Wave 1
+    repair cycle 2 dropped it). Fail closed; every one of these holds:
+    - no foreign block opens before it (_gi4_marks: a heading-like line naming an attachment or a copy or dated another
+      day, a sign-off line below the head's own fields, a statement that a copy follows);
+    - its governing heading-like line - the nearest one above its line, within sections.HEADING_REACH_LINES lines and
+      HEADING_REACH_CHARS characters (beyond that: no release) - names no other record or occasion, no education and,
+      below the head's own fields, no facility, and is no history, plan or indication heading of the layout (one
+      dated another day has opened a foreign block already);
+    - its block (between blank lines or heading-like lines, at most _GI4_BLOCK_CHARS each side) carries no date other
+      than today's and no sign-off line;
+    - its own sentence (``span``) states no unit statistics or generalisation;
+    - it is not under another occurrence (sections.under_another_occurrence) and not beyond heading reach
+      (sections.beyond_heading_reach).
+    "Today" is the head's one own date, else ``service_date``, else none (then every date holds)."""
+    today = _gi4_today(text, service_date)
+    marks = _gi4_marks(text, today)
+    if pos >= marks.foreign:  # a foreign block opened above the passage
+        return False
+    li = bisect.bisect_right(marks.line_starts, pos) - 1
+    line_start = marks.line_starts[li]
+    i = bisect.bisect_left(marks.heads, line_start) - 1
+    governing = marks.heads[i] if i >= 0 else 0
+    if line_start - governing > gi_sections.HEADING_REACH_CHARS \
+            or li - bisect.bisect_right(marks.line_starts, governing) + 1 > gi_sections.HEADING_REACH_LINES:
+        return False  # its heading lies beyond reach: no release
+    if i >= 0:
+        words, facility, kind = marks.flags[i]  # (a heading dated another day opened a foreign block above)
+        if words:  # the governing heading names another record or occasion, or education
+            return False
+        if facility:  # a facility's heading below the head's own fields
+            return False
+        if kind:  # a history, plan or indication heading
+            return False
+    lo = max(pos - _GI4_BLOCK_CHARS, marks.head_ends[i] if i >= 0 else 0)
+    if pos >= _gi4_head(text).fields_end:
+        lo = max(lo, _gi4_head(text).fields_end)
+    b = bisect.bisect_left(marks.blanks, line_start) - 1
+    if b >= 0:
+        lo = max(lo, marks.blanks[b])
+    hi = pos + _GI4_BLOCK_CHARS
+    b = bisect.bisect_right(marks.blanks, line_start)
+    if b < len(marks.blanks):
+        hi = min(hi, marks.blanks[b])
+    j = bisect.bisect_right(marks.heads, line_start)
+    if j < len(marks.heads):
+        hi = min(hi, marks.heads[j])
+    for d in marks.dates[bisect.bisect_left(marks.date_starts, lo):]:
+        if d.start >= hi:
+            break
+        if _gi4_other_day(d, today):  # another day's date in the passage's block
+            return False
+    k = bisect.bisect_left(marks.signoffs, lo)
+    if k < len(marks.signoffs) and marks.signoffs[k] < hi:  # a sign-off line in the passage's block
+        return False
+    if span is not None and _GI4_GENERAL.search(text, span[0], min(span[1], span[0] + _GI4_SENTENCE_CHARS)):
+        return False  # unit statistics or a generalisation
+    if gi_sections.under_another_occurrence(text, pos):
+        return False
+    if line_start not in marks.beyond:
+        marks.beyond[line_start] = gi_sections.beyond_heading_reach(text, layout(text), pos)
+    return not marks.beyond[line_start]
 
 
 _DEPTH_FIGURE = re.compile(r'\d{1,3}\s*cm\b', re.A | re.I)
@@ -6011,6 +6503,17 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     return [f for f in facts if f], bool(incomplete) or short
 
 
+# GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
+# says so is quoted after it), and of an E/M time or decision-making statement held because a time it names may be
+# another date's.
+EM_NOT_IN_PERSON = 'uncertain: the note may document no in-person visit'
+EM_ANOTHER_TIME = 'uncertain: the E/M statement names another time'
+_PV1_HEAD_LINES = 6  # the head lines read for a title naming a telephone or audio-only encounter (C4)
+_PV1_QUOTE = 80  # the most of the other-visit words a cue quotes
+_PV1_QUOTE_WINDOW = 4 * _PV1_QUOTE  # the most text a quote is cut from (a bound per mention: H7)
+_PV1_LINE_QUOTE = 100  # repair cycle 1 (CTS-2): the most of its line a C4 cue quotes (the cue then fits an excerpt)
+
+
 def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     cue = _cue_reading(an, m.start, m.end, em=True)
     if cue and cue.status != 'performed':
@@ -6025,7 +6528,513 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
         held = _B2_visit_box(an, m.start, m.end)  # round 4c-2 box2:J
         if held is not None:
             return held
+    return _pv1_held(an, m, reading)
+
+
+def _pv1_activity_word(an: Analysis, m: Mention) -> Optional[re.Match]:
+    """The word that opens the list of what an E/M time statement's minutes covered (cues.EM_TIME_ACTIVITIES:
+    "covering", "including", "spent on"), written right after the minutes; None when there is none, and for every
+    mention that is no time statement. Read only by C4-time (_pv1_other_time: EMR-7's reviewed items, _pv1_reviewed).
+    Wave 1 repair cycle 2 dropped C1, which skipped plan words after it (pv1.json amendment_20261101_cycle2): no cue is
+    skipped there any more, so a time statement's activity list re-times it as installed reads it."""
+    if m.kind != 'em-time':
+        return None
+    return cues.EM_TIME_ACTIVITIES.match(an.text, m.end)
+
+
+def _pv1_held(an: Analysis, m: Mention, reading: Reading) -> Reading:
+    """An E/M mention's ``reading``, held (uncertain, a doubt) where it would read performed and:
+    - it is an MDM level read after "shared" (repair cycle 1, EMR-9);
+    - it is a time or decision-making statement that names another visit or another time (_pv1_other_time: installed's
+      _another_time applied to E/M time, the other-visit words; "Total time at her last visit was 40 minutes.");
+    - the note states that today's encounter was no in-person visit (_not_in_person, C4: "Telephone encounter").
+    In that order, so a statement held as another visit's or time's is never counted as today's basis (_em_facts).
+    Hold-only: a reading that is not performed is returned as it is, so nothing installed holds, excludes or reads
+    not-performed is changed here. (Wave 1 repair cycle 2 dropped C1 and C2, the releasing rules: every reading here is
+    installed's before it is held.)"""
+    if reading.status != 'performed':
+        return reading
+    if m.kind == 'em-mdm' and _PV1_SHARED_LEAD.search(an.text, max(0, m.start - 16), m.start):
+        return Reading('uncertain', (_PV1_SHARED,), 'cue', doubt=True)
+    if m.kind in ('em-time', 'em-mdm'):
+        other = _pv1_other_time(an, m)
+        if other is not None:
+            return Reading('uncertain', other, 'cue', doubt=True)
+    words = _not_in_person(an, m)
+    if words is not None:
+        return Reading('uncertain', (f"{EM_NOT_IN_PERSON}: '{words}'",), 'cue', doubt=True)
     return reading
+
+
+# The heading-like line that governs a line (_pv1_governing_line), and another visit or note named without a
+# preposition: read by C4 (_pv1_under_another_occasion) and C4-time (_pv1_unprepped). Wave 1 repair cycle 2
+# dropped C1 and C2 and, with them, the visit evidence and the statement guards that only their releases read
+# (pv1.json amendment_20261101_cycle2).
+# Another visit or note named without a preposition ("per prior note", "Total time last visit:"); never a reviewed
+# item of it ("her last visit's results", "the prior visit notes").
+_PV1_UNPREPPED_VISIT = re.compile(
+    r'\b(?:last|previous|prior|earlier|preceding|most\s+recent)\s+(?:office\s+|clinic\s+)?(?:visits?|appointments?|'
+    r'encounters?|consult(?:ation)?s?|notes?)\b(?![\'\u2019]s\b)(?!\s+(?:notes?|results?|records?|findings?|labs?|'
+    r'reports?|summary|summaries)\b)', re.A | re.I)
+_PV1_ADDENDUM = re.compile(r'\b(?:addend(?:um|a)|late\s+entry)\b', re.A | re.I)
+
+
+def _pv1_governing_line(text: str, line_start: int) -> Optional[tuple[int, int]]:
+    """The nearest heading-like line above the line at ``line_start``: a short line (at most 60 characters) with no
+    sentence end (a field label's ':' is allowed), within 6 lines and 600 characters; None when there is none."""
+    lo = max(0, line_start - 600)
+    end = line_start - 1
+    for _ in range(6):
+        if end <= lo:
+            return None
+        start = text.rfind('\n', lo, end) + 1
+        line = text[max(start, lo):end].strip()
+        if line and len(line) <= 60 and line[-1] not in '.;!?,' and any(c.isalpha() for c in line):
+            return max(start, lo), end
+        end = start - 1
+    return None
+
+
+# --- the other-time holds: another visit's or another time's statement ------------------------------------------------
+# Session 2 (C2, C4-time): another visit named by a preposition, with or without a determiner ("at last visit", "during
+# her previous appointment", "from the prior visit"). Installed's OTHER_TIME 'another encounter' needs the determiner
+# and reads at, during and on; a time statement reads those three only ("notes from the last visit" are the visit's
+# work). 'from' stays in the pattern for C4's governing line (_pv1_under_another_occasion); C2's label, which read it
+# too, was dropped in Wave 1 repair cycle 2. Read only to hold.
+_PV1_AT_OTHER_VISIT = re.compile(
+    r'\b(?P<prep>at|during|on|from)\s+(?:(?:her|his|their|the|a|an)\s+)?(?:(?:last|previous|prior|recent|most\s+recent|'
+    r'earlier|preceding)\s+)+(?:office\s+|clinic\s+)?(?:visits?|appointments?|encounters?|consult(?:ation)?s?)\b',
+    re.A | re.I)
+# Repair cycle 1 (EMR-7): an activity list that states a duration or a time re-times its statement ("including 20
+# minutes at last visit"); one that names only the work done today is read for no other time.
+_PV1_LIST_TIME = re.compile(r'\b(?:\d+|one|two|three|four|five|ten|fifteen|twenty|thirty|forty|sixty)[\s-]*(?:minutes?|'
+                            r'mins?|hours?|hrs?)\b|\btime\b', re.A | re.I)
+_PV1_PAREN = re.compile(r'[ \t]*\((?P<inside>[^()\n]{0,80})\)', re.A)
+# Repair cycle 1, second session (EMR-7): an activity-list item that is today's work ON an earlier event - an activity
+# noun leads it ("review of the notes from her hospitalization in August", "counseling on the results discussed at her
+# last visit") - names no other occasion of the minutes. Items are cut at ',', ';' and parentheses.
+_PV1_ACTIVITY_NOUN = re.compile(
+    r'\b(?:review(?:s|ed|ing)?|discuss(?:ion|ions|ed|ing)?|counsel(?:l)?(?:ing|ed)?|comparison|compar(?:ed|ing)|'
+    r'interpret(?:ation|ed|ing)?|summar(?:y|ies|ized|ised|izing|ising)|reconcil(?:iation|ed|ing)|educat(?:ion|ed|ing))\b',
+    re.A | re.I)
+_PV1_ITEM_BREAK = re.compile(r'[,;()]', re.A)
+_PV1_ITEM_REACH = 200  # the most of a list item read on either side of the words in it; a longer item is read whole
+_PV1_ITEM_MATCHES = 8  # the most other-visit matches looked at past reviewed items per statement (then: held)
+# Repair cycle 1 (EMR-9): "shared decision making" gives no level, in installed's MDM reading too
+_PV1_SHARED_LEAD = re.compile(r'\bshared[\s-]+\Z', re.A | re.I)
+_PV1_SHARED = 'uncertain: shared decision making gives no level of medical decision making'
+
+
+def _pv1_other_time(an: Analysis, m: Mention) -> Optional[tuple[str, ...]]:
+    """The cues holding time or decision-making statement ``m`` because it names another visit or another time; None.
+
+    - A time statement: installed's _another_time and the other-visit words (at, during, on), over its sentence, except
+      in an activity-list item that is today's work on an earlier event (_pv1_reviewed; repair cycle 1, EMR-7:
+      "including review of the notes from her hospitalization in August"; "including her visit in August" and
+      "including 20 minutes at last visit" are read). Also another visit named without a preposition in its head, in a
+      parenthesis right after the minutes, or in such a list item (repair cycle 1, EMR-9: "Total time last visit: 40
+      minutes.", "45 minutes (today 25, previous visit 20)").
+    - Installed's MDM reading: the other-visit words (at, during, on) over its clause up to the level (repair cycle 1,
+      EMR-9: "MDM at her last visit: high.").
+    (Wave 1 repair cycle 2 dropped C2: its label is no mention, so the label's branch is gone.)"""
+    text = an.text
+    if m.kind == 'em-mdm':
+        cs = an.lay.clauses_for(m.start, m.end)[0][0]
+        other = _pv1_other_visit(an, min(cs, m.start), m.end)
+        return None if other is None else (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another "
+                                                            'date')
+    # from the start of the sentence the statement opens in to the end of the one it closes in (a field label such as
+    # "Total time:" ends a sentence of its own in the layout)
+    s, e = an.lay.sentence_for(m.start, m.start + 1)[0], an.lay.sentence_for(max(m.start, m.end - 1), m.end)[1]
+    listed = _pv1_activity_word(an, m)
+    work = listed.end() if listed is not None else None  # where the list of today's work starts (time statements)
+    held = _pv1_another_time(an, m, work)
+    if held:
+        return (EM_ANOTHER_TIME, held)
+    other = _pv1_other_visit(an, s, max(e, m.end), work)
+    if other is None:
+        other = _pv1_unprepped(an, s, m.end, work, max(e, m.end))
+    if other is not None:
+        return (EM_ANOTHER_TIME, f"{ANOTHER_TIME_PREFIX}: '{other}' may place it on another date")
+    return None
+
+
+def _pv1_another_time(an: Analysis, m: Mention, work: Optional[int]) -> Optional[str]:
+    """Installed's _another_time for mention ``m``; with ``work`` (where its activity list starts), never a time in a
+    list item that is today's work on an earlier event (_pv1_reviewed; repair cycle 1, EMR-7)."""
+    if work is None:
+        return _another_time(an, m.start, m.end)
+    key = ('pv1-another-time', m.start, m.end, work)
+    if key not in an.memo:
+        text = an.text
+        an.memo[key] = next((f"{ANOTHER_TIME_PREFIX}: '{x.group(0)}' may place it on another date"
+                             for _, x, _ in _attached_times(an, m.start, m.end)
+                             if x.start() < work or not _pv1_reviewed(text, work, x.start())), None)
+    return an.memo[key]
+
+
+def _pv1_reviewed(text: str, work: int, pos: int) -> bool:
+    """Whether the words at ``pos``, in an E/M time statement's activity list (it starts at ``work``), lie in a list item
+    that is today's work ON them (repair cycle 1, second session, EMR-7): an activity noun (_PV1_ACTIVITY_NOUN) stands
+    in the item before them, and the item states no duration or time (_PV1_LIST_TIME: "review of records for 20 minutes
+    at her last visit" is read). Items are cut at ',', ';' and parentheses; an item running past _PV1_ITEM_REACH
+    characters before the words is read (fail-closed). Bounded per call."""
+    lo = max(work, pos - _PV1_ITEM_REACH)
+    cut = max((b.end() for b in _PV1_ITEM_BREAK.finditer(text, lo, pos)), default=None)
+    if cut is None:
+        if lo > work:
+            return False
+        cut = work
+    nxt = _PV1_ITEM_BREAK.search(text, pos, min(len(text), pos + _PV1_ITEM_REACH))
+    item_end = nxt.start() if nxt is not None else min(len(text), pos + _PV1_ITEM_REACH)
+    return _PV1_ACTIVITY_NOUN.search(text, cut, pos) is not None and _PV1_LIST_TIME.search(text, cut, item_end) is None
+
+
+def _pv1_unprepped(an: Analysis, start: int, minutes_end: int, work: Optional[int], end: int) -> Optional[str]:
+    """Another visit named without a preposition in a time statement's head [start, minutes_end), in a parenthesis right
+    after its minutes, or in its activity list [work, end) outside the items that are today's work on an earlier event
+    (_pv1_reviewed), unless a comparison leads it (repair cycle 1, EMR-9). At most _PV1_ITEM_MATCHES matches are looked
+    at past reviewed items; then the statement is held (fail-closed)."""
+    text = an.text
+    spans = [(start, minutes_end, False)]
+    paren = _PV1_PAREN.match(text, minutes_end)
+    if paren is not None:
+        spans.append((*paren.span('inside'), False))
+    if work is not None and work < end:
+        spans.append((work, end, True))
+    for lo, hi, listed in spans:
+        for count, x in enumerate(_PV1_UNPREPPED_VISIT.finditer(text, lo, hi)):
+            words = ' '.join(x.group(0).split())[:_PV1_QUOTE]
+            if count >= _PV1_ITEM_MATCHES:
+                return words
+            if _pv1_compared(text, x.start()) or (listed and _pv1_reviewed(text, work, x.start())):
+                continue
+            return words
+    return None
+
+
+def _pv1_other_visit(an: Analysis, start: int, end: int, work: Optional[int] = None) -> Optional[str]:
+    """The words of the first _PV1_AT_OTHER_VISIT match lying wholly in [start, end) - never one led by 'from' (a time
+    statement's "notes from the last visit" are the visit's work), and with ``work`` never one in an activity-list item
+    that is today's work on it (_pv1_reviewed: at most _PV1_ITEM_MATCHES are passed over, then the next one is taken) -
+    or None. A comparison is no other time ("high, as at her prior visit"), as for installed's _another_time
+    (_COMPARE_LEAD within 30 characters before, on the same line). Matched once per document; each call costs a
+    bisection and at most _PV1_ITEM_MATCHES + 1 matches. (Only C2's label read the 'from' matches; Wave 1 repair cycle
+    2 dropped it, and C4's _pv1_under_another_occasion reads the pattern itself.)"""
+    key = ('pv1-other-visit',)
+    if key not in an.memo:
+        text = an.text
+        timed = tuple((x.start(), x.end()) for x in _PV1_AT_OTHER_VISIT.finditer(text)
+                      if x.group('prep').lower() != 'from' and not _pv1_compared(text, x.start()))
+        an.memo[key] = (timed, tuple(s for s, _ in timed))
+    spans, starts = an.memo[key]
+    i = bisect.bisect_left(starts, start)
+    for count, (x, y) in enumerate(spans[i:i + _PV1_ITEM_MATCHES + 1]):
+        if y > end:
+            break
+        if count < _PV1_ITEM_MATCHES and work is not None and x >= work and _pv1_reviewed(an.text, work, x):
+            continue  # repair cycle 1, second session (EMR-7): today's work on an earlier visit
+        return ' '.join(an.text[x:min(y, x + _PV1_QUOTE_WINDOW)].split())[:_PV1_QUOTE]
+    return None
+
+
+# A preposition and a determiner that may stand between a comparison and the visit it names ("as at her prior visit":
+# the words "prior visit" are led by "as" through "at her"; repair cycle 1, second session)
+_PV1_VISIT_LEAD = re.compile(r'(?:\b(?:at|during|on|from|in|to|with)\s+)?(?:\b(?:her|his|their|the|a|an)\s+)?\Z',
+                             re.A | re.I)
+
+
+def _pv1_compared(text: str, start: int) -> bool:
+    """Whether a comparison leads the words at ``start`` ("as at her prior visit"): _COMPARE_LEAD within the 30
+    characters before them, on their line, through at most a preposition and a determiner (_PV1_VISIT_LEAD), so the
+    words of another visit named without its preposition are led as the prepositional match is. A bounded look-back:
+    each match costs at most 30 characters."""
+    lo = max(0, start - 30)
+    newline = text.rfind('\n', lo, start)
+    lo = newline + 1 if newline >= 0 else lo
+    lead = _PV1_VISIT_LEAD.search(text, lo, start)
+    return _COMPARE_LEAD.search(text, lo, lead.start() if lead is not None else start) is not None
+
+
+# --- C4: a statement that today's encounter was no in-person visit (repair cycle 1: TODAY's encounter type only) ------
+# The kinds of a cues.NOT_IN_PERSON match: an encounter-type field, an attendance predicate, a telephone compound, else
+# a telephone or audio contact ("by telephone", "telephonic", "audio-only").
+_PV1_MODE_FIELD = re.compile(r'(?:visit|encounter|appointment|contact|consult\w*|type|mode|modality|method)\b[^\n:]*?'
+                             r'[ \t]*[:\-][ \t]*(?:tele)?phone\Z', re.A | re.I)
+_PV1_ATTENDANCE = re.compile(r"not\s+seen|no\s+in[- ]person|no[- ]?show|did\s+not|didn't|failed\s+to|missed|cancell?ed|"
+                             r'left\s+without|LWBS', re.A | re.I)
+_PV1_COMPOUND = re.compile(r'(?:tele)?phone\s+(?P<noun>[\w/-]+)', re.A | re.I)
+_PV1_DATA_NOUN = re.compile(r'notes?|numbers?|lists?|logs?|records?|lines?|polic(?:y|ies)', re.A | re.I)
+# Another party to a contact: an interpreter, a historian, a clinician, a pharmacy, a family member, a caregiver
+_PV1_THIRD_PARTY = re.compile(
+    r'\b(?:interpret(?:er|ers|ation)|translat(?:or|ors|ion)|historians?|dr|doctors?|physicians?|surgeons?|clinicians?|'
+    r'providers?|nurses?|nursing|NP|PA|RN|pharmac(?:y|ies|ist|ists)|daughters?|sons?|husbands?|wife|wives|spouses?|'
+    r'partners?|mothers?|fathers?|parents?|caregivers?|guardians?|famil(?:y|ies)|sisters?|brothers?|siblings?|friends?|'
+    r'neighbou?rs?|colleagues?|consultants?|PCP|primary\s+care|referring|insur(?:er|ers|ance)|payers?|specialists?|'
+    r'\w+ologists?|staff|scheduler|front\s+desk)\b', re.A | re.I)
+# The patient named as a party to the contact
+_PV1_PATIENT_PARTY = re.compile(
+    r'\b(?:with|to)\s+(?:the\s+)?(?:patient|pt)\b|\b(?:the\s+)?(?:patient|pt)\s+(?:was|is|were|did|called|phoned|'
+    r'reports?|reported|states?|stated|said|says|contacted|reached|spoke|talked|returned)\b|\b(?:called|phoned|'
+    r'contacted|reached|interviewed|counsel(?:l)?ed|spoke\s+(?:with|to)|talked\s+(?:with|to))\s+(?:the\s+)?(?:patient|pt)'
+    r'\b|\bwe\s+(?:spoke|talked|discussed|reviewed|went\s+over|called)\b', re.A | re.I)
+# A contact's subject: today's visit, encounter or contact, or a verb of seeing or speaking with the patient
+_PV1_TODAY_SUBJECT = re.compile(
+    r'\b(?:visits?|encounters?|appointments?|consult(?:ation)?s?|follow-?ups?|f/u|check-?ins?|sessions?|seen|evaluated|'
+    r'interviewed|assessed|counsel(?:l)?ed|contacted|reached|spoke|talked|conducted|completed|performed|done|held)\b',
+    re.A | re.I)
+# A contact detail, never today's encounter (repair cycle 1, second session: only a field, so "reached her at home by
+# phone" stays a statement of the visit): a field line's label ("<label>: <value>", the label at most 60 characters)
+# naming a contact preference ("Preferred contact: by phone", "Best method of contact: phone") ...
+_PV1_FIELD = re.compile(r'[ \t]*[^:\n]{1,60}?[ \t]*:', re.A)
+_PV1_PREFERENCE_LABEL = re.compile(
+    r'\b(?:prefer\w*|best|alternate|alternative|emergency|backup|primary|secondary|home|cell|work|mobile)\b[^:\n]*'
+    r'\b(?:contact|number|phone|telephone|method|mode|way|line)\b|\bcontact\s+(?:preference|method|mode|info\w*|'
+    r'details?|numbers?)\b', re.A | re.I)
+# ... a label naming a telephone service line, not an encounter ("After-hours phone triage: 555-0103", "Phone contact:
+# 555-0100"; "Telephone encounter: 555-0199 called back" is no contact detail) ...
+_PV1_SERVICE_LINE = re.compile(r'triage|contacts?|lines?|numbers?', re.A | re.I)
+# ... and a clause saying what the patient prefers ("She prefers telephone follow-up"), never today's encounter
+_PV1_PREFERS = re.compile(r'\bprefer(?:s|red)?\b|\bwould\s+(?:like|rather|prefer)\b', re.A | re.I)
+# A no-show named as a policy or a record, never a missed visit ("no-show policy reviewed")
+_PV1_NO_SHOW_ITEM = re.compile(r'[ \t]*(?:polic(?:y|ies)|fees?|rates?|letters?|lists?|history|forms?|warnings?|contracts?|'
+                               r'agreements?)\b', re.A | re.I)
+# Another service a missed visit may be (a missed colonoscopy or CT is no missed office visit)
+_PV1_OTHER_SERVICE = re.compile(
+    r'\b(?:procedures?|tests?|testing|imaging|labs?|laborator(?:y|ies)|blood\s*work|ultrasounds?|sonograms?|CT|MRI|MRCP|'
+    r'x-?rays?|scans?|infusions?|injections?|biops(?:y|ies)|endoscop(?:y|ies)|surgery|surgeries|operations?|'
+    r'results?|reports?|pathology)\b', re.A | re.I)
+# A span of time before today ("not seen in the office for two years")
+_PV1_SPAN = re.compile(r'\b(?:for|in|over|within)\s+(?:the\s+)?(?:past\s+|last\s+)?(?:over\s+|more\s+than\s+|about\s+|'
+                       r'nearly\s+|almost\s+|at\s+least\s+)?(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|'
+                       r'eleven|twelve|several|many|a\s+few|a\s+couple\s+of)\s+(?:days?|weeks?|months?|years?)\b|\bsince\b',
+                       re.A | re.I)
+# The visit stated as in person ("seen in person today", "is seen today", "converted to an in-person visit")
+_PV1_IN_PERSON = re.compile(
+    r"(?<!not )(?<!never )(?<!n't )\b(?:seen|evaluated|examined|interviewed)\s+(?:today\s+)?in[- ]person\b"
+    r'|(?<!no )(?<!not )\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
+    r'|\bconverted\s+to\s+(?:an?\s+)?(?:in[- ]person|office|clinic|face[- ]to[- ]face)\b|\bface[- ]to[- ]face\b'
+    r"|(?<!not )(?<!never )(?<!n't )\b(?:is|was)\s+seen\s+(?:in\s+(?:the\s+)?(?:office|clinic)\s+)?today\b",
+    re.A | re.I)
+# A head line that is the word "Telephone" or "Phone" alone (repair cycle 1, EMR-8), and the next non-blank line
+_PV1_BARE_TITLE = re.compile(r'^[ \t]*(?:telephone|phone)[ \t]*$', re.A | re.I | re.M)
+_PV1_NEXT_LINE = re.compile(r'\s*\n[ \t]*([^\n]*)', re.A)
+# A telephone number on the line: a letterhead's or a contact field's, never the encounter's mode
+_PV1_PHONE_NUMBER = re.compile(r'\(?\b\d{3}\)?[ .\-]?\d{3}[ .\-]\d{4}\b|\b\d{3}[.\-]\d{4}\b', re.A)
+
+
+def _pv1_line_quote(an: Analysis, start: int, end: int) -> str:
+    """The line holding [start, end), white space collapsed (repair cycle 1, CTS-2: a cue quotes the line it rests on);
+    a line longer than _PV1_LINE_QUOTE characters, or one running past the _PV1_QUOTE_WINDOW characters read on either
+    side, is cut to the layout's sentence holding the words when that sentence fits in _PV1_LINE_QUOTE characters
+    (Wave 1 repair cycle 2, PV1C2-08: a cut around the words alone dropped "Her CT result came back after" and quoted
+    "...the visit and was reviewed with the patient by phone."), and a longer sentence around the words; an ellipsis
+    marks each cut side. Text only: the hold is decided before this is read. Bounded per call."""
+    text = an.text
+    lo, hi = max(0, start - _PV1_QUOTE_WINDOW), min(len(text), end + _PV1_QUOTE_WINDOW)
+    nl = text.rfind('\n', lo, start)
+    ls, cut_left = (nl + 1, False) if nl >= 0 else (lo, lo > 0)
+    nr = text.find('\n', end, hi)
+    le, cut_right = (nr, False) if nr >= 0 else (hi, hi < len(text))
+    line = ' '.join(text[ls:le].split())
+    if len(line) <= _PV1_LINE_QUOTE and not cut_left and not cut_right:
+        return line
+    ss, se = an.lay.window(an.lay.sentence_for(start, end), start, end, _PV1_QUOTE_WINDOW)
+    ss, se = max(ss, ls), min(max(se, end), le)
+    sentence = ' '.join(text[ss:se].split())
+    if len(sentence) <= _PV1_LINE_QUOTE:
+        left, right = cut_left or bool(text[ls:ss].strip()), cut_right or bool(text[se:le].strip())
+        return ('…' if left else '') + sentence + ('…' if right else '')
+    side = (_PV1_LINE_QUOTE - min(end - start, _PV1_QUOTE)) // 2
+    a, b = max(ls, start - side), min(le, end + side)
+    if a > ls:  # cut at a word's edge, never inside a word
+        space = text.find(' ', a, start)
+        a = space + 1 if space >= 0 else a
+    if b < le:
+        space = text.rfind(' ', end, b)
+        b = space if space >= 0 else b
+    return ('\u2026' if a > ls or cut_left else '') + ' '.join(text[a:b].split()) + ('\u2026' if b < le or cut_right
+                                                                                     else '')
+
+
+def _pv1_em_in(an: Analysis, start: int, end: int) -> bool:
+    """Whether an E/M time, decision-making or visit statement overlaps [start, end) (the E/M mentions never overlap one
+    another, so the last one starting before ``end`` decides; one bisection). A field label ("Total time:") ends a
+    sentence of its own in the layout, so a statement may open in the sentence before."""
+    key = ('pv1-em-starts',)
+    if key not in an.memo:
+        an.memo[key] = sorted((m.start, m.end) for m in an.em if m.kind in ('em-time', 'em-mdm', 'em-visit'))
+    spans = an.memo[key]
+    i = bisect.bisect_left(spans, (end, -1))
+    return i > 0 and spans[i - 1][1] > start
+
+
+def _pv1_todays_mode(an: Analysis, start: int, end: int) -> bool:
+    """Whether the cues.NOT_IN_PERSON match [start, end) states TODAY's encounter type (repair cycle 1, CTS-1/EMR-6):
+    an encounter-type field; an attendance predicate; or a telephone or audio contact whose clause names the patient as
+    a party, the visit or the encounter, or whose sentence holds an E/M statement - and never where its line carries a
+    telephone number, its sentence states an in-person visit, or its clause names another party (unless the patient is
+    named as one), another time or, for an attendance, another service, or for a contact a plan; a telephone compound
+    naming a data item ("telephone notes") is no contact. Bounded per match (CLAUSE_REACH)."""
+    text = an.text
+    words = text[start:end]
+    if _PV1_MODE_FIELD.search(words):
+        return True  # "Visit type: Telephone", "Encounter: Telephone"
+    ss, se = an.lay.window(an.lay.sentence_for(start, end), start, end, CLAUSE_REACH)
+    if _pv1_in_person_today(an, ss, se):
+        return False  # "She called by phone yesterday; seen in person today."
+    if _pv1_under_another_occasion(an, start):
+        return False  # "Addendum 10/30/2026\nPathology discussed with the patient by phone."
+    cs, ce = an.lay.window(an.lay.clauses_for(start, end)[0], start, end, CLAUSE_REACH)
+    party = _PV1_PATIENT_PARTY.search(text, cs, ce) is not None
+    if _pv1_contact_detail(text, start, end, party or _PV1_TODAY_SUBJECT.search(text, cs, ce) is not None):
+        return False  # "After-hours phone triage: 555-0103", "Preferred contact: by phone", "Phone triage line 555-0103"
+    if not party and _PV1_THIRD_PARTY.search(text, cs, ce):
+        return False  # "Interpreter: Spanish, via phone.", "by phone with Dr. Lee", "a phone call with her daughter"
+    if _pv1_clause_other_time(an, cs, ce):
+        return False  # "she missed her appointment in August", "not seen in the office for two years"
+    if _PV1_ATTENDANCE.search(words):
+        if _PV1_NO_SHOW_ITEM.match(text, end):
+            return False  # "no-show policy reviewed with the patient"
+        return not (an.services_in(cs, ce) or _PV1_OTHER_SERVICE.search(text, cs, ce))  # "no-showed her colonoscopy"
+    if any(c.status == 'planned' for c in an.cues_in(cs, ce)) or _PV1_PREFERS.search(text, cs, ce):
+        return False  # "scheduled as a telephone visit", "I will call her by phone", "she prefers phone follow-up"
+    compound = _PV1_COMPOUND.match(words)
+    if compound is not None:
+        return _PV1_DATA_NOUN.fullmatch(compound.group('noun')) is None  # "telephone notes" are data
+    return party or _PV1_TODAY_SUBJECT.search(text, cs, ce) is not None or _pv1_em_in(an, ss, se)
+
+
+# Repair cycle 1, second session: an in-person visit told of another time ("last seen in person in August") is no
+# statement of today's visit
+_PV1_LAST_LEAD = re.compile(r'\b(?:last|previously|prior|before|earlier|first|initially|once)\s+(?:been\s+|was\s+|'
+                            r'were\s+)?\Z', re.A | re.I)
+
+
+def _pv1_in_person_today(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) states that today's visit was in person (_PV1_IN_PERSON) - not one told of another time:
+    no 'last', 'previously' or 'prior' right before it ("last seen in person"), and no other time in its clause
+    (_pv1_clause_other_time: "seen in person in August"). Bounded: the matches of a CLAUSE_REACH window."""
+    text = an.text
+    for x in _PV1_IN_PERSON.finditer(text, start, end):
+        if _PV1_LAST_LEAD.search(text, max(start, x.start() - 24), x.start()):
+            continue
+        cs, ce = an.lay.window(an.lay.clauses_for(x.start(), x.end())[0], x.start(), x.end(), CLAUSE_REACH)
+        if not _pv1_clause_other_time(an, cs, ce):
+            return True
+    return False
+
+
+def _pv1_under_another_occasion(an: Analysis, pos: int) -> bool:
+    """Whether the heading-like line governing the line at ``pos`` (_pv1_governing_line) names another occasion (repair
+    cycle 1, second session): an addendum or a late entry, another visit or note ("Prior visit", "Previous note"), or a
+    date the date of service is known to differ from ("Addendum 10/30/2026"). Narrower than sections'
+    ANOTHER_OCCURRENCE_HEAD on purpose: "History of present illness" governs today's statements ("Contacted by
+    telephone today"). Read only to keep a C4 hold off, so an unknown date of service clears nothing."""
+    text = an.text
+    line_start = text.rfind('\n', max(0, pos - _PV1_QUOTE_WINDOW), pos) + 1
+    if line_start == 0 and pos > _PV1_QUOTE_WINDOW:
+        return False  # a line longer than the reach: no governing line is read
+    governing = _pv1_governing_line(text, line_start)
+    if governing is None:
+        return False
+    gs, ge = governing
+    if _PV1_ADDENDUM.search(text, gs, ge) or _PV1_UNPREPPED_VISIT.search(text, gs, ge) \
+            or _PV1_AT_OTHER_VISIT.search(text, gs, ge):
+        return True
+    return an.service_date is not None and any(ctx.compare_to_service(d, an.service_date) != 0
+                                               for d in an.dates_in(gs, ge))
+
+
+def _pv1_contact_detail(text: str, start: int, end: int, about_contact: bool) -> bool:
+    """Whether the cues.NOT_IN_PERSON match [start, end) is a contact detail (repair cycle 1, second session): on a field
+    line, a value under a contact-preference label ("Preferred contact: by phone") or a label naming the telephone with
+    a telephone number for its value ("After-hours phone triage: 555-0103"); on another line, a telephone number with no
+    contact of the patient or the visit in the match's clause (``about_contact`` False: "Phone triage line 555-0103").
+    A number on the line of "Spoke with the patient by phone at 555-0199" clears nothing. Bounded: the match's line,
+    read at most _PV1_QUOTE_WINDOW characters on either side."""
+    lo, hi = max(0, start - _PV1_QUOTE_WINDOW), min(len(text), end + _PV1_QUOTE_WINDOW)
+    nl, nr = text.rfind('\n', lo, start), text.find('\n', end, hi)
+    ls, le = (nl + 1 if nl >= 0 else lo), (nr if nr >= 0 else hi)
+    field = _PV1_FIELD.match(text, ls, le)
+    if field is not None and field.end() <= start:  # the match is in the value
+        return _PV1_PREFERENCE_LABEL.search(text, ls, field.end()) is not None
+    if field is not None and start < field.end():  # the match is in the label: a service line, never an encounter
+        compound = _PV1_COMPOUND.match(text, start, end)
+        if compound is not None and not _PV1_SERVICE_LINE.fullmatch(compound.group('noun')):
+            return False  # "Telephone encounter: 555-0199 called back" names today's encounter
+        return _PV1_PHONE_NUMBER.search(text, field.end(), le) is not None
+    return not about_contact and _PV1_PHONE_NUMBER.search(text, ls, le) is not None
+
+
+def _pv1_clause_other_time(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) names a time other than the date of service: a historical cue, a cues.OTHER_TIME match that
+    may not be the date of service, a date other than it, or a span of time before today (_PV1_SPAN)."""
+    if any(c.status == 'historical' for c in an.cues_in(start, end)) or _PV1_SPAN.search(an.text, start, end):
+        return True
+    times, starts = _other_times(an)
+    for ts_, te_, name, x in times[bisect.bisect_left(starts, start):]:
+        if ts_ >= end:
+            break
+        if te_ <= end and not _today_compatible(an, name, x):
+            return True
+    return any(an.service_date is None or ctx.compare_to_service(d, an.service_date) != 0
+               for d in an.dates_in(start, end))
+
+
+def _pv1_not_in_person_words(an: Analysis) -> tuple[Optional[str], tuple[tuple[int, int], ...], tuple[int, ...]]:
+    """(the line that holds every E/M reading of the document, or None; every cues.NOT_IN_PERSON match as (start, end),
+    in order; their starts), read once per document (GI round 4, C4). The document's line is that of its first match
+    stating today's encounter type (_pv1_todays_mode) - in a plan section too (repair cycle 1, second session, EMR-8:
+    "Reviewed the biopsy results with the patient by telephone." in an Assessment and plan; a contact with a planned cue,
+    "Telephone follow-up in two weeks.", states no encounter of today), and in a history section only in a clause that
+    says today ("Contacted by telephone today ...") or a sentence holding an E/M statement ("Total time 25 minutes, by
+    telephone.": the visit's own time was by telephone, so the whole document is held and its basis counted, CTS-2);
+    else a title line of its head naming a telephone or audio-only encounter (cues.NOT_IN_PERSON_TITLE), whatever
+    section the head is in, never a field ("After-hours phone triage: 555-0103")."""
+    key = ('pv1-not-in-person',)
+    if key not in an.memo:
+        text = an.text
+        spans = tuple((m.start(), m.end()) for m in cues.NOT_IN_PERSON.finditer(text))
+        words = None
+        for s, e in spans:
+            if an.lay.section_at(s).kind == 'history':
+                cs, ce = an.lay.window(an.lay.clauses_for(s, e)[0], s, e, CLAUSE_REACH)
+                if cues.TODAY.search(text, cs, ce) is None and not _pv1_em_in(an, *an.lay.sentence_for(s, e)):
+                    continue
+            if _pv1_todays_mode(an, s, e):
+                words = _pv1_line_quote(an, s, e)
+                break
+        if words is None:
+            head = gi_sections.head_lines_end(text, _PV1_HEAD_LINES)
+            for title in cues.NOT_IN_PERSON_TITLE.finditer(text, 0, head):
+                line = title.group(0)
+                if ':' not in line and not _PV1_PHONE_NUMBER.search(line):
+                    words = ' '.join(line.split())[:_PV1_LINE_QUOTE]
+                    break
+        if words is None:  # repair cycle 1 (EMR-8): the title "Telephone" alone, never above a number
+            for title in _PV1_BARE_TITLE.finditer(text, 0, head):
+                after = _PV1_NEXT_LINE.match(text, title.end())
+                if after is None or not _PV1_PHONE_NUMBER.search(after.group(0)):
+                    words = title.group(0).strip()
+                    break
+        an.memo[key] = (words, spans, tuple(s for s, _ in spans))
+    return an.memo[key]
+
+
+def _not_in_person(an: Analysis, m: Mention) -> Optional[str]:
+    """The line saying the encounter of E/M mention ``m`` may be no in-person visit (GI round 4, C4): the document's
+    (_pv1_not_in_person_words), which holds every E/M reading of the document - the statement's own sentence is one of
+    the places it is read, never a hold of that statement alone (repair cycle 1, second session); None when there is
+    none. Read only to hold."""
+    return _pv1_not_in_person_words(an)[0]
+
+
+def _pv1_held_by_c4(an: Analysis, reading: Reading) -> bool:
+    """Whether ``reading`` is held by C4's hold of the whole document (repair cycle 1, CTS-2): today's own statement, in
+    a note that may document no in-person visit."""
+    return (reading.status == 'uncertain' and bool(reading.cues) and reading.cues[0].startswith(EM_NOT_IN_PERSON + ': ')
+            and _pv1_not_in_person_words(an)[0] is not None)
 
 
 # --- round 4c-2 box2:J: an E/M visit statement governed by an unread mark or an unchecked box ----------------------
@@ -6501,6 +7510,8 @@ def _em_facts(an: Analysis, readings: dict) -> list[Fact]:
     facts = [context_facts[name] for name in ('setting', 'patient_status')
              if context_facts[name].origin in ('document', 'conflict')]
     done = [m for m in an.em if readings[m].status == 'performed']
+    if not done:  # repair cycle 1 (CTS-2): a note C4 holds whole states its basis; the hold says why, not "undocumented"
+        done = [m for m in an.em if _pv1_held_by_c4(an, readings[m])]
     times = [(m.value, _span(text, m.start, m.end)) for m in done if m.kind == 'em-time']
     levels = [(m.value, _span(text, m.start, m.end)) for m in done if m.kind == 'em-mdm']
     mdm = levels + [('mdm', _span(text, m.start, m.end)) for m in done

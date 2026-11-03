@@ -1,0 +1,11 @@
+SYNTHETIC TEST DOCUMENT - not a real patient. Written for CPT Studio participant tests.
+GI Procedure Report
+Date of service: 2026-10-21
+Procedure: Colonoscopy.
+Indication: Average-risk screening.
+Technique: The colonoscope was advanced to the cecum. The appendiceal orifice and the ileocecal valve were
+identified. Bowel preparation was good.
+Findings: A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for
+pathology. A 3 mm polyp in the rectum was biopsied with cold forceps.
+Impression: Two polyps; one removed by cold snare, one biopsied.
+Plan: Await pathology. Repeat colonoscopy in 7 years.

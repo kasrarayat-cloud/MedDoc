@@ -1,0 +1,164 @@
+{
+  "source": {
+    "key": "cms-ncci-policy-manual-2026-ch6",
+    "kind": "cms-ncci-policy-manual",
+    "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+    "title": "NCCI Policy Manual for Medicare Services 2026, Chapter VI: Surgery: Digestive System",
+    "release": "Revision Date (Medicare): 1/1/2026",
+    "url": "https://www.cms.gov/files/document/06-chapter6-ncci-medicare-policy-manual-2026-final.pdf",
+    "sha256": "c1d2dc0d9ccc8890a50059124ce65e1930bc4ff02c99183ee65b46951b72aabf",
+    "retrieved_at": "2026-11-01T21:30:00Z",
+    "effective_start": "2026-01-01",
+    "effective_end": "2026-12-31",
+    "license_note": "Notice in the file: \"Current Procedural Terminology (CPT) codes, descriptions and other data only are copyright 2025 American Medical Association. All rights reserved. CPT® is a registered trademark of the American Medical Association. Applicable FARS/DFARS Restrictions Apply to Government Use. Fee schedules, relative value units, conversion factors, and/or related components aren’t assigned by the AMA, aren’t part of CPT, and the AMA isn’t recommending their use. The AMA doesn’t directly or indirectly practice medicine or dispense medical services. The AMA assumes no liability for the data contained or not contained herein.\" Verbatim CMS text; passages that quote a CPT code description are not imported.",
+    "scope_note": "Chapter VI, section C \"Endoscopic Services\": its numbered rules, one passage each; a rule whose text runs on past a page header is one passage per page, and its parts share its number. Rules 9 and 11 are not imported: they quote CPT code descriptions. The NCCI procedure-to-procedure edits are not part of this source and are not connected. Pages are the PDF's page numbers (page N is printed VI-N)."
+  },
+  "passages": [
+    {
+      "passage_key": "rule-01",
+      "section": "Chapter VI, C. Endoscopic Services, rule 1",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "1",
+      "text": "1. Per CPT Professional codebook instructions, surgical endoscopy includes diagnostic endoscopy. A diagnostic endoscopy HCPCS/CPT code shall not be reported with a surgical endoscopy code."
+    },
+    {
+      "passage_key": "rule-02",
+      "section": "Chapter VI, C. Endoscopic Services, rule 2",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "2",
+      "text": "2. If multiple endoscopic services are performed, the most comprehensive code describing the service(s) rendered shall be reported. If multiple services are performed and not adequately described by a single HCPCS/CPT code, more than one code may be reported. The multiple procedure modifier 51 should be appended to the secondary HCPCS/CPT code. Only medically necessary services may be reported. Incidental examination of other areas shall not be reported separately."
+    },
+    {
+      "passage_key": "rule-03",
+      "section": "Chapter VI, C. Endoscopic Services, rule 3",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "3",
+      "text": "3. If the same endoscopic procedure (e.g., polypectomy) is performed multiple times at a single patient encounter in the same region as defined by the CPT Professional codebook narrative, only one CPT code may be reported with one unit of service."
+    },
+    {
+      "passage_key": "rule-04",
+      "section": "Chapter VI, C. Endoscopic Services, rule 4",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "4",
+      "text": "4. Gastroenterological procedures included in CPT code ranges 43753-43757 and 91010- 91299 are frequently complementary to endoscopic procedures. Esophageal and gastric washings for cytology when performed are integral components of an esophagogastroduodenoscopy (e.g., CPT code 43235). Gastric or duodenal intubation with or without aspiration (e.g., CPT codes 43753, 43754, 43756) shall not be separately reported when performed as part of an upper gastrointestinal endoscopic procedure. Gastric or duodenal stimulation testing (e.g., CPT codes 43755, 43757) may be facilitated by gastrointestinal endoscopy (e.g., procurement of gastric or duodenal specimens). When performed concurrent with an upper gastrointestinal endoscopy, CPT code 43755 or 43757 should be reported with modifier 52 indicating that a reduced level of service was performed."
+    },
+    {
+      "passage_key": "rule-05",
+      "section": "Chapter VI, C. Endoscopic Services, rule 5",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "5",
+      "text": "5. If an endoscopy or enteroscopy is performed as a common standard of practice when performing another service, the endoscopy or enteroscopy is not separately reportable. For example, if a small intestinal endoscopy or enteroscopy is performed during the creation or revision of an enterostomy, the small intestinal endoscopy or enteroscopy is not separately reportable."
+    },
+    {
+      "passage_key": "rule-06-part-1",
+      "section": "Chapter VI, C. Endoscopic Services, rule 6",
+      "page": "5",
+      "topic": "ncci.endoscopy",
+      "topic_value": "6",
+      "text": "6. An endoscopy to assess anatomic landmarks or assess extent of disease preceding another surgical procedure at the same patient encounter is not separately reportable. However, an endoscopic procedure for diagnostic purposes to decide whether a more extensive open procedure needs to be performed is separately reportable. In the latter situation, modifier 58 may be used to indicate that the diagnostic endoscopy and more extensive open procedure were staged procedures. If an endoscopic procedure is performed at the same patient encounter as a non- endoscopic procedure to ensure no intraoperative injury occurred or verify the procedure"
+    },
+    {
+      "passage_key": "rule-06-part-2",
+      "section": "Chapter VI, C. Endoscopic Services, rule 6",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "6",
+      "text": "was performed correctly, the endoscopic procedure is not separately reportable with the non-endoscopic procedure."
+    },
+    {
+      "passage_key": "rule-07",
+      "section": "Chapter VI, C. Endoscopic Services, rule 7",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "7",
+      "text": "7. If a non-endoscopic esophageal dilation (e.g., CPT codes 43450, 43453) fails and is followed by an endoscopic esophageal dilation procedure (e.g., CPT codes 43213, 43214, 43233), only the endoscopic esophageal dilation procedure may be reported. The provider/supplier shall not report the failed procedure."
+    },
+    {
+      "passage_key": "rule-08",
+      "section": "Chapter VI, C. Endoscopic Services, rule 8",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "8",
+      "text": "8. If it is necessary to perform diagnostic or surgical endoscopy of the hepatic/biliary/pancreatic system using different methodologies (e.g., biliary T-tube endoscopy, ERCP) multiple CPT codes may be reported. Modifier 51 should be appended to indicate that multiple procedures were performed at the same patient encounter."
+    },
+    {
+      "passage_key": "rule-10",
+      "section": "Chapter VI, C. Endoscopic Services, rule 10",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "10",
+      "text": "10. Rules for reporting biopsies performed at the same patient encounter as an excision, destruction, or other type of removal are discussed in Section H (General Policy Statements), Subsection 21."
+    },
+    {
+      "passage_key": "rule-12",
+      "section": "Chapter VI, C. Endoscopic Services, rule 12",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "12",
+      "text": "12. Only the more extensive endoscopic procedure may be reported for a patient encounter. For example, if a sigmoidoscopy is completed and the physician also performs a colonoscopy during the same patient encounter, only the colonoscopy may be reported."
+    },
+    {
+      "passage_key": "rule-13-part-1",
+      "section": "Chapter VI, C. Endoscopic Services, rule 13",
+      "page": "6",
+      "topic": "ncci.endoscopy",
+      "topic_value": "13",
+      "text": "13. If an endoscopic procedure fails and is converted into an open procedure at the same patient encounter, only the open procedure is reportable. Neither a surgical endoscopy"
+    },
+    {
+      "passage_key": "rule-13-part-2",
+      "section": "Chapter VI, C. Endoscopic Services, rule 13",
+      "page": "7",
+      "topic": "ncci.endoscopy",
+      "topic_value": "13",
+      "text": "nor diagnostic endoscopy procedure code shall be reported with the open procedure code when an endoscopic procedure is converted to an open procedure."
+    },
+    {
+      "passage_key": "rule-14",
+      "section": "Chapter VI, C. Endoscopic Services, rule 14",
+      "page": "7",
+      "topic": "ncci.endoscopy",
+      "topic_value": "14",
+      "text": "14. If a transabdominal colonoscopy via colostomy and/or standard sigmoidoscopy or colonoscopy is performed as a necessary part of an open procedure (e.g., colectomy), the endoscopic procedure(s) is (are) not separately reportable. However, if either endoscopic procedure is performed as a diagnostic procedure upon which the decision to perform the open procedure is made, the endoscopic procedure may be reported separately. Modifier 58 may be used to indicate that the diagnostic endoscopy and the open procedure were staged or planned services."
+    },
+    {
+      "passage_key": "rule-15",
+      "section": "Chapter VI, C. Endoscopic Services, rule 15",
+      "page": "7",
+      "topic": "ncci.endoscopy",
+      "topic_value": "15",
+      "text": "15. If the larynx is viewed through an esophagoscope or upper gastrointestinal endoscope during endoscopy, a laryngoscopy CPT code cannot be reported separately. However, if a medically necessary laryngoscopy is performed with a separate laryngoscope, both the laryngoscopy and esophagoscopy (or upper gastro-intestinal endoscopy) CPT codes may be reported with NCCI PTP-associated modifiers."
+    },
+    {
+      "passage_key": "rule-16",
+      "section": "Chapter VI, C. Endoscopic Services, rule 16",
+      "page": "7",
+      "topic": "ncci.endoscopy",
+      "topic_value": "16",
+      "text": "16. Fluoroscopy (CPT code 76000) is an integral component of all endoscopic procedures when performed. CPT code 76000 shall not be reported separately with an endoscopic procedure. For example, fluoroscopy (e.g., CPT code 76000) is not separately reportable with CPT codes describing gastrointestinal endoscopy for foreign body removal (e.g., 43194, 43215, 43247, 44390, 45332, 45379)."
+    }
+  ],
+  "excluded": [
+    {
+      "topic": "ncci.endoscopy",
+      "topic_value": "9",
+      "section": "Chapter VI, C. Endoscopic Services, rule 9",
+      "page": "6",
+      "anchor": "9. Intubation of the gastrointestinal tract (e.g., percutaneous placement of G-tube)",
+      "reason": "Quotes a CPT code description: code 43247 is followed by a parenthetical description."
+    },
+    {
+      "topic": "ncci.endoscopy",
+      "topic_value": "11",
+      "section": "Chapter VI, C. Endoscopic Services, rule 11",
+      "page": "6",
+      "anchor": "11. Control of bleeding is an integral component of endoscopic procedures",
+      "reason": "Quotes CPT code descriptions: codes 45334 and 45382 are each followed by a parenthetical description."
+    }
+  ]
+}

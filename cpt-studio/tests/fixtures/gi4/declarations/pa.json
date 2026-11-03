@@ -1,0 +1,1206 @@
+{
+ "package": "PA",
+ "summary": "GI round 4, package PA: the agreement gate (studio/validation/engine.py only). When both readers' not-today readings of the code's own deciding passage come only from a section, and that section reaches the passage only across a heading-like line the layout does not read (or from further back than sections.beyond_heading_reach reads: 200 lines or 20,000 characters, fail-closed), the two readings share ONE cause - the layout - and are no agreement: the code is held, never excluded. Two places: _second_reading (the act path of _agreed_not_done and the no-service path of _held_unless_agreed) and _not_the_same_not_done (a documented service read not performed: service_negative). A section whose own heading stands above the passage is the document's own statement and still agrees. Declared movement: EXCLUDED -> held only. Nothing on the request side moves (engine.py is not read there).",
+ "base": "06e6d204e (its cpt-studio is byte-identical to installed 80df1831d168); PA is built on stage A 1e0733feb, whose only studio change is the PS helpers in sections.py (delta NONE)",
+ "declared_before_code": true,
+ "cues_added": [],
+ "movements": {},
+ "replay": "EQUAL",
+ "regression": {
+  "h4-01": "no movement in any member state",
+  "h4-02": "no movement in any member state",
+  "h4-03": "no movement in any member state",
+  "h4-04": "no movement in any member state",
+  "h4-05": "no movement in any member state",
+  "h4-06": "no movement in any member state",
+  "h2-08": "no movement in any member state",
+  "h2-10": "no movement in any member state"
+ },
+ "regression_why": "On installed readings no regression document in any member state reaches the gate with both readings section-only beyond the heading's reach: the only agreements are h4-04's 45378 (service_negative: the inventory reads the colonoscopy negated, \"negated: \\\"not\\\" on its predicate\", own wording, S2) and h2-08's E/M second reading, which already disagrees; h4-05 selects no code. H1 is EQUAL in every state, with both --fixtures and --inputs.",
+ "battery": [
+  [
+   "S3h h4-05 counterfactual, EUS code citing the narrative",
+   "43259",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ]
+ ],
+ "battery_rows": {
+  "E1 pre-procedure H&P with framed time | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "E1 pre-procedure H&P with framed time | 99214": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E2 phone follow-up, framed time by telephone | 99214": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E3 addendum time about a later review | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "E4 visit template, time framed, nothing recorded | 99212": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J1 records review, unnamed family, long gap | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J2 pasted 2024 report under unknown heading | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J3 teaching handout | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J4 records review, colonoscopy named in plan only | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J5 EGD today + appended outside colonoscopy | 43239": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "J5 EGD today + appended outside colonoscopy | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J6 records review, family named in copied block | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J7 records review, completion rows only | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "J8 surveillance office note, prior colonoscopy in history | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "K1 records review, copied banding narrative | 43244": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "K2 office note with copied EGD named | 43244": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "K3 copied colonoscopy, completion statement | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "S1 titled colonoscopy, past negation, no head fields | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "S2 untitled two-service, past negation, no head fields | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "S3 cited the past negation only | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "S3h h4-05 counterfactual, EUS code citing the narrative | 43259": {
+   "installed": "excluded/excluded",
+   "PA": "selected/needs_clarification",
+   "violations": {
+    "installed": [
+     "EXCLUDED where the truth says done"
+    ],
+    "PA": []
+   }
+  },
+  "bulb hot snare + planned colonoscopy | 43251": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscope reaches cecum in a plan | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscope reaches cecum, undated other doc | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscopy never started | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colonoscopy report physician time | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "colonoscopy report physician time | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "colorectal anastomosis at 15 cm | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "dated history instrument narration | 43235": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "dated history instrument narration | 45378": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "duodenoscope (ERCP) | 43262": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "earlier colonoscopy in EGD indication | 43239": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "earlier colonoscopy in EGD indication | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "elastography + framed time (S-R1) | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "future visit time | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "gastroscope to descending colon (sig) | 45331": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "gastroscopy in sig indication | 45330": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "index examination after prior studies | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "index examination after prior studies | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "last visit time | 99213": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "outside endpoint line, routing silent | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "past negation + today denial | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "polyp details history | 45378": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "polyp details history | 45385": {
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded"
+  },
+  "report from 2023 (deictic) | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "report from 2023 (deictic) | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "return visit + ultrasound (V3) | 99213": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "sig report, planned colonoscopy | 45338": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "sig report, planned colonoscopy | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "stricture at 30 cm | 45380": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "stricture, cecum named in plan | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "telephone-only time | 99212": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "two services, colon polyp then it | 45385": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "two services, snare refers back | 43251": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "two services, snare refers back | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  },
+  "unpassed pylorus (steered) | 43235": {
+   "installed": "selected/ready",
+   "PA": "selected/ready"
+  },
+  "withheld label + finding of cecum | 45378": {
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification"
+  }
+ },
+ "new_battery_rows": {
+  "PA1 disagreeing second reader: a plan line it reads nothing in (EUS)": {
+   "code": "43259",
+   "truth": "unsupported",
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification",
+   "why": "act_missing (no endosonographic examination act); routing reads the cited plan line planned (\"planned: in one year\"); the documented-service reader reads nothing in it (\"reads nothing in it as done or as not done\"): no agreement, held (installed reason, unchanged by PA)",
+   "under battery-exclusion-needs-agreement": "excluded/excluded (a new violation: EXCLUDED where the truth says done)"
+  },
+  "PA2 disagreeing second reader: \"No further\" read as uncertain (EUS)": {
+   "code": "43259",
+   "truth": "done",
+   "installed": "selected/needs_clarification",
+   "PA": "selected/needs_clarification",
+   "why": "act_missing; routing reads the cited plan line negated (\"negated: No further\"); the documented-service reader reads it uncertain (\"no other/further: denies only acts beyond the documented ones\"): another reading, no agreement, held (installed reason, unchanged by PA)",
+   "under battery-exclusion-needs-agreement": "excluded/excluded (a new violation: EXCLUDED where the truth says done)"
+  },
+  "PA3 agreeing second reader: a headed prior-procedures line (ERCP)": {
+   "code": "43276",
+   "truth": "not_done",
+   "installed": "excluded/excluded",
+   "PA": "excluded/excluded",
+   "why": "act_missing (no stent-exchange act); both readers read the cited line historical only by its section, and that section's own heading (\"Prior Procedures\") stands directly above it: the document's own statement, agreement stands, excluded (PA's boundary: a headed section still excludes)",
+   "under battery-agreement-never": "selected/needs_clarification (a movement no declaration names)",
+   "under pa-routing-reach": "selected/needs_clarification (a movement no declaration names)"
+  }
+ },
+ "h2": "NONE by construction: engine.py is read neither by the date reader nor by the layout; NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, every request byte-identical, mention counts and layouts unchanged, no cue pattern added, changed or removed",
+ "h3": "no movement by construction: H3 observes the readers (context, routing, inventory), never the engine",
+ "h5": "no movement: the state battery (remake, Resume, identical re-save, reuse, decision carry, member-asked offers) does not reach the agreement gate",
+ "h7": "within the limits: the gate adds bounded work only where a section-only agreement is found (sections.beyond_heading_reach: at most 200 lines or 20,000 characters, layout cached)",
+ "fingerprints": "only codes whose bucket, status or checks move: in the battery, S3h's 43259; no live decision is touched (h4-05 selects no code; h4-04's approved 43251 does not reach the gate)",
+ "unit_pins": {
+  "h4-05, 43259 or 43237 citing \"A linear echoendoscope was introduced by mouth.\", the echoendoscopic-views sentence, or both": "excluded -> held (the act path: _second_reading)",
+  "h4-05, 43259 citing only the title": "held -> held",
+  "h4-05 with \"Question to Answer\" and \"Scope Passage and Views\" removed (the narrative under the Prior Studies heading)": "excluded -> excluded",
+  "h4-05 with \"had been introduced\" (the documented-service reader reads its own time word)": "excluded -> excluded",
+  "h4-05 with \"for a remote cyst\" (an attributive time word: both readings section-only)": "excluded -> held",
+  "clinic note, an echoendoscope narrative across an unread heading-like line (no documented EUS service: _held_unless_agreed)": "excluded -> held",
+  "clinic note, the same narrative under the Prior Studies heading": "excluded -> excluded",
+  "procedure note without an EUS title, the EUS sentence across an unread heading-like line (service_negative)": "excluded -> held",
+  "the same, under the Prior Studies heading": "excluded -> excluded",
+  "the same, 210 lines below the Prior Studies heading (beyond the reach read: fail-closed)": "excluded -> held",
+  "clinic note, an earlier EUS line first and the EUS sentence across an unread heading-like line (the service's status cue is the earlier line's own word)": "excluded -> excluded",
+  "ERCP report, \"The biliary stent was exchanged.\" across an unread heading-like line (\"Stent Management\")": "excluded -> held"
+ },
+ "mutants": {
+  "battery-exclusion-needs-agreement (stage A, surviving)": "KILLED on PA by PA1 and PA2 (held -> excluded) and by S3h (held -> excluded)",
+  "battery-agreement-never (stage A)": "KILLED on PA by PA3 (excluded -> held); S3h no longer kills it on PA",
+  "pa-second-reading-one-cause (drop the _second_reading branch)": "KILLED: battery S3h and tests.test_gi4_pa",
+  "pa-not-same-one-cause (drop the _not_the_same_not_done branch)": "KILLED: tests.test_gi4_pa",
+  "pa-routing-reach (no beyond_heading_reach requirement)": "KILLED: battery PA3 and J8, tests.test_gi4_pa",
+  "pa-routing-own-time (a routing time cue of its own no longer excludes)": "KILLED: tests.test_gi4_pa",
+  "pa-routing-section-cue (no section cue required)": "KILLED: tests.test_gi4_pa",
+  "pa-service-own-time (a service time cue of its own no longer excludes)": "KILLED: tests.test_gi4_pa",
+  "pa-service-side-second (the documented-service side of _second_reading not required)": "KILLED: tests.test_gi4_pa",
+  "pa-service-side-not-same (the documented-service side of _not_the_same_not_done not required)": "KILLED: tests.test_gi4_pa"
+ },
+ "not_changed": [
+  "_agreed_not_done (including its act branch: a section-only historical act of the code's kind in the passage still agrees - the \"polyp details history\" and \"index examination\" rows exclude through it, as installed)",
+  "_routing_agrees, _proposal, _select, every reader and every version label"
+ ],
+ "harness_edits": "ops/gi4/battery.py gains the three PA rows; ops/gi4/mutants.py gains the pa-* mutants; tests/test_gi4_battery.py counts them. Pins are re-written from a sealed export of the code commit, in a separate final commit.",
+ "amendment_20261101_r2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, cycle 1 of at most 2 for this releasing family (the round-4 plan, rules for the round)",
+  "base": "b840ae756 (the integrated Wave 1 head); every movement below is against it unless it says installed",
+  "why": "An independent refutation of b840ae756 (findings F6, CTS-3 and CTS-4) found three defects in the one-cause rule. F6: a line that itself names an earlier occurrence (\"What the Earlier Echoendoscope Showed\", under Prior Studies) counted as an unread heading, so a correct exclusion of an earlier EUS (43259) became a hold. CTS-3: any short title-case line inside a history section counted - a surgical-history entry (\"Colonoscopy With Biopsy\" above \"Upper Endoscopy With Dilation\"), a provider line (\"Alan Synthetic MD\"), a page line (\"Page 2 of 3\"), a procedure-name line or a facility line opening a Prior Procedures entry - so correct exclusions (43249, 43276) became holds, and the held EGD made a READY office visit (99214) a possibly-same-day hold. CTS-4: on the act path (_agreed_not_done) the one-cause explanation was discarded, so the hold of the h4-05 counterfactual showed the inventory's act_missing words, which are false of h4-05 (\"no endosonographic examination is documented as done in it\"; h4-05 states the echoendoscopic views). Each was reproduced on a sealed export of b840ae756 before this amendment.",
+  "rule_changed": {
+   "real unread heading (F6, CTS-3)": "_section_only_routing_reading now needs _pa_unread_heading (engine.py) where it read sections.beyond_heading_reach: reading up from the passage to the section's heading line, the nearest heading-like line (the same heading-like test) that stands as a REAL heading - not the section's first line under its heading; not a page line (\"Page 2 of 3\"), a provider line (a credential at its end, an aside in brackets read past, or a title such as \"Dr.\" before a name) or a facility line (hospital, medical center, clinic, university, institute, endoscopy center ...); not a bare procedure name (a service services.SERVICES names and nothing else but connectors, acts and qualifiers); bounded above (a blank line, a sentence's end or a field line); and followed by content (its next non-empty line, at most three lines down, is a sentence, a field, a bulleted or numbered item or a line longer than 60 characters). A line that is heading-like but no real heading is read past as the section's own content. Fail-closed as before: beyond 200 lines or 20,000 characters with nothing nearer deciding, it is one cause (_PA_FAR).",
+   "a line naming another occurrence governs (F6)": "when the nearest heading-like line above the passage names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD), the document's own words date the passage: not one cause, the agreement stands (the installed exclusion)",
+   "the act path says why (CTS-4)": "in engine._select, where the act path's agreement fails (found.reason act_missing, routing not_performed, no time in doubt) and _second_reading's reason is the one-cause one with no documented act of the code's kind in the passage (_acts_in_passage, factored out of _agreed_not_done unchanged), _pa_one_cause_hold replaces the match's words: reason readings_disagree (was act_missing), question \"Confirm whether <code> was performed on the date of service.\", detail \"The routing-era reading of the passage it cites reads it as <status> only by its section: <cite>. The documented-service reader reads it the same only by its section: one cause, not two readings; <reach> (<clause>). Held for the reviewer, not excluded.\" The bucket and status are unchanged (held either way); any other disagreement keeps its words",
+   "the reach words quote the line": "_pa_reach says \"its section <heading> reaches it only past the line <the real heading line>, written as a heading, which the layout does not read as one\" (was \"... only past a line written as a heading that the layout does not read as one\"); the far wording is unchanged",
+   "unchanged": "sections.py (PS) and every reader, the request side, _held_unless_agreed's held reading, the other holds of _second_opinion and _not_the_same_not_done but for the reach words, version labels"
+  },
+  "expected": {
+   "H1": "EQUAL against b840ae756 in every member state (8 documents, --fixtures and --inputs): no HARD expectation moves, READY codes unchanged (h4-01 99204, h4-03 43244, h4-04 43251, h4-06 45385, h2-10 43274)",
+   "H2": "NONE by construction (engine.py only; no cue pattern, layout, date fact, request or mention count moves)",
+   "H3": "no movement (H3 observes the readers, never the engine)",
+   "H4": "no bucket, status, check, violation or fingerprint moves in the 50 rows; S3h (43259 citing h4-05's narrative) keeps selected/needs_clarification, and its hold's words change as the CTS-4 rule says (reason readings_disagree, question \"Confirm whether 43259 was performed on the date of service.\", detail naming the line \"Scope Passage and Views\")",
+   "H5": "no movement (the state battery does not reach the agreement gate)",
+   "cts4": {
+    "row": "S3h h4-05 counterfactual, EUS code citing the narrative",
+    "code": "43259",
+    "outcome": "selected/needs_clarification",
+    "support_reason": [
+     "act_missing",
+     "readings_disagree"
+    ],
+    "question": [
+     "The documented endoscopic ultrasound shows no endosonographic examination. Was a endosonographic examination performed on the date of service?",
+     "Confirm whether 43259 was performed on the date of service."
+    ],
+    "detail_contains": [
+     "The routing-era reading of the passage it cites reads it as historical only by its section:",
+     "The documented-service reader reads it the same only by its section: one cause, not two readings; its section \"Prior Studies\" reaches it only past the line \"Scope Passage and Views\", written as a heading, which the layout does not read as one",
+     "Held for the reviewer, not excluded."
+    ],
+    "detail_excludes": [
+     "no endosonographic examination is documented as done in it"
+    ],
+    "about": "the h4-05 counterfactual's hold, [b840ae756, cycle 1] where two values are given; the detail is the service.status check's and the performed_status question's reason (quotes here are straight; the engine writes curly ones)"
+   },
+   "unit pins": "every PA pin of pa.json stands but two wordings: the service_negative hold of \"note runaway\" and _pa_reach on h4-05 now quote the line \"Scope Passage and Views\"; the h4-05 counterfactual (43259 or 43237, either narrative sentence) stays held and now says why; the PA DOCS rows keep their outcomes",
+   "rows": {
+    "about": "synthetic rows tests/test_gi4_pa.py reads (R2_ROWS; text sha256 pinned here before the code), the row's own codes; outcomes per code: [installed 80df1831d168, b840ae756, cycle 1]. F6 and CTS-3 rows are the refutation's inputs byte for byte; G-pa rows kill one guard each (controls stay held); L-pa rows are recorded limits",
+    "rows": {
+     "F6 earlier echoendoscope sub-heading": {
+      "text_sha256": "72fe411db8bf46db061126abe7449f48d2cb136e167178d424ceac0a98bd8d22",
+      "codes": [
+       [
+        "45378",
+        "The colonoscope was advanced to the cecum.",
+        "done"
+       ],
+       [
+        "43259",
+        "A linear echoendoscope was introduced by mouth.",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "45378": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ],
+       "43259": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "F6 control, earlier EUS report excerpt sub-heading": {
+      "text_sha256": "d2c0bf385023e76fa160ccb139284292dfb8e6c6df763c7d573cde32a54d24f3",
+      "codes": [
+       [
+        "45378",
+        "The colonoscope was advanced to the cecum.",
+        "done"
+       ],
+       [
+        "43259",
+        "A linear echoendoscope was introduced by mouth.",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "45378": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ],
+       "43259": [
+        "excluded/excluded",
+        "excluded/excluded",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA-06 surgical history entries in title case": {
+      "text_sha256": "b607bfb8ca848cd39e20d7d0d923fc646d718b59a249fe79af9047ec66cc1ebd",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper Endoscopy With Dilation",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/needs_clarification",
+        "selected/ready"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA-07 control, lower-case entries": {
+      "text_sha256": "bb0fbd35c0a86d96f25d10ba8d03c758ab695de8bcc205cf6cc317d35752a9d0",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper endoscopy with dilation",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "excluded/excluded",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA-08 provider name line": {
+      "text_sha256": "d75be1edb56a9ca9650a3730e8febc91a4076c8edf11fda357a12fefdf55a982",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper endoscopy with dilation",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/needs_clarification",
+        "selected/ready"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA-09 page header line": {
+      "text_sha256": "8680b27300c1bea2c284eb800e60b6b38cc3b46f0524ababec3b6e4f254afea9",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper endoscopy with dilation",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/needs_clarification",
+        "selected/ready"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA-10 control, the cited entry first": {
+      "text_sha256": "ee37ba7fc658921a17242b16b6225db450a9fbeb1584c2605ead2e510b87dfb3",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper endoscopy with dilation",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "excluded/excluded",
+        "excluded/excluded"
+       ]
+      }
+     },
+     "CTS-3 PA3-00 control, the cited line under its heading": {
+      "text_sha256": "086a2a1b60fc54c69d61ff947b1600fa356ecf5f360b13a68197c16ea4a5781d",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "excluded/excluded",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "CTS-3 PA3-01 procedure-name line": {
+      "text_sha256": "6d303800341375b2220bb4f35037252d64c6b9373a0b8a4318f7e29b9c969a64",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "CTS-3 PA3-02 facility line": {
+      "text_sha256": "7f21a7d5d28a9a80b77b24cdbf57bee597ef16cee337cd3f6cbeb4bf5d15b164",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "CTS-3 PA3-03 page header line": {
+      "text_sha256": "cd03241680d2921d7a54fac56abae9d7fa087d7f36897405cd0e03a3c69f5af0",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa control, a real unread heading": {
+      "text_sha256": "2bc332ad466ca09f790fda29181a06040cad2f5ae43b247e6f5ad3498ec06c0e",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa first line under the heading, after a blank line": {
+      "text_sha256": "d86140385d875823232dc9af19d174c3d6d4238a17309a03085713e1ff3d42b5",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa an entry followed by another entry": {
+      "text_sha256": "411fa1bc21f55e62e9ffdaa3166f4cc3aedc733f453e73ce65ee970677c52a55",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa an entry under another entry": {
+      "text_sha256": "88784894a14007423f06b26bd232b65ec3e4221bd177b326316ddc2c8c636b80",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a line continuing a sentence": {
+      "text_sha256": "047c7224945d7f0669f5d0c0c099ee2d445476fdb41c3b36f05d7ccce89a5872",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa control, a heading under a field line": {
+      "text_sha256": "6f76b27079918914fc9c0c80413d47bbc858cc62442c19cc6d82631bb380d717",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a facility line": {
+      "text_sha256": "e2d2d7477468f4258a1b0d407fb101d8d0f2831bd1f787b0da7c018064089c1d",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a provider line with a credential": {
+      "text_sha256": "ccf14e9f8e8a7d910bb7cc0dacfcaa1cf2cb17463287ab198f08bc0de33e1802",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a provider line with a title": {
+      "text_sha256": "60f647a6a3b84e497d1df05a795d9df0b0dc1da52bb57496279c442cccfdecfa",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a provider line with an aside": {
+      "text_sha256": "f15734a53b39e28b61c8ec6cfa8df86b02d5e345dc5c5180c6b8cea9d99cd295",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a page line": {
+      "text_sha256": "fa77b6a5efcf94ecf45304c0ff0e34f3d2ee4dba75aaefd6b5027a34594550b0",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a bare procedure name": {
+      "text_sha256": "64f0dbd6969c079afdbc8a0ef07806cbb27e908dcd88e5a3ec25ca5835ee3d5b",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a second entry of a procedure history": {
+      "text_sha256": "45ea30738374738039f6149edc4b09507973fa13d1992ab7580abd8747c8df5c",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa control, a service heading that says more": {
+      "text_sha256": "a61ad1098efb0d347352ad9f9aed412e49ad93de5503a8a708fc2c11b057ff57",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa control, an act-word heading naming no service": {
+      "text_sha256": "17ea2b823077af6128fa521a5c5636e17ecae5706d77eab5a28c6ed8c7fae163",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "G-pa a line naming another occurrence": {
+      "text_sha256": "2b9ba7882c329ed3a3e7b3c9fc966efe54c061bf78f0165c2c961f66b39fe7bf",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "L-pa two headings in a row": {
+      "text_sha256": "48bd0b4b19e3ce448017786f84c5c10811e807c56bc79c9733e6465d9ef8c0ac",
+      "codes": [
+       [
+        "43276",
+        "The biliary stent was exchanged.",
+        "not_done"
+       ],
+       [
+        "43262",
+        "a biliary sphincterotomy was performed",
+        "done"
+       ]
+      ],
+      "outcomes": {
+       "43276": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "excluded/excluded"
+       ],
+       "43262": [
+        "selected/ready",
+        "selected/ready",
+        "selected/ready"
+       ]
+      }
+     },
+     "L-pa a title-case entry standing as a heading": {
+      "text_sha256": "9421bad30b7924f96db9e7372603c106069138600e2593fc492d7ab9d0d91902",
+      "codes": [
+       [
+        "99214",
+        "Medical decision making: moderate.",
+        "done"
+       ],
+       [
+        "43249",
+        "Upper endoscopy with dilation was uncomplicated.",
+        "not_done"
+       ]
+      ],
+      "outcomes": {
+       "99214": [
+        "selected/ready",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ],
+       "43249": [
+        "excluded/excluded",
+        "selected/needs_clarification",
+        "selected/needs_clarification"
+       ]
+      }
+     }
+    }
+   },
+   "against_installed": "every row this amendment moves returns to installed's outcome (EXCLUDED, and 99214 READY); the declared PA movement stands: the h4-05 counterfactual (S3h) is held, never excluded, and so are G-pa controls and the PA DOCS runaway rows",
+   "exposure": "over the 51,925-text H2 corpus, at the first 40 content lines of every history or plan section, the old predicate reads one-cause at 6,380 positions in 1,781 texts and the new one at 6,371 in 1,773: the 9 positions dropped are the extra corpus's \"CPT 99214\", \"CPT | Description | Units\" and \"Esophageal High-Resolution Manometry Report\" lines; no position is added; the generated corpora's unread headings (\"Case Room Ledger\", \"Why It Was Done\", \"Observations by Segment\", \"Question to Answer\", \"Scope Passage and Views\", \"Large Bowel Narrative\", \"Addendum <date>\") still count",
+   "measured_before_code": "the code applied to a scratch copy of the sealed git-archive export of b840ae756 (engine.py sha256 bb837b00a47ae759 -> 31d6d5697142fa78; no worktree changed), read with the committed harness: H1 replay (--fixtures and --inputs) EQUAL against b840ae756; H4 battery 0 movements; the rows below on installed 80df1831d168, on b840ae756 and on the candidate"
+  },
+  "mutants": {
+   "pa-routing-reach (anchor moved to the new return; detector unchanged)": "battery: PA3 and J8",
+   "pa-reach-far-words (anchor moved into the new _pa_reach)": "unit: the far wording",
+   "pa-real-first-line": "unit: G-pa first line under the heading, after a blank line",
+   "pa-real-procedure-name": "unit: G-pa a bare procedure name; G-pa a second entry of a procedure history",
+   "pa-procedure-only-words": "unit: G-pa control, a service heading that says more (stays held)",
+   "pa-procedure-named": "unit: G-pa control, an act-word heading naming no service (stays held)",
+   "pa-real-bounded-above": "unit: G-pa an entry under another entry; G-pa a line continuing a sentence",
+   "pa-real-bounded-field": "unit: G-pa control, a heading under a field line (stays held)",
+   "pa-real-content": "unit: G-pa an entry followed by another entry",
+   "pa-real-content-sentence": "unit: G-pa control, a real unread heading (stays held)",
+   "pa-name-page": "unit: G-pa a page line",
+   "pa-name-credential": "unit: G-pa a provider line with a credential",
+   "pa-name-title": "unit: G-pa a provider line with a title",
+   "pa-name-facility": "unit: G-pa a facility line",
+   "pa-name-aside": "unit: G-pa a provider line with an aside",
+   "pa-occurrence-governs": "unit: F6 earlier echoendoscope sub-heading; G-pa a line naming another occurrence",
+   "pa-one-cause-hold-words": "unit: the S3h words (CTS-4)",
+   "pa-one-cause-hold-acts-here": "unit: a hold decided by a documented act of the code's kind keeps its words"
+  },
+  "known_limits": [
+   "two headings in a row read as list entries (L-pa two headings in a row): the installed exclusion, not the one-cause hold, until a heading stands alone",
+   "a title-case entry standing alone between paragraphs of a history section, followed by a sentence, still reads as a real heading (L-pa a title-case entry standing as a heading: 43249 and 99214 held, as on b840ae756); its hold now names the line (\"Gallbladder Removal\"), so the reviewer sees the cause",
+   "a real unread heading that is the section's first line, or a bare procedure name used as the heading of today's narrative inside a runaway history (\"Endoscopic Ultrasound\"), reads as an entry: the installed exclusion",
+   "the facility, credential and procedure-word lists are closed lists; each match only returns a hold to the installed exclusion (a miss keeps the hold)",
+   "the no-service path (_held_unless_agreed) still shows its one-cause words only as far as a cue excerpt reaches (160 characters): true, and cut before the heading line"
+  ]
+ },
+ "amendment_20261101_cycle2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, cycle 2: no PA code changes (studio/validation/engine.py's PA functions are as at fbc59ee53). PA only adds holds - EXCLUDED -> held - so a miss falls back to installed's reading",
+  "written": "by Wave 1 repair cycle 2, group PD+PO+PA, with the two refutation findings below reproduced first on sealed exports of installed 80df1831d168 and fbc59ee53 (the procedures-and-offers lens's inputs, work/cases1.json, cases4.json, cases8.json, byte for byte)",
+  "known_limits": {
+   "PA-REAL-HEADING-READ-PAST": {
+    "finding": "PA holds on a real unread heading only as _pa_real_heading reads one: a bare procedure name ('Endoscopic Ultrasound', 'Endoscopic Ultrasonography', 'Upper Endoscopic Ultrasound', 'EUS With Fine Needle Aspiration', 'Upper EUS'), any line _PA_FACILITY matches ('Endoscopy Suite Findings', 'Findings in the Endoscopy Unit', 'Today in the Endoscopy Suite'), or a heading standing right under a list line with no stop ('Cholecystectomy 2014') is read past as the section's content",
+    "reproduced": "h4-05 without its 'Question to Answer' block and with 'Scope Passage and Views' renamed so, 43259 citing 'A linear echoendoscope was introduced by mouth.' (truth: done): fbc59ee53 excludes 43259 as historical exactly as installed does (b840ae756 held it); with the facility-word headings and the list-line variant the EUS item 'documented as performed, no supported proposal' is also offered for a second review (PO-2 reads the same line as an unread heading). The control 'Scope Passage and Views' stays held",
+    "limit": "the installed false EXCLUSION of today's EUS returns under those headings, with installed's 'documented as historical' reason - no worse than installed: PA adds holds only, and a heading it reads past leaves installed's reading. Where PO-2 offers the item on the same document the output both excludes the code and offers its service for a second review (a PA x PO disagreement); the offer is the member's to ask for and no stage sends anything for it. Not repaired this cycle, by the round's direction: PA only adds holds, so a miss falls back to installed; widening _pa_real_heading would be PA's second and last cycle, with no cycle left to fix what its refutation finds"
+   },
+   "PA-EM-SAME-DAY-COLLATERAL": {
+    "finding": "when PA holds a history-section procedure on a real unread heading in an office note, the engine's same-day rule (_same_day_procedure, state 'uncertain') turns the READY office E/M into a 'possibly same-day procedure' hold: em.same_day_procedure warn and the separate_em question. pa.json declared 'EXCLUDED -> held only' and no E/M movement, so this READY -> held is a declared limit from now on",
+    "reproduced": "the lens's office note (Past Surgical History, then 'Endoscopy Findings' | 'Dilation Details' | 'Esophageal Dilation Summary' above a dilation sentence; 99214 citing 'Medical decision making: moderate.', 43249 citing the dilation): installed and the control without the heading read 43249 excluded and 99214 READY; fbc59ee53 reads 43249 needs_clarification [extent, performed_status] and 99214 needs_clarification [separate_em]",
+    "limit": "a READY office visit beside a PA-held history procedure is held, never excluded or sent: the member answers the separate-E/M question (a hold's cost, no false READY). The cycle-1 repair (amendment_20261101_r2) narrowed what PA counts as a heading - the title-case history entries, provider, page, facility and procedure-name lines of CTS-3 no longer hold - but not this propagation through a real heading"
+   }
+  },
+  "code": "none: PA's functions, tests and mutants are unchanged; this entry records the two limits only"
+ }
+}

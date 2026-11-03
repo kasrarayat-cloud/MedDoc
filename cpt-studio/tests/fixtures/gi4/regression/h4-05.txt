@@ -1,0 +1,35 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Pancreatic Endosonography
+Tamsworth Regional Medical Center (fictional), Advanced Endoscopy Service
+Patient class: outpatient in the hospital endoscopy department, POS 22
+Service date: 2026-10-15
+Examined: Henrike Dabrowski-Mensah (fictional), 71-year-old woman
+Performing endoscopist: Junia Haverkamp-Ode, MD (fictional)
+Anesthetic care: monitored anesthesia care by the Tamsworth Department of Anesthesiology (fictional), billed by that department
+
+Prior Studies
+Earlier EUS (this service): 2025-04-09 - 19 mm branch-duct cyst in the pancreatic body, no solid component, not sampled.
+MRI with MRCP at Tamsworth Imaging (fictional): 2026-09-22 - the cyst now measures 21 mm, with a possible 5 mm enhancing mural nodule.
+Cholecystectomy: 2014.
+
+Question to Answer
+Is the possible nodule on MRI tissue or mucin?
+
+Scope Passage and Views
+A linear echoendoscope was introduced by mouth. Echoendoscopic views were obtained from the duodenal bulb, the descending duodenum and the stomach, covering the gland from the uncinate process to the tail. The esophageal wall and the posterior mediastinum seen during insertion were unremarkable.
+
+What the Echoendoscope Showed
+Pancreatic body: a 21 x 16 mm anechoic, multilocular cyst joined to the main duct by a side branch. Inside it lay a 5 mm echogenic focus with a bright rim and a hypoechoic center; it shifted when she was turned onto her back and had no Doppler flow, so it behaves as a mucin globule rather than a mural nodule. The cyst wall is thin and smooth.
+Main pancreatic duct 3 mm, not dilated. Head, neck and tail parenchyma unremarkable. No solid mass, no enlarged lymph nodes, no ascites. Common bile duct 6 mm after cholecystectomy, without stones.
+Because the focus behaved as mucin, no fine-needle aspiration or biopsy was performed.
+
+Endosonographic Conclusion
+Branch-duct intraductal papillary mucinous neoplasm of the pancreatic body, 21 mm, slightly larger than at the earlier EUS. The suspected nodule is mucin. No other worrisome features.
+
+What Happens Next
+Next visit: 2026-11-16 in the pancreas clinic, to go over this result with her and her son.
+Colon cancer screening is due; a colonoscopy has been scheduled for 2026-12-03 at Tamsworth Endoscopy (fictional).
+Repeat MRI with MRCP in 12 months.
+
+Electronically finalized by Junia Haverkamp-Ode, MD (fictional), on 2026-10-15 at 15:12

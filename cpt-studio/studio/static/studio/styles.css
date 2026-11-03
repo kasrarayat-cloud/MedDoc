@@ -84,3 +84,72 @@
 .candidate-group[open]>summary{margin-bottom:14px}
 .candidate-passages{margin-top:8px;font-size:10px}
 .check-item .candidate-passages p{margin:6px 0 0;overflow-wrap:anywhere}
+
+/* harness@1 (HARNESS.md 7): the Review participants card, a code card's three statuses, what the participants said and the
+   CMS references retrieved for it, and the owner's trace. The approved components and tokens only. */
+.participants-card{margin-bottom:16px}
+.participants-card .panel-heading{margin-bottom:6px}
+.participants-card .check-item>div{flex:1;min-width:0}
+.participant-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.participant-head strong{min-width:0;overflow-wrap:anywhere}
+.participants-card .check-item p+p{margin-top:2px}
+.code-status-lines{list-style:none;margin:14px 0 0;padding:12px 0 0;border-top:1px solid #edf0e5;display:grid;gap:5px}
+.code-status-lines li{font-size:10px;line-height:1.7;color:#687a5b;overflow-wrap:anywhere}
+.code-status-lines b,.reference-facts b,.trace-list b{font-weight:500;color:var(--ink)}
+.harness-note{font-size:10px;line-height:1.8;color:#687a5b;margin:0;overflow-wrap:anywhere}
+.harness-note+.harness-note{margin-top:6px}
+.reference-facts{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.reference-facts li{font-size:10px;line-height:1.7;color:#687a5b;overflow-wrap:anywhere}
+.reference-passage{margin-top:10px;font-size:10px;line-height:1.8}
+.reference-passage summary{cursor:pointer;width:fit-content;max-width:100%;color:var(--teal);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.reference-passage summary:focus-visible{outline:3px solid #83b6a3;outline-offset:4px}
+.reference-passage p{margin:6px 0 0;color:#5f6f55;white-space:pre-wrap;overflow-wrap:anywhere}
+.trace-run .evidence-label{margin-bottom:10px}
+.trace-fields{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;margin:0;font-size:10px;line-height:1.7}
+.trace-fields dt{color:#89977a}
+.trace-fields dd{margin:0;color:#3f4b40;overflow-wrap:anywhere}
+.trace-reading{margin-top:16px;padding-top:14px;border-top:1px solid #edf0e5}
+.trace-reading .evidence-label{margin:14px 0 4px}
+.trace-list,.trace-quotes{margin:6px 0 0;padding-left:18px;font-size:10px;line-height:1.8;color:#687a5b}
+.trace-list li,.trace-quotes li{overflow-wrap:anywhere}
+.trace-list li+li{margin-top:6px}
+.trace-quotes{color:#806b3d}
+
+@media(max-width:760px){.trace-fields{grid-template-columns:minmax(0,1fr);gap:0}
+.trace-fields dd+dt{margin-top:8px}
+}
+
+/* harness@2 (HARNESS.md 11-12): candidate answers to an open question and their confirmation, a code's confirmed
+   finding and its participants' references kept apart from the reconciliation's, and the trace's exchanges. Tokens
+   only. */
+.candidate-answers{margin-top:14px;padding-top:12px;border-top:1px solid #ece5d4}
+.clarification-card>.candidate-answers{margin-bottom:16px}
+.candidate-answers .evidence-label{margin-bottom:6px}
+.candidate-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.candidate-answer{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-width:0}
+.candidate-answer strong{font-size:11px;font-weight:500;color:var(--ink);overflow-wrap:anywhere}
+.candidate-answer .candidate-quote{font-size:10px;line-height:1.8;color:#5f6f55;margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.candidate-answers>.harness-note{margin-top:10px}
+.confirm-finding{margin-top:10px;font-size:10px;line-height:1.8}
+.confirm-finding summary{cursor:pointer;width:fit-content;max-width:100%;color:var(--teal);font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.confirm-finding summary:focus-visible{outline:3px solid #83b6a3;outline-offset:4px}
+.confirm-finding .check-label{margin:10px 0 8px;font-size:10px;color:#5f6f55}
+.confirm-finding .check-label span{overflow-wrap:anywhere}
+.confirm-finding .form-error{margin:0 0 8px}
+.confirm-finding .button{width:auto;margin-top:0}
+.clarification-card .confirm-finding .button{width:auto}
+.confirmed-answer,.confirmed-fact{display:flex;gap:9px;background:var(--soft);border:1px solid #dfe8d3;border-radius:8px;padding:11px 12px;color:#55704a;font-size:10px;line-height:1.8}
+.confirmed-answer{margin-bottom:12px}
+.confirmed-fact{margin:14px 0 0}
+.confirmed-answer svg,.confirmed-fact svg{width:13px;height:13px;margin-top:3px;flex-shrink:0}
+.confirmed-answer>div,.confirmed-fact>span{min-width:0;overflow-wrap:anywhere}
+.confirmed-answer strong,.confirmed-fact strong{font-weight:500;color:var(--forest)}
+.confirmed-answer p{margin:4px 0 0}
+.reference-lists .evidence-label+.harness-note,.reference-lists .evidence-label+.reference-facts{margin-bottom:12px}
+.reference-lists>:last-child{margin-bottom:0}
+.trace-exchange+.trace-exchange{margin-top:12px;padding-top:12px;border-top:1px dashed #edf0e5}
+.trace-exchange .trace-list{margin-top:8px}
+
+@media(max-width:760px){.candidate-answer{padding:10px}
+.confirm-finding .button{width:100%}
+}

@@ -23,14 +23,27 @@ Earlier failures and measurements are kept in the log below, never rewritten.
 - Earlier in this session the review "lenses" were engineering subagents on the session's own model (Opus 5.5). They
   reviewed code and never reviewed an uploaded clinical document. They do not satisfy any item below.
 
-## Stage 1: establish the actual starting point
+**Three kinds of status, never merged (owner, 2026-11-01).** A row records whether its subject is DOCUMENTED (a fact
+read from a source or written down), IMPLEMENTED (code built and tested offline) or VERIFIED LIVE (shown on the real
+system with genuine responses). A PASS states which of the three it is. Documentation or a passing offline test is never
+recorded as live verification.
+
+## Stage 1: establish the actual starting point — PARTIAL (1.3 BLOCKED)
 
 | | Item | Status | Revision | Evidence | Remaining action |
 |---|---|---|---|---|---|
-| [ ] | 1.1 Installed revision, active work and existing provider integrations; fresh worktree; the shared checkout untouched | IN PROGRESS | live `80df1831d168` | this file's starting point | full inventory (Stage 1 map) |
-| [ ] | 1.2 Map of the document-to-code workflow; production clinical reviewers distinguished from engineering agents | IN PROGRESS | — | — | write the map |
-| [ ] | 1.3 Backend access to Corti, Astra and Fable: exact provider, API model or endpoint identifier, a minimal synthetic capability check | IN PROGRESS | — | — | Corti check; Astra and Fable access to be established (no adapter or credential found so far) |
-| [ ] | 1.4 Authorized CPT and reference sources and retrieval tools, with releases, effective dates and permitted uses; unavailable dependencies recorded | IN PROGRESS | — | — | live `reference_sources` read; retrieval tools and egress |
+| [x] | 1.1 Installed revision, active work and existing provider integrations; fresh worktree; the shared checkout untouched | PASS | live `80df1831d168` (image `sha256:88544c7cd33f…`) | `docs/cpt-harness/stage1-starting-point.md` §1 (image labels, `docker inspect`, `.git/HEAD`, read 2026-11-01 21:30Z) | — |
+| [x] | 1.2 Map of the document-to-code workflow; production clinical reviewers distinguished from engineering agents | PASS | `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §2 (FILE:LINE map; Corti the only model reading documents; agent account scripted; engineering agents have no runtime role) | — |
+| [ ] | 1.3 Backend access to Corti, Astra and Fable: exact provider, API model or endpoint identifier, a minimal synthetic capability check | IN PROGRESS (Astra and Fable PASS before install; the installed release's `app --access-check` decides) | live `80df1831d168` | per participant, below | D1 and D2 (below); then the access check for all three |
+
+Item 1.3 per participant (documented / implemented / verified live):
+
+| participant | documented | implemented | verified live |
+|---|---|---|---|
+| Corti | YES: `POST https://api.{us\|eu}.corti.app/v2/tools/coding/`, OAuth client credentials; its API takes and returns no model identifier (`docs/cpt-harness/stage1-starting-point.md` §3) | YES: installed adapter `corti-coding-v2@cptstudio-1` | PARTIAL: 45 live sent runs 2026-10-26 to 2026-10-31, each with `X-Request-Id`; no fresh access check under the harness yet; environment and tenant not recorded per run |
+| Astra | YES: OpenAI, `gpt-6-astra`, `POST https://api.openai.com/v1/responses`, Bearer (owner-confirmed; `docs/cpt-harness/vendor-and-reference-facts-20261101.md` §1) | YES: adapter `openai-responses@cptstudio-harness-2` (tool loop), offline tests | ACCESS PASS 2026-11-02T06:01Z (pre-install check from the candidate image, not yet the installed release): HTTP 200, returned model `gpt-6-astra` (= requested), request `req_f5872cba22da497c87d11b2b6d12a20a`, response `resp_0545e923d6b404e4016ae82723477487d19787aa274210cad8`, 1,773 in / 515 out tokens, est. $0.0435; reading read (45385, nothing refused or unverified) |
+| Fable | YES: Anthropic, `claude-fable-5-1`, `POST https://api.anthropic.com/v1/messages` (owner-confirmed; same file §2) | YES: adapter `anthropic-messages@cptstudio-harness-3` (no vendor output format; schema in the prompt; CPT Studio's strict parse), offline tests | ACCESS PASS 2026-11-02T07:52Z (pre-install check from the candidate image `fa457805c`): HTTP 200, returned model `claude-fable-5-1` (= requested), two exchanges with one `cms_code_facts` call (requests `req_011Cgdjn9XqR42Uc5t3eX9JE`, `req_011CgdjnX1eyPN4foZi8aYGp`; response `msg_011CgdjnXBqEtE9GD4Ph3sZF`), 7,254 in / 1,072 out tokens, est. $0.126; reading read (45385, nothing refused or unverified). Earlier: harness-2's request was refused ("compiled grammar is too large", `req_011CgdbDywZBDPP7SehwxfBs`; 12.8) |
+| [x] | 1.4 Authorized CPT and reference sources and retrieval tools, with releases, effective dates and permitted uses; unavailable dependencies recorded | PASS | live `80df1831d168` | `docs/cpt-harness/stage1-starting-point.md` §4 (live read: RVU26D 19,453 rows, MUE 2026-Q4 15,212 rows, 2026-10-01 to 2026-12-31; no retrieval stage); `docs/cpt-harness/vendor-and-reference-facts-20261101.md` §3 (each source's release, URL and published terms) | — (usable: RVU26D and its documentation, MUE, NCCI Policy Manual Ch. VI, Claims Processing Manual Ch. 12; unavailable: PTP behind the AMA agreement, AMA content) |
 
 ## Stage 2: read the document correctly
 
@@ -49,22 +62,26 @@ Earlier failures and measurements are kept in the log below, never rewritten.
 | [ ] | 3.2 Astra independently examines the source: service facts, proposed codes, missing services, clarification needs | NOT RUN | — | — | depends on 1.3 |
 | [ ] | 3.3 Fable independently examines the source before seeing Astra's or Corti's conclusions | NOT RUN | — | — | depends on 1.3 |
 | [ ] | 3.4 Each participant's model or endpoint, input revision, request identity, output and usage recorded | NOT RUN | — | — | — |
+| [ ] | 3.5 Initial assessments independent and FROZEN: Corti, then Astra, then Fable may run in sequence, but each first assessment is built from the same source revision alone, recorded immutably, and fixed before any participant is shown a peer's conclusion (owner, 2026-11-01) | NOT RUN | — | — | design in `cpt-studio/HARNESS.md` (harness@2); build |
+| [ ] | 3.6 Peer review after the freeze: each model participant is then shown the frozen peer conclusions and CPT Studio's open questions, and answers with verbatim evidence; its peer-review output is recorded separately and never replaces its frozen first assessment; reconciliation follows | NOT RUN | — | — | design (harness@2); build |
+| [ ] | 3.7 A documented service Corti omitted can be proposed by Astra or Fable, keeping its actual origin and evidence; never relabelled as Corti's output, never approved automatically | IN PROGRESS | — | engine merge being built (origin `participant`) | build; prove |
 
 ## Stage 4: retrieve, validate and reconcile
 
 | | Item | Status | Revision | Evidence | Remaining action |
 |---|---|---|---|---|---|
-| [ ] | 4.1 Actual reference retrieval: source identity, retrieved passages, release and effective dates, tool traces | NOT RUN | — | — | depends on 1.4 |
+| [ ] | 4.1 Actual reference retrieval: source identity, retrieved passages, release and effective dates, tool traces | NOT RUN | — | — | two kinds kept apart (owner, 2026-11-01): (a) the references each PARTICIPANT actually retrieved through its tools and actually cited, with the tool trace; (b) the references the later RECONCILIATION retrieved. Each passage dated (source release and effective window) |
 | [ ] | 4.2 Proposals checked against documented services, authorized CPT guidance and payer, bundling and modifier rules | NOT RUN | — | — | — |
 | [ ] | 4.3 The complete service inventory reconciled against all three outputs, including services Corti omitted | NOT RUN | — | — | — |
 | [ ] | 4.4 Disagreements resolved by source evidence and rules, not majority; contradictions kept; focused questions only where needed | NOT RUN | — | — | — |
 | [ ] | 4.5 Proposed, reference-supported and reviewer-approved codes kept distinct; no automatic approval from agreement | NOT RUN | — | — | — |
+| [ ] | 4.6 A documented path by which a source-supported finding corrects the shared date, status or extent interpretation, so that a false hold changes instead of gaining commentary; no promotion by agreement; clinical safeguards kept (owner, 2026-11-01) | NOT DONE in this release (D7, HARNESS.md 12.10) | — | built as harness@2's reviewer confirmation (11.3/12.5); three refutation rounds each found blocking defects in its "Verified" check, which cannot converge: the three retained false holds (h4-01 99204, h4-03 43244, h4-06 45385) are all "not documented" holds the readers read nothing for | OWNER QUESTION (class a): (i) a human-override confirmation that claims nothing CPT Studio cannot check, or (ii) no override, the false holds repaired at the readers (Wave 2; an I1-declared change) |
 
 ## Stage 5: verify generalization before deployment
 
 | | Item | Status | Revision | Evidence | Remaining action |
 |---|---|---|---|---|---|
-| [ ] | 5.1 The retained date, status, extent, EUS, EGD/biopsy and ERCP discrepancies reproduced and classified | IN PROGRESS | — | round-4 Corti traces (session record) | consolidate into the harness evidence |
+| [ ] | 5.1 The retained date, status, extent, EUS, EGD/biopsy and ERCP discrepancies reproduced and classified | IN PROGRESS (documented: reproduced and classified before the harness) | `80df1831d168`, round-4 cycle 2 | `docs/cpt-harness/stage5-retained-discrepancies.md` (7 rows: 4 application, 3 provider, each with its harness@2 path) | measure each row again on the harness release, offline then live |
 | [ ] | 5.2 A small independently authored unseen synthetic set predeclared before execution, with expectations sourced independently | IN PROGRESS | — | sealed set u4-01 to u4-10 (manifest sha256 `c5e59d548b4087a0…`) | check its coverage against this item; declare its use |
 | [ ] | 5.3 The declared set run and every result reported | NOT RUN | — | — | — |
 | [ ] | 5.4 Tenant isolation, duplicate prevention, unknown-outcome recovery, evidence preservation, unchanged historical approvals and exports | NOT RUN | — | — | — |
@@ -80,9 +97,58 @@ Earlier failures and measurements are kept in the log below, never rewritten.
 | [ ] | 6.5 Automated synthetic decisions labelled accurately | NOT RUN | — | — | ordinary-reviewer acceptance mode built (`1e23e80b6`, unmerged) |
 | [ ] | 6.6 Desktop and mobile verified, including genuine failure and unavailable-provider states | NOT RUN | — | — | — |
 
+**What completes Stage 6 (owner, 2026-11-01).** The INSTALLED website, with the harness enabled, verified live. Corti-only
+parity and replay are prerequisites, never completion. Completion requires all of:
+- genuine Corti, Astra and Fable responses on fresh synthetic documents;
+- reference-stage evidence: participant tool traces and the reconciliation retrieval;
+- a persisted synthetic review;
+- a reload that shows the review intact;
+- an actual reviewed report downloaded and checked against the saved state.
+
+## Final verdicts (three, reported separately)
+
+| verdict | question | status |
+|---|---|---|
+| Functional completion | Does the installed harness run Corti, Astra and Fable live, retrieve references, reconcile, and carry a synthetic review through to a reviewed download? | NOT ESTABLISHED |
+| Clinical validation | Is the coding accurate, as independently established (a qualified coder's adjudication of a predeclared set)? | NOT ESTABLISHED: no independent adjudication exists |
+| Content-use permissions | May CPT content be used as the product uses it (D3, D4)? | NOT ESTABLISHED: owner decisions open |
+
+The complete doctor-facing CPT demonstration is NOT READY while any required dependency (D1 to D4) is unresolved.
+
 ## External dependencies (one consolidated request)
 
-To be written at the end of Stage 1, once each dependency is verified rather than assumed.
+Sent to the owner 2026-11-01 ~21:30Z. Each dependency blocks only its own live stage; engineering continues meanwhile.
+
+| # | dependency | needed for | protected destination | status |
+|---|---|---|---|---|
+| D1 | An Anthropic API key with access to `claude-fable-5-1`. A dedicated key inside the existing authorized account QuillMD uses is preferred; QuillMD's key is acceptable if the owner prefers it. It cannot be copied out of `rebuild/.env` by this session | 1.3, 3.3, 3.4, 6.3 | `/etc/cpt-studio-provider-sources/anthropic.env`, root:root 0600 in a root 0700 directory, one line `ANTHROPIC_API_KEY=<key>`; the installer copies it unread to `/etc/cpt-studio/` (10150:10150 0400), mounted into the worker only | OPEN |
+| D2 | An OpenAI project API key from an authorized OpenAI project with access to `gpt-6-astra` on the Responses API. No Codex or desktop session token | 1.3, 3.2, 3.4, 6.3 | `/etc/cpt-studio-provider-sources/openai.env`, same ownership and mode, one line `OPENAI_API_KEY=<key>` | OPEN |
+| D3 | Licensed CPT content: either an AMA licence (descriptors, guidelines), or acceptance that validation uses CMS public sources only and says so | 4.2 | — | OPEN (owner, 2026-11-01: keep unresolved). Prepared: `docs/cpt-harness/licensing-requirements-20261101.md` D-4, D-5 |
+| D4 | The AMA position (FAQ, updated 2026-07-14): developing and testing products that use CPT needs an AMA licence. CPT Studio holds none, and no source read supports its "internal synthetic evaluation" note. NCCI PTP edits are reachable only through an AMA point-and-click agreement limited to CMS programs | 4.2, and the product as a whole | — | OPEN (owner, 2026-11-01: keep unresolved). Prepared: `docs/cpt-harness/licensing-requirements-20261101.md` (review of 21 sources; **no document read grants CPT Studio any right to CPT content, code numbers included**; decisions D-1 to D-8, among them D-3: the harness sends synthetic documents, and in peer review CPT code numbers, to OpenAI and Anthropic) |
+| D5 | Corti's public terms (§2.6.1.9) bar customers to "benchmark or test the Platform for competitive purposes without prior written approval". The harness runs Corti beside OpenAI and Anthropic, and its reports set their outputs side by side. Whether that is "for competitive purposes" is not stated; the owner's signed Corti agreement is not available to this review | the harness as a whole | — | OPEN, owner question (found 2026-11-01 by the licensing review) |
+
+**The two credential destinations, exactly** (D1, D2). Each is a file the owner creates as root. No secret is ever
+requested in chat.
+
+| file | directory | owner and mode | content (one line) |
+|---|---|---|---|
+| `/etc/cpt-studio-provider-sources/anthropic.env` | `/etc/cpt-studio-provider-sources/`, root:root 0700 | root:root 0600 | `ANTHROPIC_API_KEY=<key>` (optionally a second line `ANTHROPIC_WORKSPACE_ID=<id>` if the key is not scoped to a workspace) |
+| `/etc/cpt-studio-provider-sources/openai.env` | the same | root:root 0600 | `OPENAI_API_KEY=<key>` (optionally a second line `OPENAI_PROJECT=proj_<id>`) |
+
+**What happens to them.**
+- The installer copies each, unread, to `/etc/cpt-studio/anthropic-credentials.env` and
+  `/etc/cpt-studio/openai-credentials.env` (10150:10150 0400).
+- The copies are mounted read-only into the worker container only, at `/run/cpt-studio/`.
+- QuillMD's own credentials are not touched.
+- A spending limit on each key in its own console is advised.
+
+**Rules for D3 and D4 (owner, 2026-11-01).**
+- No agreement is accepted, no synthetic-testing exemption is inferred, and no download term is bypassed. In
+  particular, the PTP quarterly change file, which is a direct link, is not downloaded.
+- The existing provider agreements are being reviewed for any downstream CPT rights they document. Documented coverage
+  is kept apart from assumption.
+- The exact remaining licensing requirements are prepared for the owner's review in
+  `docs/cpt-harness/licensing-requirements-20261101.md`.
 
 ## Progress log (append only)
 
@@ -94,3 +160,224 @@ To be written at the end of Stage 1, once each dependency is verified rather tha
     two-cycle rule;
   - the three retained Corti discrepancies (EUS, EGD with biopsy, ERCP stent exchange) trace to provider omissions;
   - the round-3 live walk (2026-10-31) read 1 of 6 dates, approved 1 code and reached no reviewed report.
+- **2026-11-01T21:40Z Stage 1.**
+  - **Done:** 1.1 and 1.2 PASS on live reads. Corti is the only production participant; Astra and Fable are absent.
+  - **Identities and credentials:** the owner confirmed both identities (Astra = OpenAI `gpt-6-astra` via `/v1/responses`;
+    Fable = Anthropic `claude-fable-5-1` via `/v1/messages`). No credential for either is reachable without reading
+    QuillMD's `rebuild/.env`, so 1.3 is BLOCKED on D1 and D2.
+  - **References:** the live store holds only CMS PFS RVU26D and MUE 2026-Q4; their use terms are being checked before
+    any import (1.4).
+  - **Round-4 work in flight:** the Wave 1 repair cycle 2 finished. The non-converged releasing rules (PV1 C1/C2, PI E1
+    and A1, the PD strong-head hold) were dropped, with narrow fixes kept (PD DT-5, PO-1). Projected HARD 119/123
+    (installed 98) and walk READY {43251, 43274}, the same as installed. The integration is running.
+  - **Next:** the harness design (`cpt-studio/HARNESS.md`), then its build, independent of D1 to D3.
+- **2026-11-01T22:35Z The owner's corrections, applied to this file and to `cpt-studio/HARNESS.md` (section 11,
+  harness@2):**
+  - Stage 1 is PARTIAL while 1.3 is BLOCKED. Documented, implemented and verified live are kept apart (1.3 per
+    participant).
+  - First assessments are independent and frozen before any peer conclusion is shown. Peer review follows, then
+    reconciliation (3.5, 3.6).
+  - A reviewer-confirmed correction path lets a source-supported finding correct the shared date, status or extent
+    reading (4.6). There is no promotion by agreement.
+  - An omitted service keeps its origin (3.7).
+  - Participant-retrieved and participant-used references are kept apart from the reconciliation's references, with
+    tool traces (4.1).
+  - D3 and D4 stay unresolved. No agreement is accepted, no exemption inferred and no download term bypassed. The
+    licensing review is running.
+  - Stage 6 completion means the installed site with the harness enabled and genuine responses. Three separate final
+    verdicts.
+  - The six harness@1 builders keep running; their work is the base that harness@2 builds on.
+- **Correction to the entry above (appended, not rewritten):** it is stamped 22:35Z, but it was written at about 22:24Z. The clock read 22:25:46Z after that commit. The stamp was estimated rather than read; later entries use the clock.
+- **2026-11-01T22:43Z Licensing review prepared for the owner:** `docs/cpt-harness/licensing-requirements-20261101.md`. It is a read-only review of Corti, OpenAI, Anthropic, AMA and CMS sources, with three key quotes spot-checked against the saved copies. It finds that no document grants CPT Studio any CPT right, code numbers included. It adds D5 (Corti's benchmarking clause). D3 and D4 stay open; nothing was accepted or downloaded.
+- **2026-11-01T23:08Z Integration checkpoint (offline only):**
+  - **Round 4 merged and pushed.** The integrated round-4 branch, `443e67032` (pushed), is merged into the harness.
+    Its measured results: HARD 119/123; walk READY {43251, 43274}; H2 gate held; H3 no MUST regression; H6 195/195;
+    Django 4,082 OK.
+  - **Four builder packages merged:** adapters, passages, engine and installer.
+  - **The reading-schema mismatch is fixed** (49 failures and 2 errors before, from my own contract change of the
+    reading schema): merged-package suites 271 OK, ops 264 OK.
+  - **I1 proven against the integrated round-4 baseline (`80f2f2dc8`)**, with Astra and Fable disabled:
+    - engine parity: 11 cases byte-identical, in both call forms;
+    - H1 replay base to head EQUAL (fixtures and retained inputs; controls behave: self EQUAL, three planted DIFFER);
+    - H4 battery: 0 movements.
+  - **Pending:** the website and pipeline packages are still being built. Nothing is verified live.
+
+- **2026-11-02T01:30Z Integration owner changed; harness@1 and harness@2 part A integrated (offline only).**
+  - **Takeover:** session 1bf3b49c ended at 00:39:35Z, with its two builder workflows in their final full suites; the
+    owner chose that session cd048041 take over after it stopped. Every builder's work was committed; none had written
+    its final report, so the integrated tree was verified afresh.
+  - **Merged:** the engine's last commit, the website, the pipeline, and harness@2 part A (tool loop and peer review,
+    the engine's confirmed findings and peer inputs, the installer's updates). One conflict, a union of appended tests.
+  - **Integration fix (`ec00a5b87`):** the pipeline imports the CMS passages module directly, so a missing module fails
+    instead of recording an empty retrieval; four tests updated to the installed module; the reports test's titles.
+  - **Measured on `ec00a5b87`:** Django 4,593 tests OK (3 skipped); ops 289 OK; ops/verification 37 OK; node browser
+    verifier 84/84; node app 71/71; check and makemigrations clean. I1 against the round-4 head `80f2f2dc8`: H1 replay
+    EQUAL (HARD 119/123 both sides), H4 battery 0 movements, 0 new violations. Draft PR #1459 opened for CI.
+  - **Next:** refutation round 1 on `ec00a5b87` (five lenses, running); harness@2 part B to the contract in
+    `cpt-studio/HARNESS.md` section 12 (`99939d764`). Nothing is verified live; D1 to D5 stay open.
+
+- **2026-11-02T06:10Z Participant credentials checked, wired, and access-checked (owner directive of 2026-11-02).**
+  - **Files (05:52Z):** `/etc/cpt-studio-provider-sources/` root:root 0700 with exactly `anthropic.env` and `openai.env`,
+    each a regular root:root 0600 file within 32,000 bytes that parses under CPT Studio's rules with its required key and
+    no optional key. Checked in a no-network root container that prints booleans only (proved on fake files first).
+  - **Wired (05:59Z):** the installer's own `secrets` phase alone, from the harness revision `e3c05bc0`, under the
+    committed declaration `docs/foundation/mutations/20261102-cpt-studio-participant-credentials.md`: both copied to
+    `/etc/cpt-studio/` as 10150:10150 0400 (states `created`, key names only); the three-file set `present`; the three
+    CPT Studio containers unchanged (ids, images, start times); no value in any receipt or log (root-helper scan).
+  - **Access (06:00-06:05Z), from a separately tagged candidate image in the installer's access-check layout** (copied
+    file read-only at the worker's path, uid 10150, the installer's hardening, a throwaway network and database; output
+    kept only after a root-helper scan found no credential value): **Astra PASS** (returned model `gpt-6-astra`, row
+    1.3 above). **Fable: the key and the model work, the harness request does not**: Anthropic refuses the reading
+    schema as structured output together with the reference tools ("compiled grammar is too large"; six probes pin it,
+    request ids kept). Fable's adapter is being changed to send no vendor-constrained output; CPT Studio's own strict
+    parse and validation are unchanged. Both checks run again, formally, in the install's `app --access-check`.
+  - D3 and D4 stay open. Nothing here is a live verification of the harness (1.3 needs Fable's access too).
+
+- **2026-11-02T07:55Z Fable's access passes with the harness-3 request shape.** Fable's requests now carry no vendor output
+  format (the schema in the system prompt, the reference tools strict, CPT Studio's own strict parse and validation), merged
+  as `225485e2d`. The pre-install access check from a candidate image of `fa457805c` (the installer's copied credentials,
+  uid 10150, the installer's hardening, a throwaway database; output leak-scanned) answered HTTP 200 as `claude-fable-5-1`,
+  ran the tool loop live (one `cms_code_facts` call, two exchanges) and its reading was read. Both participants' access
+  is shown; 1.3 stays open until the installed release's own `app --access-check` repeats it for Corti, Astra and Fable.
+
+- **2026-11-02T10:44Z Correction to the I1 records of 2026-11-01T23:08Z and 2026-11-02T01:30Z (appended, not
+  rewritten; refutation round 2, parity-r2-1 and parity-r2-2, both reproduced).** Each record's figures are what its
+  instruments printed, but each read them as I1 holding, and I1 covers more than they measure.
+  - **What those instruments measure.** The engine parity test: the engine's result on 11 cases whose reference sources
+    are built in memory (note `licence`). H1 replay: the engine on the retained regression fixtures, whose reference
+    sources keep the round-4 note. H4 battery: the assess child with no reference rows. None of them loads a source
+    through the importers, runs the pipeline's stages or re-assesses an encounter.
+  - **2026-11-01T23:08Z ("I1 proven"):** the stages and keys and the reference-source entries of a source loaded through
+    the importers were not measured. At that commit (`7c79270cd`) `studio/jobs.py`, `studio/review.py` and the
+    importers were still the round-4 head's, so those parts had not moved (the note changed at 23:27Z, `ad025537c`),
+    but nothing showed it.
+  - **2026-11-02T01:30Z ("I1 against the round-4 head: H1 replay EQUAL, H4 battery 0 movements", on `ec00a5b87`):** I1
+    did not hold as written. (a) `ad025537c` had changed the note the importers write on the CMS sources, so on an
+    installed system every Corti-only assessment's two imported CMS entries and its sha256 differed from the round-4
+    head's, and I1 did not say so (parity-r2-1; for the refutation lens's colonoscopy `07315c45fbda` on the round-4
+    head and `c961e7e69c35` on the harness, the note the only difference). (b) The pipeline package (`367612adb`) had made the participants record and the
+    retrieval traces decide whether a re-assessment is the recorded one, so a Corti-only re-assessment on identical
+    inputs after the CMS passages were imported recorded a second assessment, carried the decision onto it and asked
+    its question again (parity-r2-2). Neither instrument could see either.
+  - **Now (R2-PARITY, branch `wip/harness-r2-parity-20261102`, offline; nothing verified live):** I1 states its one
+    exception, the licence note, and the re-persist rule is the round-4 head's with no model participant configured
+    (`05860513b`; HARNESS.md 9). `tests/test_harness2_r2_parity.py` loads the CMS tables through the importers and
+    pins both digests, and pins the re-persist rule on the round-4 head's paths (14 tests). The I1 pins
+    (`tests/test_harness_engine_parity.py`, `CortiOnlyParityTests`) pass unchanged. Against `80f2f2dc8` on
+    `05860513b`: H1 replay base to head EQUAL; H4 battery 0 movements, 0 undeclared, 0 new violations.
+- **2026-11-02 ~16:30Z (session cd048041): refutation rounds 2 and 3 repaired; checklist 4.6 not done in this release.**
+  - Round 2 (32 findings, 31 reproduced, 1 blocking) was repaired by five agents and merged (HARNESS.md 12.9). Round 3
+    attacked those repairs: 35 findings, all reproduced (3 blocking, 13 major), every blocking and eleven of the
+    twelve majors in the reviewer-confirmation path's "Verified" check; the parity lens found nothing.
+  - The session decided D7 (fail closed): this release offers no reviewer confirmation; the participants' located
+    passages are still shown, with no verification claim (HARNESS.md 12.10). Item 4.6 is NOT DONE in this release; what
+    it becomes is the owner's question, with options (i) and (ii) in its row.
+  - Round 3's other repairs (peer shapes, wording, the exchange records) and the integration's trace and problem
+    quoting are indexed in HARNESS.md 12.11. A focused fourth refutation of round 3's diff comes before the PR is made
+    ready.
+- **2026-11-02 ~19:40Z (session cd048041): refutation round 4 repaired.** 24 findings, all reproduced, none blocking;
+  the parity lens found nothing again. D8 (no candidate served with confirmations off) and D9 (one strict-shape rule for
+  every value a participant wrote that CPT Studio lists or shows) are recorded in HARNESS.md 12.12 with the round's other
+  repairs. A focused fifth refutation of round 4's diff comes before the PR is made ready.
+- **2026-11-03 ~00:55Z (session cd048041): refutation round 5 repaired.** 20 findings, all reproduced, one major (the
+  reports printed CPT Studio's own, inverting reading of a participant's peer answer as its answer), none blocking. D10
+  (the reports print no peer-answer value), D11 (the Clarification row only counts), D12 ("proposed" only with a located
+  quote, everywhere) and D13 (one unlisted count) are recorded in HARNESS.md 12.13 with the round's other repairs and
+  W1, a walk-tool false rejection fixed at integration. A narrow sixth refutation of round 5's diff comes before the PR
+  is made ready.
+- **2026-11-03 ~07:30Z (session cd048041): refutation round 6 and the owner's D10/D12 meaning check repaired.** Round 6:
+  12 findings, all reproduced, all minor. Its repairs are the D12 account in the engine, the reports and the trace; the
+  Clarification row's null count while an addendum's revision is unassessed; listedText; and the access check's own
+  words. The meaning check: 15 findings, all reproduced, 10 of them blocking. In each blocking one a code was READY on a
+  verbatim quotation of a failed act, a denial, another procedure's sentence, a pathology addendum, or an indication or
+  history line. The session's D14 closes the harness path: in this release a participant's code is never a proposal.
+  The integration repaired three sentences D14 made false. The same readers' false READY on Corti's own selections is
+  pre-existing on the installed Corti-only path (I1-pinned). Two of its classes were already accepted residuals (r1
+  release-0 and release-1). It is recorded in HARNESS.md 12.14 as the first target of the shared-reader repair, and
+  pausing the live demonstration is put to the owner. The shared-reader repair's design recommends that no rule
+  release the three false holds now, and it found two more installed false READYs. 4.6 stays NOT DONE. D14's owner
+  question and the release-standard question (the round-4 standard or parity) are open. Before the
+  PR is made ready, a narrow seventh refutation of `de6418fc6..` the integrated head runs as the standing gate
+  requires.
+- **2026-11-03 ~09:30Z (session cd048041): refutation round 7 repaired.** The narrow seventh refutation of round 6's and
+  the meaning check's repairs filed 14 findings, all reproduced, two major. D14's core promise held: no participant's
+  code became a proposal or changed how a Corti proposal is decided. The repairs, each with a failing pin and a mutation
+  proof (HARNESS.md 12.15):
+  - Only the proposal provider's codes are traced. A participant's alternative had given Corti's 45378 an
+    endoscopy-family rule, and reference validation had counted it as a code checked.
+  - participants.summary's closing sentence and the participants-only blocker and panel say only what is true.
+  - A participant's service is worded with the inventory's not-done reading only where CPT Studio reads it inside the
+    quoted passage. Round 6's repair had attached a Plan line's reading to another sentence, in the reviewed report.
+  - A participant's verbatim quote is never called an evidence passage.
+  - The source panel never titles "Evidence for" a passage its chip says does not show the coded act.
+  - The Final status row never says an assessment of an unassessed revision was made.
+  - The access check's remaining request count is corrected.
+  - Two pins are hardened.
+  Because round 7 found a defect that a repair itself introduced, a narrow eighth refutation of round 7's repair commit
+  runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard question and interpretation
+  68 stay open.
+- **2026-11-03 ~11:00Z (session cd048041): refutation round 8 repaired.** The narrow eighth refutation of round 7's repair
+  commit filed 11 findings, all reproduced, two major. I1 held. The repairs, each with a failing pin and a mutation proof
+  (HARNESS.md 12.16):
+  - Only a decidable proposal's code is traced, never an alternative's. A code the bounded second review selected and
+    CPT Studio did not add had been traced, with Corti alone too. That gave 45378 an endoscopy-family rule in the
+    reviewed report, and reference validation read "Done 1 code checked" with nothing to decide on.
+  - An alternative's card lists no retrieval.
+  - A service only a participant reads is worded with the documented-service reading's own located reading of the
+    quoted passage, never routing's. Round 7's gate had dropped "declined", "could not be performed" and every other-GI
+    family, and had named "the peg" for a quoted upper endoscopy. An act read as performed in the quote is named.
+  - The participants-only blocker and panel never say "not the provider". The panel gives a refused or unread
+    provider's own check first.
+  - participants.summary's closing sentence is merge's own rule.
+  - A highlight holding both kinds of passage for one code is titled as overlapping passages.
+  Four findings were defects round 7's repairs introduced, so a narrow ninth refutation of this round's repair commit
+  runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard question and interpretation
+  68 stay open.
+- **2026-11-03 ~12:45Z (session cd048041): refutation round 9 repaired.** The narrow ninth refutation of round 8's repair
+  commit filed 10 findings, 9 reproduced (three major); retrieval-3 was not, since no installed system can hold its
+  input. I1 held. The repairs, each with a failing pin and a mutation proof (HARNESS.md 12.17):
+  - Only a code a reviewer can decide (selected, or excluded and reinstatable) is traced, counted or listed on a card. A
+    code excluded with no reinstatement had been counted "Done 1 code checked", and paired with a READY 45378 in a CMS
+    endoscopy-family rule in the reviewed report.
+  - An act is named beside a participant's quote only where its own mention lies inside the quote. An act whose clause
+    only touched the quote's edge had been printed "as performed" beside an attempt that failed.
+  - Every place of the quote is read. A PEG mention is named by its act label, and an act's service by its family's
+    label.
+  - The summary's first clause names a response CPT Studio used.
+  - A highlight holding both kinds of passage for one code says so, never that they overlap.
+  One assertion in an I1 proof file moved, declared: the superscript code excluded for scope is no longer traced, and
+  its sha256 pins are unchanged. Because round 9 again found defects in the previous round's repairs, a narrow tenth
+  refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the
+  release-standard question and interpretation 68 stay open.
+- **2026-11-03 ~14:00Z (session cd048041): refutation round 10 repaired.** The narrow tenth refutation of round 9's repair
+  commit filed 10 findings, 9 reproduced. One is blocking and predates the harness, on the installed Corti-only path: a
+  diagnostic base is not held again when a reviewer reinstates a therapeutic code of its family, so both can be approved
+  into a reviewed report. It is recorded (HARNESS.md 12.18), left for its own branch, and reported to the owner with the
+  pause question. I1 held. The repairs, each with a failing pin and a mutation proof:
+  - Each quote of a participant's service is read alone.
+  - No act is named beside a participant's quote. The fallback says only what makes the service missing, which is true
+    by construction.
+  - Each piece of a highlight split across paragraphs is titled by what it holds.
+  - Two more title shapes are pinned.
+  The cpt-studio job's time budget is raised to 45 minutes, since the suite outgrew 30. A narrow eleventh refutation of
+  this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard
+  question and interpretation 68 stay open.
+- **2026-11-03 ~15:00Z (session cd048041): refutation round 11 repaired.** The narrow eleventh refutation of round 10's repair
+  commit filed 6 findings. All 6 were reproduced, every one minor. I1 held. The repairs, each with a failing pin and a
+  mutation proof:
+  - Where no quote names a not-done reading, the reason also says what the reading reads as done in the quoted words, of
+    another family, by that family's label. A quoted service is never left looking denied.
+  - An instrument is never named by its family's kind.
+  - Four page shapes are pinned. The page code was right.
+  A narrow twelfth refutation of this round's repair commit runs before the PR is made ready. 4.6, D3-D5, D14's owner
+  question, the release-standard question and interpretation 68 stay open.
+- **2026-11-03 ~17:00Z (session cd048041): refutation round 12 repaired; the review ends.** The narrow twelfth refutation
+  of round 11's repair commit, one lens, filed 4 findings. 2 were reproduced, both minor, and 2 were not: in those the
+  clause truly states the reading's own reading. I1 held. The repairs, each with a failing pin and a mutation proof
+  (HARNESS.md 12.20):
+  - A quoted mention is named only with its own status, never the whole service's.
+  - The clause's first-quote and first-place rules are pinned.
+  The repair writes no new sentence; it only narrows round 11's clause. So no concrete finding justifies a thirteenth
+  round. A further pre-existing false READY on the installed Corti-only path, an attached prior EGD report's title, is
+  verified and recorded for the shared-reader repair. 4.6, D3-D5, D14's owner question, the release-standard question
+  and interpretation 68 stay open.

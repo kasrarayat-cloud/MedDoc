@@ -1,0 +1,843 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000009",
+ "title": "Colonoscopy with polypectomy and biopsy",
+ "state": "ready_for_review",
+ "state_label": "Ready for review",
+ "service_date": "2026-10-28",
+ "families": [
+  "Colonoscopy"
+ ],
+ "source_kind": "pdf",
+ "open_clarifications": 0,
+ "created_at": "2026-10-30T09:00:00Z",
+ "created_by": "Synthetic Owner",
+ "permissions": {
+  "can_review": true,
+  "is_owner": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000091",
+  "number": 1,
+  "kind": "upload",
+  "revisions_total": 1,
+  "created_at": "2026-10-30T09:00:00Z",
+  "source_file": {
+   "name": "synthetic-colonoscopy-harness.pdf",
+   "media_type": "application/pdf",
+   "size": 41022,
+   "sha256": "6a81dd066fab5696976a2f0d7a088e034fb2a184f4a6ba7fd945ae7ca250616f"
+  },
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "pdf-text",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nLakeside Endoscopy Unit (fictional) · Hospital outpatient department\nColonoscopy report\n\nPatient: Test Patient Echo (synthetic)\nDate of service: 2026-10-28\nIndication: Surveillance after prior adenomas.\n\nProcedure: Colonoscopy. The colonoscope was advanced to the cecum and the examination was completed.\nA 6 mm sessile polyp in the rectum was removed with a cold snare.\nA 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.\nBiopsies of the sigmoid colon are planned at the next colonoscopy.\n\nImpression: Rectal polyp removed; transverse colon lesion sampled.",
+  "text_sha256": "3fcb202feb0c3d6b23430276240d2783bf46cd7abbae55d0e3729f6205d6d2e4",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 652
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-28",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 173,
+      "end": 200,
+      "text": "Date of service: 2026-10-28",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": "hospital_outpatient",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 83,
+      "end": 113,
+      "text": "Hospital outpatient department",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": "Professional versus facility billing is not documented."
+   },
+   "patient_status": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.colonoscopy",
+    "label": "Colonoscopy",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "stopped_by_member": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "astra",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "fable",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-30T09:02:00Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000101",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 5874.2,
+   "usage": {
+    "creditsConsumed": 0.0312
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "5228a3b64143123b0bf26cb544c3eb7b247117d6bec6e67fdffc99094543d314",
+   "response_sha256": "93f84b2e33a1a40ca9dc3ecbb39f26b40bb636957c77f134c160be77feab5c10",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:00:20Z",
+   "purpose": "primary",
+   "scope_items": []
+  },
+  {
+   "id": "e0000000-0000-4000-8000-000000000102",
+   "provider": "astra",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 41250.0,
+   "usage": {
+    "input_tokens": 4120,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 1630,
+    "output_tokens_details": {
+     "reasoning_tokens": 910
+    },
+    "total_tokens": 5750
+   },
+   "usage_basis": "vendor_reported_tokens",
+   "request_sha256": "f7fc58cca27979599176c488bba19c4eeb5b1e7be435cf45b4e0cdef6bff6b26",
+   "response_sha256": "62d0de57c8fd788b44f4b1b33bedf085e7cd370a51af463b15c48aecd1244520",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:00:31Z",
+   "purpose": "independent",
+   "scope_items": []
+  },
+  {
+   "id": "e0000000-0000-4000-8000-000000000103",
+   "provider": "fable",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 38904.5,
+   "usage": {
+    "input_tokens": 4388,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 1207,
+    "output_tokens_details": {
+     "thinking_tokens": 640
+    },
+    "service_tier": "standard"
+   },
+   "usage_basis": "vendor_reported_tokens",
+   "request_sha256": "73763b36f705c96f7ac1bfa25fc636e1f168c0aecf305aa3ceea0ec6706cc6dc",
+   "response_sha256": "6356ce3a356a5d9931b3349ee684a7676c82b1cf10ff7d2e43677ee30b8d5144",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-30T09:01:15Z",
+   "purpose": "independent",
+   "scope_items": []
+  }
+ ],
+ "state_run": null,
+ "second_review": {
+  "available": false,
+  "reason": "",
+  "items": [],
+  "can_request": true,
+  "run": null
+ },
+ "assessment": {
+  "id": "90000000-0000-4000-8000-000000000009",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-30T09:02:00Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000901",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "45385",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 350,
+      "end": 415,
+      "text": "A 6 mm sessile polyp in the rectum was removed with a cold snare.",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "A rectal polyp removed with a cold snare is documented as performed on the service date.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "45385 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "support": {},
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "reinstated_by": null,
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ],
+    "approve_withheld_by": null,
+    "proposed_by": [
+     "corti",
+     "astra",
+     "fable"
+    ],
+    "participant_positions": {
+     "astra": {
+      "position": "proposed",
+      "detail": "",
+      "quote": ""
+     },
+     "fable": {
+      "position": "proposed",
+      "detail": "",
+      "quote": ""
+     }
+    },
+    "reference_check": {
+     "state": "passed",
+     "detail": "Present in the fee schedule for the service date; 1 unit is within the MUE."
+    },
+    "retrieval": [
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "PFS status",
+      "value": "A",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Global days",
+      "value": "000",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Multiple procedure indicator",
+      "value": "3",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Endoscopic base",
+      "value": "45378",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-mue-practitioner-2026q4",
+      "release": "2026-Q4",
+      "label": "Practitioner MUE",
+      "value": "1 (MAI 2)",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "passage",
+      "source_key": "cms-pfs-rvu26d-documentation",
+      "release": "RVU26D",
+      "label": "Multiple procedure indicator 3",
+      "value": "3",
+      "page": "12",
+      "section": "Field 21: multiple procedure",
+      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the RVU26D documentation passage that defines multiple procedure indicator 3, the special rules for multiple endoscopic procedures."
+     },
+     {
+      "kind": "passage",
+      "source_key": "cms-ncci-policy-manual-2026-ch6",
+      "release": "Revision 1/1/2026",
+      "label": "Endoscopic services, rule 3",
+      "value": "",
+      "page": "VI-14",
+      "section": "Chapter VI, section C: Endoscopic Services",
+      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the NCCI Policy Manual rule that a surgical endoscopy includes the diagnostic endoscopy of the same anatomy."
+     }
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000902",
+    "key": "sel:1",
+    "bucket": "selected",
+    "code": "45380",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 416,
+      "end": 496,
+      "text": "A 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "A transverse colon lesion sampled with cold biopsy forceps is documented as performed on the service date.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "45380 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "participants.disagree",
+      "label": "A participant disagrees",
+      "status": "warn",
+      "detail": "Fable advised not to code it: not performed at this encounter — “Biopsies of the sigmoid colon are planned at the next colonoscopy.” The status is decided from the source text, which documents the transverse colon biopsy as performed.",
+      "source": "cpt-studio:participants@1"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "support": {},
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "reinstated_by": null,
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ],
+    "approve_withheld_by": null,
+    "proposed_by": [
+     "corti",
+     "astra"
+    ],
+    "participant_positions": {
+     "astra": {
+      "position": "proposed",
+      "detail": "",
+      "quote": ""
+     },
+     "fable": {
+      "position": "advised_not_to_code",
+      "detail": "not performed at this encounter",
+      "quote": "Biopsies of the sigmoid colon are planned at the next colonoscopy."
+     }
+    },
+    "reference_check": {
+     "state": "attention",
+     "detail": "Shares the endoscopic base 45378 with 45385: the special endoscopy payment rules apply."
+    },
+    "retrieval": [
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "PFS status",
+      "value": "A",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Global days",
+      "value": "000",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Multiple procedure indicator",
+      "value": "3",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-pfs-rvu26d",
+      "release": "RVU26D",
+      "label": "Endoscopic base",
+      "value": "45378",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "fact",
+      "source_key": "cms-mue-practitioner-2026q4",
+      "release": "2026-Q4",
+      "label": "Practitioner MUE",
+      "value": "1 (MAI 2)",
+      "page": "",
+      "section": "",
+      "text": ""
+     },
+     {
+      "kind": "passage",
+      "source_key": "cms-pfs-rvu26d-documentation",
+      "release": "RVU26D",
+      "label": "Multiple procedure indicator 3",
+      "value": "3",
+      "page": "12",
+      "section": "Field 21: multiple procedure",
+      "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the RVU26D documentation passage that defines multiple procedure indicator 3, the special rules for multiple endoscopic procedures."
+     }
+    ]
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "extraction.status",
+    "label": "Text extraction",
+    "status": "pass",
+    "detail": "The document text was extracted completely.",
+    "source": "cpt-studio:extraction@1"
+   },
+   {
+    "id": "provider.status",
+    "label": "Proposal provider",
+    "status": "pass",
+    "detail": "corti (corti-coding@2) returned 2 selected CPT-labelled codes.",
+    "source": "cpt-studio:provider@1"
+   }
+  ],
+  "unsupported": [],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 2,
+   "alternatives": 0,
+   "excluded": 0,
+   "provider_status": "succeeded"
+  },
+  "services": {
+   "services": [
+    {
+     "id": "S1",
+     "family": "gi.colonoscopy",
+     "kind": "colonoscopy",
+     "status": "performed",
+     "completion": "complete",
+     "extent": "cecum",
+     "acts": []
+    }
+   ]
+  },
+  "completeness": {
+   "covered": {
+    "S1": [
+     "45385",
+     "45380"
+    ]
+   }
+  },
+  "second_run": null
+ },
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": false,
+  "blockers": [
+   "45385 has no decision",
+   "45380 has no decision"
+  ]
+ },
+ "coding": {
+  "state": "pending_review",
+  "statement": "The documented colonoscopy has proposals; a reviewer decides each code."
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document added",
+   "actor": "Synthetic Owner",
+   "actor_kind": "human",
+   "created_at": "2026-10-30T09:00:00Z",
+   "data": {}
+  },
+  {
+   "event": "assessment.created",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "created_at": "2026-10-30T09:02:00Z",
+   "data": {}
+  }
+ ],
+ "harness": {
+  "participants": [
+   {
+    "name": "corti",
+    "label": "Corti",
+    "vendor": "Corti",
+    "model": "",
+    "state": "done",
+    "detail": "Answered; its proposals were read.",
+    "run_id": "e0000000-0000-4000-8000-000000000101",
+    "reused": false,
+    "codes": [
+     "45385",
+     "45380"
+    ],
+    "unverified_quotes": 0,
+    "usage": {
+     "creditsConsumed": 0.0312
+    },
+    "usage_basis": "provider_reported_credits_not_usd",
+    "estimated_cost_usd": null,
+    "returned_model": ""
+   },
+   {
+    "name": "astra",
+    "label": "Astra",
+    "vendor": "OpenAI",
+    "model": "gpt-6-astra",
+    "state": "done",
+    "detail": "Answered; its reading was used.",
+    "run_id": "e0000000-0000-4000-8000-000000000102",
+    "reused": false,
+    "codes": [
+     "45385",
+     "45380"
+    ],
+    "unverified_quotes": 1,
+    "usage": {
+     "input_tokens": 4120,
+     "input_tokens_details": {
+      "cached_tokens": 0
+     },
+     "output_tokens": 1630,
+     "output_tokens_details": {
+      "reasoning_tokens": 910
+     },
+     "total_tokens": 5750
+    },
+    "usage_basis": "vendor_reported_tokens",
+    "estimated_cost_usd": "0.1227",
+    "returned_model": "gpt-6-astra"
+   },
+   {
+    "name": "fable",
+    "label": "Fable",
+    "vendor": "Anthropic",
+    "model": "claude-fable-5-1",
+    "state": "done",
+    "detail": "Answered; its reading was used.",
+    "run_id": "e0000000-0000-4000-8000-000000000103",
+    "reused": false,
+    "codes": [
+     "45385"
+    ],
+    "unverified_quotes": 0,
+    "usage": {
+     "input_tokens": 4388,
+     "cache_creation_input_tokens": 0,
+     "cache_read_input_tokens": 0,
+     "output_tokens": 1207,
+     "output_tokens_details": {
+      "thinking_tokens": 640
+     },
+     "service_tier": "standard"
+    },
+    "usage_basis": "vendor_reported_tokens",
+    "estimated_cost_usd": "0.1042",
+    "returned_model": "claude-fable-5-1"
+   }
+  ],
+  "reference_validation": {
+   "state": "done",
+   "codes_checked": 2,
+   "passages": 3,
+   "sources": [
+    {
+     "key": "cms-pfs-rvu26d",
+     "title": "CMS Physician Fee Schedule relative value file (fixture)",
+     "release": "RVU26D",
+     "effective_start": "2026-10-01",
+     "effective_end": "2026-12-31"
+    },
+    {
+     "key": "cms-mue-practitioner-2026q4",
+     "title": "CMS practitioner MUE table (fixture)",
+     "release": "2026-Q4",
+     "effective_start": "2026-10-01",
+     "effective_end": "2026-12-31"
+    },
+    {
+     "key": "cms-pfs-rvu26d-documentation",
+     "title": "CMS PFS RVU26D documentation (fixture)",
+     "release": "RVU26D",
+     "effective_start": "2026-10-01",
+     "effective_end": "2026-12-31"
+    },
+    {
+     "key": "cms-ncci-policy-manual-2026-ch6",
+     "title": "CMS NCCI Policy Manual 2026, Chapter VI (fixture)",
+     "release": "Revision 1/1/2026",
+     "effective_start": "2026-01-01",
+     "effective_end": "2026-12-31"
+    }
+   ],
+   "not_connected": [
+    "NCCI procedure-to-procedure edits (AMA licence agreement not accepted)",
+    "AMA CPT descriptors and guidelines (no licence)",
+    "Payer policies"
+   ]
+  },
+  "clarification": {
+   "open": 0
+  },
+  "final": {
+   "state": "ready_for_review",
+   "label": "Ready for review"
+  }
+ }
+}

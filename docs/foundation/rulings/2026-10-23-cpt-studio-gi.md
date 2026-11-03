@@ -1326,6 +1326,53 @@ before the code that depends on it.
       encrypted backup and an isolated restore check first. Repairing the schedule is outside this round and goes to the
       owner.
 
+### Session interpretation, 2026-11-01 (1bf3b49c, fourth round, after the round-4 refutations) — recorded, not owner-ruled
+
+68. **CPT Studio's pypdf move is deferred from this round, and the trade-off goes to the owner.** Four repair rounds of
+    the CPT Studio reader on pypdf 6.21.4 (branch `fix/cpt-studio-pypdf-6.21.4-20261031`, head `6134dc7cf`) did not
+    converge. Round 4's three-lens refutation filed 13 findings, 6 major:
+    - **Meaning, R4M-1 to R4M-5 (4 major), all in round 4's new checklist-row rules.** A bulleted procedure list next
+      to one boxed row becomes a checklist and every procedure is held, where installed reads them right (R4M-1). An
+      unchecked check box in another column holds a procedure on the same baseline (R4M-2). In a two-column procedure
+      checklist drawn row by row, procedures whose boxes are empty read performed, as installed reads them, where round
+      3 held them (R4M-3; reproduced by the integration owner on `b6/t6_proc_twocol_typed_euc.pdf`: "Biopsy of the
+      cecum" and "Tattoo injection" performed on round 4 and on installed). R4M-4 and R4M-5 likewise turn round 3's
+      holds back into installed's readings.
+    - **Cost, 2 major and 1 minor.** A 164 KB, 12-page file and a 62 KB page of 10,000 check boxes pass the 240 s
+      deadline (R4-COST-CODESPACE-1, which also refutes the 4 MiB CMap cap's repair, and R4-COST-LEFTLABEL-1).
+    - **Capability, 5 minor.** Each needs an unusual font structure; 200 new ordinary files read identically or better.
+
+    Item 2 says to repair and verify the regressions *before* deploying the dependency update. They are not verified
+    repaired, so CPT Studio installs this round on pypdf 6.21.2, exactly as round 3 did (interpretation 61), and its
+    dependency audit stays red and is declared, not concealed. The branch is kept unmerged with its rounds' records.
+    **For the owner (class b):** stay on 6.21.2 with seven known advisories, or accept round 4's false holds on some
+    glyph-index and EUC-H checklist layouts to clear the audit, or fund further rounds. Nothing here changes what the
+    installed reader does.
+
+69. **A stated own date of service is held, not taken, when the entered date differs (h4-03).** PD's cycle 1 returned
+    h4-03 to installed's behaviour: an entered date matching neither date the report states for its own case
+    ("Exam date: 10/06/2026", ledger "Service date logged for this case: 10/08/2026", signed 10/09) was taken and sent,
+    and 4 of 17 HARD states failed. "Unchanged from installed" is insufficient when installed is known to be wrong, so
+    the integration owner directed a strong-head hold, declared in `pd.json` (`amendment_20261101_integration`) before
+    its code: when the head is a procedure report's own head (PI+PE's predicate, imported) with exactly one own date, a
+    member date that differs is held for a question quoting the stated date lines; it is never narrowed, taken or sent.
+    The integration added two declared conditions (no hold on a note written around a procedure, or one mentioning a
+    call or message) and a rewritten note. h4-03 goes to 17/17; NEW-SEND and NEW-TAKE stay 0. Recorded for the owner:
+    with the relabelled ledger no answer is taken any more, and a consultation whose head carries proceduralist and
+    sedation fields and the planned day would have its own date held (no such text is in the corpus).
+
+70. **The rebuild release carries P1 and nothing of item 2.**
+    - **P1's fifth round** repaired GR1-EXPORT-OPEN in `documents.check_original` only, not in `_run`: preparation
+      records an unlisted code as `provider_unknown`, which would be false. PG-1 (a stop landing as a PDF-form
+      transcription starts can leave it for reconciliation; unreachable with no PDF templates) and the pre-existing
+      GR1-UPLOAD-FILL are recorded limits. P1 merged as `797199c7` after CI on its round-5 head.
+    - **The rebuild's pypdf 6.21.4 compatibility repair** (`fix/rebuild-pypdf-6214-compat-20261101`) is not in this
+      release: its refutation died with the previous account's weekly usage limit and was not re-run. D1b's act code is
+      not built. The live venv keeps pypdf 6.21.1, filelock 4.0.0 and msgpack 1.2.2, declared.
+    - **The usage limit.** At about 11:20Z the previous account's weekly limit stopped every running agent: P1 round
+      4's last gate, both rebuild-compatibility lenses and two of three CPT Studio reader lenses. The owner switched
+      accounts at about 16:45Z. Only commits survived; every lost run was re-run or is named above as not re-run.
+
 ## Owner directive, 2026-11-01 — the CPT Studio GI coding harness (Corti, Astra, Fable, references, reconciliation)
 
 Received directly from the owner in session 1bf3b49c on 1 November 2026 (about 21:00Z), as pasted instruction text,
@@ -1427,3 +1474,335 @@ acceptance checklist it requires (`CPT-HARNESS-CHECKLIST.md`), before the work t
 > 6. Two separate verdicts: functional synthetic-demo readiness and independently established clinical accuracy.
 >
 > Do not declare the full harness complete while required participants or reference validation are missing. Do not stop at a plan, local preview or installation report. Deliver and verify the actual website workflow within the authorized scope.
+
+## Owner directive, 2026-11-02 — the participants' credentials are placed: check them, wire them, access-check, then install and verify live
+
+Received by session cd048041 at about 05:45Z (it took over integration and deployment from session 1bf3b49c at
+00:40Z, at the owner's choice). Verbatim:
+
+> Continue the CPT Studio harness work. Check these credential files first:
+>
+> - /etc/cpt-studio-provider-sources/anthropic.env
+> - /etc/cpt-studio-provider-sources/openai.env
+>
+> Verify they exist, contain the expected variables, and have secure ownership and permissions. Never print the keys or
+> include them in logs, reports or Git.
+>
+> Wire them through the existing installer/secret mechanism and run minimal authorized synthetic access checks for:
+> - Anthropic: claude-fable-5-1
+> - OpenAI: gpt-6-astra
+>
+> Record the actual returned model identifiers. Do not silently substitute models.
+>
+> If access passes, update the checklist and continue implementation, installation on cpt.quillmd.com, and the
+> complete live acceptance workflow under the existing authorization. Keep QuillMD and unrelated services unchanged.
+>
+> Completion requires real Corti/Astra/Fable responses, traced references, saved synthetic review, persistence after
+> reload and an actual reviewed report download. Keys working alone does not establish completion.
+>
+> Keep D3/D4 accurately recorded; do not accept new agreements or infer licensing permission. If access fails, diagnose
+> the precise error without exposing credentials, and continue independent work.
+
+### Session interpretation, 2026-11-02 (cd048041, on receipt) — recorded, not owner-ruled
+
+(a) **The files were checked before anything else, and no value was printed.** A stdlib-only checker that applies
+`studio/participants/credentials.py`'s rules ran as root in a throwaway container with no network and the directory
+bound read-only, printing metadata and booleans only (proved first on fake files: no value in its output). Result
+05:52Z: the directory is root:root 0700 with exactly the two files; each is a regular root:root 0600 file within
+32,000 bytes that parses, with its required key present and a valid header value, and no optional key.
+
+(b) **The installer's access check runs only inside the app phase of an install, and this release is not installable
+yet** (round 1's repairs are running, and a refutation pass over the finished diff is mandatory before merge). So access
+is checked now in two steps, and again formally by the install: (1) the installer's own `secrets` phase, alone, from
+the harness revision under `docs/foundation/mutations/20261102-cpt-studio-participant-credentials.md`, copies the two
+sources into `/etc/cpt-studio/` (10150:10150 0400): the existing secret mechanism, with no code installed and no
+service restarted; (2) `manage participant_access_check --participant astra` and `--participant fable` run once each from
+a separately tagged candidate image (`cpt-studio-precheck:e3c05bc007c6`, built as the image phase builds), in a
+one-shot with the installer's access-check layout (the copied file read-only at the worker's path, uid 10150, the
+installer's hardening), on a throwaway network and database (the command needs a database only for its advisory lock;
+the live database is never connected), and its output is kept only after a root helper finds no credential value in
+it. The install's `app --access-check` repeats the check on the installed revision.
+
+(c) **"Do not silently substitute models":** the requested and returned model ids are recorded exactly as the vendors
+return them; the adapters refuse any reading answered by another model (I6).
+
+(d) **D3 and D4 stay open as recorded.** The owner's remark earlier on 2026-11-02 that CPT descriptors are not needed
+is noted, not recorded as a D3 decision: it was asked about and not confirmed. No agreement is accepted and no
+licensing permission is inferred. Working keys establish checklist item 1.3 only; completion stays as the directive
+states.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's second refutation) — recorded, not owner-ruled
+
+(a) **The second refutation of the finished harness head (`cdc41dfa2`, PR #1459, a draft throughout) filed 32 findings;
+31 were reproduced by independent verifiers, and one was blocking.** EV2-1: a performed-status candidate was verified on
+a passage about the examination for a question about an act, so after one reviewer confirmation 45385 (snare removal)
+became ready to approve on a document that says "No polyps were seen". Sixteen findings were major and fourteen minor;
+EV2-4 was not reproduced (documented design). Records: `$S4/refute-harness-r2/findings.json` (the lenses) and
+`$S4/verify-harness-r2/results.json` (the verdicts, reach, proposed repairs and evidence), where `$S4` is
+`/home/claude/cpt-studio-gi4-20261031`.
+
+(b) **Six design decisions were taken by the session, and none is an owner question.** They are D1-D6 of the repair plan
+(`$S4/verify-harness-r2/REPAIR-PLAN.md`), recorded in HARNESS.md where each replaced rule is stated and indexed in
+HARNESS.md 12.9. Each makes CPT Studio claim less or show a model less: a status is verified only where CPT Studio's own
+readers read the question's act (or service) with exactly that status in the passage's whole sentence (D1); every fact's
+passage gets the history, plan and indication rule, and a qualified passage never verifies (D2); candidates and
+confirmations only on the current revision and context (D3); a peer request carries no person, no member-entered value
+and none of the other model's free text (D4); each exchange is recorded as what happened (D5); I1 states its one
+exception and the re-persist rule compares what round 4 compared (D6). Under the four classes that reach the owner: none
+is a product decision without precedent (each brings the code back to a rule HARNESS.md already stated, or narrows that
+rule); none is an accepted-capability loss, because harness@2 has never been installed - confirmations, candidates and
+peer review do not exist on the live site, so nothing a member can do there today changes; none needs the owner's
+eyeball beyond the live walk already required; none concerns money, keys or deleting data.
+
+(c) **One tightening beyond D1, by the repair agent, accepted by the session:** a code that accounts for an act (its
+coverage profile names the act kinds it covers) is checked on that act even when its hold was raised at the service
+level, because checking it on the service would let a snare code become ready on the bare examination sentence through a
+service-level hold. Recorded in HARNESS.md 12.5. A consequence, also recorded there and in 12.9: a 'performed' status
+never verifies on a hold raised because the readers read no act of the code's kinds as done; such a hold is resolved by
+an addendum or by rejecting the code, never by one confirmation.
+
+(d) **Recorded and not repaired in this round, none an owner question:** the hand-written harness@1 fixtures (FG2-5 part
+2, a test-fidelity gap whose user-visible half is repaired); Corti's send classification (D5's rule is not applied to
+Corti, whose path I1 pins); routing's `_landmark_negations_near`, where `cues.NOT_REACHED_AFTER` is read with
+`match(text, pos)` and its `^` anchor never matches there (verified by the session on "The cecum was not reached."), so
+"the cecum was not reached" never explains its negation word in that reader. Its effect on routing output was not
+measured, and repairing it changes Corti-only results, which I1 forbids without a declared change; it is left for a
+round that declares one. The residuals of each repair are listed in HARNESS.md 12.9.
+
+(e) **Integration.** The five repairs were merged into the harness branch in the order PARITY, EV, PEER, TRUTH, WORDING.
+The test file's appended blocks and API.md's example were resolved as unions (0 lines removed from either side apart
+from each side's declared edits), and the harness@2 fixtures were regenerated from the serializer. Each repair's patches
+for files it did not own were applied. The session changed one runtime rule itself: the engine's first sentence of a
+participant's own proposal now names a code Corti's bounded second review listed, as the page does, instead of saying
+"Corti did not propose this code."; it is mutation-proved. Next: the full CI-like run and the Corti-only parity replay
+on the merged head, a push, and a focused third refutation of the round-2 repair diff before the PR is made ready (each
+round attacks the last round's repair).
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's third refutation) — recorded, not owner-ruled
+
+(a) **The third refutation, focused on round 2's repairs (`cdc41dfa2..624754eb1`), filed 35 findings through seven
+lenses, and independent verifiers reproduced every one they checked.** Three were blocking, all in the status check
+round 2 had built (D1): a readings-disagree hold was "verified" by the reader on one side of the disagreement ("The
+sigmoid polyp was reportedly removed with a hot snare."), a denial in another clause of the sentence was not read ("A
+hot snare was placed around the sigmoid polyp, but the polyp was not removed."), and a report title verified a
+colonoscopy the document says was not performed; each time one reviewer confirmation made the code ready. Eleven more
+majors were the same check's siblings for extent, cannulation, the E/M basis and the date (a hedge, a denial, a plan,
+another occasion, a date of birth or a signature date written in a sentence, the last two sending Corti a request with
+that date), a reviewer's confirmed conclusion shown to a peer as CPT Studio's own reading, and four gaps in the tests of
+the confirmation path. The parity lens found nothing: I1 and D6 hold across the whole round-2 diff. Records:
+`$S4/refute-harness-r3/findings.json`, `$S4/verify-harness-r3/results.json`, `$S4/verify-harness-r3/REPAIR-PLAN.md`.
+
+(b) **Decision D7, taken by the session: this release offers no reviewer confirmation.** The confirmation endpoint
+refuses and records nothing; the participants' located passages for an open question are still shown, with no claim
+about what they state; the confirmation code stays, dormant, behind a code-level setting that defaults off and that no
+installer, environment variable or member action can change (HARNESS.md 12.10). The reason is structural, not a matter
+of one more repair: a fact is asked because CPT Studio's own readers did not establish it, and the three retained false
+holds checklist 4.6 names (h4-01 99204, h4-03 43244, h4-06 45385) are all holds where the readers read nothing at all. A
+check that verifies a passage only where the readers read its value can never verify those; a check that verifies more
+is a second, weaker reader, and three rounds each found its next misreading in the previous round's repair.
+
+(c) **Why the session may take D7, and what it leaves to the owner.** It is the fail-closed choice (hold, never offer);
+harness@2 has never been installed, so no member loses anything they can do on the live site; the owner's completion
+criteria (genuine Corti, Astra and Fable responses, traced references, a saved synthetic review, persistence after
+reload, a reviewed download) do not need a confirmation; and it narrows a release after non-converging refutation, as
+the owner's own decision of 2026-10-30 did. What checklist 4.6 becomes is the owner's question (class a), put to him
+with two options and not decided here: (i) a human-override confirmation that claims nothing CPT Studio cannot check -
+the reviewer's reading of the passage decides, the page says so, and approval stays a separate act; or (ii) no override,
+with the false holds repaired at the readers themselves (the planned Wave 2: framed time, instrument reach), which also
+improves Corti-only coding and is an I1-declared change.
+
+(d) **Repaired in round 3 besides D7:** what a peer request shows of another model's codes, modifiers and ids (strict
+shapes only); the retrieval-failure note, the positions and phase wording, Corti's unlisted codes, a reuse's counts,
+Corti's alternatives and the one procedure-to-procedure statement per card; and the exchange records (a loop that lost
+its database session sends nothing more, the installer's undo settles a run as the sweep does, a replayed exchange marks
+nothing sent). At integration the session also made the owner's trace and a participant's problems show a model-written
+code, modifier or id only in those strict shapes (I9). Each repair carries its tests and its mutation proofs; the
+measurements on the integrated head are in its commit and in PR #1459.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's fourth refutation) — recorded, not owner-ruled
+
+(a) **The fourth refutation, focused on round 3's repairs (`624754eb1..3daafa91b`), filed 24 findings, all reproduced,
+none blocking (5 major).** The parity lens found nothing for the second round running. Three of the majors were in D7's
+own display: the participants' "located passages" it still served under each open question were labelled "Their answer",
+but their values were CPT Studio's own inferences from a reading ("Their answer: time" beside "Total time of 45 minutes
+is not used to select the level"). Two were displays of a participant's own code-like text: a code the engine listed
+because it was at most ten characters long, and a reference the participant cited but never retrieved.
+
+(b) **Two further session decisions, each narrowing what CPT Studio claims or shows, neither an owner question for the
+reasons D7's interpretation gives (fail closed; never installed; not in the completion criteria).** D8: with
+confirmations off no candidate is served at all, and no sentence names a way a question is settled. D9: one strict-shape
+rule for every value a participant wrote that CPT Studio lists or shows; Corti's own listing is unchanged, as I1
+requires. HARNESS.md 12.12 indexes them and the round's other repairs.
+
+(c) **What this means for the release.** A reviewer sees each open question, what it holds (the reviewed report, or one
+code, which can still be rejected), and the participants' own readings and peer answers where they already were; CPT
+Studio no longer puts a participant's passage forward as an answer. Checklist 4.6 stays the owner's open question as
+interpretation (c) after the third refutation sets out.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's fifth refutation) — recorded, not owner-ruled
+
+(a) **The fifth refutation, focused on round 4's repairs (`3daafa91b..0ca5e6623`), filed 20 findings, all reproduced,
+none blocking (1 major).** The major was in the reports. A participant's peer answer was printed with CPT Studio's own
+reading of its free text shown as the participant's answer, and that reader inverted "Cannulation of the bile duct was
+not successful." into "successful", printed beside the participant's quote "Biliary cannulation was unsuccessful."
+The others were sentences that claimed more than the code checks:
+- the Clarification row's holds, false beside a rejected code, a stopped run and a Corti-only page;
+- "proposed" said of entries with no located quote;
+- two different counts of the same unlisted codes;
+- a participant's HCPCS code called "a code CPT Studio does not read";
+- the installer's advice to fix the credentials, beside a receipt showing that the vendor had answered.
+
+The parity lens's one finding was the Clarification row on a Corti-only page.
+
+(b) **Four further session decisions, each narrowing what CPT Studio says. None is an owner question, for the reasons
+D7's interpretation gives.**
+- **D10:** the reports print no value for a peer answer, only whether it is read as settling the question, with the
+  passages it located.
+- **D11:** the Clarification row only counts the open questions by what each is about; what holds the reviewed report
+  is readiness's to say. This supersedes interpretation (c) after the fourth refutation in its words "what it holds
+  (the reviewed report, or one code, which can still be rejected)".
+- **D12:** "proposed" is said only of an entry with a located quote, on every surface; a participant that gave a code
+  with no located quote is named as having listed it.
+- **D13:** one count of a participant's codes that cannot be listed: the engine's.
+
+HARNESS.md 12.13 indexes them and the round's other repairs.
+
+(c) **What this means for the release, and what stays open.** A reviewer sees:
+- how many questions are open, and what each is about;
+- the readiness blockers, once;
+- each participant's codes, as proposed or only listed;
+- its peer answers, as claims with the passages they quote.
+
+No value CPT Studio inferred from a participant's answer is printed or served. The inverting reader stays dormant (it
+is not served while confirmations are off) and is recorded for option (ii) of checklist 4.6, which remains the owner's
+open question.
+
+The install's declaration draft is corrected before it is committed: Astra's and Fable's access check is one tool-loop
+run each, at most four exchanges, so the act sends three to nine requests, not "exactly three".
+
+## Owner directive, 2026-11-03 — finish round 6, check D10/D12's meaning, pursue the shared-reader repair, then install and walk
+
+Received by session cd048041 at about 01:40Z, verbatim:
+
+> Finish the currently declared round-6 review and repair any demonstrated defects. Keep the scope stable; initiate
+> further review only when a concrete finding justifies it.
+>
+> For D10/D12, verify that the displayed conclusion preserves the quotation's meaning, negation, procedure ownership and
+> time context. A quotation existing verbatim must not itself establish clinical support.
+>
+> Keep unresolved reviewer-confirmation functionality disabled until verified. Pursue the shared-reader repair for the
+> known false holds; do not claim those holds are resolved by changing report wording.
+>
+> Once the applicable release gates pass, continue the declared installation and focused authenticated live walk.
+> Demonstrate a clear synthetic case through actual Corti/Astra/Fable responses, reference retrieval, saved review,
+> reload and a downloaded reviewed report. Report legitimate holds separately from software failures.
+>
+> Keep the pypdf audit result explicit. Do not silently waive it.
+>
+> In the next report, consolidate the exact wording, recommended choice and affected stages for checklist 4.6, D3–D5 and
+> interpretation 68. Do not treat unresolved owner decisions as approved.
+>
+> Report actual requests, latency and usage. Completion requires the installed workflow—not test volume or another
+> written contract.
+
+### Session interpretation, 2026-11-03 (cd048041, on receipt) — recorded, not owner-ruled
+
+(a) **Round 6 runs as declared and is not widened.** Five lenses attack round 5's repairs
+(`0ca5e6623..ee570e4bc`), sandbox `.lens-harness-r6`, workflow `wf_0aecfe24-e67`, launched 01:19Z. Only reproduced
+findings are repaired. A further round runs only if a concrete finding justifies it, and its scope is that finding.
+
+(b) **The D10/D12 meaning check is a bounded verification the owner asked for, not a new review round.** It renders
+every surface that states a conclusion about a participant's quotation (the cards and their evidence, positions,
+alternatives, peer rows, the reports, the trace). It feeds them synthetic quotations that are verbatim in the document
+but negated, about another procedure in the same document, or about another time (history, a prior visit, a plan).
+For each surface it checks:
+- that the displayed conclusion keeps the quotation's meaning;
+- that nothing reads verbatim presence as clinical support.
+
+HARNESS.md I2 already makes readiness the local readers' alone. This check is about what the displays say. Defects it
+demonstrates are repaired under the same rule.
+
+(c) **Reviewer confirmation stays disabled** (D7, `STUDIO_OFFER_CONFIRMATIONS = False`). Nothing here changes that.
+
+(d) **The shared-reader repair for the three retained false holds is pursued as its own change.** The holds are h4-01
+99204, h4-03 43244 and h4-06 45385. The change goes on a branch from `main` after the harness merges, with its own
+refutation and an I1 declaration, since the readers are shared with the Corti-only path. No report wording is offered
+as resolving them. Checklist 4.6 stays NOT DONE and an open owner decision. This directive's instruction to pursue the
+reader repair is acted on as work. It is not recorded as the owner choosing option (ii) over option (i).
+
+(e) **The release gates, before the declared install:**
+- round 6 repaired;
+- the CI-like suite green;
+- I1's replay EQUAL and battery 0 on the final head;
+- the PR's CI, with the cpt-studio job's pypdf audit stated as red with its seven advisories (interpretation 68),
+  never waived;
+- the merge through `scripts/merge-pr.sh`;
+- the install declaration committed on `main` through its own PR before the act.
+
+Then the install phases through `scripts/run-ruled-mutation.sh`, and the focused authenticated walk on a clear
+synthetic case. The walk reports legitimate holds apart from software failures.
+
+(f) **The next report gives:**
+- the exact wording, a recommended choice and the affected stages of checklist 4.6, D3, D4, D5 and interpretation 68,
+  each as still open;
+- the access check's and the walk's actual requests, latency and usage, from the receipts and the recorded runs.
+
+### Session interpretation, 2026-11-03 (cd048041, after the sixth refutation and the meaning check) — recorded, not owner-ruled
+
+(a) **Round 6 is repaired.** Its 12 findings, all reproduced and all minor, are repaired by R6-TRACE, R6-ROW and
+R6-SENDS. The answers lens found nothing. HARNESS.md 12.14 records each repair.
+
+(b) **The D10/D12 meaning check did not hold.** Its 15 findings were all reproduced: 10 blocking, 1 major and 4 minor.
+In each blocking finding a code became READY and approvable on a verbatim quotation that does not support it: a failed
+act, a denial, another procedure's sentence, a pathology addendum, or an indication or history line. There are two
+paths, and they are recorded apart:
+- **Through the harness.** A participant-only code reached READY on the participant's quotation alone. That path was
+  never installed, and D14 (c) closes it.
+- **On the installed Corti-only path** (80df1831d168). Corti's own selection quoting such a passage is READY the same
+  way. It was reproduced with participants disabled for 10 of the findings. I1 pins it, so this release neither
+  introduced nor changed it. Two of its classes were already accepted as accuracy residuals, r1 release-0 and r1
+  release-1 in ACCURACY-RESIDUALS.md, "because no code is approved without a reviewer". The check adds members those rows
+  do not name. HARNESS.md 12.14 lists each reader with its input and its verifier's sketch.
+
+(c) **D14 (session decision, fail closed, the D7 pattern the owner endorsed: "keep ... disabled until verified"): in
+this release a participant's code is never a proposal.** A code no decidable proposal carries is listed as an
+alternative with CPT Studio's own reason. Participants never make a code ready, never count as covering a documented
+act, never make another code included and never clear an unresolved item. Corti's proposals are assessed exactly as with
+no participant configured. Checklist 4.3 still holds: the three outputs are reconciled, services Corti omitted included.
+**Owner question (class a), recorded and not answered here:** should a participant's own code ever become a selectable
+proposal again, and on what reader guarantee? The recommendation is: only after the shared-reader repair passes its own
+refutation, and re-enabled by the owner.
+
+(d) **The Corti-only false READY is the first target of the shared-reader repair**, ahead of the three false holds
+(h4-01, h4-03, h4-06) that interpretation (d) of 2026-11-03 named. A false READY is the harm the readers exist to
+prevent. The repair is an I1-declared change on its own branch from `main`, with its declarations before code and its
+own refutation cycles. This install does not change the defects' exposure. Whether to pause the live demonstration until
+the repair lands is the owner's decision. The report puts it first, and the session does not decide it.
+
+(e) **A narrow seventh refutation runs before the PR is made ready, and it is required, not optional.** D14 changes
+which codes can be selected, so it is a change on the clinical decision path, and the standing gate (AGENTS.md, "THE
+ADVERSARIAL PASS IS MANDATORY ON THE CLINICAL GENERATION PATH") requires a refutation of the finished diff. Its scope is
+the concrete findings that justified this round's repairs, and nothing wider:
+- D14's completeness;
+- the displayed wording of the repaired surfaces;
+- I1 parity;
+- false-green gaps in the new pins.
+
+The diff is `de6418fc6..` the integrated head. Only findings it reproduces are repaired, under the directive's rule.
+
+(g) **The shared-reader repair's design is done (read-only).** It recommends that no rule release the three false
+holds now:
+- the visit rule (R-EM, for h4-01) is not to be coded, because no revision survived its critic's counterexamples;
+- the extent rule (X2, for h4-03) is to be coded only under a parity standard the owner has not ruled: a release may
+  have exactly the exposure installed routing already has on the named twin of the same document, never wider;
+- h4-06 stays a recorded limit.
+
+It also confirmed two more installed false READYs, each a hold-only item for the same repair (HARNESS.md 12.14). **Owner
+question (class a), recorded:** which release standard governs a reader repair? Under the round-4 standard every
+must-stay-held input stays held and a contained release counts as blocking. Under the parity standard a release may be
+exactly as wide as the named twin, and never wider. The session applies the round-4 standard until the owner rules;
+under it, checklist 4.6's holds stay recorded limits.
+
+(f) **The release gates of interpretation (e) of 2026-11-03 stand**, with round 7's reproduced findings repaired and
+the gates re-run on the final head. The pypdf audit stays red with its seven advisories (interpretation 68) and is
+stated, never waived.

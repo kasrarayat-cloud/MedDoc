@@ -1,6 +1,116 @@
 {
  "encounters": [
   {
+   "id": "e2d00000-0000-4000-8000-000000000001",
+   "title": "Colonoscopy after peer review, confirmation offered",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": null,
+   "service_date_conflict": true,
+   "service_date_asked": false,
+   "service_date_evidence": "",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 4,
+   "coding_state": "incomplete",
+   "queue_reasons": [
+    "question",
+    "decision",
+    "incomplete"
+   ],
+   "created_at": "2026-11-01T09:00:58Z"
+  },
+  {
+   "id": "e2c00000-0000-4000-8000-000000000001",
+   "title": "Colonoscopy with a confirmed finding",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": null,
+   "service_date_conflict": true,
+   "service_date_asked": false,
+   "service_date_evidence": "",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 3,
+   "coding_state": "incomplete",
+   "queue_reasons": [
+    "question",
+    "decision",
+    "incomplete"
+   ],
+   "created_at": "2026-11-01T09:00:35Z"
+  },
+  {
+   "id": "e2b00000-0000-4000-8000-000000000001",
+   "title": "Colonoscopy after peer review",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": null,
+   "service_date_conflict": true,
+   "service_date_asked": false,
+   "service_date_evidence": "",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 4,
+   "coding_state": "incomplete",
+   "queue_reasons": [
+    "question",
+    "decision",
+    "incomplete"
+   ],
+   "created_at": "2026-11-01T09:00:13Z"
+  },
+  {
+   "id": "e2a00000-0000-4000-8000-000000000001",
+   "title": "Colonoscopy while the peer reviews run",
+   "state": "processing",
+   "state_label": "Processing",
+   "service_date": null,
+   "service_date_conflict": true,
+   "service_date_asked": false,
+   "service_date_evidence": "",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 4,
+   "coding_state": "incomplete",
+   "queue_reasons": [],
+   "created_at": "2026-11-01T09:00:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-00000000000a",
+   "title": "Upper endoscopy with a participant failure",
+   "state": "provider_unknown",
+   "state_label": "Provider outcome unknown",
+   "service_date": "2026-10-29",
+   "families": [
+    "Upper GI endoscopy (EGD, esophagoscopy, POEM)"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 0,
+   "created_at": "2026-10-30T09:10:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000009",
+   "title": "Colonoscopy with polypectomy and biopsy",
+   "state": "ready_for_review",
+   "state_label": "Ready for review",
+   "service_date": "2026-10-28",
+   "families": [
+    "Colonoscopy"
+   ],
+   "source_kind": "pdf",
+   "open_clarifications": 0,
+   "created_at": "2026-10-30T09:00:00Z"
+  },
+  {
    "id": "c0000000-0000-4000-8000-000000000008",
    "title": "Flexible sigmoidoscopy report",
    "state": "stopped",

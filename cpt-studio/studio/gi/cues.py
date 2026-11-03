@@ -739,6 +739,49 @@ EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<mi
 # Times that belong to a procedure, never to an E/M visit.
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
                  r'cecal|anesthesia|recovery|monitoring)\b')
+# GI round 4: the word that opens the list of what an E/M time statement's minutes covered, written right after the
+# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). Read
+# only by C4-time's EMR-7 reading (detect._pv1_activity_word, _pv1_reviewed): a list item that is today's work on an
+# earlier event names no other occasion of the minutes. Wave 1 repair cycle 2 DROPPED C1 (pv1.json
+# amendment_20261101_cycle2), so no cue after this word is skipped any more: "the orders" re-times the statement, as
+# installed.
+EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
+                        r'consisting\s+of|which\s+(?:covered|included))\b')
+# GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
+# contact, a telephone or phone contact, an audio-only one, a no-show, a patient who did not arrive. Read only to HOLD an
+# E/M reading (detect._not_in_person). Video, telehealth and virtual visits are not among them: installed reads those as
+# visits (EM_VISIT), and holding them is a policy this round does not make.
+NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\bno\s+in[- ]person\b'
+                   # repair cycle 1 (EMR-8): "on phone", "over phone" and a parenthesised "(telephone)" too
+                   r'|\b(?:by|via|over(?:\s+the)?|on(?:\s+the)?)\s+(?:tele)?phone\b|\((?:by\s+|via\s+)?(?:tele)?phone\)'
+                   r'|,[ \t]*(?:tele)?phone(?=[ \t]*(?:[.;]|$))'  # "Total time: 12 minutes, telephone."
+                   r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|f/u\b|'
+                   r'check-?ins?|contacts?|conversations?|interviews?|appointments?|notes?|discussions?|messages?|'
+                   r'triage)\b'
+                   r'|\btelephonic(?:ally)?\b|\baudio[- ]only\b'
+                   r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b"
+                   # session 2: "The patient was not seen.", a visit-type field naming the telephone ("Visit type:
+                   # Telephone", "Type of encounter: phone"), "missed her appointment", "left without being seen"
+                   r'|\b(?:patient|pt|she|he)\s+(?:was|is)\s+not\s+seen\b|\b(?:(?:visit|encounter|appointment|contact|'
+                   r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
+                   r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
+                   r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
+                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b'
+                   # repair cycle 1 (EMR-8): the field "Encounter: Telephone"; a patient who did not show or come in, who
+                   # did not keep or who cancelled the appointment - the patient as subject, at the clause's end or
+                   # before "for the visit" ("The CT did not show a mass." is no missed visit)
+                   r'|^[ \t]*(?:encounter|visit|appointment)[ \t]*:[ \t]*(?:tele)?phone\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+(?:did\s+not|didn't|failed\s+to)\s+(?:show|come\s+in)(?:\s+(?:up|"
+                   r"today))?(?=[ \t]*(?:[.;,!]|$|for\s+(?:the|her|his|their|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:visit|appointment)))'
+                   r"|\b(?:did\s+not|didn't|failed\s+to)\s+keep\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'appointment\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+cancell?ed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:appointment|visit)\b', FLAGS | re.M)
+# ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
+# visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
+NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'
+                         r'visit|consultation|follow-?up|f/u|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
 MDM_LEVEL = rx(r'\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
@@ -795,6 +838,17 @@ NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
+# GI round 4, package PE (synthesis E2): routing's own reach vocabulary - REACHED_BEFORE with two more reach verbs,
+# "steered" and "navigated", and nothing else changed. h4-04: "The gastroscope was introduced by mouth under visual
+# guidance and steered through the stomach and pylorus into the second part of the duodenum" stood 76 characters from
+# "introduced" to "into", past REACHED_BEFORE's 60, so the EGD read "incomplete: stomach". Read by detect._landmarks
+# only, where a reach that only these two verbs read counts only under its guards (detect._pe_routing_reach: the
+# family's endpoint or beyond, no denial, no accessory). REACHED_BEFORE itself stays as it is: sections reads it to hold
+# a part, and the request side never moves.
+REACHED_BEFORE_ROUTING = rx(r'\b(?:advanced|passed|inserted|introduced|intubated|examined|inspected|traversed|reached|'
+                            r'visualized|steered|navigated)\b[^.;]{0,60}?\b(?:to|into|through|as\s+far\s+as|up\s+to|'
+                            r'to\s+the\s+level\s+of|beyond|past|at)\s+(?:the\s+)?(?:[\w-]+\s+){0,3}$'
+                            r'|\b(?:reached|intubated|entered)\s+(?:the\s+)?$')
 # A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
 # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
 # instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb
