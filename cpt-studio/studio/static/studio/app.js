@@ -761,7 +761,11 @@ function serviceOnlySupport(proposal) {
 // where its source passages are the act's own (not serviceOnlySupport): the chip says "cited by the provider; does not
 // show the coded act" (evidenceChips), and the source panel titles them so too, never "Evidence for <code>" (refutation
 // round 7, display-6: a Ready 45385 whose cited "A 9 mm pedunculated polyp in the sigmoid colon was seen." was titled
-// "Evidence for 45385" beside that chip). A service-only support's unrelated passages are only "cited by the provider".
+// "Evidence for 45385" beside that chip). Where one highlight also carries a passage of the same code that shows the act
+// - a longer passage of the provider's that holds it, or a source passage CPT Studio selected at the same place - the
+// title says it holds overlapping passages of both kinds, never "Evidence for <code>" and that passage's own title side by
+// side as if of one passage (refutation round 8, page-1; renderPieces). A service-only support's unrelated passages are
+// only "cited by the provider".
 function passagesNotShowingTheAct(proposal) {
   const unrelated = proposal?.support?.unrelated;
   return new Set(supportChecked(proposal) && !serviceOnlySupport(proposal) && Array.isArray(unrelated) ? unrelated : []);
@@ -802,12 +806,17 @@ function renderPieces(pieces, layout) {
     const unchecked = layout.unchecked || new Set();
     const services = layout.services || new Set();
     const cited = layout.cited || new Set();
-    const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
+    const codesIn = keys => [...new Set(keys.map(key => layout.codes.get(key)))];
+    const codesOf = keys => codesIn(keys).join(', ');
     const evidence = piece.keys.filter(key => !unchecked.has(key) && !services.has(key) && !cited.has(key));
     const notTheAct = piece.keys.filter(key => cited.has(key));
     const service = piece.keys.filter(key => services.has(key));
     const notChecked = piece.keys.filter(key => unchecked.has(key));
-    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', notTheAct.length ? `Passage the provider cited for ${codesOf(notTheAct)}, which does not show the coded act` : '', service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    // A code with both kinds of passage here is titled once, as overlapping passages of both kinds (page-1).
+    const both = codesIn(evidence).filter(code => codesIn(notTheAct).includes(code));
+    const evidenceOnly = codesIn(evidence).filter(code => !both.includes(code));
+    const notTheActOnly = codesIn(notTheAct).filter(code => !both.includes(code));
+    const title = [evidenceOnly.length ? `Evidence for ${evidenceOnly.join(', ')}` : '', notTheActOnly.length ? `Passage the provider cited for ${notTheActOnly.join(', ')}, which does not show the coded act` : '', ...both.map(code => `Overlapping passages for ${code}: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`), service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
     return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
@@ -1497,13 +1506,6 @@ function emptySelectionCopy(assessment, doc) {
   if (waiting === 1) return and('One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
   if (waiting) return and(`${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`);
   if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
-  // A participant's code is never a proposal in this release (refutation round 6, R6-MEANING, the session's D14): it is
-  // listed as an alternative. Where every code listed is a participant's, the provider proposed none of them, so the
-  // panel never says it did - and says who gave them, never "independent": a code first given in peer review never is
-  // (refutation round 7, display-2; review.readiness says it in the same words).
-  const listed = [...excluded, ...proposalsIn(assessment, 'alternative')];
-  if (listed.length && listed.every(proposal => proposal?.support?.origin === 'participant')) return and('No code is selected for approval. Each code listed below was given by Astra or Fable, not the provider, and is offered only as an alternative.');
-  if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
   // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
   // assessment that read no response at all - its provider outcome unknown, failed, or the provider not run - whatever
@@ -1511,7 +1513,18 @@ function emptySelectionCopy(assessment, doc) {
   const provider = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).find(check => check && check.id === 'provider.status');
   const read = assessment.summary?.provider_status;
   const unread = typeof read === 'string' && read !== 'succeeded';
-  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return and(provider.detail);
+  const providerSays = provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail ? provider.detail : '';
+  // A participant's code is never a proposal in this release (refutation round 6, R6-MEANING, the session's D14): it is
+  // listed as an alternative. Where every code listed is a participant's, the panel says who gave them, never
+  // "independent" - a code first given in peer review never is (refutation round 7, display-2) - and never that the
+  // provider proposed them, nor that it did not: a provider response refused whole, or a second review not yet read, can
+  // carry the same code (refutation round 8, wording-3 and page-3). A refused or unread provider response is said first,
+  // by its own check, as readiness says it first; readiness words the rest in the same words.
+  const listed = [...excluded, ...proposalsIn(assessment, 'alternative')];
+  const participantsOnly = 'Each code listed below was given by Astra or Fable and is offered only as an alternative.';
+  if (listed.length && listed.every(proposal => proposal?.support?.origin === 'participant')) return and(providerSays ? `${providerSays} ${participantsOnly}` : `No code is selected for approval. ${participantsOnly}`);
+  if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
+  if (providerSays) return and(providerSays);
   if (unread) return and('No provider response was read for this revision, so there are no CPT proposals.');
   // The primary response was read and selected nothing, but the second review's was not read or not used: the primary
   // check's own wording, then that review's outcome - never "none were proposed".

@@ -61,8 +61,13 @@ def act_label(kind: str) -> str:
     return ACT_LABELS.get(kind, kind.replace('_', ' '))
 
 
+def kind_label(kind: str) -> str:
+    """A service kind's label, as service_label words a documented service's own kind."""
+    return SERVICE_LABELS.get(kind, kind.replace('_', ' '))
+
+
 def service_label(service: DocumentedService) -> str:
-    return SERVICE_LABELS.get(service.kind, service.kind.replace('_', ' '))
+    return kind_label(service.kind)
 
 
 def quote(span: Span, limit: int = 160) -> str:

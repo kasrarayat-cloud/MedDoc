@@ -164,7 +164,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
-    harness = _Harness(participants, text, pages, routing) if participants else None
+    harness = _Harness(participants, text, pages) if participants else None
     # Whether any answer is read: the proposal provider's, or an independent participant's reading (I10: the proposal
     # provider's failure blocks only itself). With no participant it is exactly "the provider answered".
     answered = response is not None or (harness is not None and harness.answered)
@@ -185,10 +185,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     provider = list(checks.provider_checks(provider_status, response))
     coverage: list[Check] = []
     # The documented-service inventory is read from the text alone, before and independently of the proposals; the
-    # page spans tell it where a page turns inside a sentence (refutation r1, formats-6).
+    # page spans tell it where a page turns inside a sentence (refutation r1, formats-6). With a participant configured
+    # the reading also records where it read each service mention (``located``, beside the inventory and never an input
+    # to it: the inventory is the same), which _Harness.missing reads (refutation round 8, wording-1 and wording-2).
+    located = [] if harness is not None else None
     inventory = (gi_services.build(text, service_date=read_day, routing=routing, context_facts=context,
-                                   pages=pages)
+                                   pages=pages, located=located)
                  if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
+    if harness is not None:
+        harness.located = tuple(located)
     problems = gi_services.validate(inventory, text)
     usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported
     second_merge: Optional[_SecondMerge] = None
@@ -3047,11 +3052,12 @@ class _Harness:
       them, as notes; an answer is recorded and decides nothing by itself (only a reviewer's confirmation of a
       candidate is read, on the dormant path: _Confirmations; HARNESS.md 12.10)."""
 
-    def __init__(self, participants: Sequence[ParticipantInput], text: str, pages,
-                 routing: Optional[RoutingResult] = None):
+    def __init__(self, participants: Sequence[ParticipantInput], text: str, pages):
         self.inputs = _usable_inputs(participants)
         self.text, self.pages = text, pages
-        self.routing = routing  # where routing read each family's mentions (missing: what a quote is read as)
+        # where the documented-service reading read each service mention, and how (gi_services.build's ``located``:
+        # (family, kind, status, start, end)); assess sets it, and missing reads it
+        self.located: tuple = ()
         self.readings = {p.provider: p.reading for p in self.inputs if p.state == 'read'}
         self.peers = {p.provider: p.peer for p in self.inputs if p.state == 'read' and p.peer_state == 'read'}
         self.answered = bool(self.readings)
@@ -3542,17 +3548,19 @@ class _Harness:
     def missing(self, inventory) -> list[dict]:
         """The services a participant reads as performed, or as started and not completed (MISSING_STATUSES), quoting
         the document verbatim, of a kind of which ``inventory`` reads no performed service: one per participant and
-        family, the first quote of its first. Where ``inventory`` reads a service of that kind as not done at this
-        encounter (checks.NEGATIVE: negated, cancelled, planned or historical) and routing reads that family with that
-        status inside the quoted passage, the reason names that reading ('read_as', which the participants.services
-        check names too), never that the documented-service reading merely "does not read as performed" it (refutation
-        round 6, R6-MEANING, negation-5: Astra's "performed" upper endoscopy, quoting only "An upper endoscopy was not
-        performed.", beside the inventory's own "upper endoscopy (negated)"). A not-done reading of another passage is
-        never attached to the quote (refutation round 7, display-1: the inventory's planned upper endoscopy, read from
-        "Plan: Upper endoscopy in 6 months.", was named beside Astra's quote of "The stomach and duodenum were also
-        examined and were normal.", in the report a reviewer signs): there, and where routing reads no mention in the
-        quote, the reason says what is true of every such case, that the documented-service reading does not read it as
-        performed. Coding completeness is incomplete beside each all the same (complete): the safety net stays."""
+        family, the first quote of its first. Coding completeness is incomplete beside each all the same (complete):
+        the safety net stays.
+
+        The reason names what the documented-service reading itself reads in the quoted passage ('read_as', which the
+        participants.services check names too: _read_as), from where that reading read each service mention
+        (``located``), never from another reader's reading: a mention of a service of that kind inside the quote that
+        it reads as not done at this encounter (checks.NEGATIVE: negated, cancelled, planned or historical) with the
+        status its inventory gives that service, named by the mention's own kind - 'the upper endoscopy as negated'
+        (refutation round 6, R6-MEANING, negation-5) - and an act it reads as performed whose passage overlaps the quote
+        - 'the band ligation in the colonoscopy as performed'. A not-done reading of another passage is never attached to
+        the quote (refutation round 7, display-1). Where it reads neither, the reason says that the documented-service
+        reading does not read the service as performed, which is then true: it reads no performed service of that kind
+        (that is what makes the service missing), and nothing in the quote as a performed act."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3569,18 +3577,7 @@ class _Harness:
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
-                    # the inventory's own not-done reading of a service of that kind, in its order: 'the upper
-                    # endoscopy as negated', 'the colonoscopy as planned and as historical' - only where routing reads
-                    # that family with that status inside the quote (refutation round 7, display-1)
-                    inside = self._read_inside(good[0])
-                    read = {}
-                    for documented in inventory.services:
-                        if documented.family in families and documented.status in checks.NEGATIVE \
-                                and (documented.family, documented.status) in inside:
-                            states = read.setdefault(reconcile.service_label(documented), [])
-                            if documented.status not in states:
-                                states.append(documented.status)
-                    read_as = ' and '.join(f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items())
+                    read_as = self._read_as(good[0], families, inventory)
                     reason = (f'{PARTICIPANT_LABELS[name]} reads {what} '
                               + (f'where the documented-service reading reads {read_as}' if read_as
                                  else 'that the documented-service reading does not read as performed'))
@@ -3596,13 +3593,38 @@ class _Harness:
             self._missing = out
         return self._missing
 
-    def _read_inside(self, span) -> set:
-        """(family, status) of each mention routing reads inside ``span`` (half-open, the revision's text); empty
-        without a routing result, so that nothing is named (missing)."""
-        if self.routing is None:
-            return set()
-        return {(mention.family, mention.status) for finding in self.routing.findings for mention in finding.mentions
-                if span.start <= mention.span.start and mention.span.end <= span.end}
+    def _read_as(self, span, families, inventory) -> str:
+        """What the documented-service reading reads in ``span`` (half-open, the revision's text), for missing; '' when
+        it reads none of these there:
+        - each mention of ``families`` it read inside the span (``located``) as not done at this encounter
+          (checks.NEGATIVE), where its inventory gives that family's service that status, named by the mention's own
+          kind, each status once, in reading order: 'the upper endoscopy as cancelled'. Refutation round 8, wording-1:
+          round 7 named a reading only where routing read the same family with the same status in the quote, and
+          routing reads "declined" and "refused" as negated where this reading reads cancelled, "could not be performed"
+          as uncertain where it reads negated, and none of the families other_gi maps to, so the reading of the quoted
+          passage itself went unnamed. Wording-2: the inventory's upper-endoscopy service takes its kind from its first
+          mention, so with a PEG line first a quoted upper endoscopy had been named "the peg".
+        - each act its inventory reads as performed whose passage overlaps the span, as describe_act and the service it
+          belongs to word it: 'the band ligation in the colonoscopy as performed'. Refutation round 8, wording-5: a PEG
+          placement, a banding or a dilation that the inventory files under the endoscopy it reads, quoted as another GI
+          service, had been said not to be read as performed."""
+        statuses = {(s.family, s.status) for s in inventory.services}
+        read: dict[str, list[str]] = {}
+        for family, kind, status, start, end in self.located:
+            if span.start <= start and end <= span.end and family in families and status in checks.NEGATIVE \
+                    and (family, status) in statuses:
+                states = read.setdefault(reconcile.kind_label(kind), [])
+                if status not in states:
+                    states.append(status)
+        phrases = [f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items()]
+        for documented in inventory.services:
+            for act in documented.acts:
+                if act.status == 'performed' and any(e.start < span.end and span.start < e.end for e in act.evidence):
+                    phrase = (f'the {reconcile.describe_act(documented, act)} in the '
+                              f'{reconcile.service_label(documented)} as performed')
+                    if phrase not in phrases:
+                        phrases.append(phrase)
+        return ' and '.join(phrases)
 
     def complete(self, complete: dict, inventory) -> None:
         """Coding completeness, incomplete beside each service only a participant reads (recorded under

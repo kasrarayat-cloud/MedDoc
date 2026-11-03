@@ -2930,17 +2930,26 @@ OBSERVED = _rx(r'\b(?:was|were|is|are)\s+(?:seen|noted|found|identified|visualiz
 
 
 def build(text: str, *, service_date: Optional[date], routing=None, context_facts=None,
-          pages: Sequence = ()) -> ServiceInventory:
+          pages: Sequence = (), located: Optional[list] = None) -> ServiceInventory:
     """The documented services of ``text`` for the effective ``service_date``. ``routing`` (a RoutingResult) supplies
     routing's family readings, kept beside each service and used, fail-closed, where the two readings disagree.
 
     The reader reads a same-length view of the text in which a line break inside a sentence (a PDF or scan wrapping
     its line, or turning its page: ``pages`` are the revision's page spans) is a space (``reflow``); every offset is the
-    text's own, and every passage it returns is the text's."""
+    text's own, and every passage it returns is the text's.
+
+    ``located``, when given, is a list that receives this reader's own reading of each service mention it reads - a
+    service's name, a report title that names it, or an instrument that names its family - as (family, kind, status,
+    start, end): the mention's status after every rule of the reading, its kind (the name's own, or the family's for an
+    instrument) and its offsets in ``text``, in reading order, exactly as each service's statuses are drafted. It is a
+    record kept beside the inventory, never an input to it: the inventory is the same with it or without it. A service
+    read as not done keeps no passage (only one read as performed has ``evidence``), so this is where a not-done
+    reading's place is read (engine._Harness.missing: refutation round 8, wording-1 and wording-2)."""
     flow = reflow(text, pages)
     token = _ORIGINAL.set(text)
     try:
-        inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts)
+        inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts,
+                           located=located)
     finally:
         _ORIGINAL.reset(token)
     return _restore_spans(inventory, text) if flow != text else inventory
@@ -3419,7 +3428,8 @@ def _restore_spans(obj, text: str):
     return obj
 
 
-def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None) -> ServiceInventory:
+def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None,
+           located: Optional[list] = None) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
@@ -3537,6 +3547,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 d.report_title = part.title
             bounded_span = _span(text, *_bounded_clause(text, clause, ms, me))
             d.statuses.append((reading.status, reading.cues, bounded_span))
+            if located is not None:
+                located.append((family, kind, reading.status, ms, me))
             if reading.status == 'performed':
                 d.evidence.append(bounded_span)
             if family not in present_families and reading.status in ('performed', 'uncertain'):
@@ -3609,6 +3621,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     reach_only.discard(family)  # an installed reading states it performed too
                 d = drafts[family]
                 d.statuses.append((reading.status, reading.cues, bounded_span))
+                if located is not None:
+                    located.append((family, FAMILY_KINDS.get(family, family.split('.')[-1]), reading.status,
+                                    m.start(), m.end()))
                 if reading.status == 'performed':
                     d.evidence.append(bounded_span)
         # Pass 2: completion and extent, read in each service's own report part (or a sentence naming only it).

@@ -908,19 +908,6 @@
    "service_date": null
   },
   {
-   "code": "45381",
-   "facts": [],
-   "notes": [
-    "Service date unknown; dated references cannot be applied.",
-    "Service date unknown; no dated passage applies."
-   ],
-   "lookups": [
-    "reference lookup 45381 on an unknown date: no source applied"
-   ],
-   "passages": [],
-   "service_date": null
-  },
-  {
    "code": "45385",
    "facts": [],
    "notes": [

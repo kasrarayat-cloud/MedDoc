@@ -3069,8 +3069,10 @@ test('R6-ROW falsegreen-2: an alternative a peer review proposed with a located 
 test('R6-MEANING D14: the panel never says the provider proposed the participants\' alternatives', () => {
   const theirs = { proposals: [{ bucket: 'alternative', support: { origin: 'participant' } }] };
   // moved by refutation round 7 (display-2): who gave them, never "independent" - a code first given in peer review
-  // never is (it was "Each code listed below is an independent participant's, offered only as an alternative.")
-  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below was given by Astra or Fable, not the provider, and is offered only as an alternative.');
+  // never is (it was "Each code listed below is an independent participant's, offered only as an alternative."); and by
+  // round 8 (wording-3, page-3): never "not the provider" (it was "... given by Astra or Fable, not the provider, and is
+  // offered only as an alternative.")
+  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below was given by Astra or Fable and is offered only as an alternative.');
   assert.equal(app.emptySelectionCopy(theirs).includes('The provider proposed'), false);
   // controls: a provider alternative or exclusion beside them, or alone, reads as before
   const said = 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
@@ -3162,4 +3164,66 @@ test('R7 parity-1: with no assessment of this revision the Final status row neve
   // and Corti alone draws no note
   const alone = { ...doc, harness: { ...doc.harness, phase: 0, participants: doc.harness.participants.map(row => ({ ...row, peer: null })) } };
   assert.deepEqual(note({ ...alone, assessment: null, harness: { ...alone.harness, clarification: { open: null } } }), []);
+});
+
+// refutation round 8
+// page-1, page-2: one highlight carrying, for one code, both a passage that shows the coded act and a provider passage a
+// checked support says does not (a longer passage of the provider's that holds it, or a source passage CPT Studio
+// selected at the same place) was titled "Evidence for <code>; Passage the provider cited for <code>, which does not
+// show the coded act"; it is now titled as overlapping passages of both kinds. The display-6 pin checked only a warning
+// support: a passing one with a passage that does not show the act is pinned too.
+// wording-3, page-3: the participants-only panel said "given by Astra or Fable, not the provider" beside a provider
+// response refused whole whose stored selection was the same code; it never says "not the provider", and a refused or
+// unread provider response is said first, by its own check. The pipeline's inputs are pinned in
+// tests/test_harness2_r8.py.
+
+test('R8 page-1, page-2: a highlight holding both kinds of passage for one code is titled as overlapping passages', () => {
+  const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
+  const snare = 'The polyp was removed with a hot snare.';
+  const overlapping = code => `Overlapping passages for ${code}: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
+  const notTheAct = code => `Passage the provider cited for ${code}, which does not show the coded act`;
+  const doc = (text, evidence, support, code = '45385') => {
+    const at = quote => ({ start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, text: quote, exact: true });
+    return { revision: { text, pages: [] }, assessment: { proposals: [{ id: 'p1', key: 'sel:0', bucket: 'selected', status: 'ready', code, evidence: evidence.map(at), support: { ...support, source: (support.source || []).map(at) } }] } };
+  };
+  const apart = `Procedure: Colonoscopy\n${seen}\n${snare}\n`;
+  const passing = { status: 'pass', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting: [1], unrelated: [0] };
+  // page-2: a passing support - display-6's pin covered only a warning one
+  assert.deepEqual(r7Titles(doc(apart, [seen, snare], passing)), [[seen, notTheAct('45385')], [snare, 'Evidence for 45385']]);
+  // page-1 (b): the provider cites the sentence and the whole line holding it; the layout merges them into one highlight
+  const line = `${seen} ${snare}`;
+  const held = `Procedure: Colonoscopy\n${line}\n`;
+  assert.deepEqual(r7Titles(doc(held, [seen, line], passing)), [[line, overlapping('45385')]]);
+  // page-1 (a): CPT Studio's source passage at the very place of the provider's passage that does not show the visit
+  const time = 'Total time spent on the date of the encounter was 30 minutes, including review of the 2026-03-02 EGD report.';
+  const visit = `Office visit (fictional)\n${time}\n`;
+  const em = { status: 'warn', reason: 'service', acts: [], supporting: [], unrelated: [0], source: ['Office visit (fictional)', time] };
+  assert.deepEqual(r7Titles(doc(visit, [time], em, '99213')), [['Office visit (fictional)', 'Evidence for 99213'], [time, overlapping('99213')]]);
+  for (const [, title] of [...r7Titles(doc(held, [seen, line], passing)), ...r7Titles(doc(visit, [time], em, '99213'))]) {
+    assert.equal(/^Evidence for [^;]*; Passage the provider cited/.test(title), false, title);
+  }
+  // controls: each kind alone keeps its own title
+  assert.deepEqual(r7Titles(doc(held, [line], { ...passing, supporting: [0], unrelated: [] })), [[line, 'Evidence for 45385']]);
+  assert.deepEqual(r7Titles(doc(apart, [seen], { status: 'warn', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting: [], unrelated: [0], source: [snare] })), [[seen, notTheAct('45385')], [snare, 'Evidence for 45385']]);
+});
+
+test('R8 wording-3, page-3: the participants-only panel never says the provider did not give the codes', () => {
+  const panel = 'Each code listed below was given by Astra or Fable and is offered only as an alternative.';
+  const theirs = [{ bucket: 'alternative', support: { origin: 'participant' } }];
+  const refused = 'The response from corti (corti-coding-v2@cptstudio-1) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
+  // page-3: a response refused whole - its own check first, then whose the listed codes are
+  const check = status => ({ id: 'provider.status', status, detail: refused });
+  assert.equal(app.emptySelectionCopy({ proposals: theirs, encounter_checks: [check('fail')], summary: { provider_status: 'succeeded' } }), `${refused} ${panel}`);
+  // an unread provider outcome (failed, unknown) whatever its check's status
+  assert.equal(app.emptySelectionCopy({ proposals: theirs, encounter_checks: [check('warn')], summary: { provider_status: 'unknown' } }), `${refused} ${panel}`);
+  // a response that was read and proposed none of them
+  assert.equal(app.emptySelectionCopy({ proposals: theirs, encounter_checks: [check('pass')], summary: { provider_status: 'succeeded' } }), `No code is selected for approval. ${panel}`);
+  for (const status of ['fail', 'warn', 'pass']) {
+    for (const read of ['succeeded', 'unknown', 'failed']) {
+      assert.equal(app.emptySelectionCopy({ proposals: theirs, encounter_checks: [check(status)], summary: { provider_status: read } }).includes('not the provider'), false);
+    }
+  }
+  // controls: Corti alone - a refused response with no code listed, and a provider alternative - read as before
+  assert.equal(app.emptySelectionCopy({ proposals: [], encounter_checks: [check('fail')], summary: { provider_status: 'succeeded' } }), refused);
+  assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative', support: {} }], encounter_checks: [check('pass')], summary: { provider_status: 'succeeded' } }), 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
 });

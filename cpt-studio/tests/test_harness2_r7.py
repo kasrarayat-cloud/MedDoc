@@ -27,6 +27,12 @@ tests/frontend/app.test.cjs. The paths with no participant configured are unchan
 traced codes are exactly the prefetched ones, and tests/test_harness_engine_parity.py and CortiOnlyParityTests pin them.
 Synthetic data only; nothing is sent: Corti is the suite's in-process fake read by the real normaliser, and Astra and
 Fable are the real replay adapters on the real tool loop (tests.test_harness2_pipeline).
+
+Refutation round 8 amended three of these rules (tests/test_harness2_r8.py): only the codes of the proposals a reviewer
+can decide are traced, never an alternative's, the provider's second review's included (retrieval-1, retrieval-2); a
+participant's quote is worded with the documented-service reading's own located reading of it, never routing's
+(wording-1, wording-2, wording-5; display-1's banding pin below moved with it); and the participants-only blocker and
+panel never say "not the provider" (wording-3, page-3).
 """
 import json
 import re
@@ -268,10 +274,14 @@ class MissingServiceReadingTests(SimpleTestCase):
     def test_a_reading_of_another_passage_is_never_attached_to_the_quote(self):
         """display-1: the inventory's planned upper endoscopy - read from the Plan line - was named beside Astra's quote
         of another sentence; and for a family of many kinds, another service's kind and time ("the capsule endoscopy as
-        planned") beside a banding quote."""
-        for name, lines, family, quote, label, documented in (
-                ('the plan line', (ELSEWHERE, PLAN_LINE), 'egd', ELSEWHERE, 'upper endoscopy', 'gi.egd'),
-                ('a capsule plan', (BANDED, CAPSULE_PLAN), 'other_gi', BANDED, 'other GI service', 'gi.capsule')):
+        planned") beside a banding quote. Moved by refutation round 8 (wording-5): the banding quote is the inventory's
+        own performed band ligation of the colonoscopy, which the reason now names - "does not read as performed" was
+        false of it - and the capsule plan, another passage's reading, is still never named beside it."""
+        banded = 'the band ligation in the colonoscopy as performed'
+        for name, lines, family, quote, label, documented, read_as in (
+                ('the plan line', (ELSEWHERE, PLAN_LINE), 'egd', ELSEWHERE, 'upper endoscopy', 'gi.egd', ''),
+                ('a capsule plan', (BANDED, CAPSULE_PLAN), 'other_gi', BANDED, 'other GI service', 'gi.capsule',
+                 banded)):
             with self.subTest(name):
                 text = r6m.doc(r6m.COLON, *lines)
                 result = self.engine(text, family, quote)
@@ -279,13 +289,16 @@ class MissingServiceReadingTests(SimpleTestCase):
                 self.assertIn((documented, 'planned'), [(s['family'], s['status'])
                                                         for s in result.services['services']])
                 (entry,) = result.completeness['participant_services']
-                self.assertEqual((entry['reason'], entry['read_as']),
-                                 (f'Astra reads a performed {label} {NOT_READ} (“{quote}”)', ''))
+                reason = (f'Astra reads a performed {label} where the documented-service reading reads {read_as}'
+                          if read_as else f'Astra reads a performed {label} {NOT_READ}')
+                self.assertEqual((entry['reason'], entry['read_as']), (f'{reason} (“{quote}”)', read_as))
+                self.assertNotIn('planned', entry['reason'])
                 self.assertEqual(result.completeness['state'], 'incomplete')
                 check = next(c for c in result.encounter_checks if c.id == 'participants.services')
-                self.assertEqual(check.detail, f'Astra reads a performed {label} (“{quote}”). The documented-service '
-                                               'reading reads no performed service of that kind, so coding completeness '
-                                               'is incomplete.')
+                named_here = f', where the documented-service reading reads {read_as}' if read_as else ''
+                self.assertEqual(check.detail, f'Astra reads a performed {label} (“{quote}”){named_here}. The '
+                                               'documented-service reading reads no performed service of that kind, so '
+                                               'coding completeness is incomplete.')
 
 
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):
@@ -341,8 +354,10 @@ class PeerOnlyBlockerTests(r6m.MeaningCase):
         self.assertEqual([(p['code'], p['bucket'], p['phases']) for p in r6m.proposals(detail)],
                          [('45385', 'alternative', {'fable': 'peer_review'})])
         lines = self.page_lines(detail)
-        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable, not the '
-                      'provider, and is offered only as an alternative.', lines)
+        # moved by refutation round 8 (wording-3, page-3): never "not the provider" (it was "... given by Astra or
+        # Fable, not the provider, and is offered only as an alternative.")
+        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable and is '
+                      'offered only as an alternative.', lines)
         self.assertIn('Codes it proposed after peer review, never independent: 45385.', lines)
         self.assertFalse(any("independent participant's" in line for line in lines), lines)
 

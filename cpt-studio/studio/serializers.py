@@ -301,7 +301,11 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'corti_relation': review.corti_relation(proposal),
         'participant_positions': review.participant_positions(proposal, assessment.participants),
         'reference_check': review.reference_check(proposal),
-        'retrieval': review.proposal_retrieval(proposal, assessment.retrieval),
+        # an alternative is never traced: none of a decidable proposal's trace of the same code is served on its card
+        # (refutation round 8, retrieval-3: a participant's copy of Corti's code excluded for evidence carried that
+        # code's 12 facts and passages beside its own "No CMS reference check ran for this code.")
+        'retrieval': ([] if proposal.bucket == models.Proposal.ALTERNATIVE
+                      else review.proposal_retrieval(proposal, assessment.retrieval)),
         # harness@2 (HARNESS.md 11.1, 11.3, 12.6), from the engine's support record: the phase in which each participant
         # first proposed the code (a code first proposed in peer review is never independent), and the reviewer
         # confirmations this proposal's checks read - a confirmed fact, never a decision
@@ -838,7 +842,11 @@ def _reference_validation(assessment, active):
     retrieval ran for it - also when it has no code to retrieve for, never 'done' of nothing (no trace at all is what
     an absent passages module records too). ``detail`` is '' in every other state. ``codes_checked`` counts the traced
     codes only when a CMS reference file applied (0 otherwise), and a failed entry is no code checked, so it is counted
-    in neither ``codes_checked`` nor ``passages``."""
+    in neither ``codes_checked`` nor ``passages``. Only a trace of a code a proposal can be decided on is read: an
+    alternative's code is never traced (jobs._retrieval), so a trace of one, which an assessment recorded before
+    refutation round 8 can hold (retrieval-2: a second review's code CPT Studio did not add, counted "Done 1 code
+    checked" where no proposal could be decided on), is never counted as a code checked or as a passage retrieved, and
+    with no code to decide on the state is never 'done'."""
     out = {'state': 'not_run', 'detail': '', 'codes_checked': 0, 'passages': 0, 'sources': [],
            'not_connected': list(review.NOT_CONNECTED)}
     if active:
@@ -847,9 +855,9 @@ def _reference_validation(assessment, active):
         return out
     entries = [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
     failures = [entry for entry in entries if retrieval_failed(entry)]
-    retrieval = [entry for entry in entries if not retrieval_failed(entry)]
-    traced = {entry.get('code') for entry in retrieval}
     decidable = {p.code for p in assessment.proposals.all() if p.bucket != models.Proposal.ALTERNATIVE}
+    retrieval = [entry for entry in entries if not retrieval_failed(entry) and entry.get('code') in decidable]
+    traced = {entry.get('code') for entry in retrieval}
     applied = _source_applied(assessment)
     if not active and failures:
         out.update(state='failed', detail=failure_note(failures[0]))

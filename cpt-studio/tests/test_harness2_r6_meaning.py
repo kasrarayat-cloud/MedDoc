@@ -577,9 +577,10 @@ class D14PipelineTests(MeaningCase):
         # the panel says whose the listed code is, never that the provider proposed it (Corti selected nothing)
         lines = self.page_lines(detail)
         # moved by refutation round 7 (display-2): who gave it, never "independent" (it was "Each code listed below is
-        # an independent participant's, offered only as an alternative.")
-        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable, not the '
-                      'provider, and is offered only as an alternative.', lines)
+        # an independent participant's, offered only as an alternative."); and by round 8 (wording-3, page-3): never
+        # "not the provider", which a refused or unread provider response can carry the same code against
+        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable and is '
+                      'offered only as an alternative.', lines)
         self.assertFalse(any('The provider proposed' in line for line in lines), lines)
         self.assert_d14(text, ['45385'], fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
 
@@ -726,9 +727,11 @@ class EvidenceChipLabelTests(MeaningCase):
 # --- the integration of R6-MEANING (its NEEDS 1): the readiness blocker where every code listed is a participant's -----
 
 # moved by refutation round 7 (display-2): a code first given in peer review is never independent, so the blocker says
-# who gave the codes (it was "each code listed is an independent participant's, offered only as an alternative")
-PARTICIPANTS_ONLY = ('No code is selected for approval: each code listed was given by Astra or Fable, not the provider, '
-                     'and is offered only as an alternative')
+# who gave the codes (it was "each code listed is an independent participant's, offered only as an alternative"); moved
+# by round 8 (wording-3): it no longer says "not the provider", which a second review not yet read can make false (it
+# was "each code listed was given by Astra or Fable, not the provider, and is offered only as an alternative")
+PARTICIPANTS_ONLY = ('No code is selected for approval: each code listed was given by Astra or Fable and is offered only '
+                     'as an alternative')
 
 
 class D14BlockerTests(MeaningCase):
@@ -855,12 +858,17 @@ class SourceHighlightTitleTests(MeaningCase):
 # --- the integration of R6-MEANING: participants.summary's closing sentence -------------------------------------------
 
 # moved by refutation round 7 (d14-3, display-3): each clause is the engine's own rule - a provider code excluded for
-# scope or evidence carries no participant's code, and a code in no code's shape is counted, never listed
+# scope or evidence carries no participant's code, and a code in no code's shape is counted, never listed; moved by round
+# 8 (wording-4): the first clause names merge's two kinds of proposal - a code the provider only listed, or that its
+# second review selected and CPT Studio did not add, carries none (it was "a participant's code that the proposal
+# provider also proposed, in scope and with an exact passage, is recorded on that proposal")
 NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
-                'proposal provider also proposed, in scope and with an exact passage, is recorded on that proposal, which '
-                "CPT Studio's own readers judge on the provider's passages alone; any other code a participant gives in a "
-                "CPT or HCPCS code's shape is listed as an alternative and never added as a proposal, and one in neither "
-                "shape is counted and never listed; and a participant's questions are notes that never block.")
+                'proposal provider selected, in scope and with an exact passage, or that its bounded second review added '
+                "as a proposal, is recorded on that proposal, which CPT Studio's own readers judge on the provider's "
+                "passages alone; any other code a participant gives in a CPT or HCPCS code's shape, including one the "
+                'provider only listed and one its second review listed without adding, is listed as an alternative and '
+                "never added as a proposal, and one in neither shape is counted and never listed; and a participant's "
+                'questions are notes that never block.')
 SAME_RULES = "by the same rules as the proposal provider's"
 
 

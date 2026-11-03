@@ -2532,12 +2532,18 @@ PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
 # display-3) found that sentence still false twice: of a code the provider proposed and CPT Studio excluded for scope or
 # evidence, which engine._Harness.merge lists as the participant's alternative (it carries only a decidable proposal's
 # code), and of a code in no code's shape, which is counted and never listed. Each clause is now the engine's own rule.
+# Refutation round 8 (wording-4) found "that the proposal provider also proposed" still wider than merge's rule: a code
+# the provider only listed as a candidate, or that its bounded second review selected and CPT Studio did not add (alt2),
+# carries no decidable proposal, so merge lists the participant's code as an alternative of its own. The sentence now
+# names the two kinds of proposal merge records a participant's code on (``have``: a selection with an evaluation).
 PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's "
-                             'code that the proposal provider also proposed, in scope and with an exact passage, is '
-                             "recorded on that proposal, which CPT Studio's own readers judge on the provider's passages "
-                             "alone; any other code a participant gives in a CPT or HCPCS code's shape is listed as an "
-                             'alternative and never added as a proposal, and one in neither shape is counted and never '
-                             "listed; and a participant's questions are notes that never block.")
+                             'code that the proposal provider selected, in scope and with an exact passage, or that its '
+                             'bounded second review added as a proposal, is recorded on that proposal, which CPT '
+                             "Studio's own readers judge on the provider's passages alone; any other code a participant "
+                             "gives in a CPT or HCPCS code's shape, including one the provider only listed and one its "
+                             'second review listed without adding, is listed as an alternative and never added as a '
+                             "proposal, and one in neither shape is counted and never listed; and a participant's "
+                             'questions are notes that never block.')
 
 
 def participants_summary_check(sentences: Sequence[str]) -> Check:

@@ -239,8 +239,11 @@ CMS reference file applied to its service date, `not_verified` when the traces c
 reference file applied (no service date is established - none documented, or a member's date in conflict with the
 document - or none covers it, as `reference_sources[].applies` records), so no code was checked against one, and
 `not_run` otherwise (no assessment, one recorded before the harness, or no trace at all - never `done` over zero
-codes); `not_connected` is always listed. `codes_checked` counts the traced codes only when a CMS reference file
-applied (0 for `not_verified`), and `not_verified`'s `detail` says why, in CPT Studio's own sentence: "No code was
+codes); `not_connected` is always listed. Only the trace of a code a proposal can be decided on is read: an
+alternative's code is never traced, whoever gave it, and a trace of one that an earlier assessment recorded is neither
+counted nor makes the state `done` (refutation round 8, retrieval-2: a second review's code CPT Studio did not add read
+"Done 1 code checked" where no proposal could be decided on). `codes_checked` counts the traced codes only when a CMS
+reference file applied (0 for `not_verified`), and `not_verified`'s `detail` says why, in CPT Studio's own sentence: "No code was
 checked against the CMS reference files: no service date is established for this encounter, so no dated CMS
 reference file applies." or "... no installed CMS reference file applies to the service date, 2025-03-02."
 (refutation round 2, truth-3: this was `done`, its codes counted as checked). A retrieval that fails never stops the
@@ -290,7 +293,9 @@ independent"; round 4, truth-2: where peer review did not propose it, the same f
 proposed this code; none of its quotes was found in the document.", beside `proposed_by`).
 A position never decides a status, and agreement never approves anything. `retrieval` lists the CMS facts
 the checks read for the code and the verbatim CMS passages retrieved for it, with source key, release, page and
-section ([] for a code that was not looked up: a provider's alternatives never are).
+section ([] for an alternative, which is never traced, whoever gave it - a participant, the provider as a candidate, or
+the provider's second review, a code it selected that CPT Studio did not add - and never another proposal's trace of the
+same code: refutation round 8, retrieval-1 to retrieval-3).
 
 `pipeline.stages` includes the participants' stages (`kind` `astra`, `fable`), between `predict` and `assess`. Their
 requests carry the revision alone (no date), so a context change that leaves Corti's request as it is re-assesses with
