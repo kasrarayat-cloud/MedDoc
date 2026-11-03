@@ -228,6 +228,26 @@ class PositionWordingTests(MeaningCase):
             self.assertEqual(positions[name]['detail'], PROPOSED_DETAIL.format(label=name.title()), value)
         self.assert_worded(encounter_id, detail)
 
+    def test_t1b_a_history_sentence_beside_corti_s_code(self):
+        """time-3, t1b: Corti's 45385 rests on today's hot-snare sentence; Astra's first reading quotes only the
+        history line about 2019. Its position names no evidence (the same repair as negation-4; pinned on time-3's own
+        input at the integration of R6-MEANING), and Corti's code is as with Corti alone."""
+        history = 'Prior colonoscopy in 2019 with polypectomy.'
+        snare = 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.'
+        text = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
+                'Place of service: Ambulatory surgery center\nHistory\n' + history + '\nProcedure: Colonoscopy\n'
+                + CECUM_LANDMARKS + '\n' + snare + '\nPlan\nRepeat colonoscopy in 3 years.\n')
+        encounter_id = self.scenario(text, [('45385', snare)],
+                                     astra=hp.reading(codes=[('45385', history)], services=[colon_service(snare)]))
+        detail = self.detail(encounter_id)
+        astra = self.positions_of(detail, '45385')['selected']['astra']
+        self.assertEqual(astra, {'position': 'proposed', 'detail': PROPOSED_DETAIL.format(label='Astra'),
+                                 'quote': history})
+        self.assertIn(f'Astra proposed it: Astra proposed this code, quoting the document verbatim. — “{history}”',
+                      self.page_lines(detail))
+        self.assert_worded(encounter_id, detail)
+        self.assertEqual(corti_rows(detail), corti_rows(self.corti_alone(text, [('45385', snare)])))
+
 
 # --- D14 on the engine: a participant's code no decidable proposal carries is an alternative, never a proposal --------
 
