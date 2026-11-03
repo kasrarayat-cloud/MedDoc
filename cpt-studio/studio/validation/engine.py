@@ -223,8 +223,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                              for index, item in enumerate(alternatives))
                      + tuple(second_alternatives) + participant_alternatives)
     elif harness is not None:
-        # No usable answer from the proposal provider: the participants' codes are judged on their own, by the same path
-        # (I10: the provider's failure blocks only itself).
+        # No usable answer from the proposal provider: the participants' codes are listed as alternatives, never as
+        # proposals (the session's D14), and the provider's failure blocks only itself (I10).
         selections, participant_alternatives = harness.merge(selections, routing, reference, read_day, usable,
                                                              dated=date_state.value is not None)
         encounter = _encounter('', context, routing, sources, date_state, selections)

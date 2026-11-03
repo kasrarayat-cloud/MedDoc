@@ -1636,3 +1636,58 @@ standard governs a reader repair, the round-4 standard or that parity standard?
 `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL, and `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new
 violations (50 rows and 60 codes, 11 ready, 7 excluded and 42 held, as on the base). The suite there passes 5,185 tests
 in 214 modules, with ops 311, ops/verification 37 and node 127 and 91.
+
+### 12.15 Refutation round 7 (2026-11-03): what changed, and where it is recorded
+
+The seventh refutation is the narrow pass the clinical-path gate requires before the PR is made ready. Four lenses (D14,
+display, parity, false green) attacked round 6's and the meaning check's repairs, `de6418fc6..84a48c2f1`, and filed 14
+findings. Independent verifiers reproduced all 14: two major (the verifiers raised display-4 to major), twelve minor.
+**D14's core promise held.** On 60 engine runs (12 inputs, 5 participant variants) and on the pipeline's own inputs, no
+participant's code became a proposal or changed how any Corti proposal is decided: its bucket, status, actions,
+questions and the reconciliation were the participants-disabled run's. The findings are about what the retrieval and
+the new sentences say, and about two pins.
+
+| findings | what was wrong | the repair |
+|---|---|---|
+| d14-1 (major), d14-2, display-4 (major) | `jobs._retrieval` traced every prefetched code a proposal row carried, so a participant's alternative was traced beside Corti's codes. On time-2's and N1's inputs, Corti's 45378 card, both reports and the owner's trace listed the CMS endoscopy-family rule and passages that pair it with the participant's 45385. In the reviewed TXT this sat beside the same code's own "No other selected code shares an endoscopic base relationship with 45378". Reference validation also counted the alternative as a code checked: "Done 1 code checked" on time-1, where Corti proposed none. The mechanism predates D14: an unlocated participant code had the same effect at `de6418fc6`. D14 widened it to every code only a participant gave | Only the proposal provider's selections are traced, from both the first and the bounded second review. The lookup stays prefetched for the union, which the checks read. With no participant configured, the traced codes are exactly the prefetched ones (I1). Sections 1 and 5 are amended, with the superseded wording kept |
+| d14-3, display-3 | participants.summary's closing sentence was false in two cases: a code in no code's shape, which is counted and never listed; and a provider code excluded for scope or evidence, whose participant copy is listed as an alternative | Each clause is now the engine's own rule (`checks.PARTICIPANTS_NEVER_DECIDE`) |
+| display-1 (a regression in round 6's negation-5 repair), falsegreen-1 | The inventory's not-done reading of a family was named beside any participant quote of that family. Example: the Plan line's planned EGD was named beside Astra's quote of "The stomach and duodenum were also examined and were normal.", and that sentence reached the reviewed report. The pins named only 'negated' | The reading is named only where routing reads that family, with that status, inside the quoted passage (`_Harness._read_inside`). Otherwise the sentence says the documented-service reading does not read it as performed, which is true in every such case. Every not-done status is pinned |
+| display-2 | The participants-only blocker and panel called a code first proposed in peer review "an independent participant's" | They now say "each code listed was given by Astra or Fable, not the provider" |
+| display-5 | A participant alternative's API rationale called its verbatim quote of a failed act "1 exact evidence passage" | It now says "1 passage of the document quoted verbatim" |
+| display-6 (pre-existing, on the Corti-only page too) | The source panel titled a provider passage "Evidence for 45385" while the card's chip says that passage does not show the coded act | The chip and the title read one rule (`app.js passagesNotShowingTheAct`): "Passage the provider cited for 45385, which does not show the coded act" |
+| parity-1 (pre-existing) | With no assessment of the current revision (after a stop in an addendum's window, or before any assessment), the Final status row's note said "Assessed from the frozen first readings; no peer review was read by this assessment." | The note uses the Clarification row's own rule (`revisionUnassessed`): "No assessment of this revision was made.", or, while a stage runs, the note it had before |
+| parity-2 | INSTALL.md's app-phase paragraph, the command's docstring and its help still said "one request" for Corti. The integration had corrected four of the five places R6-SENDS named | Text only; pinned in `ops/test_install_r5_sends.py` |
+| falsegreen-2, falsegreen-3 | The per-entry wording was pinned only on one-quote entries, and test_n1's per-line "Ready for review" check could never fail | A two-quote entry is pinned in both orders on the TXT, the CSV and the trace; the check is now card-scoped |
+
+**Moved pins**, each with its reason in the test:
+- r2_truth: codes_checked moves from 3 to 2. In the member-date-conflict half, 'not_verified' becomes 'not_run', because every code listed there is a participant's alternative.
+- r4_shapes: the retrieval codes.
+- r5_account: an alternative's rationale.
+- r6_meaning: the blocker, the panel and the closing sentence.
+
+The four harness@2 fixtures change in the closing sentence only; they equal a regeneration apart from digests. Each
+repair has a mutation proof, eleven in all. Each mutant was applied in its own copy of the tree, from a green baseline
+(35 Django tests, node 129), and every mutant was killed. The new pins are in `tests/test_harness2_r7.py` and in the
+round-7 block of `tests/frontend/app.test.cjs`.
+
+**Round 8.** Round 7's display-1 is a defect that a repair itself introduced, and this round changes what the engine and
+the reports say. So the gate's refutation pass runs once more, narrowly, over round 7's repair commit alone. It has
+three lenses: the retrieval and I1, the new sentences, and the page together with the new pins.
+
+**Recorded, not repaired:** round 7 confirmed the residuals of 12.9-12.14. Its notes also observed four things that
+were not filed:
+- the panel's D14 branch comes before the provider-failure branch, while readiness still names the provider's failure;
+- a participant's verbatim fragment can drop its sentence's negation (a design limit of span quotes);
+- a base code's source passages under "Source passages that show the coded act".
+
+The parity lens also noted an engine comment, stale since D14, that said the participants' codes are "judged on their
+own, by the same path". This record's commit corrects it; the change is to the comment only.
+
+**I1 at the repair commit** (`268921abe`):
+- `tests/test_harness_engine_parity.py` and `tests/test_harness_pipeline.py` are unchanged since `de6418fc6`, and
+  `CortiOnlyParityTests` pass with them (9 tests).
+- `ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL.
+- `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new violations: 50 rows and 60 codes, with 11 ready, 7
+  excluded and 42 held, as on the base.
+- The suite passes 5,205 tests in 215 modules, 3 of them skipped because the OCR tools are absent; ops passes 313,
+  ops/verification 37, and node 129 and 91. `manage.py check` and `makemigrations --check` are clean.

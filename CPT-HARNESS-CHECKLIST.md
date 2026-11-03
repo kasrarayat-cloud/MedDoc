@@ -299,3 +299,20 @@ requested in chat.
   question and the release-standard question (the round-4 standard or parity) are open. Before the
   PR is made ready, a narrow seventh refutation of `de6418fc6..` the integrated head runs as the standing gate
   requires.
+- **2026-11-03 ~09:30Z (session cd048041): refutation round 7 repaired.** The narrow seventh refutation of round 6's and
+  the meaning check's repairs filed 14 findings, all reproduced, two major. D14's core promise held: no participant's
+  code became a proposal or changed how a Corti proposal is decided. The repairs, each with a failing pin and a mutation
+  proof (HARNESS.md 12.15):
+  - Only the proposal provider's codes are traced. A participant's alternative had given Corti's 45378 an
+    endoscopy-family rule, and reference validation had counted it as a code checked.
+  - participants.summary's closing sentence and the participants-only blocker and panel say only what is true.
+  - A participant's service is worded with the inventory's not-done reading only where CPT Studio reads it inside the
+    quoted passage. Round 6's repair had attached a Plan line's reading to another sentence, in the reviewed report.
+  - A participant's verbatim quote is never called an evidence passage.
+  - The source panel never titles "Evidence for" a passage its chip says does not show the coded act.
+  - The Final status row never says an assessment of an unassessed revision was made.
+  - The access check's remaining request count is corrected.
+  - Two pins are hardened.
+  Because round 7 found a defect that a repair itself introduced, a narrow eighth refutation of round 7's repair commit
+  runs before the PR is made ready. 4.6, D3-D5, D14's owner question, the release-standard question and interpretation
+  68 stay open.
