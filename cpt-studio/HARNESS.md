@@ -1406,8 +1406,12 @@ diff. Two session decisions, each narrowing what CPT Studio claims or shows:
   participant row's "Codes it proposed" (`review.listed_codes`), the engine's `support['participants']` position
   (superseded, round 5, falsegreen-5: that position speaks of both phases, so it is 'not_proposed' only where no entry
   of either phase located a quote; where peer review then proposed the code with a located quote it is 'proposed', and
-  its detail says the first reading listed the code with no quote found verbatim there and peer review proposed it;
-  the card's positions speak of the first reading alone) and its
+  its detail says the first reading listed the code with no quote found verbatim there and peer review proposed it
+  (round 6, account-3: that detail counts as proposals only the entries that located a quote - it had said "Astra
+  proposed 45385 2 times" of that listing and that proposal - and names every other entry as a listing in its phase,
+  the mirror case too: a first reading's located code that peer review lists with no quote found is "Astra proposed
+  45380 in its independent reading, and also listed it in peer review with no quote found verbatim in the document",
+  never "again in peer review"); the card's positions speak of the first reading alone) and its
   participants.summary ("It listed N codes (...) with no quote found verbatim in the document, so it did not propose
   them."); "It proposed it after peer review." follows only where it did. (The participant row and the engine's two
   sentences were applied at integration from R4-TRUTH's notes; three pins moved with them.)
@@ -1457,7 +1461,8 @@ decisions, each narrowing what CPT Studio says:
   ('G0121;LES' and a 30-character one, which no longer reach the assess stage's code field); Corti's unlisted count with
   a short value in no code's shape; the replayed run's unrecorded-outcome sentence and the engine's two unread-position
   sentences written out; and 12.12's truth-2 record corrected to what the engine says (its `support['participants']`
-  position speaks of both phases).
+  position speaks of both phases; that record left out the detail's count, which counted a listing as a proposal:
+  repaired in round 6, account-3, and 12.12 amended).
 - **At integration (the session):** in app.js, the participant row's null count (D13) and the owner's trace's wording
   of an answer read as not settling its question (D10); 12.7's IND-1 bullet, stale since D9; the access check's
   request count - Astra's and Fable's check is one run of the pipeline's tool loop, one request per exchange and at

@@ -856,10 +856,12 @@ class FirstReadingThenPeerReviewTests(Surfaces, R2WordingCase):
         self.assertEqual((snare['proposed_by'], snare['phases']),
                          (['corti', 'astra', 'fable'], {'astra': 'peer_review', 'fable': 'independent'}))
         position_ = snare['support']['participants']['astra']
+        # moved by refutation round 6 (R6-TRACE, account-3): the detail counts as proposals only the entries that
+        # located a quote, so it no longer says "Astra proposed 45385 2 times" of one located entry and one listing
         self.assertEqual({key: position_[key] for key in ('position', 'detail', 'quote')}, {
             'position': 'proposed', 'quote': SNARE,
-            'detail': 'Astra proposed 45385 2 times, listed in its independent reading with no quote found verbatim '
-                      'there, and proposed after peer review (stated units 1, 1; modifiers none; confidence high), '
-                      'quoting the document verbatim in 1 passage.'})
+            'detail': 'Astra proposed 45385, listed in its independent reading with no quote found verbatim there, and '
+                      'proposed after peer review (stated units 1, 1; modifiers none; confidence high), quoting the '
+                      'document verbatim in 1 passage.'})
         self.assertEqual(snare['participant_positions']['astra'],
                          {'position': 'not_proposed', 'quote': '', 'detail': LISTED + LATER})
