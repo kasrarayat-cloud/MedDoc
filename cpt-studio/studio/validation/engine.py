@@ -3291,9 +3291,11 @@ class _Harness:
 
     def positions(self, code: str) -> dict:
         """{participant: {'position', 'detail', 'quote'}} for every configured participant: 'proposed', 'not_proposed',
-        'advised_not_to_code' or 'not_run' - from both phases, each 'proposed' saying in which; and, once its peer
-        review stage exists for it, 'peer': its peer-review position ('supports', 'disputes', 'cannot_tell',
-        'no_position' or 'not_run'). The quote is a passage of the document it quoted, found verbatim."""
+        'advised_not_to_code' or 'not_run' - from both phases, each 'proposed' saying in which, its detail counting as
+        proposals only the entries that quote the document verbatim and naming any other as a listing in its phase;
+        and, once its peer review stage exists for it, 'peer': its peer-review position ('supports', 'disputes',
+        'cannot_tell', 'no_position' or 'not_run'). The quote is a passage of the document it quoted, found
+        verbatim."""
         out = {}
         for p in self.inputs:
             label = PARTICIPANT_LABELS[p.provider]
@@ -3312,18 +3314,31 @@ class _Harness:
                 entry = {'position': 'not_proposed', 'detail': detail, 'quote': ''}
             elif said:
                 good = list({(span.start, span.end): span for x in said for span in x.good}.values())
-                phases = {x.phase for x in said}
-                detail = f'{label} proposed {code}' + (f' {len(said)} times' if len(said) > 1 else '')
-                if phases == {PEER_REVIEW}:
-                    detail += ' after peer review, not in its independent reading'
-                elif PEER_REVIEW in phases:
+                # only an entry that quotes the document verbatim proposed the code, so only those are counted and give
+                # its phases; each other entry is named as a listing in its own phase (refutation round 6, account-3:
+                # every entry was counted - "Astra proposed 45385 2 times" beside one located entry - and "again in
+                # peer review" was said of a peer-review entry none of whose quotes was found)
+                proposed = [x for x in said if x.good]
+                phases = {x.phase for x in proposed}
+                listed = {x.phase for x in said if not x.good}
+                detail = f'{label} proposed {code}' + (f' {len(proposed)} times' if len(proposed) > 1 else '')
+                if phases == {PEER_REVIEW} and INDEPENDENT in listed:
                     # a first reading whose quotes were not found proposed nothing there (11.1: a phase is the phase of
                     # the located evidence), so its listing is not called a proposal (refutation round 3, R3-TRUTH's
                     # note on truth-2: the API serves this detail in the proposal's support)
-                    located_first = any(x.good for x in said if x.phase != PEER_REVIEW)
-                    detail += (', in its independent reading and again in peer review' if located_first else
-                               ', listed in its independent reading with no quote found verbatim there, and proposed '
+                    detail += (', listed in its independent reading with no quote found verbatim there, and proposed '
                                'after peer review')
+                    listed.discard(INDEPENDENT)
+                elif phases == {PEER_REVIEW}:
+                    detail += ' after peer review, not in its independent reading'
+                elif PEER_REVIEW in phases:
+                    detail += ', in its independent reading and again in peer review'
+                elif listed:
+                    detail += ' in its independent reading'
+                if listed:
+                    where = ' and '.join(words for phase, words in ((INDEPENDENT, 'in its independent reading'),
+                                                                    (PEER_REVIEW, 'in peer review')) if phase in listed)
+                    detail += f', and also listed it {where} with no quote found verbatim in the document'
                 detail += f' ({self._stated([x.entry for x in said])})'
                 detail += (f', quoting the document verbatim in {checks.plural(len(good), "passage")}.' if good
                            else '; none of its quotes was found verbatim in the document, so it is not counted as a '

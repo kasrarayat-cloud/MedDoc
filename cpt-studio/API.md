@@ -559,7 +559,13 @@ as it ends, so a run still sending, or swept to unknown, can list exchanges
 (sends-r2-4). Then `review`, a peer-review run's PeerReview as JSON (its answers, positions, additional codes, references
 used checked against its own tool calls, the frozen inputs it was shown and its problems; null for every other run, whose
 `reading` it is instead). Each of its `additional_codes` carries `phase`, the phase its participant first proposed the
-code in (`independent` or `peer_review`), where the current assessment read that review, and `''` otherwise (truth-8). `reading.references_used` checks each reference against that run's own tool results; for a
+code in (`independent` or `peer_review`), where the current assessment read that review, and "`''` otherwise" (truth-8;
+superseded, round 6: where that review was read, an entry none of whose quotes was located is never `peer_review` -
+each entry is worded by its own quotes, account-4 - so `''` is said of such an entry where the participant first
+proposed the code in its peer review, as it is of a code no entry of either phase located, D12, and of a code in no
+code's shape, while `independent` stays on every entry of a code its frozen first reading proposed; where the current
+assessment did not read that review, every additional code carries `null`, account-5, which the page words "not read by
+the current assessment", never "listed in peer review"). `reading.references_used` checks each reference against that run's own tool results; for a
 run that reused a retained answer (`reused_from`), against the retained run's, and each of its references used then
 carries `reused_from` too (refutation round 2, truth-13). The
 trace also lists `assessments`: each assessment of the current revision, oldest first, with `current`, its `phase`,
@@ -777,7 +783,10 @@ review: its state and run, the frozen inputs it was shown, its answers to CPT St
 Studio's own words" (superseded, round 5, D10: each only by whether it is read as settling the question, "Astra says
 the document settles it" or "Astra's answer is read as not settling it", with no value), its positions on codes and the
 codes it proposed
-"after peer review, never independent", each with
+"after peer review, never independent" (superseded, round 6, account-4: its additional codes, each worded by its phase
+and its own quotes - "proposed after peer review, never independent" of an entry with a located passage of a code
+the participant first proposed in its peer review, "repeated in peer review; first proposed in its independent
+reading" of every entry of a code its frozen first reading proposed, and otherwise "listed in peer review"), each with
 its located passages; a phase-1 report says whether peer reviews follow, by the pipeline's rule, and why none does:
 no first reading was read, a member date conflict holds the encounter, or no participant that read is configured now)
 and a PARTICIPANT REFERENCES section (by
@@ -795,12 +804,19 @@ the locating participants in `proposed_by`, the reviewer in `reviewer`/`reviewer
 in `evidence_support`, `confirmation=<id>;clarification=<id>;scope=<scope>` in `checks`), `peer_answer` (`settled` or
 `not_settled`, "the value" (superseded, round 5, D10: no value, so `exclusion_reason` stays empty), passages,
 `question=<id>;fact=<fact>`), `peer_position` (code, position, passages),
-`peer_additional_code` (code, units, `proposed_after_peer_review`, passages) and `participant_reference` (`retrieved`,
+`peer_additional_code` (code, units, "`proposed_after_peer_review`" (superseded, round 6, account-2: the status the
+TXT's wording of the entry gives - `proposed_after_peer_review` where the entry located a passage of a code the
+participant first proposed in its peer review, `repeated_in_peer_review` where its frozen first reading proposed the
+code (round 2, truth-8), and otherwise `listed_in_peer_review`: the entry proposed nothing, because no entry of either
+phase located the code (round 5, D12), because the entry itself located no passage (round 6, account-4), or because
+the code is in no code's shape), passages) and `participant_reference` (`retrieved`,
 `used` or `cited_not_retrieved`, the ref in `exclusion_reason`, the source in `documented_service`, kind, release and
 window in `evidence_support`, `run=<id>` in `checks`, and `run=<id>;reused_from=<id>` for a run that reused a
 retained answer, whose tool calls they are: PARTICIPANT REFERENCES says the same of that run, "reuses the retained
 answer of run <id>, whose tool calls these are; this run made none", and of each reference it used, "retrieved by the
-retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin`, and none
+retained run it reuses"); each names its participant in `proposed_by` and its phase in `proposal_origin` - the row's
+participant and phase, not a proposer: the entry a `listed_in_peer_review` row records proposed nothing, as its status
+says, whoever it names (refutation round 6, account-2) - and none
 carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10):** CONFIRMED FINDINGS and the
 `confirmed_finding` rows are printed only while confirmations are offered; this release offers none, so neither appears
 (the section's "None: no reviewer has confirmed a finding for this revision." implied a reviewer could).

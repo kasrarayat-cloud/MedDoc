@@ -587,7 +587,10 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         self.assertEqual([(c['code'], c['position']) for c in review_['positions']], [('G0121', 'disputes')])
         self.assertIn('    Position on G0121: disputes', txt)
         self.assertIn('    Additional code G0105 · units 1 — proposed after peer review, never independent', txt)
-        self.assertFalse([line for line in txt if reports.UNREAD_CODE in line])
+        # written out (refutation round 6, falsegreen-3: read through reports.UNREAD_CODE, the constant under test,
+        # this passed whatever that sentence said), and the constant kept beside it, so the pin is no weaker than it was
+        self.assertFalse([line for line in txt
+                          if 'a code CPT Studio does not read' in line or reports.UNREAD_CODE in line])
         self.assertEqual(rows, [('peer_position', 'G0121', 'disputes'),
                                 ('peer_additional_code', 'G0105', 'proposed_after_peer_review')])
 
@@ -626,8 +629,10 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
         detail, review_, txt, rows = self.peer_surfaces(encounter_id, 'fable')
-        self.assertIn(f'    Position on {reports.UNREAD_CODE}: disputes', txt)
-        self.assertIn(f'    Additional code {reports.UNREAD_CODE} · units 1 — listed in peer review', txt)
+        # the sentences written out (refutation round 6, falsegreen-3: through reports.UNREAD_CODE, the constant under
+        # test, "a code it did not propose" there passed this control)
+        self.assertIn('    Position on a code CPT Studio does not read: disputes', txt)
+        self.assertIn('    Additional code a code CPT Studio does not read · units 1 — listed in peer review', txt)
         self.assertEqual(rows, [('peer_position', '', 'disputes'), ('peer_additional_code', '', 'listed_in_peer_review')])
         self.assertEqual([(c['code'], c['phase']) for c in review_['additional_codes']], [(length('G0121;LES'), '')])
         self.assertEqual(self.rows(detail)['fable']['peer']['codes_added'], [])
@@ -852,10 +857,12 @@ class FirstReadingThenPeerReviewTests(Surfaces, R2WordingCase):
         self.assertEqual((snare['proposed_by'], snare['phases']),
                          (['corti', 'astra', 'fable'], {'astra': 'peer_review', 'fable': 'independent'}))
         position_ = snare['support']['participants']['astra']
+        # moved by refutation round 6 (R6-TRACE, account-3): the detail counts as proposals only the entries that
+        # located a quote, so it no longer says "Astra proposed 45385 2 times" of one located entry and one listing
         self.assertEqual({key: position_[key] for key in ('position', 'detail', 'quote')}, {
             'position': 'proposed', 'quote': SNARE,
-            'detail': 'Astra proposed 45385 2 times, listed in its independent reading with no quote found verbatim '
-                      'there, and proposed after peer review (stated units 1, 1; modifiers none; confidence high), '
-                      'quoting the document verbatim in 1 passage.'})
+            'detail': 'Astra proposed 45385, listed in its independent reading with no quote found verbatim there, and '
+                      'proposed after peer review (stated units 1, 1; modifiers none; confidence high), quoting the '
+                      'document verbatim in 1 passage.'})
         self.assertEqual(snare['participant_positions']['astra'],
                          {'position': 'not_proposed', 'quote': '', 'detail': LISTED + LATER})

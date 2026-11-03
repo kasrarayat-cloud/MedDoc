@@ -1983,7 +1983,10 @@ test('older payloads draw exactly as they did before harness@2: every review tab
   // 2365f766...) - each card's status line states the NCCI procedure-to-procedure limit, so its "Not verified" note no
   // longer names the edits again; nothing else on those pages changed. Refutation round 5, R5-ROW (the session's D11):
   // the processing payload's tabs moved (from f117e044...) - its waiting Clarification row says only "Known once the
-  // proposals are checked.", no longer why a question is asked; nothing else on that page changed.
+  // proposals are checked.", no longer why a question is asked; nothing else on that page changed. Refutation round 6,
+  // R6-TRACE (account-1): the harness@1 trace moved (from 40ec4c58...) - a reading's codes are headed "Codes it listed",
+  // no longer "Codes proposed", over items that each say whether their quotes were found; nothing else on that page
+  // changed.
   const crypto = require('node:crypto');
   const sha = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
   const BASE = {
@@ -2005,7 +2008,7 @@ test('older payloads draw exactly as they did before harness@2: every review tab
     assert.deepEqual(['codes', 'checks', 'timeline'].map(tab => sha(render(doc, tab))), BASE[name], name);
   }
   const trace = fixture(HARNESS_TRACE);
-  assert.equal(sha(app.traceView(trace, trace.encounter.id)), '40ec4c58e45d6275e9714bb44ec02ebb83e28611d68b7d8671a04bdefbb2f5de');
+  assert.equal(sha(app.traceView(trace, trace.encounter.id)), 'b6562046d92b7d0ecd3db06f2277f0bb37112ad9de73e27f238084ff65cdb266');
 });
 
 test('a Corti-only encounter served with harness@2\'s empty fields draws exactly as the same payload without them (I1)', () => {
@@ -2331,7 +2334,11 @@ test('R2-WORDING truth-8: a peer review\'s additional code is called never indep
   assert.ok(shown('independent').includes(`${head}repeated in peer review; first proposed in its independent reading</b>`));
   assert.equal(shown('independent').includes('never independent'), false);
   for (const phase of ['peer_review', undefined]) assert.ok(shown(phase).includes(`${head}proposed after peer review, never independent</b>`), String(phase));
-  for (const phase of ['', 'exploded', null]) assert.ok(shown(phase).includes(`${head}listed in peer review</b>`), String(phase));
+  for (const phase of ['', 'exploded']) assert.ok(shown(phase).includes(`${head}listed in peer review</b>`), String(phase));
+  // moved by refutation round 6 (R6-TRACE, account-5): null is what the trace serves for a review the current
+  // assessment did not read, and the page says so, never "listed in peer review"
+  assert.ok(shown(null).includes(`${head}not read by the current assessment</b>`));
+  assert.equal(shown(null).includes(`${head}listed in peer review</b>`), false);
 });
 
 test('R2-WORDING IR2-4: participant text shaped like an E/M or an abbreviated descriptor is withheld; a located quote is the document\'s own text', () => {
@@ -2883,4 +2890,46 @@ test('R5 integration: an unknown unlisted count never reads as "proposed no code
   const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review, answers: [{ question_id: 'q-1', settled: false, value: '', evidence: [] }] } }] }], assessments: undefined }, trace.encounter.id);
   assert.ok(html.includes('<li><b>Question q-1</b><br>Its answer is read as not settling it.</li>'), html);
   assert.equal(html.includes('It says the document does not settle it.'), false);
+});
+
+// refutation round 6, R6-TRACE
+// account-1: the owner's trace headed a peer review's additional codes "Codes proposed after peer review" and a first
+// reading's codes "Codes proposed", over items whose only quote is unverified and which the same trace says were not
+// proposed. The headings are neutral now ("Additional codes", "Codes it listed"); each item carries its own words.
+// account-5: every additional code of a review the current assessment did not read is served phase null, and the page
+// says so, never D12's "listed in peer review" (which says no entry of either phase located the code).
+test('R6-TRACE account-1, account-5: no trace heading says "proposed"; a review the current assessment did not read says so', () => {
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const [first, peer] = astra.runs;
+  const view = runs => app.traceView({ ...trace, participants: [{ ...astra, runs }], assessments: undefined, reconciliation: [], retrieval: [] }, trace.encounter.id);
+  const headings = html => [...html.matchAll(/<div class="evidence-label">([^<]*)<\/div>/g)].map(match => match[1]);
+  // the fixture's own peer review lists 45381 with an unverified quote only (phase ''); its first reading gains a code
+  // whose only quote is unverified too
+  assert.deepEqual(peer.review.additional_codes.map(code => [code.code, code.phase, code.evidence.map(item => item.spans.length)]), [['45381', '', [0]]]);
+  const unverified = { quote: 'A quote found nowhere in this document.', spans: [], reason: 'not found' };
+  const reading = { ...first.reading, codes: [...first.reading.codes, { ...first.reading.codes[0], code: '45378', evidence: [unverified] }] };
+  const html = view([{ ...first, reading }, peer]);
+  const said = headings(html);
+  assert.deepEqual(said.filter(text => /propos/i.test(text)), [], said.join(' | '));
+  assert.ok(said.includes('Codes it listed · 3') && said.includes('Additional codes · 1'), said.join(' | '));
+  assert.ok(html.includes('<li><b>45381 · units 1 · confidence low · services s1 · listed in peer review</b>'));
+  assert.ok(html.includes('<li><b>45378 · units 1 · confidence high · services s1</b><br>Basis: '));
+  // an empty list says none was listed
+  const empty = view([{ ...first, reading: { ...first.reading, codes: [] } }, { ...peer, review: { ...peer.review, additional_codes: [] } }]);
+  assert.ok(empty.includes('<div class="evidence-label">Codes it listed · 0</div><p class="harness-note">No code listed.</p>'));
+  assert.ok(empty.includes('<div class="evidence-label">Additional codes · 0</div><p class="harness-note">No additional code.</p>'));
+  assert.deepEqual(headings(empty).filter(text => /propos/i.test(text)), []);
+  // account-5: a review the current assessment did not read, one of its codes with a quote found in the document
+  const found = { quote: 'was removed with a cold snare', spans: [{ context_index: 0, start: 379, end: 408, text: 'was removed with a cold snare', exact: true, page: null }], reason: '' };
+  const codes = [...peer.review.additional_codes, { ...peer.review.additional_codes[0], code: '45385', evidence: [found] }];
+  const unread = view([{ ...peer, review: { ...peer.review, additional_codes: codes.map(code => ({ ...code, phase: null })) } }]);
+  assert.ok(unread.includes('<li><b>45381 · units 1 · confidence low · services s1 · not read by the current assessment</b>'), unread);
+  assert.ok(unread.includes('<li><b>45385 · units 1 · confidence low · services s1 · not read by the current assessment</b>'), unread);
+  assert.equal(/listed in peer review|proposed after peer review|repeated in peer review/.test(unread), false);
+  // the same codes, read: each by the phase served with it, as before
+  const read = view([{ ...peer, review: { ...peer.review, additional_codes: codes.map((code, index) => ({ ...code, phase: index ? 'peer_review' : '' })) } }]);
+  assert.ok(read.includes('<li><b>45381 · units 1 · confidence low · services s1 · listed in peer review</b>'));
+  assert.ok(read.includes('<li><b>45385 · units 1 · confidence low · services s1 · proposed after peer review, never independent</b>'));
+  assert.equal(read.includes('not read by the current assessment'), false);
 });

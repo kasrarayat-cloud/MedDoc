@@ -1176,12 +1176,18 @@ def _trace_review(run, assessment=None, ids=None):
     """A peer-review run's PeerReview (HARNESS.md 11.1) as JSON - its answers, positions, additional codes, references
     used (each checked against that run's own tool results), the frozen inputs it was shown, its problems - read as the
     adapter version that recorded it; None for any other run and a run with no answer. Each additional code carries
-    ``phase``, the phase its participant first proposed it in (peer_code_phases), where ``assessment`` - the current
-    one - read this review, and '' otherwise, and for a code it proposed in neither phase (refutation round 2, truth-8:
-    a code its first reading proposed was called "proposed after peer review, never independent"; round 5, the
-    session's D12: so was a code no entry of its located). ``ids``: the participant's one participants.peer.ShownIds for
-    the whole trace (_trace_runs): an additional code's service ids name the services of its own frozen first reading,
-    so each has the name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
+    ``phase``, where ``assessment`` - the current one - read this review: the phase its participant first proposed it in
+    (peer_code_phases), except that an entry none of whose quotes was located is '' where that phase is 'peer_review'
+    (refutation round 6, account-4: an entry is worded by its own quotes, so a second entry of a code another entry
+    located, its quote not found, was called "proposed after peer review, never independent"; 'independent' stays on
+    every entry, since "repeated in peer review" claims no proposal there), and '' for a code it proposed in neither
+    phase (refutation round 2, truth-8: a code its first reading proposed was called "proposed after peer review, never
+    independent"; round 5, the session's D12: so was a code no entry of its located). Where the current assessment did
+    not read this review, every additional code carries ``phase`` None, never D12's '' (refutation round 6, account-5:
+    '' read "listed in peer review" beside a quote found in the document, and the reuse of the same bytes was "proposed
+    after peer review" in the same trace). ``ids``: the participant's one participants.peer.ShownIds for the whole trace
+    (_trace_runs): an additional code's service ids name the services of its own frozen first reading, so each has the
+    name that reading's run gave it (refutation round 4, shapes-2, truth-3)."""
     if (run.provider not in participants.PARTICIPANTS or run.purpose != models.ProviderRun.PEER_REVIEW
             or run.state != models.ProviderRun.SUCCEEDED):
         return None
@@ -1196,10 +1202,19 @@ def _trace_review(run, assessment=None, ids=None):
     # shapes-1: the CPT shape alone gave an HCPCS code no phase); any other is served by its length (_code_entry)
     shaped = [item.code if participant_peer.code_shaped(item.code) else '' for item in peer_review.additional_codes]
     phases = peer_code_phases(peer_review, record) if read else {}
+
+    def phase(item, code):
+        if not read:
+            return None
+        said = phases.get(code, '')
+        located = any(quote.spans for quote in item.evidence)
+        return '' if said == models.ProviderRun.PEER_REVIEW and not located else said
+
     ids = participant_peer.ShownIds() if ids is None else ids
     return {**data, 'positions': [_code_entry(item, ids) for item in data['positions']],
-            'additional_codes': [{**_code_entry(item, ids), 'phase': phases.get(code, '')}
-                                 for item, code in zip(data['additional_codes'], shaped)],
+            'additional_codes': [{**_code_entry(entry, ids), 'phase': phase(item, code)}
+                                 for entry, item, code in zip(data['additional_codes'], peer_review.additional_codes,
+                                                              shaped)],
             'references_used': _checked_against(run, data['references_used'])}
 
 

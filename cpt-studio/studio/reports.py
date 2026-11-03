@@ -593,12 +593,18 @@ def _peer_items(assessment, peer_review, text, index, name='', record=None):
                   'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
     # each additional code with the phase its participant first proposed it in (serializers.peer_code_phases;
     # refutation round 2, truth-8): '' for a code CPT Studio does not read, and for one it proposed in neither phase -
-    # no entry of either located a quote (refutation round 5, the session's D12)
+    # no entry of either located a quote (refutation round 5, the session's D12) - and each entry worded by its own
+    # quotes: one with no passage located is never 'peer_review' (refutation round 6, account-4: a second entry of a
+    # code another entry located, its quote not found, was printed "proposed after peer review, never independent" with
+    # no passage, and the CSV counted it as a second such row)
     shaped = [item.code if code_shaped(item.code) else '' for item in peer_review.additional_codes]
     phases = peer_code_phases(peer_review, record)
-    added = [{'code': code, 'units': item.units if type(item.units) is int else 0,
-              'evidence': _located(item.evidence, text, index), 'phase': phases.get(code, '')}
-             for item, code in zip(peer_review.additional_codes, shaped)]
+    added = []
+    for item, code in zip(peer_review.additional_codes, shaped):
+        evidence = _located(item.evidence, text, index)
+        phase = phases.get(code, '')
+        added.append({'code': code, 'units': item.units if type(item.units) is int else 0, 'evidence': evidence,
+                      'phase': '' if phase == ProviderRun.PEER_REVIEW and not evidence else phase})
     return {'frozen': [[str(name), str(value)] for name, value in peer_review.frozen_inputs], 'answers': answers,
             'positions': positions, 'additional_codes': added}
 
@@ -1223,7 +1229,7 @@ def _peer_evidence(spans):
 def _peer_section(snap):
     """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions - each only by
     whether it is read as settling the question, never a value (refutation round 5, the session's D10) - its positions
-    on codes and the codes it proposed after peer review, each with its located passages."""
+    on codes and its additional codes, each worded by its phase (_peer_items), each with its located passages."""
     data = snap.get('peer_review') or {}
     if data.get('predates'):
         return ['  - none: this assessment was recorded before peer review existed']
@@ -1259,9 +1265,10 @@ def _peer_section(snap):
                          f'{POSITION_WORDS.get(position["position"], "no position CPT Studio reads")}')
             lines += _peer_evidence(position['evidence'])
         for added in entry['additional_codes']:
-            # by the phase its participant first proposed it in (serializers.peer_code_phases; refutation round 2,
-            # truth-8): a code its first reading proposed is repeated, never "never independent"; an entry that does
-            # not name its phase reads as before
+            # by the phase _peer_items gives the entry: the phase its participant first proposed the code in
+            # (serializers.peer_code_phases; refutation round 2, truth-8: a code its first reading proposed is repeated,
+            # never "never independent"), never 'peer_review' for an entry with no passage located (refutation round 6,
+            # account-4); an entry that does not name its phase reads as before
             phase = added.get('phase', ProviderRun.PEER_REVIEW)
             said = ('proposed after peer review, never independent' if phase == ProviderRun.PEER_REVIEW else
                     'repeated in peer review; first proposed in its independent reading'
