@@ -821,3 +821,42 @@ class SourceHighlightTitleTests(MeaningCase):
             said = title_codes(title)
             self.assertIn('45380', said.get('Evidence for', set()), title)
             self.assertNotIn('45380', said.get('Passage of the documented service for', set()), title)
+
+
+# --- the integration of R6-MEANING: participants.summary's closing sentence -------------------------------------------
+
+NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a code the proposal provider "
+                "also proposed is judged by CPT Studio's own readers on the provider's passages alone; any other code a "
+                "participant gives is listed as an alternative and never added as a proposal; and a participant's "
+                'questions are notes that never block.')
+SAME_RULES = "by the same rules as the proposal provider's"
+
+
+class SummarySentenceTests(MeaningCase):
+    """participants.summary closed with "each code it proposes is judged by CPT Studio's own readers, with exact
+    evidence, by the same rules as the proposal provider's" - false since D14 of a code only a participant gave, which
+    no reader reads: on time-1 p1 the same report lists Astra's 45385 as never added as a proposal. It now says what the
+    engine does (HARNESS.md I3 as amended for D14), on the API, the page's Checks tab and the TXT report (the CSV carries
+    no encounter check)."""
+
+    def test_time_1_p1_every_surface(self):
+        text = earlier(LAST_LABEL)
+        astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
+        encounter_id = self.scenario(text, astra=astra)
+        detail = self.detail(encounter_id)
+        self.assertTrue(self.summary(detail).endswith(f' {NEVER_DECIDE}'), self.summary(detail))
+        self.assertNotIn(SAME_RULES, self.summary(detail))
+        checks = self.page_lines(detail, 'checks')
+        self.assertTrue(any(NEVER_DECIDE in line for line in checks))
+        self.assertFalse(any(SAME_RULES in line for line in checks))
+        # the TXT prints the encounter's checks; the CSV carries per-code rows only, so neither sentence is in it
+        report = self.download(encounter_id)
+        self.assertIn(NEVER_DECIDE, report)
+        self.assertNotIn(SAME_RULES, report)
+
+    def test_a_code_corti_also_proposed(self):
+        encounter_id = self.scenario(COLON, corti=[('45378', CECUM)], astra=hp.reading(codes=[('45378', CECUM)]))
+        detail = self.detail(encounter_id)
+        self.assertEqual([(p['code'], p['bucket'], p['proposed_by']) for p in proposals(detail)],
+                         [('45378', 'selected', ['corti', 'astra'])])
+        self.assertTrue(self.summary(detail).endswith(f' {NEVER_DECIDE}'), self.summary(detail))

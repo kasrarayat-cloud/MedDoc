@@ -2525,9 +2525,14 @@ def names_procedure(text: str, start: int, end: int, code: str, service_date: Op
 # participant wrote (a basis, a description, a question) is ever quoted.
 
 PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
-PARTICIPANTS_NEVER_DECIDE = ('A participant never decides a status and agreement never promotes a code: each code '
-                             'it proposes is judged by CPT Studio\'s own readers, with exact evidence, by the same '
-                             'rules as the proposal provider\'s, and its questions are notes that never block.')
+# Since the session's D14 (refutation round 6, R6-MEANING) a code only a participant gave is never a proposal and no
+# reader reads it, so the sentence that every code a participant proposes "is judged by CPT Studio's own readers, with
+# exact evidence, by the same rules as the proposal provider's" was false of it (found at the integration of
+# R6-MEANING): it says what the engine does (HARNESS.md I3, as amended for D14).
+PARTICIPANTS_NEVER_DECIDE = ('A participant never decides a status and agreement never promotes a code: a code the '
+                             'proposal provider also proposed is judged by CPT Studio\'s own readers on the provider\'s '
+                             'passages alone; any other code a participant gives is listed as an alternative and never '
+                             'added as a proposal; and a participant\'s questions are notes that never block.')
 
 
 def participants_summary_check(sentences: Sequence[str]) -> Check:
