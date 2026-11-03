@@ -59,6 +59,10 @@ class AccessCheckTests(OfflineDatabaseTestCase):
         for secret in ALL_SECRETS:
             self.assertNotIn(secret, printed)
         self.assertNotIn(str(self.tmp), printed)
+        # refutation round 6, R6-SENDS (parity-1): the access check keeps no response body, so nothing it prints says
+        # one is retained ("; the response body is retained." is the adapters' clause for the pipeline, which keeps
+        # the answer; tests.test_harness2_r6_sends pins what the receipt says instead)
+        self.assertNotIn('retained', printed.lower())
         receipt = json.loads(out.getvalue()) if out.getvalue() else None
         if receipt is not None:
             self.assertEqual(out.getvalue().count('\n'), 1)  # exactly one JSON line
