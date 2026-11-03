@@ -2899,6 +2899,9 @@ test('R5 integration: an unknown unlisted count never reads as "proposed no code
 // while the current revision has no assessment, and the row reads null as it reads no assessment: waiting while a
 // stage runs, otherwise not asked. The pipeline's own states, participants on and Corti alone, busy and stopped, are
 // pinned in tests/test_harness2_r6_row.py.
+// falsegreen-4: a participant is named as having listed a code only as review.listed_by serves one - Astra or Fable -
+// never a name the page does not know, nor Corti (the R5-ACCOUNT comment claimed it; only a value that is not a list
+// was tried).
 
 const R6_WAITING = { state: 'waiting', badge: 'Waiting', lines: ['Known once the proposals are checked.'], notes: [] };
 const R6_NOT_ASKED = { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] };
@@ -2952,4 +2955,28 @@ test('R6-ROW row-1: a count served as null reads as no assessment of this revisi
     assert.deepEqual(r5Row(none), R6_NOT_ASKED, String(open));
     assert.deepEqual(r5Row({ ...none, pipeline: { ...none.pipeline, busy: true } }), R6_WAITING, String(open));
   }
+});
+
+test('R6-ROW falsegreen-4: a participant is named as having listed a code only as review.listed_by serves one - Astra or Fable - never a name the page does not know, nor Corti', () => {
+  const status = proposal => /<li><b>Proposed by:<\/b> ([^<]*)<\/li>/.exec(app.codeStatusLines({ reference_check: { state: 'not_verified' }, ...proposal }))[1];
+  // the finding: 'no participant; listed by mallory with no quote found verbatim in the document, so not proposed', and
+  // the same of Corti
+  for (const listed of [['mallory'], ['corti'], ['Astra'], ['__proto__'], ['corti', 'mallory']]) {
+    assert.equal(status({ proposed_by: [], listed_by: listed }), 'not recorded', JSON.stringify(listed));
+  }
+  // beside a name it serves, only that one is named
+  assert.equal(status({ proposed_by: [], listed_by: ['mallory', 'astra', 'corti'] }), `no participant; listed by Astra ${R5_LISTED}`);
+  // apart from its proposers (proposerText): a name it does not serve is not named, and Corti's relation stands alone
+  assert.equal(status({ proposed_by: ['fable'], listed_by: ['corti', 'mallory'], phases: { fable: 'independent' }, corti_relation: 'none' }),
+    'Fable (independent reading); Corti did not propose this code.');
+  assert.equal(status({ proposed_by: ['astra'], listed_by: ['mallory', 'fable'], phases: { astra: 'independent' }, corti_relation: 'none' }),
+    `Astra (independent reading); listed by Fable ${R5_LISTED} by Fable; Corti did not propose this code.`);
+  // the owner's trace's reconciliation, by the same function
+  const trace = fixture(H2_TRACE);
+  const row = { code: '45378', family: 'gi.colonoscopy', bucket: 'alternative', status: 'informational', positions: {}, reference_check: { state: 'not_verified' }, approved: false };
+  const proposed = rows => /<p>Proposed by: ([^<]*)<\/p>/.exec(app.traceView({ ...trace, reconciliation: rows }, trace.encounter.id))[1];
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['mallory'] }]), 'not recorded');
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti'] }]), 'not recorded');
+  assert.equal(proposed([{ ...row, proposed_by: ['astra'], listed_by: ['corti'] }]), 'Astra');
+  assert.equal(proposed([{ ...row, proposed_by: [], listed_by: ['corti', 'fable'] }]), `no participant; listed by Fable ${R5_LISTED}`);
 });

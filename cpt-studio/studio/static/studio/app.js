@@ -1068,9 +1068,11 @@ function proposerText(proposal, proposers) {
 // theirs was found verbatim in the document, so they did not propose it; refutation round 5, the session's D12), named
 // apart from its proposers - "listed by Fable with no quote found verbatim in the document, so not proposed", and "by
 // Fable" after it where others proposed the code - never as one of them, and with no proposer as "no participant",
-// never "none" (Corti may have a row of its own for the code); '' when it serves none.
+// never "none" (Corti may have a row of its own for the code); '' when it serves none. Only Astra and Fable are named,
+// as review.listed_by serves only them: a name the page does not know, or Corti, is never named as having listed the
+// code (refutation round 6, falsegreen-4: 'mallory' and 'corti' were named as served).
 function listedText(listedBy, apart = false) {
-  const names = joinWords(strings(listedBy).map(name => lookup(PARTICIPANT_LABELS, name, name)));
+  const names = joinWords(strings(listedBy).filter(name => name === 'astra' || name === 'fable').map(name => PARTICIPANT_LABELS[name]));
   return names ? `listed by ${names} with no quote found verbatim in the document, so not proposed${apart ? ` by ${names}` : ''}` : '';
 }
 
