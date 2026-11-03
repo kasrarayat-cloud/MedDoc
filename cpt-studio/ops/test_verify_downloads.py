@@ -779,7 +779,10 @@ class ParticipantAlternativeBesideSecondReviewTests(unittest.TestCase):
     def test_a_participant_alternative_worded_as_its_participant_s_passes(self):
         for line in ('  - 45378 · Colonoscopy — proposed by Astra, not added as a proposal, never selectable: why',
                      '  - 45378 · Colonoscopy — listed by Astra with no quote found verbatim in the document, so not '
-                     'proposed, never selectable: why'):
+                     'proposed, never selectable: why',
+                     # the three forms reports._alternative_words prints since round 5's D12 (R5-ACCOUNT's NEEDS 1)
+                     '  - 45378 · Colonoscopy — proposed by Astra, not added as a proposal; listed by Fable with no quote '
+                     'found verbatim in the document, so not proposed by Fable, never selectable: why'):
             with self.subTest(line=line):
                 result = self.run_check(line)
                 self.assertEqual(result.status, 'pass', result.detail)

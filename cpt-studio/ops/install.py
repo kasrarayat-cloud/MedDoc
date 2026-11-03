@@ -101,7 +101,9 @@ PARTICIPANTS = {
               'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
 }
 PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
-# The access check sends one request: its deadline is the participant send deadline (330 s), plus the container's start.
+# An access check sends one request (Corti) or one run of the pipeline's tool loop, one request per exchange and at most
+# PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
+# start.
 ACCESS_CHECK_SECONDS = 420
 ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
 # The CMS passage files the revision commits (HARNESS.md 5), in the repository and as the image ships them (/app is the
@@ -2743,8 +2745,9 @@ def access_receipt(stdout: bytes):
 
 
 def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) -> dict:
-    """``manage participant_access_check --participant <name>`` sends ONE real request to the participant's vendor
-    ('corti', 'astra' or 'fable'), so it runs only with --access-check, once the new pair runs. A one-shot with the
+    """``manage participant_access_check --participant <name>`` sends real requests to the participant's vendor
+    ('corti', 'astra' or 'fable'): one for Corti, and for Astra or Fable one run of the pipeline's tool loop, one request
+    per exchange and at most PARTICIPANT_MAX_EXCHANGES. So it runs only with --access-check, once the new pair runs. A one-shot with the
     worker's mount and network for that participant: its credentials file read-only at the worker's path and
     cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
     container wrote is recorded (its JSON receipt here; its stdout and the last 8 KiB of its stderr in a log) only once
@@ -2901,8 +2904,8 @@ def phase_app(ctx) -> dict:
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
         raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes),
                            details={**services, 'states_recomputed': states}) from error
-    # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is sent
-    # one real request (participant_access_check), never without the flag.
+    # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is
+    # checked once with real requests (participant_access_check), never without the flag.
     checks, checked = None, (['corti'] if mode == 'live' else []) + live
     if access:
         checks = {}

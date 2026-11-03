@@ -935,9 +935,12 @@ and 12.1-12.6 differ, this list describes the code; the earlier text is kept so 
   failed gives the incomplete result (`service.incomplete`, the 52/53 consideration); a value CPT Studio cannot place
   is not read (`confirmations.ignored`) and the question stays open.
 - **I9 in the API (refutation round 1, IND-1).** A participant row's `codes` lists only the codes the engine lists
-  (`engine._listable`), its detail ending with the engine's count sentence. The trace serves a participant's code,
+  ~~(`engine._listable`)~~, its detail ending with the engine's count sentence. The trace serves a participant's code,
   modifier or service id as given only when it is a short token (`participants.reading._token`), otherwise "a value of
-  N characters (not shown)".
+  N characters (not shown)". (Superseded in part: since refutation round 4's D9 the engine lists a participant's code
+  only in a CPT or HCPCS code's shape (`engine.participant_listable`; `engine._listable`, 1 to 10 characters, is
+  Corti's rule alone), and the trace by the strict shapes of 12.4 as amended; since round 5's D12 and D13 the row lists
+  only codes with a located quote and states the engine's count re-read from the frozen reading - 12.13.)
 - **Cost (refutation round 1, FG-3, sends-4).** `estimated_cost_usd` is pricing's `estimated_usd` to four decimals,
   rounded half up. A tool loop is priced per exchange (`pricing.estimate_loop`), never its summed usage as one request,
   and has no estimate when its exchanges do not add up to its usage.

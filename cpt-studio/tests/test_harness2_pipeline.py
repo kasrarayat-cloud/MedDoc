@@ -454,6 +454,10 @@ class PhaseOneLoopTests(Harness2Case):
         astra = self.runs_of(encounter_id, 'astra')[0]
         self.assertEqual((astra.state, astra.sent, astra.exchanges.count()), ('unknown', True, 0))
         self.assertEqual(astra.error, jobs.UNRECORDED_MESSAGE.format(label='Astra'))
+        # written out too (refutation round 5's integration, the sibling of falsegreen-3): a constant compared with
+        # itself cannot catch a change to the sentence a live run records
+        self.assertEqual(astra.error, 'The Astra outcome could not be recorded whole (logged), so what reached the vendor '
+                                      'is not known. The outcome is unknown; reconcile it before any new attempt.')
         self.assertEqual(models.ToolCall.objects.filter(exchange__run=astra).count(), 0)
 
     def test_a_stage_with_no_time_left_for_a_whole_loop_reserves_and_sends_nothing(self):

@@ -2862,3 +2862,25 @@ test('R5-ROW D11: the row says the same of the same open questions whatever thei
   assert.equal(app.exportStatusText(stopped), 'Draft — not reviewed. Still needed: The peer reviews have not finished: decisions are recorded on the final assessment.');
   assert.equal(app.exportStatusText(rejected), 'Reviewed — every selected code has a current decision.');
 });
+
+// refutation round 5, integration
+// R5-ACCOUNT's NEEDS 2 and 3. A participant row whose count of codes that cannot be listed the API could not tell
+// (unlisted_codes null: its frozen reading could not be read again, D13) says the codes it proposed that CAN be listed,
+// never that it proposed no code; and the owner's trace says of an answer read as not settling its question what the
+// reports say (D10), since the peer reader also reads a "settled" answer that gave no value as not settled.
+test('R5 integration: an unknown unlisted count never reads as "proposed no code"; an unsettled answer reads as the reports say it', () => {
+  const ready = fixture(HARNESS_READY);
+  const none = harnessRow(render(withParticipant(ready, 'astra', { codes: [], unlisted_codes: null })), 'astra');
+  assert.ok(none.includes('It proposed no code that can be listed.'), none);
+  assert.equal(none.includes('It proposed no code.'), false, none);
+  const some = harnessRow(render(withParticipant(ready, 'astra', { codes: ['45385'], unlisted_codes: null })), 'astra');
+  assert.ok(some.includes('Codes it proposed that can be listed: 45385.'), some);
+  // a count served as 0, or a payload served before the count existed, reads as before
+  assert.ok(harnessRow(render(withParticipant(ready, 'astra', { codes: [], unlisted_codes: 0 })), 'astra').includes('It proposed no code.'));
+  const trace = fixture(H2_TRACE);
+  const astra = trace.participants.find(item => item.name === 'astra');
+  const peer = astra.runs[1];
+  const html = app.traceView({ ...trace, participants: [{ ...astra, runs: [{ ...peer, review: { ...peer.review, answers: [{ question_id: 'q-1', settled: false, value: '', evidence: [] }] } }] }], assessments: undefined }, trace.encounter.id);
+  assert.ok(html.includes('<li><b>Question q-1</b><br>Its answer is read as not settling it.</li>'), html);
+  assert.equal(html.includes('It says the document does not settle it.'), false);
+});

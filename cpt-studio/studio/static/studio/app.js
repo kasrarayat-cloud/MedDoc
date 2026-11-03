@@ -1636,14 +1636,15 @@ function referencesNote(references) {
 // does not say so - and what it proposed, how many of its quotes the document does not contain, whether its answer was
 // reused, and the model asked for and the one that answered. A reading that proposed codes the engine cannot list
 // (unlisted_codes; the API's sentence counts them) is said to have proposed none that can be listed, never none at all
-// (refutation round 2, truth-11).
+// (refutation round 2, truth-11) - and so is one whose count the API could not tell (unlisted_codes null: its frozen
+// reading could not be read again, refutation round 5's D13), since codes may have been left unlisted.
 function participantRow(participant) {
   const name = typeof participant.name === 'string' ? participant.name : '';
   const [look, label, plain, required] = lookup(PARTICIPANT_STATES, participant.state, [['pending', 'info'], 'State not recorded', 'The state of this participant was not recorded.', 'not recorded']);
   const said = typeof participant.detail === 'string' ? participant.detail.trim() : '';
   const lines = !said ? [plain] : required && !said.toLowerCase().includes(required) ? [plain, said] : [said];
   const codes = (Array.isArray(participant.codes) ? participant.codes : []).filter(code => typeof code === 'string' && code);
-  const unlisted = Number.isInteger(participant.unlisted_codes) && participant.unlisted_codes > 0;
+  const unlisted = participant.unlisted_codes === null || (Number.isInteger(participant.unlisted_codes) && participant.unlisted_codes > 0);
   const unverified = Number.isInteger(participant.unverified_quotes) && participant.unverified_quotes > 0 ? participant.unverified_quotes : 0;
   const model = textValue(participant.model);
   const returned = textValue(participant.returned_model);
@@ -1979,7 +1980,7 @@ function traceReview(review) {
   ]);
   const frozen = (Array.isArray(review.frozen_inputs) ? review.frozen_inputs : []).filter(Array.isArray).map(([name, digest]) => [textValue(name) || 'input', textValue(digest) || 'not recorded']);
   const problems = strings(review.problems).map(problem => `<li>${escapeHtml(problem)}</li>`);
-  const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'It says the document does not settle it.')}${traceQuotes(answer.evidence)}</li>`);
+  const answers = objects(review.answers).map(answer => `<li><b>${escapeHtml(`Question ${textValue(answer.question_id) || 'not named'}`)}</b><br>${escapeHtml(answer.settled === true ? `Answer: ${participantText(answer.value) || 'no value given'}` : 'Its answer is read as not settling it.')}${traceQuotes(answer.evidence)}</li>`);
   const positions = objects(review.positions).map(item => `<li><b>${escapeHtml(`${textValue(item.code) || 'No code'} · ${lookup(PEER_POSITIONS, item.position, textValue(item.position) || 'position not recorded')}`)}</b>${participantText(item.reason) ? `<br>${escapeHtml(`Why: ${participantText(item.reason)}`)}` : ''}${traceQuotes(item.evidence)}</li>`);
   // each additional code by the phase its participant first proposed it in, where the trace serves it (truth-8): a code
   // its first reading proposed is repeated, never "never independent"; one served without a phase reads as before

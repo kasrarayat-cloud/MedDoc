@@ -1,4 +1,5 @@
-"""Prove one participant's live access with exactly one minimal synthetic request (HARNESS.md 8; checklist item 1.3).
+"""Prove one participant's live access with one minimal synthetic request - for Astra and Fable, one run of the
+pipeline's tool loop, one request per exchange (HARNESS.md 8; checklist item 1.3).
 
 Run it where the participant's credentials are mounted (the worker):
 
@@ -6,8 +7,8 @@ Run it where the participant's credentials are mounted (the worker):
 
 It refuses, sending nothing, unless that participant is live on this installation (CPT_STUDIO_PROVIDER_MODE for Corti,
 CPT_STUDIO_ASTRA_MODE or CPT_STUDIO_FABLE_MODE), the installation is synthetic-only and an owner authorization is
-configured; and while another provider request holds the installation-wide single-flight lock (I8). It then sends one
-request through the real adapter, with no retry: Astra and Fable read the short synthetic GI note below as pasted text,
+configured; and while another provider request holds the installation-wide single-flight lock (I8). It then sends
+through the real adapter, with no retry - one request for Corti, one tool-loop run for Astra or Fable: Astra and Fable read the short synthetic GI note below as pasted text,
 and Corti codes the same note. The answer is read as the pipeline reads it, and one JSON receipt is printed with no
 secret in it: what was called, which model was asked for and which answered, the vendor's request and response ids,
 the latency, the usage as reported with its estimated cost, and a summary of the reading. Nothing is written to the
@@ -58,8 +59,8 @@ NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for a CPT Studio 
 
 
 class Command(BaseCommand):
-    help = ('Send one minimal synthetic request to one participant and print a JSON receipt (no secret, no database '
-            'write).')
+    help = ('Send one minimal synthetic request (for Astra and Fable, one tool-loop run) to one participant and print a '
+            'JSON receipt (no secret, no database write).')
 
     def add_arguments(self, parser):
         parser.add_argument('--participant', required=True, choices=PARTICIPANTS)

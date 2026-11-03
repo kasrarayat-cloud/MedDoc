@@ -55,7 +55,7 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 2 | `secrets` | — | creates `/etc/cpt-studio/` and its three files, once; copies each participant credentials source the owner placed, once |
 | 3 | `image` | — | builds `cpt-studio:<sha12>` |
 | 4 | `db` | — | network, two volumes, database container |
-| 5 | `app` | `--provider-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers; with `--access-check`, one real request per live participant |
+| 5 | `app` | `--provider-mode live --authorization-ref docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` (or `--provider-mode disabled`); optional `--astra-mode live`, `--fable-mode live` (each `disabled` when not given; live needs `--authorization-ref`) and `--access-check` | migrations; web and worker containers; with `--access-check`, one access check per live participant: one real request for Corti, one run of the tool loop (one request per exchange, at most `PARTICIPANT_MAX_EXCHANGES`, 4) for Astra and for Fable |
 | 6 | `reference` | `--pfs-zip <abs> --pfs-retrieved-at <ISO> --mue-zip <abs> --mue-retrieved-at <ISO>` | reference copies in the files volume; two `ReferenceSource` imports |
 | 7 | `passages` | — | each committed `studio/reference/data/` file imported (`PassageSource`, `ReferencePassage`); idempotent |
 | 8 | `license-note` | — | CPT Studio's own licence note on each imported reference source (`ReferenceSource.license_note`): exactly the old text replaced by the corrected one, nothing else; idempotent |
@@ -211,8 +211,11 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   without the flag, because it sends a real request), once the new pair runs,
   its states are recomputed and the parked pair is removed, each live
   participant in turn - Corti first when `--provider-mode live`, then Astra and
-  Fable - is sent ONE request by
-  `manage participant_access_check --participant <corti|astra|fable>`, in a
+  Fable - is checked once by
+  `manage participant_access_check --participant <corti|astra|fable>`: one
+  request for Corti, and for Astra or Fable one run of the pipeline's tool loop,
+  one request per exchange and at most `PARTICIPANT_MAX_EXCHANGES` (4), whose
+  receipt counts its exchanges. Each runs in a
   one-shot with the worker's mount and network for that participant: its
   credentials file read-only at the worker's path, `cpt-studio-net`, that
   participant live under the same `--authorization-ref`, every other one
