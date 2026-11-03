@@ -21,11 +21,20 @@ BaseCommand.run_from_argv), with the suite's synthetic key and a fake vendor ses
 lock-lost, vendor-refusal and passing receipts but for the times and client request ids each run makes afresh, and
 what it wrote on stderr. Every other input (a refused reading's receipt, a long error, a traceback, a long line, a
 long stderr, nothing at all) is written here. A guard reads the captured sentences back from the command and from
-studio/jobs.py, so they stay the command's. Run from cpt-studio/ (no Docker, sudo, network or database):
+studio/jobs.py, so they stay the command's.
+
+Refutation round 6, R6-SENDS (parity-1): the vendor-refusal receipt's error is no longer the captured one, "OpenAI
+answered HTTP 401; the response body is retained." - the adapters' clause for the pipeline, which keeps the answer,
+and false in the access check, which keeps no copy of it - but what the command prints for the captured answer
+since round 6: the error code that answer gives, and that the access check keeps no copy of the response body. The
+guard reads that sentence back from the command's own constants, and tests.test_harness2_r6_sends has the command
+print it for the captured answer and compares it with VENDOR_401_ERROR here. Run from cpt-studio/ (no Docker, sudo,
+network or database):
 
     python3 -B -m unittest discover -s ops -p 'test_*.py' -v
 """
 import ast
+import hashlib
 import io
 import json
 import os
@@ -44,6 +53,8 @@ from test_install_harness2 import module_constants  # noqa: E402
 APP_ROOT = Path(__file__).resolve().parents[1]
 COMMAND = APP_ROOT / 'studio' / 'management' / 'commands' / 'participant_access_check.py'
 JOBS = APP_ROOT / 'studio' / 'jobs.py'
+HTTP = APP_ROOT / 'studio' / 'participants' / 'http.py'
+CORTI = APP_ROOT / 'studio' / 'providers' / 'corti.py'
 
 # What the command wrote on stderr (Django's run_from_argv: the CommandError's class name, its message, a newline).
 DID_NOT_PASS = b'CommandError: The Astra access check did not pass: see the receipt.\n'
@@ -55,7 +66,15 @@ LOCK_UNCHECKED_ERROR = ('CPT Studio could not check that its database session st
 LOCK_LOST_ERROR = ('The database session that held the provider lock, which keeps every other provider request '
                    'waiting, ended while the tool loop ran, after 1 exchange; nothing more was sent, and the run has '
                    'no final answer.')
-VENDOR_401_ERROR = 'OpenAI answered HTTP 401; the response body is retained.'
+# Refutation round 6, R6-SENDS (parity-1): moved from the capture's 'OpenAI answered HTTP 401; the response body is
+# retained.' to what the command prints for the captured answer (VENDOR_401_BODY) since the round-6 repair.
+VENDOR_401_ERROR = ('OpenAI answered HTTP 401 with the error code invalid_api_key; the access check keeps no copy of '
+                    "the response body (its sha256 is the receipt's response_sha256).")
+# The captured answer (verify-harness-r5/v3-sends-rest, test_zz_v3sends_capture.py's VENDOR_401): its sha256 is the
+# receipt's response_sha256 below.
+VENDOR_401_BODY = json.dumps({'error': {'message': 'Incorrect API key provided (synthetic).',
+                                        'type': 'invalid_request_error', 'param': None,
+                                        'code': 'invalid_api_key'}}).encode()
 
 # The lens's capture (refute-harness-r5/sends/logs/access-receipt-capture.json), as the command printed it: the access
 # check's session ended right after its executor answered exchange 1's tool call, so the lock question failed; it
@@ -100,7 +119,8 @@ LOCK_STOP_RECEIPT = {
 }
 # The verifier's 'lock_lost_replaced' capture: the session ended and Django opened another, which never took the lock.
 LOCK_LOST_RECEIPT = {**LOCK_STOP_RECEIPT, 'error': LOCK_LOST_ERROR}
-# The verifier's 'vendor_401' capture: a credentials refusal, for comparison (exit 1, DID_NOT_PASS).
+# The verifier's 'vendor_401' capture: a credentials refusal, for comparison (exit 1, DID_NOT_PASS), its error as the
+# command prints it since refutation round 6 (VENDOR_401_ERROR).
 VENDOR_401_RECEIPT = {
     **LOCK_STOP_RECEIPT, 'error': VENDOR_401_ERROR, 'estimated_cost': None, 'http_status': 401, 'request_id': 'req_401',
     'response_id': '', 'returned_model': '', 'usage': {}, 'usage_basis': '',
@@ -358,6 +378,16 @@ class WhatTheOperatorSeesTests(TemporaryDirectoryTest):
         code, printed, record = self.run_main(answer(1, b'', IN_FLIGHT))
         self.assertIn(f'({LINE_SAYS}CommandError: {IN_FLIGHT_SENTENCE})', printed['summary'])
 
+    def test_the_operator_reads_what_the_check_says_of_a_vendor_s_refusal(self):
+        # refutation round 6, R6-SENDS (parity-1): the error code the vendor's answer gives, and that the access check
+        # keeps no copy of the response body - never that the body is retained, which nothing did
+        code, printed, record = self.run_main(answer(1, stdout_of(VENDOR_401_RECEIPT), DID_NOT_PASS))
+        self.assertEqual((code, printed['ok']), (1, False))
+        self.assertIn(f'(it exited 1, and its receipt says: {VENDOR_401_ERROR})', printed['summary'])
+        astra = record['details']['access_checks']['astra']
+        self.assertEqual(astra['receipt'], VENDOR_401_RECEIPT)
+        self.assertNotIn('retained', (printed['summary'] + json.dumps(astra)).lower())
+
 
 class TheInputsAreTheCommandsOwnTests(unittest.TestCase):
     """The sentences these tests feed the installer are the command's and jobs.py's own, read back with ast (no Django
@@ -374,3 +404,19 @@ class TheInputsAreTheCommandsOwnTests(unittest.TestCase):
                    if isinstance(node, ast.Constant) and isinstance(node.value, str)}
         self.assertIn(IN_FLIGHT_SENTENCE, strings)  # _single_flight's refusal, before anything is sent
         self.assertIn(" access check did not pass: see the receipt.", strings)  # the f-string's tail
+
+    def test_the_vendor_refusal_s_sentence_is_the_command_s(self):
+        # refutation round 6, R6-SENDS (parity-1): VENDOR_401_ERROR read back from the command's constants. RETAINED
+        # is the clause the adapters end their sentence with (the tail of an f-string in studio/participants/http.py
+        # and in studio/providers/corti.py); the command says KEPT in its place, after NAMED for the code the answer
+        # gives (VENDOR_401_BODY, the captured answer).
+        constants = module_constants(COMMAND, ('RETAINED', 'KEPT', 'NAMED'))
+        for path in (HTTP, CORTI):
+            tails = {node.values[-1].value for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+                     if isinstance(node, ast.JoinedStr) and node.values and isinstance(node.values[-1], ast.Constant)}
+            self.assertIn(constants['RETAINED'], tails, path)
+        self.assertEqual(hashlib.sha256(VENDOR_401_BODY).hexdigest(), VENDOR_401_RECEIPT['response_sha256'])
+        self.assertEqual(json.loads(VENDOR_401_BODY)['error']['code'], 'invalid_api_key')
+        self.assertEqual('OpenAI answered HTTP 401' + constants['NAMED'].format(field='code', value='invalid_api_key')
+                         + constants['KEPT'], VENDOR_401_ERROR)
+        self.assertNotIn('retained', (VENDOR_401_ERROR + json.dumps(VENDOR_401_RECEIPT)).lower())

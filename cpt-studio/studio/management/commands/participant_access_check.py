@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -42,6 +43,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import Error, connection
 
 from studio.participants import LABELS, loop, openai_astra, participant_mode, pricing, registry
+from studio.participants.reading import strict_json
 from studio.providers import get_provider
 from studio.providers.base import ProviderUnavailable
 
@@ -197,5 +199,48 @@ def _receipt(name: str, adapter_version: str, request, exchange, reading) -> dic
             'request_id': exchange.provider_request_id, 'response_id': exchange.response_id,
             'latency_ms': exchange.latency_ms, 'usage': exchange.usage, 'usage_basis': exchange.usage_basis,
             'request_sha256': request.canonical_sha256, 'response_sha256': exchange.response_sha256,
-            'error': exchange.error, 'reading': reading, 'authorization_ref': settings.AUTHORIZATION_REF,
+            'error': _error(exchange), 'reading': reading, 'authorization_ref': settings.AUTHORIZATION_REF,
             'checked_at': datetime.now(timezone.utc).isoformat(timespec='seconds')}
+
+
+# The adapters end their sentence for an answer other than HTTP 200 with RETAINED (studio/participants/http.py post;
+# studio/providers/corti.py _predict, Corti's coding call), and the tool loop gives that sentence as it stands for its
+# first exchange and inside its own, "The tool loop stopped at exchange N: ...", for a later one. RETAINED is true in
+# the pipeline, which keeps the answer (ProviderRun, ProviderExchange), and false here: the access check writes no row,
+# and its receipt holds the body's sha256 and not the body (refutation round 6, parity-1). So the receipt's error says
+# KEPT in its place, after the vendor's own error code, else its error type (NAMED), when the answer's body gives one
+# in VENDOR_ERROR's shape - 1 to 48 lowercase letters and underscores, such as invalid_api_key, model_not_found or
+# authentication_error - and repeats nothing else of the body: never its message (OpenAI's answer to a wrong key
+# quotes part of that key in it), and never a value with a space, a digit, a capital letter, a hyphen or other
+# punctuation. The installer repeats a receipt's error only whole and only up to 300 characters;
+# tests.test_harness2_r6_sends pins the longest sentence written here within that.
+RETAINED = '; the response body is retained.'
+KEPT = "; the access check keeps no copy of the response body (its sha256 is the receipt's response_sha256)."
+NAMED = ' with the error {field} {value}'
+VENDOR_ERROR = re.compile(r'[a-z_]{1,48}')
+
+
+def _error(exchange) -> str:
+    """The receipt's error: the exchange's, as its adapter or the tool loop wrote it, but that an error ending with
+    RETAINED ends instead with _named's words for the answer's body, then KEPT."""
+    error = exchange.error
+    if not (isinstance(error, str) and error.endswith(RETAINED)):
+        return error
+    return error[:-len(RETAINED)] + _named(exchange.response_bytes) + KEPT
+
+
+def _named(raw) -> str:
+    """NAMED for a body that is one JSON object, read strictly (studio.participants.reading.strict_json), whose "error"
+    is an object with a "code" in VENDOR_ERROR's shape, else a "type" in that shape; '' for any other body."""
+    try:
+        body = strict_json(raw)
+    except Exception:  # not UTF-8 JSON, a repeated key, NaN, or no bytes at all: the body names nothing here
+        return ''
+    error = body.get('error') if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return ''
+    for field in ('code', 'type'):
+        value = error.get(field)
+        if isinstance(value, str) and VENDOR_ERROR.fullmatch(value):
+            return NAMED.format(field=field, value=value)
+    return ''
