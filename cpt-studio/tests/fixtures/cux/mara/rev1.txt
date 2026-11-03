@@ -1,0 +1,134 @@
+SYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL
+CEDAR VALE  /  GASTROENTEROLOGY
+GI procedure report
+Upper endoscopy and colonoscopy | Outpatient professional record
+Mara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03
+GI-DEMO-20261103-ME  |  Synthetic test only - not a medical record
+Page 1
+ENCOUNTER AND PRE-PROCEDURE ASSESSMENT
+Patient
+Mara Ellison | 68-year-old woman
+Record / service date
+GI-DEMO-20261103-ME | 2026-11-03
+Endoscopist
+Maya Chen, MD (fictional clinician)
+Setting / billing context
+Outpatient endoscopy; Medicare Part B professional claim
+Upper procedure time
+09:12-09:24
+Lower procedure time
+09:31-10:04
+Indications: Four months of intermittent solid-food dysphagia and post-meal epigastric discomfort; three months of
+intermittent bright-red blood per rectum and a change in bowel habits. No hematemesis, melena, unintentional weight loss
+or persistent vomiting. These examinations were ordered to evaluate active symptoms.
+Preparation: The history and examination were reviewed, informed consent was obtained, and a procedural time-out was
+completed. Stable hypertension is part of the medical history; no separate hypertension management was provided today.
+No antiplatelet or anticoagulant use. No known drug allergies. ASA class II.
+Sedation: Monitored anesthesia care was administered by a separate anesthesia team. Its medications, time and billing
+are documented in a separate record, not in this report.
+UPPER ENDOSCOPY - PERFORMED TODAY
+The upper endoscope was introduced through the mouth and advanced to the second portion of the duodenum. The
+examination was completed without limitation, with adequate visualization and no immediate complication.
+Esophagus: Normal caliber and mucosa. No obstructing lesion, stricture, varices or visible Barrett-type change. Biopsies
+were obtained with cold forceps from the proximal and distal esophagus for histologic evaluation (specimen B).
+Esophageal dilation was considered before the procedure but was not performed because no narrowing was identified.
+Stomach: Mild patchy antral erythema without ulceration or active bleeding. Cold-forceps biopsies were obtained from the
+gastric antrum and body for histology and Helicobacter pylori testing (specimen A). Retroflexion showed no additional
+lesion.
+Duodenum: Bulb and second portion appeared normal. No duodenal biopsy or therapy was performed. No endoscopic
+ultrasound or biliary procedure was performed during this examination.
+Completion: Specimens A and B were retrieved. Estimated blood loss was minimal. Histology is pending.
+
+
+SYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL
+CEDAR VALE  /  GASTROENTEROLOGY
+GI procedure report
+Upper endoscopy and colonoscopy | Outpatient professional record
+Mara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03
+GI-DEMO-20261103-ME  |  Synthetic test only - not a medical record
+Page 2
+COLONOSCOPY - PERFORMED TODAY
+After digital rectal examination, the colonoscope was advanced to the cecum. The appendiceal orifice and ileocecal valve
+were identified and photographed. The terminal ileum was entered for approximately 5 cm and appeared normal; no ileal
+biopsy was taken.
+Extent
+Complete to cecum and terminal ileum
+Preparation quality
+BBPS: right 2, transverse 3, left 3; total 8/9
+Inspection
+Withdrawal inspection: 14 minutes, excluding treatment
+Limitations / complications
+None; no immediate complication
+LESIONS AND INTERVENTIONS
+COL-1 - ascending colon: A 2 mm sessile polyp was completely removed in one bite with jumbo cold biopsy forceps and
+retrieved as specimen C. Snare capture was technically difficult because of its position behind a fold. No snare resection
+was performed on COL-1.
+COL-2 - sigmoid colon: An 8 mm sessile polyp was removed en bloc by cold snare and retrieved as specimen D. Resection
+was complete. No biopsy forceps were used on COL-2.
+Resection-site care: One prophylactic clip was placed at the COL-2 resection site. There was no active bleeding and no
+separate bleeding lesion was treated. Neither lesion required a lifting injection, cautery or ablation.
+Lesion
+Location / size
+Technique actually performed
+Specimen
+COL-1
+Ascending colon
+2 mm
+Jumbo cold biopsy forceps; complete removal in one bite
+C
+COL-2
+Sigmoid colon
+8 mm
+Cold snare; en bloc removal
+D
+COL-1 and COL-2 are different lesions at separate colonic sites. The forceps removal was not a biopsy of, or a completion
+step for, the snare-treated sigmoid lesion. Both specimens were placed in separate labelled containers.
+Other findings: Non-bleeding grade I internal hemorrhoids were seen on rectal retroflexion. The remaining colon appeared
+normal. No additional lesion was sampled or treated. No colonic stricture, mass or active colitis was seen.
+Completion: Both polyps were completely removed and retrieved. Estimated blood loss was minimal. The patient tolerated
+the procedure and was transferred to recovery in stable condition.
+
+
+SYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL
+CEDAR VALE  /  GASTROENTEROLOGY
+GI procedure report
+Upper endoscopy and colonoscopy | Outpatient professional record
+Mara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03
+GI-DEMO-20261103-ME  |  Synthetic test only - not a medical record
+Page 3
+SPECIMEN RECONCILIATION
+Container
+Source
+Material / purpose
+A
+Gastric antrum and body
+Cold-forceps biopsies; histology and H. pylori testing
+B
+Proximal and distal esophagus
+Cold-forceps biopsies; evaluation of dysphagia
+C
+COL-1: ascending colon
+2 mm polyp; jumbo cold biopsy forceps removal
+D
+COL-2: sigmoid colon
+8 mm polyp; cold-snare removal
+POST-PROCEDURE ASSESSMENT
+1. Intermittent solid-food dysphagia without a visible obstructing cause on today's examination; esophageal biopsies
+pending.
+2. Mild antral erythema; gastric biopsies pending. H. pylori infection, atrophic gastritis and intestinal metaplasia are not
+established today.
+3. Two distinct colonic polyps, completely removed by different techniques. Adenoma, dysplasia and malignancy cannot be
+assigned from appearance alone; histology is pending.
+4. Non-bleeding grade I internal hemorrhoids. The source of the intermittent hematochezia has not been definitively
+established.
+HISTORICAL AND PLANNED CARE - NOT SERVICES PERFORMED TODAY
+Historical: An outside upper endoscopy dated 2024-06-12 reportedly showed mild gastric erythema. That examination was
+a prior service, not a second upper endoscopy on 2026-11-03.
+Planned: An EUS appointment for a pancreatic cyst seen on an outside MRI was arranged before this encounter for
+2026-11-17. No EUS, cyst aspiration or ERCP was performed today. No separate cyst-management visit occurred today.
+FOLLOW-UP AND AUTHENTICATION
+Discharge after standard recovery criteria are met. Review pathology with the gastroenterologist in approximately two
+weeks. The surveillance interval will be determined after histology. The patient received routine post-endoscopy
+precautions. No separate office evaluation and management encounter or office-visit time is documented on this date.
+Authenticated: Maya Chen, MD | 2026-11-03 at 10:22
+Synthetic clinician attestation for this fictional test case only.
