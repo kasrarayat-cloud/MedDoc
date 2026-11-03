@@ -120,6 +120,7 @@ UNMOVED = {
     ('R8 D1 N2 attempted, could not be removed', '45378'): HELD,
     ('R8 D1 N3 biopsy attempted, no tissue', '45378'): HELD,
     ('R8 D1 N4 ERCP stent placement failed', '43260'): HELD,
+    ('R8 D2 N10 antral biopsy failed', '43235'): HELD,
 }
 
 
@@ -180,3 +181,40 @@ class FailedActIsNeverReleasedTests(SimpleTestCase):
         item = proposal(run(text, [sel('45380', span(text, 'Cecal biopsies x2.'))]), '45380')
         self.assertEqual(item.status, 'ready')
         self.assertIn('read from its own passage by the routing-era reader', check(item, 'service.status').detail)
+
+
+def acts(text, day=date(2026, 10, 14)):
+    """[(family, kind, status)] of every act the documented-service reader reads."""
+    from studio.gi import services as gi_services
+    inventory = gi_services.build(text, service_date=day, routing=detect.route(text, day))
+    return [(s.family, a.kind, a.status) for s in inventory.services for a in s.acts]
+
+
+class FailedActClauseTests(SimpleTestCase):
+    """D2 (R8 1.3): the clause reader reads a failure word on the act's own predicate - after the mention in its clause,
+    or right before it as its attribute - as a doubt (held, as "attempted" already is), never as an act done; a failure
+    of something else in the sentence leaves the act to its own predicate. HEDGE_WORDS is not widened."""
+
+    def test_d2_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D2 ')
+
+    def test_a_failed_act_is_not_read_as_done(self):
+        for head, kind, line in (
+                (EGD_HEAD, 'biopsy', 'Cold forceps biopsy of the antrum failed.'),
+                (EGD_HEAD, 'biopsy', 'An unsuccessful cold forceps biopsy of the antrum was the only attempt.'),
+                (HEAD + CECUM + '\n', 'snare', 'The hot snare polypectomy of the 9 mm sigmoid polyp failed.'),
+                (HEAD + CECUM + '\n', 'snare', 'Hot snare polypectomy was abandoned.'),
+                (ERCP_HEAD, 'stent', 'Biliary stent placement failed.')):
+            with self.subTest(line):
+                read = [status for _, k, status in acts(head + line + '\n') if k == kind]
+                self.assertNotIn('performed', read)  # read in doubt, or not read as an act at all
+
+    def test_controls_a_failure_of_something_else_leaves_the_act_done(self):
+        for head, kind, line in (
+                (EGD_HEAD, 'biopsy', 'Two cold forceps biopsies of the antrum were taken after brushing had failed.'),
+                (HEAD + CECUM + '\n', 'snare', 'The polyp was removed with a hot snare because cold forceps removal '
+                                               'had failed.'),
+                (EGD_HEAD, 'biopsy', 'Cold forceps biopsies of the antrum were taken for failed medical therapy.')):
+            with self.subTest(line):
+                read = [status for _, k, status in acts(head + line + '\n') if k == kind]
+                self.assertIn('performed', read, acts(head + line + '\n'))

@@ -1940,6 +1940,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
         return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    failed = _failed_act(text, cs, ce, pos, end)
+    if failed:
+        return Reading('uncertain', ('uncertain: ' + failed,))
     hypothetical = _hypothetical(text, cs, ce, pos, end, report=in_today_report or part.kind in ('report', 'section'))
     if hypothetical:
         return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
@@ -1965,6 +1968,25 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+def _failed_act(text: str, cs: int, ce: int, pos: int, end: int) -> str:
+    """The failure word of the act at [pos, end) in its clause [cs, ce), or '' (package P2 READ-HOLD, R8 D2): a failure
+    word (cues.FAILED_ACT: "failed", "unsuccessful", "abandoned") after the mention on its own predicate ("Hot snare
+    polypectomy: unsuccessful." too) - neither the act's own stated predicate ("were taken after brushing had failed"),
+    nor another clause's opener ("because the cold snare had failed"), nor a predicate the word lies inside
+    (_not_on_another_predicate) between them - or right
+    before the mention as its attribute ("an unsuccessful polypectomy": cues.FAILED_ACT_BEFORE, at most three words
+    between, no mark). Read only to hold (the act reads uncertain); HEDGE_WORDS, shared with other readers, is not
+    widened. Bounded: the matches of one clause."""
+    for m in _cues.FAILED_ACT.finditer(text, end, ce):
+        between = text[end:m.start()]
+        if ACT_VERB.search(between) or NEGATION_SCOPE_END.search(between) \
+                or _not_on_another_predicate(text, m.start(), end):
+            continue
+        return m.group(0).lower()
+    before = _cues.FAILED_ACT_BEFORE.search(text, max(cs, pos - 60), pos)
+    return before.group('w').lower() if before else ''
 
 
 # Routing's reading of an item no status wording speaks for (detect.SILENT; validation's checks.SILENT_CUE_PREFIX).

@@ -1095,3 +1095,8 @@ BILIARY_SUBJECT = rx(r'\b(?:common\s+bile\s+duct|bile\s+duct|biliary|CBD|choledo
 UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|ing)?|attempt(?:s|ed|ing)?|"
                 r"could\s+not|couldn['\u2019]t|cannot|can\s+not|unable|without\s+success|no\s+tissue|yield(?:s|ed)?\s+no|"
                 r"not\s+(?:be\s+|been\s+)?(?:obtained|removed|retrieved|placed|achieved|successful|deployed|completed))\b")
+# A failure word of the act's own predicate (services.read_clause, R8 D2): after the mention in its clause ("Cold forceps
+# biopsy of the antrum failed.") or right before it as its attribute ("an unsuccessful polypectomy"). It reads the act
+# uncertain - held, as "attempted" already is - never performed and never denied.
+FAILED_ACT = rx(r'\b(?:failed|unsuccessful(?:ly)?|abandoned)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>failed|unsuccessful|abandoned)[ \t]+(?:[\w-]+[ \t]+){0,3}$')

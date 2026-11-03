@@ -43,6 +43,8 @@ R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPl
             'completed.\n')
 R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
 R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
+R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+          'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
            'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla.\nDeep biliary cannulation was '
            'achieved.\n')
@@ -335,6 +337,11 @@ CASES = {
         _r8(R8_ERCP, 'Biliary stent placement failed.'),
         [('43260', 'Deep biliary cannulation was achieved.', 'done'),
          ('43274', 'Biliary stent placement failed.', 'not_done')]),
+    # D2: a failed act read as performed by the clause reader
+    'R8 D2 N10 antral biopsy failed': (
+        _r8(R8_EGD, 'A small nodule was seen in the gastric antrum.', 'Cold forceps biopsy of the antrum failed.'),
+        [('43235', 'The endoscope was advanced to the second part of the duodenum.', 'done'),
+         ('43239', 'Cold forceps biopsy of the antrum failed.', 'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}
