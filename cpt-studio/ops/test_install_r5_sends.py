@@ -455,3 +455,31 @@ class TheAccessCheckRequestCountTests(unittest.TestCase):
             'Astra and for Fable one run of the tool loop, one real, paid request per exchange and at most '
             f'`PARTICIPANT_MAX_EXCHANGES` ({self.exchanges()})), or from the first live send. A check that fails '
             'leaves the pair installed: retrying it means running `app` again, which parks and replaces the pair.'))
+
+    def test_install_md_s_app_phase_gives_the_count(self):
+        """Refutation round 7, parity-2: the app phase's own paragraph, which R6-SENDS named, still said "one request
+        for Corti" after the integration corrected four of the five places it named; Corti's adapter sends its OAuth
+        token request before its one coding request."""
+        said = ' '.join((APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8').split())
+        self.assertIn('`manage participant_access_check --participant <corti|astra|fable>`: one coding request for '
+                      'Corti (after the OAuth token request its adapter sends first), and for Astra or Fable one run of '
+                      "the pipeline's tool loop, one request per exchange and at most `PARTICIPANT_MAX_EXCHANGES` "
+                      f'({self.exchanges()}), whose receipt counts its exchanges.', said)
+        self.assertNotIn('one request for Corti', said)
+
+    def test_the_command_s_docstring_and_help_give_the_count(self):
+        """Refutation round 7, parity-2: the command's docstring and its --help said "one minimal synthetic request"
+        and named no request count for Corti."""
+        tree = ast.parse(COMMAND.read_text(encoding='utf-8'))
+        doc = ' '.join(ast.get_docstring(tree).split())
+        self.assertTrue(doc.startswith("Prove one participant's live access with one minimal synthetic request - for "
+                                       'Corti one coding request, after the OAuth token request its adapter sends '
+                                       'first; for Astra and Fable, one run of the pipeline\'s tool loop, one request '
+                                       'per exchange'), doc)
+        (command,) = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'Command']
+        (value,) = [node.value for node in command.body if isinstance(node, ast.Assign)
+                    and [target.id for target in node.targets if isinstance(target, ast.Name)] == ['help']]
+        self.assertEqual(ast.literal_eval(value), (
+            'Send one minimal synthetic request (for Corti one coding request, after its OAuth token request; for Astra '
+            'and Fable, one tool-loop run) to one participant and print a JSON receipt (no secret, no database '
+            'write).'))

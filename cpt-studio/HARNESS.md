@@ -15,7 +15,9 @@ adversarial pass are held to the INVARIANTS below; a change to one is a change t
 | Fable | Anthropic Messages API, `POST https://api.anthropic.com/v1/messages` | `claude-fable-5-1` | `fable` | `fable` |
 
 **After the three participants:**
-- authoritative references are retrieved for every code any participant proposed;
+- ~~authoritative references are retrieved for every code any participant proposed;~~ (superseded, round 7, d14-1:
+  authoritative references are retrieved for the proposal provider's codes; a participant's code is never a proposal in
+  this release, the session's D14, and is never traced);
 - the proposals are validated against the documented services and the CMS rules;
 - disagreements are reconciled by source evidence and rules, never by counting votes.
 
@@ -165,7 +167,10 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   - The reviewer sees the contradiction on the card and in the reports.
 - **Missing services.** A participant service documented as `performed` with located evidence, in a family the
   documented-service inventory reads no performed service of, makes coding completeness `incomplete`, with the
-  participant's quote.
+  participant's quote. The reason names the inventory's own not-done reading of that family (negated, cancelled,
+  planned or historical) only where routing reads that family with that status inside the quoted passage (round 6,
+  negation-5; round 7, display-1: never a reading of another passage); otherwise it says the documented-service
+  reading does not read it as performed.
 - **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 
@@ -175,7 +180,13 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   (prefetched, as today, now for the union).
 - **Passages.** The passages that govern those facts are retrieved from `ReferencePassage`. These are verbatim CMS text
   with source key, release, effective dates, page or section, and sha256.
-- **Trace.** Each lookup and each passage is recorded as a retrieval trace on the assessment (`Assessment.retrieval`).
+- **Trace.** Each lookup and each passage is recorded as a retrieval trace on the assessment (`Assessment.retrieval`),
+  for the proposal provider's codes only (round 7, d14-1: `jobs._retrieval` traced every prefetched code a proposal
+  row carried, so a participant's alternative was traced beside Corti's codes - its endoscopy-family rule and passages
+  were listed under Corti's base code, which its own check said shared no endoscopic base with another selected code,
+  and reference validation counted the alternative as a code checked against the CMS reference files, d14-2). The
+  lookup stays prefetched for the union, which the engine's checks read; with no participant configured the traced
+  codes are exactly the prefetched ones (I1).
 - **A retrieval that fails** (refutation round 1, parity-1) never stops the assessment, which is recorded as the engine
   made it (I1, I10). Its retrieval is one entry `{'code': '', 'failed': True, 'notes': [...]}`
   (`jobs.retrieval_failure`) whose note, CPT Studio's own sentence, says reference validation failed; the exception's

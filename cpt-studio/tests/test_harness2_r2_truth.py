@@ -133,12 +133,23 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
         block = self.block(encounter_id)  # the control: the documented date's release applied
-        self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('done', '', 3))
+        # moved by refutation round 7 (d14-1, d14-2): Corti's 45385 and 45380 are checked; Fable's peer-review 45378 is
+        # a participant's alternative (D14), never traced, so never counted as a code checked (it was 3)
+        self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('done', '', 2))
         self.assertTrue(block['passages'] and block['sources'], block)
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
                                    {'service_date': '2026-10-20'}).status_code, 201)
         drain()
-        self.assertNoCodeChecked(encounter_id, NO_SOURCE_NO_DATE)
+        # moved by refutation round 7 (d14-2): the member's date conflicts with the document's, so Corti's request is
+        # held and Corti selects nothing; every code listed is a participant's alternative (D14), never traced, so
+        # nothing was checked and the row reads not run (it read 'not_verified' with the no-date reason, from the
+        # alternatives' own traces - the class d14-2 found)
+        self.assertEqual(self.block(encounter_id), {'state': 'not_run', 'detail': '', 'codes_checked': 0,
+                                                    'passages': 0, 'sources': [], 'not_connected': NOT_CONNECTED})
+        listed = self.encounter(encounter_id).current_assessment.proposals.all()
+        self.assertTrue(listed)
+        self.assertEqual({(p.bucket, (p.support or {}).get('origin')) for p in listed},
+                         {('alternative', 'participant')})
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')

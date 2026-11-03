@@ -363,9 +363,11 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
                   'Alternatives cannot be approved.')
         self.assertEqual((alternative['proposed_by'], alternative['phases'], alternative['listed_by'],
                           alternative['exclusion_reason']), (['astra'], {'astra': 'independent'}, ['fable'], reason))
+        # moved by refutation round 7 (display-5): a participant's verbatim quote is never called an evidence passage
+        # (it was 'Informational only. 1 exact evidence passage.')
         self.assertEqual(alternative['rationale'],
                          f'Proposed by Astra (independent participant); not added as a proposal: {HCPCS_WHY}. {apart} '
-                         'Informational only. 1 exact evidence passage.')
+                         'Informational only. 1 passage of the document quoted verbatim.')
         txt = self.download(encounter_id)
         self.assertEqual(_block(_section(txt, reports.ALTERNATIVES_TITLE), '  - G0121 · '), [
             f'  - G0121 · Service outside the GI profiles — proposed by Astra, not added as a proposal; listed by Fable '

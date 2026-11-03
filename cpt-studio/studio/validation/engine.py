@@ -164,7 +164,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
-    harness = _Harness(participants, text, pages) if participants else None
+    harness = _Harness(participants, text, pages, routing) if participants else None
     # Whether any answer is read: the proposal provider's, or an independent participant's reading (I10: the proposal
     # provider's failure blocks only itself). With no participant it is exactly "the provider answered".
     answered = response is not None or (harness is not None and harness.answered)
@@ -3047,9 +3047,11 @@ class _Harness:
       them, as notes; an answer is recorded and decides nothing by itself (only a reviewer's confirmation of a
       candidate is read, on the dormant path: _Confirmations; HARNESS.md 12.10)."""
 
-    def __init__(self, participants: Sequence[ParticipantInput], text: str, pages):
+    def __init__(self, participants: Sequence[ParticipantInput], text: str, pages,
+                 routing: Optional[RoutingResult] = None):
         self.inputs = _usable_inputs(participants)
         self.text, self.pages = text, pages
+        self.routing = routing  # where routing read each family's mentions (missing: what a quote is read as)
         self.readings = {p.provider: p.reading for p in self.inputs if p.state == 'read'}
         self.peers = {p.provider: p.peer for p in self.inputs if p.state == 'read' and p.peer_state == 'read'}
         self.answered = bool(self.readings)
@@ -3234,8 +3236,11 @@ class _Harness:
             profile_version=profile_version, status='informational',
             exclusion_reason=f'{exclusion} Alternatives cannot be approved.',
             reinstatable=False, provider_display='', evidence=kept,
+            # a participant's verbatim quote is never called evidence for the code (refutation round 7, display-5: "1
+            # exact evidence passage" was said of "Hot snare polypectomy failed." beside this reason; the owner's D10/D12
+            # directive: a quotation existing verbatim must not itself establish clinical support)
             rationale=(f'{rationale} Informational only.'
-                       + (f' {checks.plural(len(kept), "exact evidence passage")}.' if kept else '')),
+                       + (f' {checks.plural(len(kept), "passage")} of the document quoted verbatim.' if kept else '')),
             checks=found, modifier_considerations=(), units=1,
             fingerprint=_fingerprint(code, family, profile_version, kept, found, {}, 1, 'informational'),
             support={'origin': 'participant'})
@@ -3538,11 +3543,16 @@ class _Harness:
         """The services a participant reads as performed, or as started and not completed (MISSING_STATUSES), quoting
         the document verbatim, of a kind of which ``inventory`` reads no performed service: one per participant and
         family, the first quote of its first. Where ``inventory`` reads a service of that kind as not done at this
-        encounter (checks.NEGATIVE: negated, cancelled, planned or historical), the reason names that reading
-        ('read_as', which the participants.services check names too), never that the documented-service reading merely
-        "does not read as performed" it (refutation round 6, R6-MEANING, negation-5: Astra's "performed" upper
-        endoscopy, quoting only "An upper endoscopy was not performed.", beside the inventory's own "upper endoscopy
-        (negated)"). Coding completeness is incomplete beside each all the same (complete): the safety net stays."""
+        encounter (checks.NEGATIVE: negated, cancelled, planned or historical) and routing reads that family with that
+        status inside the quoted passage, the reason names that reading ('read_as', which the participants.services
+        check names too), never that the documented-service reading merely "does not read as performed" it (refutation
+        round 6, R6-MEANING, negation-5: Astra's "performed" upper endoscopy, quoting only "An upper endoscopy was not
+        performed.", beside the inventory's own "upper endoscopy (negated)"). A not-done reading of another passage is
+        never attached to the quote (refutation round 7, display-1: the inventory's planned upper endoscopy, read from
+        "Plan: Upper endoscopy in 6 months.", was named beside Astra's quote of "The stomach and duodenum were also
+        examined and were normal.", in the report a reviewer signs): there, and where routing reads no mention in the
+        quote, the reason says what is true of every such case, that the documented-service reading does not read it as
+        performed. Coding completeness is incomplete beside each all the same (complete): the safety net stays."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3560,10 +3570,13 @@ class _Harness:
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
                     # the inventory's own not-done reading of a service of that kind, in its order: 'the upper
-                    # endoscopy as negated', 'the colonoscopy as planned and as historical'
+                    # endoscopy as negated', 'the colonoscopy as planned and as historical' - only where routing reads
+                    # that family with that status inside the quote (refutation round 7, display-1)
+                    inside = self._read_inside(good[0])
                     read = {}
                     for documented in inventory.services:
-                        if documented.family in families and documented.status in checks.NEGATIVE:
+                        if documented.family in families and documented.status in checks.NEGATIVE \
+                                and (documented.family, documented.status) in inside:
                             states = read.setdefault(reconcile.service_label(documented), [])
                             if documented.status not in states:
                                 states.append(documented.status)
@@ -3582,6 +3595,14 @@ class _Harness:
                                                                                      'participants\' services)'})
             self._missing = out
         return self._missing
+
+    def _read_inside(self, span) -> set:
+        """(family, status) of each mention routing reads inside ``span`` (half-open, the revision's text); empty
+        without a routing result, so that nothing is named (missing)."""
+        if self.routing is None:
+            return set()
+        return {(mention.family, mention.status) for finding in self.routing.findings for mention in finding.mentions
+                if span.start <= mention.span.start and mention.span.end <= span.end}
 
     def complete(self, complete: dict, inventory) -> None:
         """Coding completeness, incomplete beside each service only a participant reads (recorded under

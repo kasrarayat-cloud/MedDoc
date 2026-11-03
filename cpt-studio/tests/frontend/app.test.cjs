@@ -3068,7 +3068,9 @@ test('R6-ROW falsegreen-2: an alternative a peer review proposed with a located 
 // every code listed is a participant's, the empty-selection panel never says the provider proposed them.
 test('R6-MEANING D14: the panel never says the provider proposed the participants\' alternatives', () => {
   const theirs = { proposals: [{ bucket: 'alternative', support: { origin: 'participant' } }] };
-  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below is an independent participant\'s, offered only as an alternative.');
+  // moved by refutation round 7 (display-2): who gave them, never "independent" - a code first given in peer review
+  // never is (it was "Each code listed below is an independent participant's, offered only as an alternative.")
+  assert.equal(app.emptySelectionCopy(theirs), 'No code is selected for approval. Each code listed below was given by Astra or Fable, not the provider, and is offered only as an alternative.');
   assert.equal(app.emptySelectionCopy(theirs).includes('The provider proposed'), false);
   // controls: a provider alternative or exclusion beside them, or alone, reads as before
   const said = 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
@@ -3105,4 +3107,59 @@ test('R6-MEANING ownership-5: a service\'s own passages are never labelled as sh
   const unchecked = chips({ status: 'not_applicable', reason: 'act_missing', acts: [], supporting: [], unrelated: [0], source });
   assert.ok(unchecked.includes('Passages of the documented service (not checked against the coded act)'));
   assert.equal(unchecked.includes('does not show the coded act'), false);
+});
+
+// refutation round 7
+// display-6: a provider's passage that a checked support says does not show the coded act (support.unrelated, where its
+// source passages are the act's own) is labelled so on the chip and was titled "Evidence for <code>" in the source
+// panel; it is now titled as the chip labels it, by one rule (passagesNotShowingTheAct). A service-only support's cited
+// passage, and the act's own source passages, keep their titles.
+// parity-1: with no assessment of the current revision (the Clarification row's own test), the Final status row's note
+// said "Assessed from the frozen first readings; no peer review was read by this assessment."; it now says none was made
+// (or, while a stage runs, that the first assessment comes first). The pipeline's own states are pinned in
+// tests/test_harness2_r7.py.
+
+function r7Titles(doc) {
+  const html = app.reviewView(doc, app.documentLayout(doc), 'codes', true);
+  return [...html.matchAll(/class="evidence-mark" data-evidence="[^"]*" data-keys="[^"]*" title="([^"]*)">([^<]*)<\/button>/g)].map(match => [match[2], match[1]]);
+}
+
+test('R7 display-6: a provider passage the chip says does not show the coded act is never titled evidence for the code', () => {
+  const text = 'Procedure: Colonoscopy\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nThe polyp was removed with a hot snare.\n';
+  const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
+  const snare = 'The polyp was removed with a hot snare.';
+  const at = quote => ({ start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, text: quote, exact: true });
+  const doc = support => ({ revision: { text, pages: [] }, assessment: { proposals: [{ id: 'p1', key: 'sel:0', bucket: 'selected', status: 'ready', code: '45385', evidence: [at(seen)], support }] } });
+  const matched = { status: 'warn', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting: [], unrelated: [0], source: [at(snare)] };
+  // the finding: [seen, 'Evidence for 45385'] beside the chip "cited by the provider; does not show the coded act"
+  assert.deepEqual(r7Titles(doc(matched)), [[seen, 'Passage the provider cited for 45385, which does not show the coded act'], [snare, 'Evidence for 45385']]);
+  assert.ok(app.evidenceChips(doc(matched).assessment.proposals[0], { unlocated: new Set() }).includes(`“${seen}” — cited by the provider; does not show the coded act`));
+  // the same with no acts list (the elsewhere path), which the chip labels the same way
+  const elsewhere = { status: 'warn', supporting: [], unrelated: [0], source: [at(snare)] };
+  assert.deepEqual(r7Titles(doc(elsewhere))[0], [seen, 'Passage the provider cited for 45385, which does not show the coded act']);
+  // controls: a cited passage that shows the act (not unrelated) keeps "Evidence for"; a service-only support's cited
+  // passage is only "cited by the provider" on its chip and keeps its title; an unchecked support is as before
+  assert.deepEqual(r7Titles(doc({ ...matched, unrelated: [] }))[0], [seen, 'Evidence for 45385']);
+  const own = { status: 'warn', reason: 'own_passage', acts: [], supporting: [], unrelated: [0], source: [at(snare)] };
+  assert.deepEqual(r7Titles(doc(own)), [[seen, 'Evidence for 45385'], [snare, 'Passage of the documented service for 45385']]);
+  const unchecked = { status: 'not_applicable', reason: 'act_missing', acts: [], supporting: [], unrelated: [0], source: [at(snare)] };
+  assert.deepEqual(r7Titles(doc(unchecked)), [[seen, 'Evidence for 45385'], [snare, 'Passage of the documented service for 45385, not checked against the coded act']]);
+});
+
+test('R7 parity-1: with no assessment of this revision the Final status row never says an assessment was made', () => {
+  const doc = fixture(H2_FINAL);
+  const note = payload => [...harnessRow(render(payload), 'final').matchAll(/<small class="check-source">([^<]*)<\/small>/g)].map(match => textOf(match[1]));
+  // the finding: ['Assessed from the frozen first readings; no peer review was read by this assessment.']
+  assert.deepEqual(note(r6Unassessed(doc, false)), ['No assessment of this revision was made.']);
+  assert.deepEqual(note(r6Unassessed(doc, true)), ['The peer reviews and the second assessment follow the first assessment.']);
+  // and before any assessment at all: no assessment served, the phase 1
+  const none = { ...doc, assessment: null, harness: { ...doc.harness, phase: 1, clarification: { open: 0 } } };
+  assert.deepEqual(note({ ...none, state: 'stopped', pipeline: { ...doc.pipeline, busy: false } }), ['No assessment of this revision was made.']);
+  // controls: the assessed revision's notes are as before
+  assert.deepEqual(note(doc), ['Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.']);
+  const first = { ...doc, harness: { ...doc.harness, phase: 1 } };
+  assert.deepEqual(note({ ...first, pipeline: { ...doc.pipeline, busy: false } }), ['Assessed from the frozen first readings; no peer review was read by this assessment.']);
+  // and Corti alone draws no note
+  const alone = { ...doc, harness: { ...doc.harness, phase: 0, participants: doc.harness.participants.map(row => ({ ...row, peer: null })) } };
+  assert.deepEqual(note({ ...alone, assessment: null, harness: { ...alone.harness, clarification: { open: null } } }), []);
 });

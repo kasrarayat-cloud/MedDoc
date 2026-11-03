@@ -1993,11 +1993,16 @@ RETRIEVAL_LOAD_FAILED_UNCHECKED = ("Reference validation failed: CPT Studio coul
                                    "informs the reviewer and decides no status, so the assessment stands as made.")
 
 
-def _retrieval(result, service_date, reference, prefetched):
+def _retrieval(result, service_date, reference, provider_codes):
     """The retrieval traces (HARNESS.md 5, Assessment.retrieval) for the codes of the assessment's proposals that the
-    checks' own lookup holds - every code a proposal can be decided on; a provider's informational alternatives were
-    never looked up - from that same lookup, with the CMS passages that govern its facts, read here in the parent, which
-    has the database. [] only when no proposal has a looked-up code.
+    proposal provider selected (``provider_codes``: its first and its bounded second review's selections) - every code a
+    proposal can be decided on; a provider's informational alternatives were never looked up - from the checks' own
+    lookup, with the CMS passages that govern its facts, read here in the parent, which has the database. [] only when
+    no proposal has such a code. A participant's code is never traced (refutation round 7, d14-1): in this release it is
+    never a proposal (D14), and tracing it beside the provider's codes gave a provider's code CMS endoscopy-family rules
+    and passages that pair it with a code no proposal carries, and counted that code as checked against the CMS
+    reference files (d14-2). With no participant configured, ``provider_codes`` is exactly what the lookup was
+    prefetched for, so the traces are as before (I1).
 
     A retrieval that fails never stops the assessment (I1, I10; refutation round 1, parity-1: a Corti code ending in a
     superscript digit raised here and the encounter was left with no assessment at all). Retrieval only informs the
@@ -2006,7 +2011,7 @@ def _retrieval(result, service_date, reference, prefetched):
     CMS reference file applied to the service date - so that the codes' checks read the CMS facts - is the engine's own
     record of the lookup (``result.reference_sources``), read here in memory, never asked of the database again. The
     entry names the step that failed: loading the stored passages, or the retrieval (refutation round 4, truth-5)."""
-    codes = sorted({proposal.code for proposal in result.proposals} & set(prefetched))
+    codes = sorted({proposal.code for proposal in result.proposals} & set(provider_codes))
     if not codes:
         return []
     step = RETRIEVAL_STEP_LOAD
@@ -2098,8 +2103,8 @@ def stage_assess(job):
     inputs = tuple(item for item, _ in read)
     proposed = {code.code for item in inputs if item.reading is not None for code in item.reading.codes}
     proposed |= {code.code for item in inputs if item.peer is not None for code in item.peer.additional_codes}
-    prefetched = tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized)) | proposed))
-    reference = prefetched_lookup(prefetched)
+    provider_codes = tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized))))
+    reference = prefetched_lookup(tuple(sorted(set(provider_codes) | proposed)))
     service_date = context_service_date(context)
     confirmed = confirmed_findings(revision) if names else ()
     data, result = _bounded(
@@ -2108,7 +2113,7 @@ def stage_assess(job):
         tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
         confirmed, seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
-    retrieval = _retrieval(result, service_date, reference, prefetched)
+    retrieval = _retrieval(result, service_date, reference, provider_codes)  # never a participant's (r7, d14-1)
     records = {record['name']: record for _, record in read}
     if names and mode != AGAIN:  # HARNESS.md 12.3: assess #1 and #2 record every frozen phase-1 output they read
         frozen = _frozen(revision, run, records)

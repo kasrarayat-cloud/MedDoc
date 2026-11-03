@@ -1,5 +1,6 @@
-"""Prove one participant's live access with one minimal synthetic request - for Astra and Fable, one run of the
-pipeline's tool loop, one request per exchange (HARNESS.md 8; checklist item 1.3).
+"""Prove one participant's live access with one minimal synthetic request - for Corti one coding request, after the
+OAuth token request its adapter sends first; for Astra and Fable, one run of the pipeline's tool loop, one request per
+exchange (HARNESS.md 8; checklist item 1.3).
 
 Run it where the participant's credentials are mounted (the worker):
 
@@ -62,8 +63,8 @@ NOTE = ('SYNTHETIC TEST DOCUMENT - not a real patient. Written for a CPT Studio 
 
 
 class Command(BaseCommand):
-    help = ('Send one minimal synthetic request (for Astra and Fable, one tool-loop run) to one participant and print a '
-            'JSON receipt (no secret, no database write).')
+    help = ('Send one minimal synthetic request (for Corti one coding request, after its OAuth token request; for Astra '
+            'and Fable, one tool-loop run) to one participant and print a JSON receipt (no secret, no database write).')
 
     def add_arguments(self, parser):
         parser.add_argument('--participant', required=True, choices=PARTICIPANTS)

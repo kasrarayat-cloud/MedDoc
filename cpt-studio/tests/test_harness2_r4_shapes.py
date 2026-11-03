@@ -185,7 +185,9 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.assertEqual(proposals, [('45385', 'selected', 'primary'), ('45380', 'alternative', 'participant')])
         self.assertEqual([(row['code'], row['bucket']) for row in trace['reconciliation']],
                          [('45385', 'selected'), ('45380', 'alternative')])
-        self.assertEqual(sorted(entry.get('code') for entry in trace['retrieval']), ['45380', '45385'])
+        # moved by refutation round 7 (d14-1): only the proposal provider's codes are traced; the participant's 45380,
+        # never a proposal (D14), is never looked up for one (it was ['45380', '45385'])
+        self.assertEqual(sorted(entry.get('code') for entry in trace['retrieval']), ['45385'])
         summary = next(check['detail'] for check in detail['assessment']['encounter_checks']
                        if check['id'] == 'participants.summary')
         self.assertIn('Astra (OpenAI, gpt-6-astra) read the document. It proposed 1 code (45385), 1 quoting the '

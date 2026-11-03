@@ -770,8 +770,10 @@ def _assessment_blockers(encounter, assessment):
                 # A participant's code is never a proposal (refutation round 6, the session's D14): where every code
                 # listed is a participant's alternative, the provider proposed none of them, so this never says it did
                 # - said as the panel says it (app.js emptySelectionCopy; found at the integration of R6-MEANING).
-                what = ("No code is selected for approval: each code listed is an independent participant's, offered "
-                        'only as an alternative')
+                # Who gave them, never "independent": a code first given in peer review is never independent
+                # (refutation round 7, display-2; HARNESS.md 11.1).
+                what = ('No code is selected for approval: each code listed was given by Astra or Fable, not the '
+                        'provider, and is offered only as an alternative')
             elif origins:
                 what = (f'No code is selected for approval: the {"response that was read" if unread else "provider"} '
                         'proposed only codes that were excluded or offered as alternatives')

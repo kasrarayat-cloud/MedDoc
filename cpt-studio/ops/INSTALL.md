@@ -213,7 +213,8 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   participant in turn - Corti first when `--provider-mode live`, then Astra and
   Fable - is checked once by
   `manage participant_access_check --participant <corti|astra|fable>`: one
-  request for Corti, and for Astra or Fable one run of the pipeline's tool loop,
+  coding request for Corti (after the OAuth token request its adapter sends
+  first), and for Astra or Fable one run of the pipeline's tool loop,
   one request per exchange and at most `PARTICIPANT_MAX_EXCHANGES` (4), whose
   receipt counts its exchanges. Each runs in a
   one-shot with the worker's mount and network for that participant: its

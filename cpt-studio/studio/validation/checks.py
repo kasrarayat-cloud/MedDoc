@@ -2528,11 +2528,16 @@ PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
 # Since the session's D14 (refutation round 6, R6-MEANING) a code only a participant gave is never a proposal and no
 # reader reads it, so the sentence that every code a participant proposes "is judged by CPT Studio's own readers, with
 # exact evidence, by the same rules as the proposal provider's" was false of it (found at the integration of
-# R6-MEANING): it says what the engine does (HARNESS.md I3, as amended for D14).
-PARTICIPANTS_NEVER_DECIDE = ('A participant never decides a status and agreement never promotes a code: a code the '
-                             'proposal provider also proposed is judged by CPT Studio\'s own readers on the provider\'s '
-                             'passages alone; any other code a participant gives is listed as an alternative and never '
-                             'added as a proposal; and a participant\'s questions are notes that never block.')
+# R6-MEANING): it says what the engine does (HARNESS.md I3, as amended for D14). Refutation round 7 (d14-3,
+# display-3) found that sentence still false twice: of a code the provider proposed and CPT Studio excluded for scope or
+# evidence, which engine._Harness.merge lists as the participant's alternative (it carries only a decidable proposal's
+# code), and of a code in no code's shape, which is counted and never listed. Each clause is now the engine's own rule.
+PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's "
+                             'code that the proposal provider also proposed, in scope and with an exact passage, is '
+                             "recorded on that proposal, which CPT Studio's own readers judge on the provider's passages "
+                             "alone; any other code a participant gives in a CPT or HCPCS code's shape is listed as an "
+                             'alternative and never added as a proposal, and one in neither shape is counted and never '
+                             "listed; and a participant's questions are notes that never block.")
 
 
 def participants_summary_check(sentences: Sequence[str]) -> Check:

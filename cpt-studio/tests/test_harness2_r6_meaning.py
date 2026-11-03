@@ -10,7 +10,8 @@ verified in meaning-r6/results.json), on the findings' own inputs:
   reason, so no participant's code is ever selected or ready, counts as covering a documented act, makes another code
   included or clears an unresolved item; Corti's proposals are assessed exactly as with no participant configured;
 - negation-5: a service only a participant reads as performed is worded with the documented-service reading's own
-  not-done reading of that family where there is one, in the completeness reason and in the check;
+  not-done reading of that family where CPT Studio reads it inside the quoted passage (refutation round 7, display-1:
+  never a reading of another passage), in the completeness reason and in the check;
 - ownership-5: the page labels the source passages as showing the coded act only where they are the act's own.
 
 The engine classes run the real routing, inventory and engine (tests.test_harness_engine's helpers); the pipeline
@@ -506,7 +507,10 @@ class D14PipelineTests(MeaningCase):
         reason = json.dumps(D14_REASON)
         row = browser(f'visible(page()).split("\\n").filter(line => line.includes({reason})).join("\\n")', detail)
         self.assertIn(D14_REASON, row)
-        self.assertFalse(any('Ready for review' in line and '45385' in line for line in self.page_lines(detail)))
+        # card-scoped (refutation round 7, falsegreen-3): the page draws a card's badge and its code on separate lines,
+        # so the per-line check this replaces could never fail
+        self.assertEqual(browser('cards(page()).map(visible).filter(card => card.split("\\n").includes("45385") '
+                                 '&& card.includes("Ready for review")).length', detail), 0)
         # the reports: listed under ALTERNATIVES, never selectable, and never among the selections
         draft = self.download(encounter_id, 'draft', 'txt')
         listed = [line for line in draft.splitlines() if '45385' in line and 'never selectable' in line]
@@ -572,8 +576,10 @@ class D14PipelineTests(MeaningCase):
         self.assertFalse(detail['readiness']['reviewed'])
         # the panel says whose the listed code is, never that the provider proposed it (Corti selected nothing)
         lines = self.page_lines(detail)
-        self.assertIn("No code is selected for approval. Each code listed below is an independent participant's, "
-                      'offered only as an alternative.', lines)
+        # moved by refutation round 7 (display-2): who gave it, never "independent" (it was "Each code listed below is
+        # an independent participant's, offered only as an alternative.")
+        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable, not the '
+                      'provider, and is offered only as an alternative.', lines)
         self.assertFalse(any('The provider proposed' in line for line in lines), lines)
         self.assert_d14(text, ['45385'], fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
 
@@ -598,8 +604,9 @@ NEGATED_REASON = ('Astra reads a performed upper endoscopy where the documented-
 
 class MissingServiceWordingTests(SimpleTestCase):
     """_Harness.missing: the reason, and the participants.services check that follows it, name the inventory's own
-    negated, planned, historical or cancelled reading of the service's family where there is one; coding completeness
-    stays incomplete beside it (the safety net)."""
+    negated, planned, historical or cancelled reading of the service's family where routing reads it inside the quoted
+    passage, and never a reading of another passage (refutation round 7, display-1); coding completeness stays
+    incomplete beside it (the safety net)."""
 
     def test_n11_a_service_the_inventory_reads_as_negated(self):
         text = doc(COLON, NO_EGD)
@@ -718,8 +725,10 @@ class EvidenceChipLabelTests(MeaningCase):
 
 # --- the integration of R6-MEANING (its NEEDS 1): the readiness blocker where every code listed is a participant's -----
 
-PARTICIPANTS_ONLY = ("No code is selected for approval: each code listed is an independent participant's, offered only "
-                     'as an alternative')
+# moved by refutation round 7 (display-2): a code first given in peer review is never independent, so the blocker says
+# who gave the codes (it was "each code listed is an independent participant's, offered only as an alternative")
+PARTICIPANTS_ONLY = ('No code is selected for approval: each code listed was given by Astra or Fable, not the provider, '
+                     'and is offered only as an alternative')
 
 
 class D14BlockerTests(MeaningCase):
@@ -769,7 +778,7 @@ class D14BlockerTests(MeaningCase):
                                 for p in proposals(detail)),
                          [('45385', 'alternative', 'participant'), ('G0121', 'excluded', 'primary')])
         self.assert_blocker(encounter_id, 'No code is selected for approval: the provider proposed only codes that were '
-                            'excluded or offered as alternatives', 'independent participant')
+                            'excluded or offered as alternatives', 'given by Astra or Fable')
 
 
 # --- the integration of R6-MEANING (its NEEDS 2): the source panel's highlight title is ownership-5's label ------------
@@ -845,10 +854,13 @@ class SourceHighlightTitleTests(MeaningCase):
 
 # --- the integration of R6-MEANING: participants.summary's closing sentence -------------------------------------------
 
-NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a code the proposal provider "
-                "also proposed is judged by CPT Studio's own readers on the provider's passages alone; any other code a "
-                "participant gives is listed as an alternative and never added as a proposal; and a participant's "
-                'questions are notes that never block.')
+# moved by refutation round 7 (d14-3, display-3): each clause is the engine's own rule - a provider code excluded for
+# scope or evidence carries no participant's code, and a code in no code's shape is counted, never listed
+NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
+                'proposal provider also proposed, in scope and with an exact passage, is recorded on that proposal, which '
+                "CPT Studio's own readers judge on the provider's passages alone; any other code a participant gives in a "
+                "CPT or HCPCS code's shape is listed as an alternative and never added as a proposal, and one in neither "
+                "shape is counted and never listed; and a participant's questions are notes that never block.")
 SAME_RULES = "by the same rules as the proposal provider's"
 
 

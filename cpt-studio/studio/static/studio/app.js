@@ -757,16 +757,29 @@ function serviceOnlySupport(proposal) {
   return supportChecked(proposal) && Array.isArray(acts) && !acts.length && proposal?.support?.reason !== 'service';
 }
 
+// The provider's passages (their indexes) that a checked support says do not show the coded act (support.unrelated),
+// where its source passages are the act's own (not serviceOnlySupport): the chip says "cited by the provider; does not
+// show the coded act" (evidenceChips), and the source panel titles them so too, never "Evidence for <code>" (refutation
+// round 7, display-6: a Ready 45385 whose cited "A 9 mm pedunculated polyp in the sigmoid colon was seen." was titled
+// "Evidence for 45385" beside that chip). A service-only support's unrelated passages are only "cited by the provider".
+function passagesNotShowingTheAct(proposal) {
+  const unrelated = proposal?.support?.unrelated;
+  return new Set(supportChecked(proposal) && !serviceOnlySupport(proposal) && Array.isArray(unrelated) ? unrelated : []);
+}
+
 function documentLayout(doc) {
   const spans = [];
   const codes = new Map();
   const unchecked = new Set();
   const services = new Set();
+  const cited = new Set();
   for (const proposal of proposalsIn(doc.assessment, 'selected')) {
+    const notTheAct = passagesNotShowingTheAct(proposal);
     (proposal.evidence || []).forEach((evidence, index) => {
       const key = `${proposal.id}:${index}`;
       spans.push({ ...evidence, key });
       codes.set(key, proposal.code);
+      if (notTheAct.has(index)) cited.add(key);
     });
     // Source passages CPT Studio selected because the provider's passages do not show the coded act - or, for a support
     // that was not checked, the documented service's passages, which are never marked as evidence for the code; nor are
@@ -780,7 +793,7 @@ function documentLayout(doc) {
     });
   }
   const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked, services };
+  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked, services, cited };
 }
 
 function renderPieces(pieces, layout) {
@@ -788,11 +801,13 @@ function renderPieces(pieces, layout) {
     if (!piece.keys) return escapeHtml(piece.text);
     const unchecked = layout.unchecked || new Set();
     const services = layout.services || new Set();
+    const cited = layout.cited || new Set();
     const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
-    const evidence = piece.keys.filter(key => !unchecked.has(key) && !services.has(key));
+    const evidence = piece.keys.filter(key => !unchecked.has(key) && !services.has(key) && !cited.has(key));
+    const notTheAct = piece.keys.filter(key => cited.has(key));
     const service = piece.keys.filter(key => services.has(key));
     const notChecked = piece.keys.filter(key => unchecked.has(key));
-    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', notTheAct.length ? `Passage the provider cited for ${codesOf(notTheAct)}, which does not show the coded act` : '', service.length ? `Passage of the documented service for ${codesOf(service)}` : '', notChecked.length ? `Passage of the documented service for ${codesOf(notChecked)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
     return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
@@ -906,13 +921,15 @@ function modifierNote(proposal) {
 function evidenceChips(proposal, layout) {
   // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
   const checked = supportChecked(proposal);
-  // Whose passages CPT Studio's source passages are: serviceOnlySupport (ownership-5).
+  // Whose passages CPT Studio's source passages are: serviceOnlySupport (ownership-5); which of the provider's do not
+  // show the coded act: passagesNotShowingTheAct, which the source panel's titles read too (display-6).
   const serviceOnly = serviceOnlySupport(proposal);
   const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
+  const notTheAct = passagesNotShowingTheAct(proposal);
   const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;
     if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
-    const note = unrelated.has(index) ? (serviceOnly ? ' — cited by the provider' : ' — cited by the provider; does not show the coded act') : '';
+    const note = notTheAct.has(index) ? ' — cited by the provider; does not show the coded act' : unrelated.has(index) ? ' — cited by the provider' : '';
     return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”${note}`)}</span></button>`;
   });
   const source = (proposal.support?.source || []).map((evidence, index) => {
@@ -1482,9 +1499,10 @@ function emptySelectionCopy(assessment, doc) {
   if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
   // A participant's code is never a proposal in this release (refutation round 6, R6-MEANING, the session's D14): it is
   // listed as an alternative. Where every code listed is a participant's, the provider proposed none of them, so the
-  // panel never says it did.
+  // panel never says it did - and says who gave them, never "independent": a code first given in peer review never is
+  // (refutation round 7, display-2; review.readiness says it in the same words).
   const listed = [...excluded, ...proposalsIn(assessment, 'alternative')];
-  if (listed.length && listed.every(proposal => proposal?.support?.origin === 'participant')) return and('No code is selected for approval. Each code listed below is an independent participant\'s, offered only as an alternative.');
+  if (listed.length && listed.every(proposal => proposal?.support?.origin === 'participant')) return and('No code is selected for approval. Each code listed below was given by Astra or Fable, not the provider, and is offered only as an alternative.');
   if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
   // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
@@ -1754,6 +1772,14 @@ function referenceRow(reference) {
 // and a service 45385 carries. What holds the reviewed report is readiness's to say (review.readiness's blockers,
 // which exportStatusText draws as "Still needed: ..."), and this row restates none of it. Where the questions served
 // do not account for the API's count, it says only the count.
+// No assessment of the current revision: none at all (doc.assessment null), or doc.assessment is an earlier revision's -
+// the API serves the clarification count as null while the current revision has none (serializers.harness_json;
+// refutation round 6, row-1). One rule for the Clarification row and the Final status row's note (phaseNote; refutation
+// round 7, parity-1).
+function revisionUnassessed(doc) {
+  return !doc.assessment || doc.harness?.clarification?.open === null;
+}
+
 function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
@@ -1766,7 +1792,7 @@ function clarificationRow(doc) {
   // Waiting says only when the questions are known, no longer why one is asked (refutation round 5, D11): "only where
   // the documentation leaves open something that changes the coding" did not fit a member's entry that conflicts with
   // the document, or a diagnostic code asked about beside its interventions.
-  const unassessed = !doc.assessment || served === null;
+  const unassessed = revisionUnassessed(doc);
   if (unassessed && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
   if (unassessed) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
   if (open > 0) {
@@ -1799,9 +1825,14 @@ function finalRow(doc) {
 }
 
 // Which assessment the review reads (harness.phase, HARNESS.md 12.3); '' for a payload without one, or Corti only. A
-// phase-1 assessment read no peer review, whatever runs the revision holds; each peer row says why (truth-9).
+// phase-1 assessment read no peer review, whatever runs the revision holds; each peer row says why (truth-9). With no
+// assessment of the current revision (revisionUnassessed) harness.phase is 1 whatever was read before, so the note says
+// none was made, never "Assessed ..." (refutation round 7, parity-1: "Assessed from the frozen first readings; no peer
+// review was read by this assessment." beside the Clarification row's "Not asked", in the addendum window after a stop
+// and before any assessment); one is coming while a stage runs.
 function phaseNote(doc) {
   if (!harness2(doc)) return '';
+  if (revisionUnassessed(doc)) return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'No assessment of this revision was made.';
   if (doc.harness.phase === 2) return 'Assessed after peer review: both phases reconciled from source evidence and rules, never by counting agreement.';
   return doc.pipeline?.busy ? 'The peer reviews and the second assessment follow the first assessment.' : 'Assessed from the frozen first readings; no peer review was read by this assessment.';
 }

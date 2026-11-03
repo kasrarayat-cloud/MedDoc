@@ -207,8 +207,8 @@ class EntryWordingTests(Surfaces, R2WordingCase):
     and the trace. Both orders, so a rule that let the first or the last entry of a code decide fails (falsegreen-1's
     pipeline half). The engine's own count of the same input is account-3's (PositionCountPipelineTests)."""
 
-    def surfaces(self, *codes):
-        self.adapters['fable'].peer = [hp.answered('fable', hp.peer_answer(codes=list(codes)), number=2)]
+    def surfaces(self, *codes, answer=None):
+        self.adapters['fable'].peer = [hp.answered('fable', answer or hp.peer_answer(codes=list(codes)), number=2)]
         encounter_id = self.create(TWO_EXTENTS)
         drain()
         detail = self.detail(encounter_id)
@@ -219,6 +219,7 @@ class EntryWordingTests(Surfaces, R2WordingCase):
                                                                                                          fmt='csv'))
                 if row['item_list'] == 'peer_additional_code' and row['proposed_by'] == 'fable']
         trace = self.trace(encounter_id)
+        self.last_trace = trace
         runs = next(item for item in trace['participants'] if item['name'] == 'fable')['runs']
         served = [[(c['code'], c['phase']) for c in run['review']['additional_codes']] for run in runs
                   if run.get('review')]
@@ -255,6 +256,34 @@ class EntryWordingTests(Surfaces, R2WordingCase):
         self.assertEqual(served, [[('45378', ''), ('45378', 'peer_review')]])
         self.assertEqual(lines, [f'45378 · units 1 · confidence high · {LISTED_IN_PEER} {UNVERIFIED_DIAG}',
                                  f'45378 · units 1 · confidence high · {PROPOSED_AFTER} {FOUND_LAND}'])
+
+    def one_entry(self, evidence):
+        """Refutation round 7, falsegreen-2: every entry above holds one quote, so neither surface's per-entry rule was
+        pinned against an every-quote, first-quote or last-quote rule (serializers._trace_review reads any quote found;
+        reports._peer_items likewise). One entry of 45378 quoting the landmarks line and a passage no document holds is
+        proposed after peer review on all three surfaces, in either order (one order per test: a workspace reuses an
+        identical peer request's answer)."""
+        answer = {**hp.peer_answer(), 'additional_codes': [hp.code('45378', service_ids=[], evidence=evidence)]}
+        detail, added, rows, served, lines = self.surfaces(answer=answer)
+        self.assertPerCode(detail)
+        self.assertEqual(added[0], f'    Additional code 45378 · units 1 — {PROPOSED_AFTER}')
+        self.assertIn(f'      "{LAND}" [chars 354–418, page 1]', added)
+        self.assertFalse(any(LISTED_IN_PEER in line for line in added), added)
+        self.assertEqual(rows, [('45378', 'proposed_after_peer_review', True)])
+        self.assertEqual(served, [[('45378', 'peer_review')]])
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith(f'45378 · units 1 · confidence high · {PROPOSED_AFTER} '), lines)
+        # the entry's quotes, in its order: the first on its line, the next on the line after
+        every = self.trace_lines(self.last_trace)
+        at = every.index(lines[0])
+        quotes = [FOUND_LAND, UNVERIFIED_DIAG] if evidence[0] == LAND else [UNVERIFIED_DIAG, FOUND_LAND]
+        self.assertEqual([lines[0].endswith(quotes[0]), every[at + 1]], [True, quotes[1]], every[at:at + 2])
+
+    def test_one_entry_its_located_quote_first(self):
+        self.one_entry([LAND, UNLOCATED_DIAG])
+
+    def test_one_entry_its_located_quote_last(self):
+        self.one_entry([UNLOCATED_DIAG, LAND])
 
     def test_an_unlocated_entry_of_a_code_its_first_reading_proposed_is_still_repeated(self):
         # control: 'independent' claims no proposal in peer review, so it stays, located or not (ColonCase: Astra's
