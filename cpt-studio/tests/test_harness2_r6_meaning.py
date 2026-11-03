@@ -8,7 +8,9 @@ verified in meaning-r6/results.json), on the findings' own inputs:
 - the session's D14 (negation-1, -2, -3, ownership-1, -4, time-1, time-2): a participant's code that no decidable Corti
   proposal carries is never added as a proposal. It is listed as informational - an alternative - with CPT Studio's own
   reason, so no participant's code is ever selected or ready, counts as covering a documented act, makes another code
-  included or clears an unresolved item; Corti's proposals are assessed exactly as with no participant configured.
+  included or clears an unresolved item; Corti's proposals are assessed exactly as with no participant configured;
+- negation-5: a service only a participant reads as performed is worded with the documented-service reading's own
+  not-done reading of that family where there is one, in the completeness reason and in the check.
 
 The engine classes run the real routing, inventory and engine (tests.test_harness_engine's helpers); the pipeline
 classes run the real jobs, tool loop, readers, engine, API, reports and app.js under node (tests.test_harness2_pipeline:
@@ -563,3 +565,77 @@ class D14PipelineTests(MeaningCase):
                 draft = self.download(encounter_id, 'draft', 'txt')
                 self.assertIn('snare removal (hot snare) in the colonoscopy [not_covered]', draft)
                 self.assertNotIn('Is 45378 reported separately from 45385', json.dumps(detail))
+
+
+# --- negation-5: a participant's performed service where the documented-service reading reads it as not done ----------
+
+NO_EGD = 'An upper endoscopy was not performed.'
+NEGATED_REASON = ('Astra reads a performed upper endoscopy where the documented-service reading reads the upper '
+                  'endoscopy as negated (“An upper endoscopy was not performed.”)')
+
+
+class MissingServiceWordingTests(SimpleTestCase):
+    """_Harness.missing: the reason, and the participants.services check that follows it, name the inventory's own
+    negated, planned, historical or cancelled reading of the service's family where there is one; coding completeness
+    stays incomplete beside it (the safety net)."""
+
+    def test_n11_a_service_the_inventory_reads_as_negated(self):
+        text = doc(COLON, NO_EGD)
+        result = run(text, corti(('45378', span(text, CECUM))),
+                     [read('astra', [code(text, '45378', CECUM)],
+                           services=[service(text, 'colonoscopy', CECUM), service(text, 'egd', NO_EGD)]),
+                      read('fable', [code(text, '45378', CECUM)], services=[service(text, 'colonoscopy', CECUM)])])
+        self.assertEqual([(s['family'], s['status']) for s in result.services['services']],
+                         [('gi.colonoscopy', 'performed'), ('gi.egd', 'negated')])
+        complete = result.completeness
+        self.assertEqual(complete['state'], 'incomplete')
+        self.assertIn(NEGATED_REASON, complete['reasons'])
+        self.assertEqual([m['reason'] for m in complete['participant_services']], [NEGATED_REASON])
+        check = next(c for c in result.encounter_checks if c.id == 'participants.services')
+        self.assertEqual(check.status, 'warn')
+        # the check follows the reason; and it says completeness is incomplete, never "until a reviewer checks the
+        # document": the reviewed report keeps it incomplete (engine.reviewed_completeness)
+        self.assertEqual(check.detail, 'Astra reads a performed upper endoscopy (“An upper endoscopy was not '
+                                       'performed.”), where the documented-service reading reads the upper endoscopy '
+                                       'as negated. The documented-service reading reads no performed service of that '
+                                       'kind, so coding completeness is incomplete.')
+        self.assertNotIn('that the documented-service reading does not read as performed', json.dumps(complete))
+
+    def test_with_no_reading_of_that_family_the_wording_is_as_before(self):
+        """A family the inventory reads nothing of keeps the sentence it had: there is no reading to name."""
+        text = doc(COLON, 'Esophagogastroduodenoscopy findings were reviewed with the patient.')
+        quote = 'Esophagogastroduodenoscopy findings were reviewed with the patient.'
+        result = run(text, corti(('45378', span(text, CECUM))),
+                     [read('astra', [code(text, '45378', CECUM)], services=[service(text, 'eus', quote)])])
+        (entry,) = result.completeness['participant_services']
+        self.assertEqual(entry['reason'], f'Astra reads a performed endoscopic ultrasound that the documented-service '
+                                          f'reading does not read as performed (“{quote}”)')
+        check = next(c for c in result.encounter_checks if c.id == 'participants.services')
+        self.assertTrue(check.detail.startswith(f'Astra reads a performed endoscopic ultrasound (“{quote}”). The '
+                                                'documented-service reading reads no performed service'), check.detail)
+
+    def test_a_performed_reading_of_that_family_is_no_missing_service(self):
+        """The control (N11C): the inventory reads the upper endoscopy as performed, so nothing is missing."""
+        done = 'An upper endoscopy was performed to the second portion of the duodenum.'
+        text = doc(COLON, done)
+        result = run(text, corti(('45378', span(text, CECUM))),
+                     [read('astra', [code(text, '45378', CECUM)], services=[service(text, 'egd', done)])])
+        self.assertNotIn('participant_services', result.completeness)
+        self.assertIsNone(next((c for c in result.encounter_checks if c.id == 'participants.services'), None))
+
+
+class MissingServicePipelineTests(MeaningCase):
+    def test_n11_the_statement_the_reports_and_the_check(self):
+        text = doc(COLON, NO_EGD)
+        services = [colon_service(CECUM), ('u1', 'egd', 'performed', NO_EGD)]
+        encounter_id = self.scenario(text, [('45378', CECUM)],
+                                     astra=hp.reading(codes=[('45378', CECUM)], services=services),
+                                     fable=hp.reading(codes=[('45378', CECUM)], services=[colon_service(CECUM)]))
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['coding']['state'], 'incomplete')
+        self.assertIn(NEGATED_REASON, detail['coding']['statement'])
+        draft = self.download(encounter_id, 'draft', 'txt')
+        self.assertIn(NEGATED_REASON, draft)
+        self.assertNotIn('that the documented-service reading does not read as performed', draft)
+        check = next(c for c in detail['assessment']['encounter_checks'] if c['id'] == 'participants.services')
+        self.assertIn('where the documented-service reading reads the upper endoscopy as negated', check['detail'])

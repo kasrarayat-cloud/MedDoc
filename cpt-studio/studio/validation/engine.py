@@ -3473,7 +3473,8 @@ class _Harness:
         missing = self.missing(inventory)
         if missing:
             out.append(checks.participants_services_check([(PARTICIPANT_LABELS[m['participant']], m['label'],
-                                                            m['quote'], m['status']) for m in missing]))
+                                                            m['quote'], m['status'], m['read_as'])
+                                                           for m in missing]))
         return out
 
     def _summary_sentence(self, p: ParticipantInput) -> str:
@@ -3521,7 +3522,12 @@ class _Harness:
     def missing(self, inventory) -> list[dict]:
         """The services a participant reads as performed, or as started and not completed (MISSING_STATUSES), quoting
         the document verbatim, of a kind of which ``inventory`` reads no performed service: one per participant and
-        family, the first quote of its first."""
+        family, the first quote of its first. Where ``inventory`` reads a service of that kind as not done at this
+        encounter (checks.NEGATIVE: negated, cancelled, planned or historical), the reason names that reading
+        ('read_as', which the participants.services check names too), never that the documented-service reading merely
+        "does not read as performed" it (refutation round 6, R6-MEANING, negation-5: Astra's "performed" upper
+        endoscopy, quoting only "An upper endoscopy was not performed.", beside the inventory's own "upper endoscopy
+        (negated)"). Coding completeness is incomplete beside each all the same (complete): the safety net stays."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3538,11 +3544,21 @@ class _Harness:
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
-                    reason = (f'{PARTICIPANT_LABELS[name]} reads {what} that the documented-service reading does not '
-                              'read as performed')
+                    # the inventory's own not-done reading of a service of that kind, in its order: 'the upper
+                    # endoscopy as negated', 'the colonoscopy as planned and as historical'
+                    read = {}
+                    for documented in inventory.services:
+                        if documented.family in families and documented.status in checks.NEGATIVE:
+                            states = read.setdefault(reconcile.service_label(documented), [])
+                            if documented.status not in states:
+                                states.append(documented.status)
+                    read_as = ' and '.join(f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items())
+                    reason = (f'{PARTICIPANT_LABELS[name]} reads {what} '
+                              + (f'where the documented-service reading reads {read_as}' if read_as
+                                 else 'that the documented-service reading does not read as performed'))
                     quoted = f'{reason} ({reconcile.quote(good[0])})'
                     out.append({'participant': name, 'family': service.family, 'families': list(families),
-                                'label': label, 'status': service.status, 'quote': good[0].text,
+                                'label': label, 'status': service.status, 'read_as': read_as, 'quote': good[0].text,
                                 'start': good[0].start, 'end': good[0].end, 'page': good[0].page,
                                 # review.coding_completeness drops every reason that holds "open question" (it
                                 # recounts the open questions): a quote that holds it is kept in the entry and the
