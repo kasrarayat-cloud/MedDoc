@@ -693,3 +693,59 @@ class EvidenceChipLabelTests(MeaningCase):
         self.assertNotIn(SERVICE_LABEL, card)
         self.assertIn(f'“Procedure: Colonoscopy” {NOT_THE_ACT}', card)
         self.assertIn(f'“{TODAY_BX}” — selected from the source by CPT Studio', card)
+
+
+# --- the integration of R6-MEANING (its NEEDS 1): the readiness blocker where every code listed is a participant's -----
+
+PARTICIPANTS_ONLY = ("No code is selected for approval: each code listed is an independent participant's, offered only "
+                     'as an alternative')
+
+
+class D14BlockerTests(MeaningCase):
+    """D14 makes reachable an assessment whose every code is a participant's alternative: time-1 p1, where Corti selects
+    nothing. review.readiness still said "No code is selected for approval: the provider proposed only codes that were
+    excluded or offered as alternatives" there - false, Corti proposed none of them - and the page's Still needed, the
+    draft TXT's Review status and the reviewed report's refusal print that blocker. It is now said as the panel says it
+    (app.js emptySelectionCopy); a provider code beside the participants' keeps the provider's sentence."""
+
+    def assert_blocker(self, encounter_id, said, unsaid):
+        detail = self.detail(encounter_id)
+        self.assertIn(said, detail['readiness']['blockers'])
+        self.assertFalse(any(unsaid in blocker for blocker in detail['readiness']['blockers']), detail['readiness'])
+        status = browser('app.exportStatusText(data)', detail)
+        self.assertIn(f'Still needed: {said}', status)
+        self.assertNotIn(unsaid, status)
+        txt = self.download(encounter_id).splitlines()
+        # the draft TXT's Review status block: its heading line, then one line per blocker, up to the blank line
+        start = txt.index('Review status: not complete')
+        status_block = txt[start:txt.index('', start)]
+        self.assertIn(f'  - {said}', status_block)
+        self.assertFalse(any(unsaid in line for line in status_block), status_block)
+        refused = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        self.assertEqual(refused.status_code, 409, refused.content)
+        self.assertIn(said, refused.json()['details']['blockers'])
+        return detail
+
+    def test_time_1_p1_says_whose_the_listed_code_is(self):
+        text = earlier(LAST_LABEL)
+        astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
+        encounter_id = self.scenario(text, astra=astra)
+        detail = self.assert_blocker(encounter_id, PARTICIPANTS_ONLY, 'provider proposed')
+        # and nowhere in the draft TXT does CPT Studio say the provider proposed a code
+        self.assertNotIn('provider proposed', self.download(encounter_id))
+        self.assertEqual([(p['code'], p['bucket'], (p.get('support') or {}).get('origin')) for p in proposals(detail)],
+                         [('45385', 'alternative', 'participant')])
+
+    def test_a_provider_code_beside_them_keeps_the_provider_s_sentence(self):
+        # control: Corti's own code is listed too (G0121, outside the GI profiles, is excluded and cannot be reinstated:
+        # nothing is reviewable), so the provider did propose a code that was excluded - its sentence stands, and the
+        # participants' does not
+        text = earlier(LAST_LABEL)
+        astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
+        encounter_id = self.scenario(text, corti=[('G0121', CECUM_LANDMARKS)], astra=astra)
+        detail = self.detail(encounter_id)
+        self.assertEqual(sorted((p['code'], p['bucket'], (p.get('support') or {}).get('origin') or 'primary')
+                                for p in proposals(detail)),
+                         [('45385', 'alternative', 'participant'), ('G0121', 'excluded', 'primary')])
+        self.assert_blocker(encounter_id, 'No code is selected for approval: the provider proposed only codes that were '
+                            'excluded or offered as alternatives', 'independent participant')

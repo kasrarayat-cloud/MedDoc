@@ -765,10 +765,18 @@ def _assessment_blockers(encounter, assessment):
             # Codes the provider proposed that nobody can decide - excluded with no reinstatement, or offered only as
             # alternatives (nothing here is reviewable) - were proposed: said as the panel says it, never "No CPT code
             # was proposed" beside the stored response and its own provider check (refutation p2, reports2:3).
-            what = (f'No code is selected for approval: the {"response that was read" if unread else "provider"} '
-                    'proposed only codes that were excluded or offered as alternatives'
-                    if assessment.proposals.exists() else
-                    f'No CPT code was proposed{" in the response that was read" if unread else ""}')
+            origins = [(proposal.support or {}).get('origin') for proposal in assessment.proposals.all()]
+            if origins and all(origin == 'participant' for origin in origins):
+                # A participant's code is never a proposal (refutation round 6, the session's D14): where every code
+                # listed is a participant's alternative, the provider proposed none of them, so this never says it did
+                # - said as the panel says it (app.js emptySelectionCopy; found at the integration of R6-MEANING).
+                what = ("No code is selected for approval: each code listed is an independent participant's, offered "
+                        'only as an alternative')
+            elif origins:
+                what = (f'No code is selected for approval: the {"response that was read" if unread else "provider"} '
+                        'proposed only codes that were excluded or offered as alternatives')
+            else:
+                what = f'No CPT code was proposed{" in the response that was read" if unread else ""}'
             blockers.append(f'{what}; the second review {unread}' if unread else what)
     return blockers
 
