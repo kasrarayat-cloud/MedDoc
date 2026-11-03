@@ -1659,9 +1659,10 @@ test('each open question lists its candidate answers: the value, the passage quo
   assert.ok(codeCardOf(html, '45385').includes(`data-question="${extent.id}"`) && codeCardOf(html, '45380').includes(`data-question="${clarificationOf(doc, 'performed_status').id}"`));
   // the clarification row says a verified candidate can answer a question; the first assessment's questions have none
   // (moved by refutation round 4, d7-3: the row names no way a question is settled on the dormant path either, and says
-  // what each open question holds by the readiness rules)
+  // what each open question holds by the readiness rules; and by refutation round 5, R5-ROW, D11: it says only how many
+  // questions are open and what each is about)
   const confirmRow = harnessRow(html, 'clarification');
-  assert.ok(confirmRow.includes('<p>One question about the encounter is open; it holds the reviewed report.</p><p>3 questions about codes are open; each holds its code, which can still be rejected.</p>'), confirmRow);
+  assert.ok(confirmRow.includes('<p>One open question is about the encounter.</p><p>3 open questions are each about a code.</p>'), confirmRow);
   assert.equal(/addendum|confirming|verified/i.test(confirmRow), false, confirmRow);
   const peer = render(fixture(H2_PEER));
   assert.equal(peer.includes('candidate-answers') || peer.includes('confirm-finding'), false);
@@ -1980,7 +1981,9 @@ test('older payloads draw exactly as they did before harness@2: every review tab
   // harness@2. A deliberate change to an older payload's page updates its digest here, with the reason in the commit.
   // Refutation round 3, R3-TRUTH truth-6: the codes tab of the two harness@1 payloads moved (from 6f31d8b0... and
   // 2365f766...) - each card's status line states the NCCI procedure-to-procedure limit, so its "Not verified" note no
-  // longer names the edits again; nothing else on those pages changed.
+  // longer names the edits again; nothing else on those pages changed. Refutation round 5, R5-ROW (the session's D11):
+  // the processing payload's tabs moved (from f117e044...) - its waiting Clarification row says only "Known once the
+  // proposals are checked.", no longer why a question is asked; nothing else on that page changed.
   const crypto = require('node:crypto');
   const sha = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
   const BASE = {
@@ -1989,7 +1992,7 @@ test('older payloads draw exactly as they did before harness@2: every review tab
     'encounter-extraction-failed.json': ['dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3', 'dec9f487032d382e09d7e9892acc210888d1074ea9a4d72d48e38891fbe909f3'],
     'encounter-harness-degraded.json': ['ae7de29d01dbe4a01943cffed5557159e3cb3735419ef6076a8355f289e687f8', 'ebe5e7a4ef1ffdf16e134a10868996da2bd2aa4687deadd8dc683ab93923b2bb', '193c71f5bb476cec76e30ebc57b7b4609555f17efcaff9bf04e091085ccfe48b'],
     'encounter-harness-ready.json': ['35de470acaf9f7d40aeeef5e4e1305b7126a91356261eb88f82f612204d8d396', '2690efc65889389b8cf26b91fd85e9d8e9f381a647b4aa1a019fbd1eb549fdf9', 'c105f3237d5c889dfbc0ecbffadd6786dc5f267df09b1cc4a04bea4c6cca4df9'],
-    'encounter-processing.json': ['f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666', 'f117e044458c55d0e50c5b896de82d6be036bedea258f804767872b990ff0666'],
+    'encounter-processing.json': ['89598d2fee0cbbf54c4def21e9ea69d893afe069db50673cd9f9e58289a1f3ef', '89598d2fee0cbbf54c4def21e9ea69d893afe069db50673cd9f9e58289a1f3ef', '89598d2fee0cbbf54c4def21e9ea69d893afe069db50673cd9f9e58289a1f3ef'],
     'encounter-provider-unknown.json': ['b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8', 'b7710405a9bc62f0136928b4b6f7d3d89ad7ef2fcc2797ac8ed194c13b69b6e8'],
     'encounter-ready.json': ['fa983aa9544d162a3697d8ad6aab958828787a922ef9ceefd5bce4ac278f39f1', '0f4fde31a4556cb5863f9d2ff873a578e3f99ba03ebe3edd217853af49f3fdae', '71120acb2819c38cbfbe9dd8c1cca32eea38d43d2ed67b7b083d736bda27a995'],
     'encounter-reviewed.json': ['dbd38e960eb1702f26e3a403d9443174deeb581416a93efe2cac4307c635cd88', '8b5da0ab20b901454ad99fa22bff335af621a1565b9ec77c5e0f4f77fadf0072', 'aa78da5dcb8954782068517d14e240fe20a322edf80d7a469cfd0b70cd4fac5f'],
@@ -2421,10 +2424,11 @@ test('R3-CONF D7: each candidate is drawn as the participants\' located passage 
   assert.equal(html.includes('candidate-answers') || html.includes('Their answer') || html.includes('located passages'), false);
   assert.equal(/readers read|consistency check|exact slice of the document/i.test(r3Text(html)), false);
   // nowhere on the page: no Confirm action, and the clarification row offers only an addendum (moved by refutation round
-  // 4, d7-3: it names no way a question is settled, an addendum included, and says what each open question holds)
+  // 4, d7-3: it names no way a question is settled, an addendum included, and says what each open question holds; and
+  // by refutation round 5, R5-ROW, D11: it says only how many questions are open and what each is about)
   assert.equal(html.includes('confirm-finding') || html.includes('<span class="status green">Verified</span>'), false);
   const row = harnessRow(html, 'clarification');
-  assert.ok(row.includes('<p>One question about the encounter is open; it holds the reviewed report.</p>') && !/addendum|confirming/.test(row), row);
+  assert.ok(row.includes('<p>One open question is about the encounter.</p>') && !/addendum|confirming/.test(row), row);
   // the questions still sit where they did: the date with the encounter, the others on their codes' cards (moved by
   // refutation round 4: by the addendum action each carries, as no candidate block is drawn)
   const date = clarificationOf(doc, 'service_date');
@@ -2598,12 +2602,14 @@ test('R4-CONF D8: a payload served to a member who may not confirm draws no cand
   }
 });
 
-test('R4-CONF d7-3: the Clarification row says what each open question holds, by the readiness rules, and names no way it is settled', () => {
+test('R4-CONF d7-3: the Clarification row names no way a question is settled (moved by refutation round 5, D11: it says only how many questions are open and what each is about)', () => {
+  // moved by refutation round 5 (R5-ROW, the session's D11): the row no longer says what each question holds by the
+  // readiness rules - it read no decision and no finality, so it said a rejected code "can still be rejected" - only
+  // how many are open and what each is about (the R5-ROW block at the end of this file pins every branch)
   const doc = fixture(H2_FINAL);
   const row = harnessRow(render(doc), 'clarification');
   assert.ok(row.includes('<span class="status amber">4 open</span>'), row);
-  assert.deepEqual(r4Lines(row), ['One question about the encounter is open; it holds the reviewed report.',
-    '3 questions about codes are open; each holds its code, which can still be rejected.']);
+  assert.deepEqual(r4Lines(row), ['One open question is about the encounter.', '3 open questions are each about a code.']);
   assert.ok(row.includes('A participant&#x27;s own questions never hold the reviewed report.'));
   for (const words of ['addendum', 'encounter context', 'answered', 'confirm', 'needs an answer', 'verified']) assert.equal(textOf(row).toLowerCase().includes(words), false, words);
   // the dormant path's row says the same of the same questions: no confirmation is named as a way to settle one either
@@ -2614,11 +2620,10 @@ test('R4-CONF d7-3: the Clarification row says what each open question holds, by
   const service = { scope: 'service', proposal_id: null, fact: 'extent' };
   const asked = (items, open = items.length) => r4Lines(harnessRow(render({ ...doc, harness: { ...doc.harness, clarification: { open } },
     clarifications: items.map((item, index) => ({ ...item, id: `e2b00000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`, family: '', question: 'Synthetic question?', reason: '', state: 'open', candidates: [], confirmation: null })) }), 'clarification'));
-  assert.deepEqual(asked([code]), ['One question about a code is open; it holds that code, which can still be rejected.']);
-  assert.deepEqual(asked([encounter, encounter]), ['2 questions about the encounter are open; each holds the reviewed report.']);
-  assert.deepEqual(asked([service]), ['One question about a documented service no code carries is open; it holds neither a code nor the reviewed report.']);
-  assert.deepEqual(asked([service, code, service]), ['One question about a code is open; it holds that code, which can still be rejected.',
-    '2 questions about documented services no code carries are open; none holds a code or the reviewed report.']);
+  assert.deepEqual(asked([code]), ['One open question is about a code.']);
+  assert.deepEqual(asked([encounter, encounter]), ['2 open questions are about the encounter.']);
+  assert.deepEqual(asked([service]), ['One open question is about a documented service.']);
+  assert.deepEqual(asked([service, code, service]), ['One open question is about a code.', '2 open questions are each about a documented service.']);
   assert.deepEqual(asked([], 2), ['2 questions are open.']);
   assert.deepEqual(asked([{ ...service, scope: 'another scope' }]), ['One question is open.']);
   assert.deepEqual(asked([encounter, code], 3), ['3 questions are open.']);
@@ -2744,4 +2749,116 @@ test('R5-ACCOUNT truth-1, truth-3: the trace\'s reconciliation names a participa
   // a row served without listed_by reads as before
   assert.ok(lines([{ ...row, proposed_by: [] }]).includes('<p>Proposed by: not recorded</p>'));
   assert.ok(lines([{ ...row, proposed_by: ['corti', 'astra'] }]).includes('<p>Proposed by: Corti, Astra</p>'));
+});
+
+// refutation round 5, R5-ROW
+// The Clarification row only counts (HARNESS.md 12.10 as amended, the session's D11; d8-1, truth-4, parity-1, truth-5):
+// it says how many questions are open and what each is about - the encounter (scope encounter, no proposal), a code (a
+// proposal) or a documented service (scope service, no proposal) - and nothing else. Round 4's row said what each
+// question holds by the readiness rules, but read neither a code's decision, nor whether the assessment is final, nor
+// which service a code carries: a code "can still be rejected" when it was already rejected (beside a reviewed
+// encounter, and on a Corti-only page) and when no decision could be recorded (a run stopped before its peer reviews),
+// and a service 45385 carries was one "no code carries". What holds the reviewed report is readiness's to say
+// (exportStatusText's "Still needed: ..."), and the row restates none of it. The pipeline's own states are pinned in
+// tests/test_harness2_r5_row.py; this block pins each of the row's branches.
+
+const R5_NOTE = 'A participant\'s own questions never hold the reviewed report.';
+// What no word of the row but its fixed note may say: what a question holds, rejecting a code, settling a question.
+const R5_UNSAID = ['hold', 'reject', 'settle', 'addendum', 'no code carries'];
+const R5_SMALL = /<small class="check-source">([^<]*)<\/small>/g;
+
+// The row as a reader sees it - its state, its badge, its lines and its notes - with every word of it but the note held
+// to R5_UNSAID.
+function r5Row(doc) {
+  const row = harnessRow(render(doc), 'clarification');
+  const said = textOf(row.replace(R5_SMALL, '')).toLowerCase();
+  for (const word of R5_UNSAID) assert.equal(said.includes(word), false, `${word}: ${said}`);
+  return { state: /data-state="([^"]*)"/.exec(row)[1], badge: textOf(/<span class="status [^"]*">([^<]*)<\/span>/.exec(row)[1]),
+    lines: [...row.matchAll(/<p>([^<]*)<\/p>/g)].map(match => textOf(match[1])), notes: [...row.matchAll(R5_SMALL)].map(match => textOf(match[1])) };
+}
+
+// The final fixture serving exactly these open questions, with the API's count (their number unless given).
+function r5Asked(doc, items, open = items.length) {
+  return { ...doc, harness: { ...doc.harness, clarification: { open } },
+    clarifications: items.map((item, index) => ({ id: `e2b00000-0000-4000-8000-0000000005${String(index).padStart(2, '0')}`, family: 'gi.colonoscopy',
+      question: 'Synthetic question?', reason: '', state: 'open', candidates: [], confirmation: null, ...item })) };
+}
+
+test('R5-ROW D11: every branch of the Clarification row says how many questions are open and what each is about, and nothing of what one holds, of rejecting a code or of settling one', () => {
+  const doc = fixture(H2_FINAL);
+  // the fixture's four: the date of service, about the encounter, and three questions about its two codes
+  assert.deepEqual(r5Row(doc), { state: 'open', badge: '4 open', lines: ['One open question is about the encounter.', '3 open questions are each about a code.'], notes: [R5_NOTE] });
+  // each kind alone and together, one and several
+  const [snare, biopsy] = doc.assessment.proposals;
+  const encounter = { scope: 'encounter', proposal_id: null, fact: 'service_date', family: '' };
+  const code = { scope: 'proposal', proposal_id: snare.id, fact: 'extent' };
+  const other = { scope: 'proposal', proposal_id: biopsy.id, fact: 'performed_status' };
+  const service = { scope: 'service', proposal_id: null, fact: 'conflict:biopsy' };
+  const lines = (items, open) => r5Row(r5Asked(doc, items, open)).lines;
+  assert.deepEqual(lines([encounter]), ['One open question is about the encounter.']);
+  assert.deepEqual(lines([encounter, { ...encounter, fact: 'setting' }]), ['2 open questions are about the encounter.']);
+  assert.deepEqual(lines([code]), ['One open question is about a code.']);
+  // two questions about one code, and about two codes: each is about a code, whichever
+  assert.deepEqual(lines([code, { ...code, fact: 'base_included' }]), ['2 open questions are each about a code.']);
+  assert.deepEqual(lines([code, other]), ['2 open questions are each about a code.']);
+  assert.deepEqual(lines([service]), ['One open question is about a documented service.']);
+  assert.deepEqual(lines([service, { ...service, fact: 'extent', family: 'gi.egd' }, { ...service, fact: 'setting', family: 'gi.office_em' }]),
+    ['3 open questions are each about a documented service.']);
+  assert.deepEqual(lines([service, code, encounter, { ...service, fact: 'extent' }]),
+    ['One open question is about the encounter.', 'One open question is about a code.', '2 open questions are each about a documented service.']);
+  // where the questions served do not account for the API's count, only the count
+  assert.deepEqual(r5Row(r5Asked(doc, [], 2)), { state: 'open', badge: '2 open', lines: ['2 questions are open.'], notes: [R5_NOTE] });
+  assert.deepEqual(lines([{ ...service, scope: 'another scope' }]), ['One question is open.']);
+  assert.deepEqual(lines([{ ...code, proposal_id: null }]), ['One question is open.']);
+  assert.deepEqual(lines([encounter, code], 3), ['3 questions are open.']);
+  assert.deepEqual(lines([encounter, code, service], 2), ['2 questions are open.']);
+  // a question that is not open is not counted
+  assert.deepEqual(lines([code, { ...encounter, state: 'answered' }], 1), ['One open question is about a code.']);
+  // a count the API does not serve as a whole number is the served questions' own, as before
+  for (const clarification of [undefined, null, {}, { open: null }, { open: '4' }, { open: -1 }, { open: 1.5 }]) {
+    assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification } }).lines, ['One open question is about the encounter.', '3 open questions are each about a code.'], JSON.stringify(clarification));
+  }
+  // none open
+  assert.deepEqual(r5Row({ ...doc, harness: { ...doc.harness, clarification: { open: 0 } } }),
+    { state: 'none', badge: 'None open', lines: ['No question is open for this revision.'], notes: [R5_NOTE] });
+  // no assessment: waiting while a stage runs, otherwise not asked; neither has a note. Waiting says only when the
+  // questions are known, no longer why one is asked ("only where the documentation leaves open something that changes
+  // the coding" did not fit a member's entry that conflicts with the document, or a diagnostic code asked about beside
+  // its interventions)
+  assert.deepEqual(r5Row({ ...doc, assessment: null, pipeline: { ...doc.pipeline, busy: true } }),
+    { state: 'waiting', badge: 'Waiting', lines: ['Known once the proposals are checked.'], notes: [] });
+  assert.deepEqual(r5Row({ ...doc, assessment: null }),
+    { state: 'not_run', badge: 'Not asked', lines: ['No question was asked: the proposals were not checked for this revision.'], notes: [] });
+});
+
+test('R5-ROW D11: the row says the same of the same open questions whatever their codes\' decisions, whether the assessment is final, and with Corti alone; what holds is readiness\'s to say, and the row restates none of it', () => {
+  const doc = fixture(H2_FINAL);
+  // the fixture's three questions about its two codes, its date question left out, and readiness as it then reads
+  const codes = { ...r5Asked(doc, doc.clarifications.filter(item => item.proposal_id).map(({ id, ...item }) => item)),
+    readiness: { draft: true, reviewed: false, blockers: ['45385 has an open clarification', '45380 has an open clarification'] } };
+  const said = r5Row(codes);
+  assert.deepEqual(said.lines, ['3 open questions are each about a code.']);
+  const selected = proposal => proposal.bucket === 'selected';
+  // every code rejected, only revoke offered, the encounter reviewed (d8-1 (a), truth-4)
+  const rejected = { ...codes, state: 'reviewed', readiness: { draft: true, reviewed: true, blockers: [] },
+    harness: { ...codes.harness, final: { state: 'reviewed', label: 'Reviewed' } },
+    assessment: { ...codes.assessment, proposals: codes.assessment.proposals.map(p => (selected(p) ? { ...p, decision_state: 'rejected', allowed_actions: ['revoke'],
+      decision: { action: 'reject', reviewer: 'Synthetic Reviewer', reviewer_kind: 'human', note: 'Synthetic rejection.' } } : p)) } };
+  // a run stopped after its first assessment: not final, so no action is offered (d8-1 (b))
+  const stopped = { ...codes, state: 'stopped', pipeline: { ...codes.pipeline, busy: false, can_resume: true, stopped_by_member: true },
+    readiness: { draft: true, reviewed: false, blockers: ['The peer reviews have not finished: decisions are recorded on the final assessment'] },
+    harness: { ...codes.harness, phase: 1, final: { state: 'stopped', label: 'Stopped' } },
+    assessment: { ...codes.assessment, proposals: codes.assessment.proposals.map(p => ({ ...p, allowed_actions: [] })) } };
+  // Corti alone, its rejected code's question still open (parity-1)
+  const alone = withParticipant(withParticipant(rejected, 'astra', { state: 'not_configured', peer: {} }), 'fable', { state: 'not_configured', peer: {} });
+  const corti = { ...alone, harness: { ...alone.harness, phase: 0 } };
+  for (const [name, payload] of [['undecided', codes], ['rejected', rejected], ['stopped', stopped], ['corti only', corti]]) {
+    assert.deepEqual(r5Row(payload), said, name);
+    // what holds the reviewed report is readiness's to say, and the row restates none of it
+    const row = textOf(harnessRow(render(payload), 'clarification'));
+    for (const blocker of payload.readiness.blockers) assert.equal(row.includes(blocker), false, `${name}: ${blocker}`);
+  }
+  assert.equal(app.exportStatusText(codes), 'Draft — not reviewed. Still needed: 45385 has an open clarification; 45380 has an open clarification.');
+  assert.equal(app.exportStatusText(stopped), 'Draft — not reviewed. Still needed: The peer reviews have not finished: decisions are recorded on the final assessment.');
+  assert.equal(app.exportStatusText(rejected), 'Reviewed — every selected code has a current decision.');
 });
