@@ -1086,3 +1086,12 @@ UPPER_LOCATIONS = (
 # a deliberate choice (pancreatitis precaution), not a failed ERCP.
 PANCREATIC_SUBJECT = rx(r'\b(?:pancreatic\s+duct|main\s+pancreatic|PD|pancreatic)\b')
 BILIARY_SUBJECT = rx(r'\b(?:common\s+bile\s+duct|bile\s+duct|biliary|CBD|choledoch\w*)\b')
+
+# --- package P2 READ-HOLD (2026-11-03, R8 section 1.3): an act stated as not done, read only to HOLD ------------------
+# A passage that states its act failed, was unsuccessful, abandoned or only attempted, or yielded nothing ("could not be
+# removed", "no tissue was obtained"): it never stands for that act where the documented-service reader reads none
+# (engine._second_opinion's own-passage release, R8 D1 candidate_rb). Hold-only; HEDGE_WORDS (shared with other
+# readers) is not widened.
+UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|ing)?|attempt(?:s|ed|ing)?|"
+                r"could\s+not|couldn['\u2019]t|cannot|can\s+not|unable|without\s+success|no\s+tissue|yield(?:s|ed)?\s+no|"
+                r"not\s+(?:be\s+|been\s+)?(?:obtained|removed|retrieved|placed|achieved|successful|deployed|completed))\b")

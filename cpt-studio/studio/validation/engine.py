@@ -16,6 +16,7 @@ from datetime import date
 from typing import Mapping, Optional, Sequence
 
 from studio.gi.context import charge_question_day, is_member_conflict
+from studio.gi import cues as gi_cues
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
@@ -1117,11 +1118,13 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         return found
     if found.reason == 'act_missing' and old.state in checks.POSITIVE and old.decisive is not None \
             and old.decisive.origin == 'evidence' and old.decisive.start is not None \
-            and not _elsewhere(old.decisive, found, inventory) and _states_unread_act(old.decisive, found, code, text):
+            and not _elsewhere(old.decisive, found, inventory) and _states_unread_act(old.decisive, found, code, text) \
+            and _own_passage_may_stand(old.decisive, found, code, text, inventory):
         # The documented service is performed and the code's own passage states its act (the routing-era reader reads
         # it performed: a form row, a check box, a phrasing this reader does not parse); the inventory does not read
         # that act at all - it neither denies it nor gives the passage to another service - so the code's own reading
-        # stands, and says so.
+        # stands, and says so. Only where nothing in that passage says the act was not done (_own_passage_may_stand:
+        # P2 READ-HOLD); otherwise the inventory's act_missing hold stays.
         positive_state = 'incomplete' if found.service.status == 'incomplete' else 'performed'
         return replace(found, state=positive_state, reason='own_passage', question='',
                        detail=f'The {reconcile.service_label(found.service)} is documented as {found.service.status}; '
@@ -1654,6 +1657,22 @@ def _states_unread_act(reading: checks.Reading, found: reconcile.Match, code: st
         return False
     passage = text[reading.start:reading.end]
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+
+
+def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:
+    """Whether the routing-era reading of the code's own passage may stand for an act the inventory does not read (the
+    own-passage release), package P2 READ-HOLD (R8 section 1.3). Hold-only: a gate that fails leaves the inventory's
+    act_missing hold (held with its question, never excluded).
+    - D1 (candidate_rb): only a 'performed' reading - never 'incomplete' ("was attempted", "was unsuccessful", which the
+      release had turned into the service's 'performed') - and never a passage that states the act failed, was abandoned
+      or only attempted, or yielded nothing (cues.UNDONE_ACT: "Hot snare polypectomy failed.", "no tissue was
+      obtained"). Never a worded reading only (candidate_ra): the pinned "Cecal biopsies x2." is read by its section
+      alone and still stands."""
+    if reading.status != 'performed':
+        return False
+    if gi_cues.UNDONE_ACT.search(text, reading.start, reading.end):
+        return False
+    return True
 
 
 def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bool:

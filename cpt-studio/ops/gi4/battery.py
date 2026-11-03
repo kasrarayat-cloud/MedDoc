@@ -37,6 +37,20 @@ B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 H405 = (boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-05.txt').read_text(encoding='utf-8')
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
 SNARE = 'A 10 mm polyp was removed with a hot snare.'
+# package P2 READ-HOLD's register rows (R8 section 1.2, probes/R8-history-defects/r8_cases.py): their shared texts
+R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery '
+            'center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was '
+            'completed.\n')
+R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
+R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+           'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla.\nDeep biliary cannulation was '
+           'achieved.\n')
+
+
+def _r8(head, *lines):
+    return head + ''.join(line + '\n' for line in lines)
+
 
 # (text, [(code, quote, truth)]); a truth 'X|MAY' is the author's X disputed by the second review (judged as MAY)
 CASES = {
@@ -303,6 +317,24 @@ CASES = {
         'Procedures\nThe biliary stent was exchanged.\n\nProcedure\nThe duodenoscope was advanced to the second part of the '
         'duodenum. The bile duct was cannulated and a biliary sphincterotomy was performed.\n',
         [('43276', 'The biliary stent was exchanged.', 'not_done')]),
+    # --- package P2 READ-HOLD (2026-11-03): the register's inputs (R8 section 1.2), READY on c9f20a148 where the truth
+    # says not done; tests/fixtures/gi4/declarations/cux-hold.json declares each movement ---
+    # D1: a failed or attempted act released by the own-passage path
+    'R8 D1 N1 hot snare polypectomy failed': (
+        _r8(R8_COLON, R8_SEEN, 'Hot snare polypectomy failed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Hot snare polypectomy failed.', 'not_done')]),
+    'R8 D1 N2 attempted, could not be removed': (
+        _r8(R8_COLON, R8_SEEN, 'Hot snare polypectomy was attempted but the polyp could not be removed.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'Hot snare polypectomy was attempted but the polyp could not be removed.', 'not_done')]),
+    'R8 D1 N3 biopsy attempted, no tissue': (
+        _r8(R8_COLON, R8_SEEN, 'Cold forceps biopsy was attempted but no tissue was obtained.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45380', 'Cold forceps biopsy was attempted but no tissue was obtained.', 'not_done')]),
+    'R8 D1 N4 ERCP stent placement failed': (
+        _r8(R8_ERCP, 'Biliary stent placement failed.'),
+        [('43260', 'Deep biliary cannulation was achieved.', 'done'),
+         ('43274', 'Biliary stent placement failed.', 'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}
