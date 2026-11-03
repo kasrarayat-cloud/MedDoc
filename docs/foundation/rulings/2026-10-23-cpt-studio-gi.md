@@ -1638,3 +1638,44 @@ requires. HARNESS.md 12.12 indexes them and the round's other repairs.
 code, which can still be rejected), and the participants' own readings and peer answers where they already were; CPT
 Studio no longer puts a participant's passage forward as an answer. Checklist 4.6 stays the owner's open question as
 interpretation (c) after the third refutation sets out.
+
+### Session interpretation, 2026-11-02 (cd048041, after the harness's fifth refutation) — recorded, not owner-ruled
+
+(a) **The fifth refutation, focused on round 4's repairs (`3daafa91b..0ca5e6623`), filed 20 findings, all reproduced,
+none blocking (1 major).** The major was in the reports. A participant's peer answer was printed with CPT Studio's own
+reading of its free text shown as the participant's answer, and that reader inverted "Cannulation of the bile duct was
+not successful." into "successful", printed beside the participant's quote "Biliary cannulation was unsuccessful."
+The others were sentences that claimed more than the code checks:
+- the Clarification row's holds, false beside a rejected code, a stopped run and a Corti-only page;
+- "proposed" said of entries with no located quote;
+- two different counts of the same unlisted codes;
+- a participant's HCPCS code called "a code CPT Studio does not read";
+- the installer's advice to fix the credentials, beside a receipt showing that the vendor had answered.
+
+The parity lens's one finding was the Clarification row on a Corti-only page.
+
+(b) **Four further session decisions, each narrowing what CPT Studio says. None is an owner question, for the reasons
+D7's interpretation gives.**
+- **D10:** the reports print no value for a peer answer, only whether it is read as settling the question, with the
+  passages it located.
+- **D11:** the Clarification row only counts the open questions by what each is about; what holds the reviewed report
+  is readiness's to say. This supersedes interpretation (c) after the fourth refutation in its words "what it holds
+  (the reviewed report, or one code, which can still be rejected)".
+- **D12:** "proposed" is said only of an entry with a located quote, on every surface; a participant that gave a code
+  with no located quote is named as having listed it.
+- **D13:** one count of a participant's codes that cannot be listed: the engine's.
+
+HARNESS.md 12.13 indexes them and the round's other repairs.
+
+(c) **What this means for the release, and what stays open.** A reviewer sees:
+- how many questions are open, and what each is about;
+- the readiness blockers, once;
+- each participant's codes, as proposed or only listed;
+- its peer answers, as claims with the passages they quote.
+
+No value CPT Studio inferred from a participant's answer is printed or served. The inverting reader stays dormant (it
+is not served while confirmations are off) and is recorded for option (ii) of checklist 4.6, which remains the owner's
+open question.
+
+The install's declaration draft is corrected before it is committed: Astra's and Fable's access check is one tool-loop
+run each, at most four exchanges, so the act sends three to nine requests, not "exactly three".

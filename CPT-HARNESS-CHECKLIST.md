@@ -279,3 +279,9 @@ requested in chat.
   the parity lens found nothing again. D8 (no candidate served with confirmations off) and D9 (one strict-shape rule for
   every value a participant wrote that CPT Studio lists or shows) are recorded in HARNESS.md 12.12 with the round's other
   repairs. A focused fifth refutation of round 4's diff comes before the PR is made ready.
+- **2026-11-03 ~00:55Z (session cd048041): refutation round 5 repaired.** 20 findings, all reproduced, one major (the
+  reports printed CPT Studio's own, inverting reading of a participant's peer answer as its answer), none blocking. D10
+  (the reports print no peer-answer value), D11 (the Clarification row only counts), D12 ("proposed" only with a located
+  quote, everywhere) and D13 (one unlisted count) are recorded in HARNESS.md 12.13 with the round's other repairs and
+  W1, a walk-tool false rejection fixed at integration. A narrow sixth refutation of round 5's diff comes before the PR
+  is made ready.

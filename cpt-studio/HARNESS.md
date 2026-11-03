@@ -1427,3 +1427,48 @@ diff. Two session decisions, each narrowing what CPT Studio claims or shows:
 **Open, recorded:** the residuals 12.9-12.11 list stand; R4-SHAPES' sweep left a participant's free text (a basis, a
 description, a reference's use, an answer's value, a position's reason) to the page's descriptor rule, as 12.4 says; the
 access check shares the worker's lock residual (12.7).
+
+### 12.13 Refutation round 5 (2026-11-02): what changed, and where it is recorded
+
+The fifth refutation (six lenses on round 4's repairs, `3daafa91b..0ca5e6623`) filed 20 findings; independent verifiers
+reproduced all 20 (1 major, 19 minor, none blocking). The parity lens's one finding (parity-1) is the Clarification
+row's defect on a Corti-only page, the same as d8-1 and truth-4; otherwise I1 holds across round 4's diff. Four session
+decisions, each narrowing what CPT Studio says:
+
+| decision | findings | the rule | recorded in |
+|---|---|---|---|
+| D10 | d8-2 (major) | the reports print no value for a peer answer. `reports._peer_items` printed `candidates.canonical_value`, CPT Studio's own reading of the participant's free text, as its answer, and that reader inverted "Cannulation of the bile duct was not successful." into "successful" beside the quote "Biliary cannulation was unsuccessful." An answer is now printed, in TXT and CSV, draft and reviewed, only as the participant's claim that the document settles the question ("Astra says the document settles it") or as read as not settling it ("Astra's answer is read as not settling it": the peer reader also reads a "settled" answer that gave no value as not settled), with the passages it located; the CSV's peer_answer row carries no value. No release-default path calls a candidate reader (pinned with every reader patched to raise). The dormant reader's inversion (`candidates._cannulation_value` has no negation guard) is recorded, not repaired: that path is not served (12.10), and repairing the readers is option (ii) of checklist 4.6's owner question | 12.10 (amendment), API.md |
+| D11 | d8-1, truth-4, parity-1, truth-5 | the Clarification row only counts: how many questions are open and what each is about - the encounter, a code or a documented service - and nothing else; no sentence there says what a question holds, whether its code can still be rejected, which service no code carries, or how a question is settled. What holds the reviewed report is readiness's to say (`review.readiness`'s blockers, drawn as "Still needed: ..."), and the row restates none of it. The waiting line says only "Known once the proposals are checked." | 12.10 (amendment), 12.12 (d7-3) |
+| D12 | truth-1, truth-2, truth-3 | "proposed" is said only of an entry with a located quote, on every surface. A participant alternative's `proposed_by` and `phases` name only participants with a located entry; the others are `support['listed_by']` (outside the fingerprint) and are said to have listed the code "with no quote found verbatim in the document, so not proposed" - in the engine's reasons, the code status lines, the TXT's ALTERNATIVES and "Proposed by:" ("no participant; listed by ..."), the CSV and the trace's reconciliation. `_Harness.phase` reads only located entries; `serializers.peer_code_phases` gives '' ("listed in peer review") to a code no entry of either phase located. Section 5's contract stands: such a code is still listed as informational, with why | 12.9 (truth-8), API.md |
+| D13 | truth-6, shapes-2 | one count of a participant's codes that cannot be listed: the engine's per-entry count (`engine.participant_unlisted_count`, which `_Harness` uses), re-read for the participant row from the frozen reading when serving (`review.unlisted_count`), so records already stored are covered. Where that reading cannot be read again the row serves `unlisted_codes` null with no count sentence, and the page says the codes it proposed that can be listed, never that it proposed none | API.md |
+
+**The other repairs:**
+- **shapes-1, truth-7:** D9's code shape (`participants.peer.code_shaped`) at the four sites round 4's sweep missed -
+  `serializers._codes_added`, `serializers._trace_review` and both of `reports._peer_items` (positions, additional
+  codes) - so a participant's HCPCS code is no longer "a code CPT Studio does not read".
+- **shapes-3:** API.md's participant row says which codes are listed (a code's shape and a located quote) and which are
+  counted; the 1-to-10-character rule is Corti's row alone.
+- **d8-3:** participants.summary counts distinct questions ("It answered 1 open question"; "It gave 2 answers to 1 open
+  question").
+- **sends-1:** the installer reports a failed access check by what the check's output says (its receipt's error, else
+  the last line of text on its stderr, each repeated only whole and only up to 300 characters) and names no cause of
+  its own; ops/INSTALL.md says the same.
+- **falsegreen-1..5:** pins the round-4 tests let through: `code_shaped`'s HCPCS half against prefixed values
+  ('G0121;LES' and a 30-character one, which no longer reach the assess stage's code field); Corti's unlisted count with
+  a short value in no code's shape; the replayed run's unrecorded-outcome sentence and the engine's two unread-position
+  sentences written out; and 12.12's truth-2 record corrected to what the engine says (its `support['participants']`
+  position speaks of both phases).
+- **At integration (the session):** in app.js, the participant row's null count (D13) and the owner's trace's wording
+  of an answer read as not settling its question (D10); 12.7's IND-1 bullet, stale since D9; the access check's
+  request count - Astra's and Fable's check is one run of the pipeline's tool loop, one request per exchange and at
+  most `PARTICIPANT_MAX_EXCHANGES` (4), not "ONE request" - in ops/INSTALL.md, install.py and the command's docstring
+  and help (text only); `UNRECORDED_MESSAGE` pinned as written; and **W1**, a walk-tool false rejection:
+  `ops/verify_downloads.py`'s second-review check counted a participant alternative as a provider alternative and so
+  failed a right report beside a Corti second review.
+- R5-ROW moved three node pins outside its own block (each pins only the row's output) and the older-payloads digest
+  table's encounter-processing.json entry, each with its reason; no assertion was weakened.
+
+**Open, recorded:** the residuals 12.9-12.12 list stand. Alternatives already stored keep their stored wording
+(harness@2 has never been installed, so no production row exists). The inverting candidate reader is a dormant-path
+defect (D10). The exclusion-confirmation dialog also says the reviewed report waits for an excluded code, so "what holds
+the reviewed report is readiness's to say" is a rule about this row, not about every sentence on the page.
