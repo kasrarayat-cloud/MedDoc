@@ -1,0 +1,356 @@
+{
+ "package": "P2 READ-HOLD (cux-hold): the hold-only repairs of the R8 register (D1-D10, D12, D13, D15) and R3 7.5.1",
+ "summary": "Hold-only repairs of the previously reported false READYs (R8 section 1.2) on the Corti-only path, each the verifier sketch of R8 section 1.3 with its recorded trap avoided, plus the narrow evidence hold of R3 7.5.1. Every rule below can only move a code from READY to held (selected/needs_clarification); none excludes, none releases. Files: studio/validation/engine.py (_second_opinion and helpers, the base rule's D15 arm, the narrow evidence hold), studio/validation/checks.py (none planned), studio/gi/services.py (read_clause failure and negation vocabulary, _time_kind/_time_parts indication on its own line; HISTORY_WORDS not planned), studio/gi/detect.py (C4 fold and in-person regex; the upper-extent stop statement), studio/gi/cues.py (new names only), ops/gi4/battery.py (the register rows), tests.",
+ "base": "c9f20a148a1f21aa2aaa53e477da0a26c07e268f",
+ "worktree_base": "165e1089a1c0c574308db17c47b09fc645a7b1de (base + test fixtures + design only)",
+ "declared_before_code": true,
+ "declared_at": "2026-11-03T23:38Z",
+ "standard": "Round-4 (ruling 2026-11-03 (g); R8 section 4): hold-only; closed lists may only add holds; a rule that releases a must-stay-held input is stopped and recorded, never forced; structure before vocabulary; HEDGE_WORDS is not widened.",
+ "rules": {
+  "D1": "engine._second_opinion own-passage release (engine.py:1118-1129): release only a 'performed' routing-era reading (never 'incomplete'), and never when the cited passage names a failure or a yield of nothing (cues.FAILED_OR_UNYIELDING_ACT, a NEW name: fail*, unsuccessful, abandon*, attempt*, could not, unable, without success, no tissue, yielded no, not obtained/removed/retrieved/placed/achieved/successful) - candidate_rb, never candidate_ra (it breaks test_control_a_passage_naming_an_act_the_reader_does_not_read_still_stands).",
+  "D2": "services.read_clause: a failure word in the mention's own clause after the mention, on the act's own predicate (not another predicate's), reads 'uncertain' before the act-predicate branch (FAILED_ACT, a NEW name in cues.py); HEDGE_WORDS is not widened.",
+  "D3": "(a) engine._status_signal: the routing-era reader's own negated or cancelled reading, or an unresolved-negation doubt cue (detect.DOUBT_PREFIX), is a status signal, so a denial in the matched service's own report holds with both readings; (b) services.read_clause negation forms 'none (of ...) was/were', 'at no point was/were', and a 'to determine whether ...' purpose phrase between the act and its own negated predicate; (c) the box row tie: a boxed row read performed only by its section whose own line marks a denying option ('No', 'Not performed', 'Not done') reads uncertain (held), never performed.",
+  "D4": "engine own-passage release: only when services._family_for_act places the passage's act in the matched family alone among the documented services (fail-closed: the correct code on an unplaceable sentence is held too - its recorded cost).",
+  "D5": "engine own-passage release: never inside a non-physician role part (services.parts role != 'physician').",
+  "D6": "Engine half only (services._on_procedure_line is P1's): the D9 third arm on any cue holds F4C; and a matched performed act read only from another role's entry (pathology, nursing, anesthesia, radiology, facility) never makes the code performed (held). The title-branch line (part.role == 'physician' in _on_procedure_line) is given to the lead/P1 as a one-line wiring.",
+  "D7": "A helper only (services.labelled_service_heading, a NEW function; P1 owns parts()): a 'Label: <service>' line naming exactly one family, with only that service's name, heading vocabulary, attributes and today's date, and no history/plan/earlier-span word, opens a report part. NOT wired on this branch: no movement here; the wiring line and the H1 battery row are given to the lead.",
+  "D8": "services._time_kind (+ the timed list of _time_parts): inside a titled report, an indication section is 'indication' over its own heading line only when that line carries a complete statement (_time_end bounds it); never a blanket p.kind in ('other','report').",
+  "D9": "engine._second_opinion third hold arm on any cue: a routing-era planned or historical reading of the code's own passage that lies on the matched act's evidence holds (not only a section-only reading).",
+  "D10": "Engine half (the inventory's reading of an attached report title is P1's): the third arm also holds a code matched to a service with no act (a base or service code) whose own passage is that service's own statement and routing reads it planned or historical by any cue.",
+  "D12": "detect C4: the NOT_IN_PERSON reading also runs on a folded copy of the text (no-break and other Unicode spaces to a space; soft hyphens and zero-width characters removed) when the text holds any; and _PV1_IN_PERSON's 'in person today' alternative no longer matches after 'seen/evaluated/examined/interviewed' (that verb's own alternative, which reads its negation, decides). Telehealth, 'Pt FTA', 'entered in error' and teaching-physician wordings are NOT in this repair (policy/vocabulary; the design's D12 names the fold and the regex).",
+  "D13": "detect._upper_extent: a stop statement (the examination, the procedure, the scope or 'we' stopped, halted, ended, was terminated or aborted at or in a landmark) shallower than the deepest landmark reached withholds the extent (held [extent]); never a pause on withdrawal or a stop to do something there.",
+  "D15": "engine._encounter base rule: a base code whose matched service is included in another documented service (DocumentedService.included_in) beside an active, performed code matched to that including service is held [base_included].",
+  "R3-7.5.1": "Narrow evidence hold (engine._select): a code the documented service reads as performed whose evidence support is warn or fail is held when EVERY provider passage lies in another documented service's evidence or acts, or in another service's scope and outside the matched service's scope, or is read by the routing-era reader as planned, historical, negated or cancelled. Otherwise it stays as it is (procedure-level-only passages stay READY: R3 open question 1)."
+ },
+ "stopped": {
+  "D9 base companion": "'a code the readers do not read as performed never makes a base included' (and t.performed in engine._encounter's others) RELEASES the base beside a held therapeutic code whose act may have been done: measured on base by monkeypatch (logs/companion-probe-base.txt in the builder's scratch): 'A 7 mm sigmoid polyp was possibly removed with a cold snare.', 'It is unclear whether ...', '... removed with a cold snare?' each move 45378 from needs_clarification[base_included] to READY. Those are must-stay-held twins under the round-4 standard, so the rule is stopped; the bases stay held (no movement). The coverage half (reconcile only performed selections) is not coded either: it is no hold, and it moves completeness, unresolved items and second-review offers for every held code."
+ },
+ "cues_added": [],
+ "movements": {},
+ "h2": "NEW-SEND = NEW-TAKE = 0 and every class 0: nothing on the request side moves (context.py and sections.py are not edited; the new cues.py names are read by neither).",
+ "battery_rows_added": [
+  "R8 C1 control, hot snare removal stated",
+  "R8 C2 control, cold forceps biopsies taken",
+  "R8 D1 N1 hot snare polypectomy failed",
+  "R8 D1 N2 attempted, could not be removed",
+  "R8 D1 N3 biopsy attempted, no tissue",
+  "R8 D1 N4 ERCP stent placement failed",
+  "R8 D10 attached prior EGD report title",
+  "R8 D12 E/M control, h4-01 time-only twin",
+  "R8 D12 E/M not seen in person, exam, NBSP",
+  "R8 D12 E/M not seen in person, exam, plain",
+  "R8 D12 E/M not seen in person, history, NBSP",
+  "R8 D12 E/M not seen in person, history, plain",
+  "R8 D13 named EGD control, h4-03 as written",
+  "R8 D13 named EGD control, two passages",
+  "R8 D13 named EGD, stopped in the stomach, two passages",
+  "R8 D13 named EGD, we stopped in the stomach",
+  "R8 D15 EGD with EUS, base EGD coded",
+  "R8 D2 N10 antral biopsy failed",
+  "R8 D3 N15 no polyps removed, snare header",
+  "R8 D3 N16 we did not remove it, snare header",
+  "R8 D3 N17 polyp was not removed, snare header",
+  "R8 D3 N9 considered but not performed",
+  "R8 D3 declared:1 period-ended row, No checked",
+  "R8 D3 negtime-0 biopsies not obtained (whether)",
+  "R8 D3 release-0 at no point",
+  "R8 D3 release-0 none was snared",
+  "R8 D3 release-0 without resection",
+  "R8 D4 F1 EGD snare line, colonoscopy normal",
+  "R8 D4 F7N EGD biopsy line, colonoscopy denies",
+  "R8 D5 F4B pathology specimen line",
+  "R8 D6 F4C pathology addendum heading",
+  "R8 D8 C1 indication line and the reach sentence cited",
+  "R8 D8 C1 indication line in a titled report",
+  "R8 D9 index colonoscopy prose",
+  "R8 D9 release-1 last spring",
+  "R8 D9 release-1 most recent colonoscopy",
+  "R8 D9 release-1 ordered by the referrer",
+  "R8 D9 release-1 to be removed tomorrow",
+  "R8 D9 time-1 last colonoscopy line",
+  "R8 D9 time-2 last colonoscopy line, base cited",
+  "R8 E1 history sentence cited, snare also done today",
+  "R8 E2 EGD biopsy sentence cited for a colon snare",
+  "R8 E3 colon snare sentence cited for an EGD biopsy"
+ ],
+ "battery": [
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D1 N2 attempted, could not be removed",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D1 N3 biopsy attempted, no tissue",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D1 N4 ERCP stent placement failed",
+   "43274",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D10 attached prior EGD report title",
+   "43235",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D12 E/M not seen in person, exam, NBSP",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D12 E/M not seen in person, exam, plain",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D12 E/M not seen in person, history, NBSP",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D12 E/M not seen in person, history, plain",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D13 named EGD, stopped in the stomach, two passages",
+   "43244",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D13 named EGD, we stopped in the stomach",
+   "43244",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D15 EGD with EUS, base EGD coded",
+   "43235",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D2 N10 antral biopsy failed",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 N15 no polyps removed, snare header",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 N16 we did not remove it, snare header",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 N17 polyp was not removed, snare header",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 N9 considered but not performed",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 declared:1 period-ended row, No checked",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 negtime-0 biopsies not obtained (whether)",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 release-0 at no point",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 release-0 none was snared",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D3 release-0 without resection",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D4 F1 EGD snare line, colonoscopy normal",
+   "43251",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D4 F1 EGD snare line, colonoscopy normal",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D4 F7N EGD biopsy line, colonoscopy denies",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D4 F7N EGD biopsy line, colonoscopy denies",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D5 F4B pathology specimen line",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D6 F4C pathology addendum heading",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D8 C1 indication line and the reach sentence cited",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 index colonoscopy prose",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 last spring",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 most recent colonoscopy",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 ordered by the referrer",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 time-1 last colonoscopy line",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 time-2 last colonoscopy line, base cited",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 E1 history sentence cited, snare also done today",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 E2 EGD biopsy sentence cited for a colon snare",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 E3 colon snare sentence cited for an EGD biopsy",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ]
+ ],
+ "battery_note": "The register rows (prefix 'R8 ') are new permanent rows run on both trees by the head's harness; their movements above are the declaration. Every other (row, code) must not move, in particular the controls: R8 C1, R8 C2, R8 D12 control, R8 D13 controls, R8 D8 single-passage row (already held), R8 D10 45378, R8 D15 43242, and every base code (no base release: the companion is stopped). The 50 permanent rows of the round-4 battery: no movement declared.",
+ "replay": "EQUAL predicted for the 8 regression documents in every member state; any movement is a finding, measured and amended (dated, after code) before it is accepted.",
+ "h3": "No MUST cell that passes on the base fails on the head.",
+ "h7": "Linear: the new checks are bounded searches per cited passage or per clause; the C4 fold builds one folded copy and one analysis of it only when the text holds a foldable character. Every doubling ratio <= 2.3, analyze child <= 30 s, assess child <= 60 s.",
+ "register": {
+  "moved_to_held": [
+   "D1 N1-N4",
+   "D2 N10",
+   "D3 N15 N16 N17 N9, release-0 x3, negtime-0, declared:1 period row",
+   "D4 F7N, F1 (the wrong-procedure code, and the correct code on the same unplaceable sentence)",
+   "D5 F4B",
+   "D6 F4C",
+   "D8 C1 two passages",
+   "D9 time-1, time-2 (45385), index, most recent, last spring, tomorrow, ordered",
+   "D10 attached prior report title",
+   "D12 not seen in person (history and exam, plain and NBSP)",
+   "D13 named EGD stopped in the stomach",
+   "D15 EGD with EUS base",
+   "R3 1.8 history-cited, wrong-procedure x2"
+  ],
+  "not_moved_on_this_branch": [
+   "D7 H1 (helper not wired: P1's parts())",
+   "D9 release-7 constructed and lens text (both readers read the act as today's; the cause is _opens_todays_report / the layout, P1's and H2-frozen)",
+   "D12 tele health, Pt FTA, entered in error, teaching physician (outside the design's D12)",
+   "D11, round7 declared:3/regression:2, '?' form, report-2: already held on base"
+  ],
+  "controls_unchanged": [
+   "tests.test_services_reconcile.ServiceStatementIsNotTheActTests.test_control_a_passage_naming_an_act_the_reader_does_not_read_still_stands ('Cecal biopsies x2.' stays READY)",
+   "D12 h4-01 time-only twin READY",
+   "D13 named P00 READY",
+   "r10 retrieval-1 control (45385 selected: 45378 held, 45385 READY)",
+   "stated snare / stated biopsy controls READY"
+  ]
+ },
+ "mara": "tests/fixtures/cux/mara through jobs._assess_child with the retained Corti response: on base 43239 and 45385 are held by false conflicts and 45380 is READY. Declared: no new hold - 45380 stays READY, 43239 and 45385 stay held with the same questions and no added hold reason, the service questions unchanged. With P1's corrected binding (simulated by R3's counterfactual inventory) 45385 must stay READY: its passages are in the colonoscopy scope, so the narrow evidence hold does not apply.",
+ "unit_pins": "Expected to change and named in the commits that change them: tests/test_gi4_battery.py (the row count and the minimal-row filter: the R8 rows), tests/test_gi4_po.py OfferBatteryTests (the R8 rows are checked by tests/test_cux_hold.py against this declaration's offers instead). Any other moved test is a finding, measured and amended. Pins (tests/fixtures/gi4/pins, parity digests) are the lead's at integration and are not re-pinned here.",
+ "not_changed": [
+  "studio/gi/context.py",
+  "studio/gi/sections.py",
+  "studio/validation/reconcile.py",
+  "services.parts() and _on_procedure_line (P1's)",
+  "HEDGE_WORDS",
+  "the request side"
+ ]
+}
