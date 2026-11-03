@@ -8,7 +8,8 @@ Run it where the participant's credentials are mounted (the worker):
 It refuses, sending nothing, unless that participant is live on this installation (CPT_STUDIO_PROVIDER_MODE for Corti,
 CPT_STUDIO_ASTRA_MODE or CPT_STUDIO_FABLE_MODE), the installation is synthetic-only and an owner authorization is
 configured; and while another provider request holds the installation-wide single-flight lock (I8). It then sends
-through the real adapter, with no retry - one request for Corti, one tool-loop run for Astra or Fable: Astra and Fable read the short synthetic GI note below as pasted text,
+through the real adapter, with no retry - one coding request for Corti (after the OAuth token request its adapter sends
+first), one tool-loop run for Astra or Fable: Astra and Fable read the short synthetic GI note below as pasted text,
 and Corti codes the same note. The answer is read as the pipeline reads it, and one JSON receipt is printed with no
 secret in it: what was called, which model was asked for and which answered, the vendor's request and response ids,
 the latency, the usage as reported with its estimated cost, and a summary of the reading. Nothing is written to the

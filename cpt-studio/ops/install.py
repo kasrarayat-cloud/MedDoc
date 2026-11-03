@@ -101,8 +101,8 @@ PARTICIPANTS = {
               'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
 }
 PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
-# An access check sends one request (Corti) or one run of the pipeline's tool loop, one request per exchange and at most
-# PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
+# An access check sends one coding request (Corti, after the OAuth token request its adapter sends first) or one run of
+# the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
 # start.
 ACCESS_CHECK_SECONDS = 420
 ACCESS_CHECK_OUTPUT_LIMIT = 64 * 1024
@@ -2748,7 +2748,8 @@ def access_receipt(stdout: bytes):
 
 def participant_access_check(ctx, image_id, env_bytes, name, authorization_ref) -> dict:
     """``manage participant_access_check --participant <name>`` sends real requests to the participant's vendor
-    ('corti', 'astra' or 'fable'): one for Corti, and for Astra or Fable one run of the pipeline's tool loop, one request
+    ('corti', 'astra' or 'fable'): one coding request for Corti, after its OAuth token request, and for Astra or Fable one
+    run of the pipeline's tool loop, one request
     per exchange and at most PARTICIPANT_MAX_EXCHANGES. So it runs only with --access-check, once the new pair runs. A one-shot with the
     worker's mount and network for that participant: its credentials file read-only at the worker's path and
     cpt-studio-net, that participant live under the authorization the worker has, every other one disabled. What the
