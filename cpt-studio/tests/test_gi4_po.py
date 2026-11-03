@@ -280,9 +280,14 @@ class OfferBatteryTests(SimpleTestCase):
         rows = DECLARED['offer_battery']['rows']
         self.assertEqual(sorted(INTEGRATION_OFFERS), [('S3h h4-05 counterfactual, EUS code citing the narrative', 'own'),
                                                       ('telephone-only time', 'empty')])  # U1 and U2, nothing else
-        self.assertEqual(sorted(set(battery.CASES) - set(rows)), sorted(PA_ROWS_OFFERS))  # PA's rows only
+        # P2 READ-HOLD's register rows ('R8 ', added after PO): their offers are checked against cux-hold.json's own
+        # declaration (tests/test_cux_hold.py), never against PO's
+        register = {n for n in battery.CASES if n.startswith('R8 ')}
+        self.assertEqual(sorted(set(battery.CASES) - set(rows) - register), sorted(PA_ROWS_OFFERS))  # PA's rows only
         self.assertEqual(sorted(set(rows) - set(battery.CASES)), [])
         for name, (text, codes) in battery.CASES.items():
+            if name in register:
+                continue
             got = {'own': offers_of(text, [(code, quote) for code, quote, _ in codes]), 'empty': offers_of(text)}
             for answer in ('own', 'empty'):
                 with self.subTest(name, answer=answer):

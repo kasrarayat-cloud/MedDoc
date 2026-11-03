@@ -6,8 +6,11 @@ In-process and offline: nothing is sent and no database is read.
 Permanent rows: the minimal design's 28 cases (its battery.py, verbatim), the judge's J1-J8, K1-K3, E1-E4 and S1-S3
 (judge_battery.py, verbatim), the h4-05 counterfactual (the judge's F1: 43259 citing the narrative is EXCLUDED as
 installed, the agreement gate's excluding side; package PA declares it moving to held), and package PA's PA1-PA3 (the
-gate's second reader: two that disagree, held; one that agrees under its section's own heading, excluded). Each code
-carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
+gate's second reader: two that disagree, held; one that agrees under its section's own heading, excluded), and the
+R8 register rows (prefix 'R8 ', package P2 READ-HOLD of 2026-11-03: the previously reported false READYs of R8 section
+1.2, each with its controls; tests/fixtures/gi4/declarations/cux-hold.json declares their movements). A row may cite
+several passages for one code (a tuple of quotes) and be read with a member's answer (R8_USER: the regression walk's
+date). Each code carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
   done             performed today: an exclusion is a violation
   done_incomplete  performed today, incompletely: an exclusion is a violation, and READY needs an incompleteness signal
                    (a modifier consideration or a non-pass check)
@@ -301,6 +304,8 @@ CASES = {
         'duodenum. The bile duct was cannulated and a biliary sphincterotomy was performed.\n',
         [('43276', 'The biliary stent was exchanged.', 'not_done')]),
 }
+# The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
+R8_USER: dict = {}
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')
@@ -315,11 +320,16 @@ def modules():
 
 
 def response(m, text, codes):
+    """The synthetic answer: one selected code per entry, its quote (or each quote of a tuple: several passages of one
+    code, as a provider cites them) located exactly in the text."""
     found = []
     for i, (code, quote, _) in enumerate(codes):
-        start = text.index(quote)
+        spans = []
+        for one in (quote if isinstance(quote, tuple) else (quote,)):
+            start = text.index(one)
+            spans.append(m.EvidenceSpan(0, start, start + len(one), one, True, 1))
         found.append(m.ProviderCode(role='selected', system='cpt', code=code, display='SYNTHETIC', index=i,
-                                    evidence=(m.EvidenceSpan(0, start, start + len(quote), quote, True, 1),)))
+                                    evidence=tuple(spans)))
     return m.NormalizedResponse(provider='corti', adapter_version='corti-coding-v2@cptstudio-1', codes=tuple(found))
 
 
@@ -370,7 +380,8 @@ def run_row(m, name, text, codes, user_values=None) -> dict:
 
 def run(only='', m=None) -> dict:
     m = m or modules()
-    return {name: run_row(m, name, text, codes) for name, (text, codes) in CASES.items() if only in name}
+    return {name: run_row(m, name, text, codes, R8_USER.get(name)) for name, (text, codes) in CASES.items()
+            if only in name}
 
 
 def movements(base: dict, head: dict) -> list:
