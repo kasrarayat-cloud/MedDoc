@@ -288,3 +288,69 @@ Stop and diagnose on any of these; do not rerun a phase and do not upload the ne
   authentication, quota or payment failure (acts from the next document); verify_downloads exiting 1 or 2; jobs_active
   not returning to 0 within the stage deadlines; a /health/ release other than 41e03656df617d5fab4a551ba7a0d7aea5ca3380, or any 5xx; a downloaded report that
   misstates the persisted decisions; any action on an encounter the walk did not create.
+
+## Decision recorded under this declaration after the image phase's stop (2026-11-03, session cd048041)
+
+Appended after the act began; nothing above is changed. It is committed, and lands through its own PR, before any
+later phase runs.
+
+**What stopped.** The preflight phase passed (receipt preflight-20261103T193306134597Z.json: ok, every preflight row
+above as declared). The image phase exited 0 and its receipt says ok (image-20261103T193415728635Z.json: cpt-studio:41e03656df61
+= sha256:31d8d09721d5ab8ce0340f8906cb657c370584bca3566771c2358c5c98d46ae1). The operator's checks then met two of the
+stop conditions above:
+- The build log (image-20261103T193354313426Z-01-docker-build.log) shows `[5/8] COPY requirements.txt ./` and
+  `[6/8] RUN pip install` ran, not CACHED (pip took 11.0 s). Steps 2 to 4 (apt, the user, WORKDIR) were CACHED.
+- The new image's `dpkg-query -W -f '${Package} ${Version}\n'` list (166 lines, sha256
+  500b6abda58b9a3e08f082bcfd06e641a580e97e951ffca2b939a2f545ed9194) differs from the recorded one. cpt-studio:80df1831d168
+  still reproduces the recorded list exactly (166 lines, sha256 6f1b61f6…). The difference is exactly two packages:
+  libsasl2-2 and libsasl2-modules-db, 2.1.28+dfsg-10 to 2.1.28+dfsg-10+deb12u1, a Debian 12 stable-update revision
+  whose content is not established here (the slim image carries no changelog).
+- So the RootFS prediction was false as well: 11 layers, of which the first 4 (the base image's) equal 88544c7cd33f's,
+  not 9.
+
+Nothing ran after the stop. The app phase was not run, and the 80df1831d168 pair served throughout.
+
+**Cause, measured.** The cause is this session's own error. On 2026-11-02T07:10Z, in the disk cleanup the owner asked
+for, the session ran an unfiltered `docker builder prune -af`. That deleted every build-cache record, the 2026-10-31
+image build's included. At 07:52Z it built a precheck image, cpt-studio-precheck:fa457805ca3b
+(sha256:b469e2d4310e…), from the same Dockerfile and requirements, in a context it extracted itself with GNU tar. Its
+apt step ran afresh and installed the +deb12u1 packages, giving layer sha256:530d5634d484…. The precheck image built at
+05:55Z, before the prune (cpt-studio-precheck:e3c05bc007c6), has the original layer sha256:e84a2052de1b…, as
+88544c7cd33f does.
+
+Today's build reused the 07:52Z apt layer, reported as CACHED, but not its requirements COPY. `git archive` writes
+requirements.txt with mode 0664. The precheck's context kept 0664, and the installer's extraction normalizes files to
+0644, so the COPY's cache key differed and pip ran again. The prediction above was written without checking that the
+surviving cache records matched the installer's context. The check made before the act, at 19:04Z, confirmed only that
+records for those steps existed.
+
+**Measured equivalence of what changed:**
+- **pip.** The 23 installed distributions have identical names and versions in cpt-studio:80df1831d168 and the new
+  image. Each one's installed-file hash list is also identical: its RECORD without bytecode entries, read offline in
+  each image (the two fingerprint files are byte-identical, sha256 176156b6…). So pip installed the same wheels. pypdf is
+  6.21.2.
+- **The two system libraries.** They are used by the system libldap-2.5-0, and through it by libcurl4: tesseract's URL
+  input, which CPT Studio does not use. The database driver loads its own bundled copy,
+  psycopg_binary.libs/libsasl2-84219a89.so.3.0.0, which is identical in both images (above).
+- **The rest of the image.** User 10150:10150, the revision label and CPT_STUDIO_RELEASE_SHA=41e03656df617d5fab4a551ba7a0d7aea5ca3380
+  are as declared, and the image phase's own smoke checks passed.
+
+**Decision.** Made by session cd048041, the integration and deployment owner, under the standing authority. It is not
+one of the owner's four classes: no product decision, capability loss, eyeball acceptance, money, key or deletion.
+- **The image.** Install sha256:31d8d09721d5… as built. It is not rebuilt: no build through this revision's installer
+  can bring back the deleted records, and the Debian mirror now serves +deb12u1.
+- **The image rows above, amended to what was measured:**
+  - apt (step 2) is the 2026-11-02 precheck's layer;
+  - requirements and pip (steps 5 and 6) ran, installing the same files;
+  - the package list is 500b6abd…, the recorded list with libsasl2-2 and libsasl2-modules-db at +deb12u1;
+  - 4 of 11 RootFS layers equal 88544c7cd33f's.
+- **The rest of this declaration stands unchanged:** the baseline, the pre-app dump, the app, passages, license-note
+  and verify predictions, the walk and its bounds, the stop conditions and the rollback. Image 88544c7cd33f stays the
+  rollback image.
+- **How the remaining phases run.** They run in order, from a clean, detached checkout of the merge commit that lands
+  this addendum: a descendant of the revision without runtime change, with its tree.head and door.declaration_commit in
+  each receipt.
+  - preflight-20261103T193306134597Z.json stays this act's binding baseline, and image-20261103T193415728635Z.json its
+    image. Neither phase is re-run.
+  - The app phase's pre-checks (jobs_active 0; no reserved or sending run; no unreconciled unknown outcome; no audit
+    event under 10 minutes old) and the baseline counts are read again immediately before it.
