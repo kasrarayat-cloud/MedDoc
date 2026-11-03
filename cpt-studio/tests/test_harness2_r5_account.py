@@ -588,8 +588,9 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
         self.assertIn('    Position on G0121: disputes', txt)
         self.assertIn('    Additional code G0105 · units 1 — proposed after peer review, never independent', txt)
         # written out (refutation round 6, falsegreen-3: read through reports.UNREAD_CODE, the constant under test,
-        # this passed whatever that sentence said)
-        self.assertFalse([line for line in txt if 'a code CPT Studio does not read' in line])
+        # this passed whatever that sentence said), and the constant kept beside it, so the pin is no weaker than it was
+        self.assertFalse([line for line in txt
+                          if 'a code CPT Studio does not read' in line or reports.UNREAD_CODE in line])
         self.assertEqual(rows, [('peer_position', 'G0121', 'disputes'),
                                 ('peer_additional_code', 'G0105', 'proposed_after_peer_review')])
 
