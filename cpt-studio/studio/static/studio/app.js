@@ -886,11 +886,21 @@ function modifierNote(proposal) {
 function evidenceChips(proposal, layout) {
   // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
   const checked = supportChecked(proposal);
+  // The source passages CPT Studio selected are the coded act's own only where the engine matched the code to the act
+  // (support.acts) or where the act is the service itself (reason 'service': a base or E/M code); a support served with
+  // no acts list (the elsewhere path) is checked against the act's own passages too. Otherwise - no act read
+  // ('own_passage': the status was read from the cited passage itself; 'profile_unknown') - they are the documented
+  // service's own passages, which the provider's were checked against, so neither is said to show, or not to show, the
+  // coded act (refutation round 6, R6-MEANING, ownership-5: a combined report's "Procedures: EGD and colonoscopy" was
+  // listed under "Source passages that show the coded act" beside the cited "Biopsies were taken with cold forceps.",
+  // said not to show it, the very passage the code's status was read from).
+  const acts = proposal.support?.acts;
+  const serviceOnly = checked && Array.isArray(acts) && !acts.length && proposal.support?.reason !== 'service';
   const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
   const provider = (proposal.evidence || []).map((evidence, index) => {
     const key = `${proposal.id}:${index}`;
     if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
-    const note = unrelated.has(index) ? ' — cited by the provider; does not show the coded act' : '';
+    const note = unrelated.has(index) ? (serviceOnly ? ' — cited by the provider' : ' — cited by the provider; does not show the coded act') : '';
     return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”${note}`)}</span></button>`;
   });
   const source = (proposal.support?.source || []).map((evidence, index) => {
@@ -898,7 +908,7 @@ function evidenceChips(proposal, layout) {
     if (layout.unlocated.has(key)) return '';
     return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio${checked ? '' : '; not checked against the coded act'}`)}</span></button>`;
   });
-  const sourceLabel = source.some(Boolean) ? groupLabel(checked ? 'Source passages that show the coded act' : 'Passages of the documented service (not checked against the coded act)') : '';
+  const sourceLabel = source.some(Boolean) ? groupLabel(!checked ? 'Passages of the documented service (not checked against the coded act)' : serviceOnly ? 'Source passages of the documented service' : 'Source passages that show the coded act') : '';
   return provider.join('') + sourceLabel + source.join('');
 }
 

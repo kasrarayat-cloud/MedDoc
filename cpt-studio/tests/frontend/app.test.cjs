@@ -2910,3 +2910,33 @@ test('R6-MEANING D14: the panel never says the provider proposed the participant
   assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'excluded', reinstatable: false, support: {} }, ...theirs.proposals] }), said);
   assert.equal(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }), said);
 });
+
+// ownership-5: the source passages CPT Studio selected are "Source passages that show the coded act" only where they
+// are the act's own - the engine matched an act (support.acts), or the act is the service itself (reason 'service'), or
+// the support serves no acts list (the elsewhere path). Where no act was read ('own_passage': the status was read from
+// the cited passage; 'profile_unknown') they are the documented service's passages, and the cited passage is never
+// said not to show the coded act.
+test('R6-MEANING ownership-5: a service\'s own passages are never labelled as showing the coded act', () => {
+  const chips = support => app.evidenceChips({ id: 'p1', evidence: [{ start: 0, end: 38, text: 'Biopsies were taken with cold forceps.' }], support }, { unlocated: new Set() });
+  const source = [{ start: 40, end: 70, text: 'Procedures: EGD and colonoscopy' }];
+  for (const reason of ['own_passage', 'profile_unknown']) {
+    const html = chips({ status: 'warn', reason, acts: [], supporting: [], unrelated: [0], source });
+    assert.equal(html.includes('Source passages that show the coded act'), false, reason);
+    assert.ok(html.includes('Source passages of the documented service'), reason);
+    assert.equal(html.includes('does not show the coded act'), false, reason);
+    assert.ok(html.includes('“Biopsies were taken with cold forceps.” — cited by the provider</span>'), reason);
+    assert.ok(html.includes('“Procedures: EGD and colonoscopy” — selected from the source by CPT Studio</span>'), reason);
+  }
+  // the act's own passages keep the label, and the cited passage that does not overlap them still says so
+  for (const support of [{ status: 'warn', reason: 'service', acts: [{ id: 'A1', kind: 'biopsy', label: 'biopsy' }], supporting: [], unrelated: [0], source },
+    { status: 'warn', reason: 'service', acts: [], supporting: [], unrelated: [0], source },
+    { status: 'warn', supporting: [], unrelated: [0], source }]) {
+    const html = chips(support);
+    assert.ok(html.includes('Source passages that show the coded act'), JSON.stringify(support));
+    assert.ok(html.includes('— cited by the provider; does not show the coded act'), JSON.stringify(support));
+  }
+  // a support that was not checked is as before, whatever its reason
+  const unchecked = chips({ status: 'not_applicable', reason: 'act_missing', acts: [], supporting: [], unrelated: [0], source });
+  assert.ok(unchecked.includes('Passages of the documented service (not checked against the coded act)'));
+  assert.equal(unchecked.includes('does not show the coded act'), false);
+});

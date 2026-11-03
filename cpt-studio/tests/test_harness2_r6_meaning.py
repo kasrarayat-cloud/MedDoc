@@ -10,7 +10,8 @@ verified in meaning-r6/results.json), on the findings' own inputs:
   reason, so no participant's code is ever selected or ready, counts as covering a documented act, makes another code
   included or clears an unresolved item; Corti's proposals are assessed exactly as with no participant configured;
 - negation-5: a service only a participant reads as performed is worded with the documented-service reading's own
-  not-done reading of that family where there is one, in the completeness reason and in the check.
+  not-done reading of that family where there is one, in the completeness reason and in the check;
+- ownership-5: the page labels the source passages as showing the coded act only where they are the act's own.
 
 The engine classes run the real routing, inventory and engine (tests.test_harness_engine's helpers); the pipeline
 classes run the real jobs, tool loop, readers, engine, API, reports and app.js under node (tests.test_harness2_pipeline:
@@ -639,3 +640,56 @@ class MissingServicePipelineTests(MeaningCase):
         self.assertNotIn('that the documented-service reading does not read as performed', draft)
         check = next(c for c in detail['assessment']['encounter_checks'] if c['id'] == 'participants.services')
         self.assertIn('where the documented-service reading reads the upper endoscopy as negated', check['detail'])
+
+
+# --- ownership-5: which source passages the page says show the coded act ----------------------------------------------
+
+C6 = (TOP + 'Procedures: Colonoscopy and upper endoscopy\nColonoscopy: The colonoscope was advanced to the cecum and '
+      'the examination was completed.\nRandom biopsies were taken with cold forceps.\nEGD: The gastroscope was '
+      'advanced to the second portion of the duodenum.\nA sessile polyp was removed with a hot snare.\n')
+COL_BX = 'Random biopsies were taken with cold forceps.'
+TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
+MATCHED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery '
+           'center\nProcedure: Colonoscopy\n' + CECUM + '\n' + TODAY_BX + '\n')
+ACT_LABEL = 'Source passages that show the coded act'
+SERVICE_LABEL = 'Source passages of the documented service'
+NOT_THE_ACT = '— cited by the provider; does not show the coded act'
+
+
+class EvidenceChipLabelTests(MeaningCase):
+    """The page as it is drawn with no participant configured (the release default): a code whose act the engine read
+    from its own cited passage ('own_passage': support.acts []) has the documented service's passages as its source
+    passages, which do not show the act, and its cited passage is the one the status was read from."""
+
+    def card(self, detail, value):
+        (item,) = [p for p in proposals(detail) if p['code'] == value and p['bucket'] == 'selected']
+        return item, browser(f'visible(cardOf(page(), {json.dumps(item["id"])}))', detail)
+
+    def test_e1_corti_s_own_passage_release(self):
+        detail = self.corti_alone(C6, [('45380', COL_BX), ('43251', 'A sessile polyp was removed with a hot snare.')])
+        item, card = self.card(detail, '45380')
+        self.assertEqual((item['support']['reason'], item['support']['acts'], item['support']['status']),
+                         ('own_passage', [], 'warn'))
+        self.assertNotIn(ACT_LABEL, card)
+        self.assertIn(SERVICE_LABEL, card)
+        self.assertNotIn(NOT_THE_ACT, card)
+        self.assertIn(f'“{COL_BX}” — cited by the provider', card)
+
+    def test_f7n_the_egd_code_read_from_its_own_passage(self):
+        detail = self.corti_alone(F7N, [('43239', EGD7_BX), ('45378', COLON7N)])
+        item, card = self.card(detail, '43239')
+        self.assertEqual((item['support']['reason'], item['support']['acts']), ('own_passage', []))
+        self.assertNotIn(ACT_LABEL, card)
+        self.assertIn(SERVICE_LABEL, card)
+        self.assertNotIn(NOT_THE_ACT, card)
+
+    def test_the_matched_act_keeps_its_label(self):
+        """The control: the inventory reads the biopsy act, and Corti cites only the procedure line - the source passage
+        is the act's own, and the cited line does not show it."""
+        detail = self.corti_alone(MATCHED, [('45380', 'Procedure: Colonoscopy')])
+        item, card = self.card(detail, '45380')
+        self.assertTrue(item['support']['acts'])
+        self.assertIn(ACT_LABEL, card)
+        self.assertNotIn(SERVICE_LABEL, card)
+        self.assertIn(f'“Procedure: Colonoscopy” {NOT_THE_ACT}', card)
+        self.assertIn(f'“{TODAY_BX}” — selected from the source by CPT Studio', card)
