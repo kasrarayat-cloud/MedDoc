@@ -524,9 +524,11 @@ class MissingServiceTests(SimpleTestCase):
         complete = result.completeness
         self.assertEqual(complete['state'], 'incomplete')
         # moved by refutation round 10 (wording-2): only what makes the service missing (it was "... that the
-        # documented-service reading does not read as performed ...")
+        # documented-service reading does not read as performed ..."); and by round 11 (wording-1): with what the
+        # reading reads as performed in the quoted words, under another family - never the quote left looking denied
         reason = ('Astra reads a performed endoscopic ultrasound where the documented-service reading reads no performed '
-                  f'service of that kind (“{CECUM}”)')
+                  'service of that kind, and reads in the quoted words a performed service under Colonoscopy '
+                  f'(“{CECUM}”)')
         self.assertEqual(complete['reasons'], [reason])
         self.assertEqual(complete['statement'], f'Coding for this encounter is incomplete: {reason}.')
         self.assertEqual([(m['participant'], m['family'], m['quote']) for m in complete['participant_services']],
@@ -556,9 +558,10 @@ class MissingServiceTests(SimpleTestCase):
         codes = corti(('45385', span(COLON, SNARE)), ('45380', span(COLON, BIOPSY)))
         result = run(COLON, codes, [read('fable', services=[service(COLON, 'egd', CECUM,
                                                                     status='attempted_incomplete')])])
-        # moved by refutation round 10 (wording-2), as above
+        # moved by refutation rounds 10 (wording-2) and 11 (wording-1), as above
         reason = ('Fable reads an attempted, incomplete upper endoscopy where the documented-service reading reads no '
-                  f'performed service of that kind (“{CECUM}”)')
+                  'performed service of that kind, and reads in the quoted words a performed service under Colonoscopy '
+                  f'(“{CECUM}”)')
         self.assertEqual(result.completeness['state'], 'incomplete')
         self.assertEqual(result.completeness['reasons'], [reason])
         entry = result.completeness['participant_services'][0]

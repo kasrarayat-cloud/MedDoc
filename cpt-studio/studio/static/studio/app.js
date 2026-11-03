@@ -331,9 +331,9 @@ function paragraphPieces(text, start, end, marks, own = null) {
     const from = Math.max(mark.start, start);
     const to = Math.min(mark.end, end);
     if (from > cursor) pieces.push({ text: text.slice(cursor, from), keys: null });
-    // keys: the whole highlight's (selection); held: the keys whose own span (``own``: key -> [start, end)) lies in this
-    // piece, which its title is made of (renderPieces; refutation round 10, page-1: a highlight split across paragraphs
-    // gave each piece the whole highlight's title)
+    // keys: the whole highlight's (selection); held: the keys whose own span (``own``: key -> [start, end)) overlaps
+    // this piece, which its title is made of (renderPieces; refutation round 10, page-1: a highlight split across
+    // paragraphs gave each piece the whole highlight's title)
     const held = own ? mark.keys.filter(key => own.has(key) && own.get(key)[0] < to && own.get(key)[1] > from) : mark.keys;
     pieces.push({ text: text.slice(from, to), keys: mark.keys, held });
     cursor = to;

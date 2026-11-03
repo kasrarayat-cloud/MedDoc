@@ -2939,10 +2939,11 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     text's own, and every passage it returns is the text's.
 
     ``located``, when given, is a list that receives this reader's own reading of each service mention it reads, in
-    reading order, as ('service', family, kind, status, start, end): a service's name, a report title that names it,
-    or an instrument that names its family, exactly as each service's statuses are drafted, its kind the name's own
-    (the family's for an instrument), its status the mention's own after every rule of the reading, and start and end
-    its own offsets in ``text``. It is a record kept beside the inventory, never an input to it: the inventory is the
+    reading order, as (what, family, kind, status, start, end): what is 'service' for a service's name or a report
+    title that names it, its kind the name's own, and 'instrument' for an instrument that names its family, its kind
+    the family's (refutation round 11, wording-2: an instrument names no kind of its own), exactly as each service's
+    statuses are drafted, its status the mention's own after every rule of the reading, and start and end its own
+    offsets in ``text``. It is a record kept beside the inventory, never an input to it: the inventory is the
     same with it or without it. A service read as not done keeps no passage (only one read as performed has
     ``evidence``), so this is where a not-done reading's place is read (engine._Harness.missing: refutation round 8,
     wording-1 and wording-2). Round 9 also recorded act mentions; round 10 removed them with the reason's act arm."""
@@ -3623,8 +3624,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 d = drafts[family]
                 d.statuses.append((reading.status, reading.cues, bounded_span))
                 if located is not None:
-                    located.append(('service', family, FAMILY_KINDS.get(family, family.split('.')[-1]), reading.status,
-                                    m.start(), m.end()))
+                    located.append(('instrument', family, FAMILY_KINDS.get(family, family.split('.')[-1]),
+                                    reading.status, m.start(), m.end()))
                 if reading.status == 'performed':
                     d.evidence.append(bounded_span)
         # Pass 2: completion and extent, read in each service's own report part (or a sentence naming only it).

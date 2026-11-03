@@ -3296,3 +3296,50 @@ test('R10 page-1, page-2: each piece of a highlight is titled by the passages it
   const shapeB = page(`Procedure: Colonoscopy\n${seen} ${snare}\n${biopsies}\n`, [['p1', '45385', [seen, `${seen} ${snare}`], [1], [0]], ['p2', '45380', [snare, biopsies], [1], [0]]]);
   assert.deepEqual(r7Titles(shapeB), [[`${seen} ${snare}`, `${notTheAct('45380')}; ${holding('45385')}`], [biopsies, 'Evidence for 45380']]);
 });
+
+// refutation round 11
+// Round 10's piece titles were right, and mutants that undo them passed every pin: they titled a piece from its
+// highlight's keys for a documented service's passage or an unchecked support's (page-1), kept the API's code-point
+// offsets beside the pieces' UTF-16 units (page-2), counted a passage that only touches a piece as held by it (page-3),
+// or named only the first of two codes that each hold only a passage that does not show their act (page-4). The
+// pipeline's inputs are pinned in tests/test_harness2_r11.py.
+
+test('R11 page-1 to page-4: a piece is titled by the passages it holds, of every kind and at every boundary', () => {
+  const seen = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.';
+  const snare = 'The polyp was removed with a hot snare.';
+  const biopsies = 'Biopsies of the rectum were taken with cold forceps.';
+  const tail = 'the examination was completed.';
+  const cecum = `The colonoscope was advanced to the cecum and ${tail}`;
+  const colBx = 'Random biopsies were taken with cold forceps.';
+  const notTheAct = codes => `Passage the provider cited for ${codes}, which does not show the coded act`;
+  const holding = code => `Passages for ${code} in this highlight: evidence for ${code}, and a passage the provider cited for ${code} that does not show the coded act`;
+  // proposals: [id, code, evidence quotes, support]; a span's offsets in code points, as the API serves them
+  const page = (text, proposals) => {
+    const at = quote => { const { key, ...span } = cpSpan(text, quote, 'x'); return span; };
+    return { revision: { text, pages: [] }, assessment: { proposals: proposals.map(([id, code, evidence, support]) => ({ id, key: `sel:${id}`, bucket: 'selected', status: 'ready', code, evidence: evidence.map(at), support: { ...support, source: (support.source || []).map(at) } })) } };
+  };
+  const checked = (supporting, unrelated) => ({ status: 'pass', reason: 'service', acts: [{ id: 'S1-A1', kind: 'snare' }], supporting, unrelated });
+  const notChecked = { status: 'not_applicable', reason: 'act_missing', acts: [], supporting: [], unrelated: [] };
+  // page-1 (b): 45380's documented-service passage lies in the first piece only
+  const serviceSplit = page(`Procedure: Colonoscopy\n${cecum}\n\n${colBx}\n`, [
+    ['p1', '45380', [colBx], { status: 'warn', reason: 'own_passage', acts: [], supporting: [], unrelated: [], source: [tail] }],
+    ['p2', '43251', [`${tail}\n\n${colBx}`], notChecked]]);
+  assert.deepEqual(r7Titles(serviceSplit), [[tail, 'Evidence for 43251; Passage of the documented service for 45380'], [colBx, 'Evidence for 43251, 45380']]);
+  // page-1 (a): an unchecked support's documented-service passage lies in the first piece only
+  const uncheckedSplit = page(`Procedure: Colonoscopy\n${cecum}\n\n${seen}\n`, [['p1', '45380', [`${tail}\n\n${seen}`], { ...notChecked, source: [tail] }]]);
+  assert.deepEqual(r7Titles(uncheckedSplit), [[tail, 'Evidence for 45380; Passage of the documented service for 45380, not checked against the coded act'], [seen, 'Evidence for 45380']]);
+  // page-2: round 10's across shape after three astral characters, so 45385's snare passage begins in the second piece
+  const across = [['p1', '45385', [seen, snare], checked([1], [0])], ['p2', '45380', [`${seen}\n\n${snare} ${biopsies}`], checked([0], [])]];
+  const astral = page(`Procedure: Colonoscopy${'\u{1F52C}'.repeat(3)}\n${seen}\n\n${snare} ${biopsies}\n`, across);
+  assert.deepEqual(r7Titles(astral), [[seen, `Evidence for 45380; ${notTheAct('45385')}`], [`${snare} ${biopsies}`, 'Evidence for 45380, 45385']]);
+  assert.deepEqual(r7Titles(astral), r7Titles(page(`Procedure: Colonoscopy\n${seen}\n\n${snare} ${biopsies}\n`, across)));
+  // page-3: a passage that ends exactly where the next piece begins, and one that begins exactly where the previous ends
+  const ends = page(`Procedure: Colonoscopy\n${seen}\n\n${snare}\n`, [['p1', '45385', [`${seen}\n\n`, `${seen}\n\n${snare}`], checked([1], [0])]]);
+  assert.deepEqual(r7Titles(ends), [[seen, holding('45385')], [snare, 'Evidence for 45385']]);
+  const begins = page(`Procedure: Colonoscopy\n${seen}\n\n${snare} ${biopsies}\n`, [['p1', '45385', [`${seen}\n\n${snare}`], checked([0], [])], ['p2', '45380', [`\n\n${snare} ${biopsies}`], checked([0], [])]]);
+  assert.deepEqual(r7Titles(begins), [[seen, 'Evidence for 45385'], [`${snare} ${biopsies}`, 'Evidence for 45385, 45380']]);
+  // page-4: two codes in one highlight, each holding only a passage that does not show its act
+  const first = `${seen} The mucosa was otherwise normal.`;
+  const shape4 = page(`Procedure: Colonoscopy\n${first}\n${snare}\n${biopsies}\n`, [['p1', '45385', [seen, snare], checked([1], [0])], ['p2', '45380', [first, biopsies], checked([1], [0])]]);
+  assert.deepEqual(r7Titles(shape4), [[first, notTheAct('45385, 45380')], [snare, 'Evidence for 45385'], [biopsies, 'Evidence for 45380']]);
+});

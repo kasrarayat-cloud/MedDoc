@@ -3499,7 +3499,7 @@ class _Harness:
         missing = self.missing(inventory)
         if missing:
             out.append(checks.participants_services_check([(PARTICIPANT_LABELS[m['participant']], m['label'],
-                                                            m['quote'], m['status'], m['read_as'])
+                                                            m['quote'], m['status'], m['read_as'], m['read_in'])
                                                            for m in missing]))
         return out
 
@@ -3558,10 +3558,14 @@ class _Harness:
         historical), with the status its inventory gives that family's service - 'the upper endoscopy as negated'
         (refutation round 6, R6-MEANING, negation-5). A reading of another passage is never attached to the quote
         (refutation round 7, display-1). The first quote whose places name a reading is the entry's, and its passage
-        the first of those places that names one. Where no quote names one, the reason says only what makes the
-        service missing - the documented-service reading reads no performed service of that kind - which is true of
-        every input (refutation round 10, wording-2: "does not read as performed" had been printed beside a quote whose
-        words the reading reads as a performed act's)."""
+        the first of those places that names one. Where no quote names one, the reason says what makes the service
+        missing - the documented-service reading reads no performed service of that kind - which is true of every input
+        (refutation round 10, wording-2: "does not read as performed" had been printed beside a quote whose words the
+        reading reads as a performed act's), and with it what the reading reads as done in a quote's own words, of a
+        family that kind does not map to (_read_in: the first quote whose places name one, its passage the first of
+        those places), so the quoted service is never left looking denied (refutation round 11, wording-1: Astra's
+        "other GI service" quoting the title of a transnasal esophagoscopy report, which the reading files under the
+        upper GI endoscopy family, as performed, and the approved 43197 cites)."""
         if self._missing is None:
             done = {s.family for s in inventory.services if s.status in checks.POSITIVE}
             out, seen = [], set()
@@ -3578,20 +3582,26 @@ class _Harness:
                     label = PARTICIPANT_SERVICE_LABELS[service.family]
                     what = (f'a performed {label}' if service.status == 'performed'
                             else f'an attempted, incomplete {label}')
-                    read_as, place = '', good[0]
-                    for quote in service.evidence:
-                        own = {(span.start, span.end) for span in quote.spans}
-                        places = [span for span in good if (span.start, span.end) in own]
-                        named = self._read_as(places, families, inventory) if places else ''
+                    read_as, read_in, place = '', '', good[0]
+                    for arm, reader in (('as', self._read_as), ('in', self._read_in)):
+                        named = ''
+                        for quote in service.evidence:
+                            own = {(span.start, span.end) for span in quote.spans}
+                            places = [span for span in good if (span.start, span.end) in own]
+                            named = reader(places, families, inventory) if places else ''
+                            if named:
+                                place = next(span for span in places if reader((span,), families, inventory))
+                                break
                         if named:
-                            read_as = named
-                            place = next(span for span in places if self._read_as((span,), families, inventory))
+                            read_as, read_in = (named, '') if arm == 'as' else ('', named)
                             break
                     reason = (f'{PARTICIPANT_LABELS[name]} reads {what} where the documented-service reading reads '
-                              + (read_as or 'no performed service of that kind'))
+                              + (read_as or 'no performed service of that kind'
+                                 + (f', and reads in the quoted words {read_in}' if read_in else '')))
                     quoted = f'{reason} ({reconcile.quote(place)})'
                     out.append({'participant': name, 'family': service.family, 'families': list(families),
-                                'label': label, 'status': service.status, 'read_as': read_as, 'quote': place.text,
+                                'label': label, 'status': service.status, 'read_as': read_as, 'read_in': read_in,
+                                'quote': place.text,
                                 'start': place.start, 'end': place.end, 'page': place.page,
                                 # review.coding_completeness drops every reason that holds "open question" (it
                                 # recounts the open questions): a quote that holds it is kept in the entry and the
@@ -3606,7 +3616,10 @@ class _Harness:
         revision's text) give, for missing: each service mention of ``families`` it read inside a place (``located``)
         as not done at this encounter (checks.NEGATIVE), where its inventory gives that family's service that status,
         named by the mention's own kind (reconcile.mention_label: a kind with no service label by its act label), each
-        status once, in reading order - 'the upper endoscopy as cancelled'; '' when it reads none there.
+        status once, in reading order - 'the upper endoscopy as cancelled'; '' when it reads none there. An instrument
+        names no kind of its own (``located`` gives it its family's), so it is never named here (refutation round 11,
+        wording-2: "the ultrathin gastroscope was not inserted" had been named "the upper endoscopy as negated" beside
+        the inventory's negated esophagoscopy).
         Refutation round 8, wording-1: round 7 named a reading only where routing read the same family with the same
         status in the quote, which routing never does for "declined", "could not be performed" or a family it does not
         route. Wording-2: the inventory's upper-endoscopy service takes its kind from its first mention, so with a PEG
@@ -3625,6 +3638,26 @@ class _Harness:
                 if status not in states:
                     states.append(status)
         return ' and '.join(f'the {kind} as ' + ' and as '.join(states) for kind, states in read.items())
+
+    def _read_in(self, spans, families, inventory) -> str:
+        """What the documented-service reading reads as done (checks.POSITIVE) in one quote's words, at the places
+        ``spans`` give, for missing where no quote names a not-done reading: each service mention it read as done
+        inside a place (``located``: a service's name, a report title or an instrument) of a family that ``families``
+        does not hold, where its inventory reads that family's service as done too, named by that family's own label
+        (PROFILES, as the inventory heads the service) and by the inventory's status of it - a performed service the
+        inventory reads as incomplete is "an incomplete service" - never by a mention's kind, each family once, in
+        reading order: 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)'; '' when it reads none
+        there. A family ``families`` holds never has a service read as done here: missing names none then. Refutation
+        round 11, wording-1: the reason had said only that the reading reads no performed service of the participant's
+        kind, beside a quote the reading files under another family, as performed."""
+        status_of = {s.family: s.status for s in inventory.services}
+        read: list[str] = []
+        for what, family, kind, status, start, end in self.located:
+            if any(span.start <= start and end <= span.end for span in spans) and family not in families \
+                    and status in checks.POSITIVE and status_of.get(family) in checks.POSITIVE and family not in read:
+                read.append(family)
+        return ' and '.join(f'{"a performed" if status_of[family] == "performed" else "an incomplete"} service under '
+                            f'{PROFILES[family].label if family in PROFILES else family}' for family in read)
 
     def complete(self, complete: dict, inventory) -> None:
         """Coding completeness, incomplete beside each service only a participant reads (recorded under

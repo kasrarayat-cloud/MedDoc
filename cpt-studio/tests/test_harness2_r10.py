@@ -11,7 +11,7 @@
   beside a quote of an act's words. No act is named now, and the fallback says only what makes the service missing:
   the documented-service reading reads no performed service of that kind - true of every input by construction.
 - page-1: a highlight split across paragraphs gave each of its pieces the whole highlight's title, so a piece was
-  titled as holding a passage it does not hold. Each piece is titled by the passages whose own span lies in it.
+  titled as holding a passage it does not hold. Each piece is titled by the passages whose own span overlaps it.
 - page-2: the round-9 title pins held one two-code shape only; two more are pinned.
 
 retrieval-1 (blocking, pre-existing on the installed path: a diagnostic base is not held again when a reviewer

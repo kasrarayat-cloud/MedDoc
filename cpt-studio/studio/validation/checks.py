@@ -2587,17 +2587,23 @@ def participants_disagree_check(code: str, items: Sequence[tuple[str, str]],
 
 def participants_services_check(items: Sequence[tuple[str, ...]]) -> Check:
     """``items``: (participant label, service label, its quote[, its status[, how the documented-service reading reads
-    a service of that kind as not done]]) for each service a participant reads as performed - or as started and not
-    completed ('attempted_incomplete') - quoting the document verbatim, of a kind of which the documented-service
-    reading reads no performed service. Coding completeness is incomplete beside each (engine._Harness.complete), and
-    stays so in the reviewed report (engine.reviewed_completeness keeps it), so the check says it is, never "until a
-    reviewer checks the document". The reading of a service of that kind as not done - 'the upper endoscopy as
-    negated' - is named where there is one (refutation round 6, R6-MEANING, negation-5)."""
+    a service of that kind as not done[, what it reads as done in the quoted words, of another family]]]) for each
+    service a participant reads as performed - or as started and not completed ('attempted_incomplete') - quoting the
+    document verbatim, of a kind of which the documented-service reading reads no performed service. Coding
+    completeness is incomplete beside each (engine._Harness.complete), and stays so in the reviewed report
+    (engine.reviewed_completeness keeps it), so the check says it is, never "until a reviewer checks the document". The
+    reading of a service of that kind as not done - 'the upper endoscopy as negated' - is named where there is one
+    (refutation round 6, R6-MEANING, negation-5), and else a service of another family read as done in the quoted
+    words - 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)' - so a quoted service the reading
+    reads as performed is never left beside "reads no performed service of that kind" alone (refutation round 11,
+    wording-1)."""
     kinds = 'that kind' if len(items) == 1 else 'those kinds'
     said = '; '.join(f'{item[0]} reads '
                      f'{"an attempted, incomplete" if item[3:4] == ("attempted_incomplete",) else "a performed"} '
                      f'{item[1]} (“{excerpt(item[2])}”)'
                      + (f', where the documented-service reading reads {item[4]}' if item[4:5] and item[4] else '')
+                     + (f', where the documented-service reading reads in the quoted words {item[5]}'
+                        if item[5:6] and item[5] else '')
                      for item in items)
     return Check('participants.services', 'Performed services only an independent participant reads', 'warn',
                  f'{said}. The documented-service reading reads no performed service of {kinds}, so coding '

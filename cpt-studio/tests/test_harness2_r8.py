@@ -294,13 +294,29 @@ class MissingServiceReadingTests(SimpleTestCase):
     def test_wording_5_an_act_read_as_performed_is_never_said_not_to_be_read(self):
         """wording-5: a PEG, a banding or a dilation the inventory files under the endoscopy, quoted as another GI
         service, had been said not to be read as performed. Round 8 named the act; moved by refutation round 10
-        (wording-2 to wording-5): no act is named, and the reason says only what makes the service missing - the
-        documented-service reading reads no performed service of that kind - which is true here."""
+        (wording-2 to wording-5): no act is named, and the reason says what makes the service missing - the
+        documented-service reading reads no performed service of that kind - which is true here. Moved by round 11
+        (wording-1): the PEG line is itself a service mention the reading reads as performed, under the upper GI
+        endoscopy family, so the reason says so; the banding and dilation lines name no service and keep the
+        fallback alone."""
+        upper = 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)'
         for base, head_code, anchor, head_family, line, _ in PERFORMED_HERE:
             with self.subTest(line):
                 text = r6m.doc(base, line)
                 result = engine(text, 'other_gi', line, head_code, anchor, head_family)
-                entry = self.assert_named(result, 'other GI service', '', line)
+                if line == PEG_PLACED:
+                    (entry,) = result.completeness['participant_services']
+                    self.assertEqual((entry['read_as'], entry['read_in']), ('', upper))
+                    self.assertEqual(entry['reason'], f'Astra reads a performed other GI service {r7.NOT_READ}, and '
+                                                      f'reads in the quoted words {upper} (“{line}”)')
+                    check = next(c for c in result.encounter_checks if c.id == 'participants.services')
+                    self.assertEqual(check.detail, f'Astra reads a performed other GI service (“{line}”), where the '
+                                                   f'documented-service reading reads in the quoted words {upper}. The '
+                                                   'documented-service reading reads no performed service of that '
+                                                   'kind, so coding completeness is incomplete.')
+                else:
+                    entry = self.assert_named(result, 'other GI service', '', line)
+                    self.assertEqual(entry['read_in'], '')
                 self.assertNotIn('does not read as performed', entry['reason'])
                 self.assertNotIn(' as performed', entry['reason'])
 
@@ -321,11 +337,12 @@ class MissingServiceReadingTests(SimpleTestCase):
                 self.assertEqual(with_record, gi_services.build(text, service_date=he.DAY, routing=routing,
                                                                 context_facts=facts))
                 self.assertTrue(located)
-                # moved by refutation round 9 (wording-1): each entry names what it is, a service or an act mention
+                # moved by refutation round 9 (wording-1): each entry names what it is; round 10 removed the act
+                # mentions, and round 11 (wording-2) records an instrument as one, never as a service's own name
                 for what, family, kind_, status, start, end in located:
                     self.assertTrue(0 <= start < end <= len(text))
-                    self.assertIn((what, status in (gi_services.SERVICE_STATUSES if what == 'service'
-                                                    else gi_services.ACT_STATUSES)), (('service', True), ('act', True)))
+                    self.assertIn(what, ('service', 'instrument'))
+                    self.assertIn(status, gi_services.SERVICE_STATUSES)
 
 
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):

@@ -184,7 +184,10 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   - a mention of that family inside the quote, read as not done, where the inventory gives that family's service the
     same status. It is named by the mention's own kind: "the upper endoscopy as cancelled" (round 6, negation-5). A kind
     with no service label is named by its act label: "the gastrostomy (PEG) placement as cancelled" (round 9,
-    wording-2).
+    wording-2). ~~An instrument that names the family is named by the family's kind~~ (superseded, round 11, wording-2:
+    "the ultrathin gastroscope was not inserted" was named "the upper endoscopy as negated" beside the inventory's
+    negated esophagoscopy). `located` records an instrument as one, and an instrument is never named: it names no kind
+    of its own.
   - ~~an act read as performed whose passage overlaps the quote~~ (superseded, round 9, wording-1: its whole clause had
     only to touch the quote's edge) ~~whose own mention lies inside the quote. The act's service is named by its
     family's own label (round 9, wording-2: never its first mention's kind): "the band ligation in the colonoscopy as
@@ -194,8 +197,15 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   A reading of another passage is never attached to the quote (round 7, display-1). Otherwise the reason says ~~the
   documented-service reading does not read the service as performed. That is then true: it reads no performed service
   of that kind, and none of the quoted words as a performed act.~~ (superseded, round 10, wording-2: false beside a quote
-  of an act's words) only what makes the service missing, "where the documented-service reading reads no performed
-  service of that kind", which is true of every input by construction.
+  of an act's words) what makes the service missing, "where the documented-service reading reads no performed
+  service of that kind", which is true of every input by construction. ~~It says only that~~ (superseded, round 11,
+  wording-1: Astra's "other GI service" quoting a transnasal esophagoscopy report's title, which the inventory files
+  under the upper GI endoscopy family as performed and the approved 43197 cites, was left looking denied.) Where a
+  quote's own words hold a mention of another family read as done, and the inventory reads that family's service as
+  done too, the reason adds it, by the family's own label and the inventory's status of it: "and reads in the quoted
+  words a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)". The first quote whose places name
+  one is the entry's; a not-done reading of the participant's own kind is still named first. The participants.services
+  check says the same.
 - **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 
