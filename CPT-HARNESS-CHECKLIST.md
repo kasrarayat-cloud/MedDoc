@@ -285,3 +285,17 @@ requested in chat.
   quote, everywhere) and D13 (one unlisted count) are recorded in HARNESS.md 12.13 with the round's other repairs and
   W1, a walk-tool false rejection fixed at integration. A narrow sixth refutation of round 5's diff comes before the PR
   is made ready.
+- **2026-11-03 ~07:30Z (session cd048041): refutation round 6 and the owner's D10/D12 meaning check repaired.** Round 6:
+  12 findings, all reproduced, all minor. Its repairs are the D12 account in the engine, the reports and the trace; the
+  Clarification row's null count while an addendum's revision is unassessed; listedText; and the access check's own
+  words. The meaning check: 15 findings, all reproduced, 10 of them blocking. In each blocking one a code was READY on a
+  verbatim quotation of a failed act, a denial, another procedure's sentence, a pathology addendum, or an indication or
+  history line. The session's D14 closes the harness path: in this release a participant's code is never a proposal.
+  The integration repaired three sentences D14 made false. The same readers' false READY on Corti's own selections is
+  pre-existing on the installed Corti-only path (I1-pinned). Two of its classes were already accepted residuals (r1
+  release-0 and release-1). It is recorded in HARNESS.md 12.14 as the first target of the shared-reader repair, and
+  pausing the live demonstration is put to the owner. The shared-reader repair's design recommends that no rule
+  release the three false holds now, and it found two more installed false READYs. 4.6 stays NOT DONE. D14's owner
+  question and the release-standard question (the round-4 standard or parity) are open. Before the
+  PR is made ready, a narrow seventh refutation of `de6418fc6..` the integrated head runs as the standing gate
+  requires.

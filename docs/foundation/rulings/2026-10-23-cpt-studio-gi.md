@@ -1746,3 +1746,63 @@ synthetic case. The walk reports legitimate holds apart from software failures.
 - the exact wording, a recommended choice and the affected stages of checklist 4.6, D3, D4, D5 and interpretation 68,
   each as still open;
 - the access check's and the walk's actual requests, latency and usage, from the receipts and the recorded runs.
+
+### Session interpretation, 2026-11-03 (cd048041, after the sixth refutation and the meaning check) — recorded, not owner-ruled
+
+(a) **Round 6 is repaired.** Its 12 findings, all reproduced and all minor, are repaired by R6-TRACE, R6-ROW and
+R6-SENDS. The answers lens found nothing. HARNESS.md 12.14 records each repair.
+
+(b) **The D10/D12 meaning check did not hold.** Its 15 findings were all reproduced: 10 blocking, 1 major and 4 minor.
+In each blocking finding a code became READY and approvable on a verbatim quotation that does not support it: a failed
+act, a denial, another procedure's sentence, a pathology addendum, or an indication or history line. There are two
+paths, and they are recorded apart:
+- **Through the harness.** A participant-only code reached READY on the participant's quotation alone. That path was
+  never installed, and D14 (c) closes it.
+- **On the installed Corti-only path** (80df1831d168). Corti's own selection quoting such a passage is READY the same
+  way. It was reproduced with participants disabled for 10 of the findings. I1 pins it, so this release neither
+  introduced nor changed it. Two of its classes were already accepted as accuracy residuals, r1 release-0 and r1
+  release-1 in ACCURACY-RESIDUALS.md, "because no code is approved without a reviewer". The check adds members those rows
+  do not name. HARNESS.md 12.14 lists each reader with its input and its verifier's sketch.
+
+(c) **D14 (session decision, fail closed, the D7 pattern the owner endorsed: "keep ... disabled until verified"): in
+this release a participant's code is never a proposal.** A code no decidable proposal carries is listed as an
+alternative with CPT Studio's own reason. Participants never make a code ready, never count as covering a documented
+act, never make another code included and never clear an unresolved item. Corti's proposals are assessed exactly as with
+no participant configured. Checklist 4.3 still holds: the three outputs are reconciled, services Corti omitted included.
+**Owner question (class a), recorded and not answered here:** should a participant's own code ever become a selectable
+proposal again, and on what reader guarantee? The recommendation is: only after the shared-reader repair passes its own
+refutation, and re-enabled by the owner.
+
+(d) **The Corti-only false READY is the first target of the shared-reader repair**, ahead of the three false holds
+(h4-01, h4-03, h4-06) that interpretation (d) of 2026-11-03 named. A false READY is the harm the readers exist to
+prevent. The repair is an I1-declared change on its own branch from `main`, with its declarations before code and its
+own refutation cycles. This install does not change the defects' exposure. Whether to pause the live demonstration until
+the repair lands is the owner's decision. The report puts it first, and the session does not decide it.
+
+(e) **A narrow seventh refutation runs before the PR is made ready, and it is required, not optional.** D14 changes
+which codes can be selected, so it is a change on the clinical decision path, and the standing gate (AGENTS.md, "THE
+ADVERSARIAL PASS IS MANDATORY ON THE CLINICAL GENERATION PATH") requires a refutation of the finished diff. Its scope is
+the concrete findings that justified this round's repairs, and nothing wider:
+- D14's completeness;
+- the displayed wording of the repaired surfaces;
+- I1 parity;
+- false-green gaps in the new pins.
+
+The diff is `de6418fc6..` the integrated head. Only findings it reproduces are repaired, under the directive's rule.
+
+(g) **The shared-reader repair's design is done (read-only).** It recommends that no rule release the three false
+holds now:
+- the visit rule (R-EM, for h4-01) is not to be coded, because no revision survived its critic's counterexamples;
+- the extent rule (X2, for h4-03) is to be coded only under a parity standard the owner has not ruled: a release may
+  have exactly the exposure installed routing already has on the named twin of the same document, never wider;
+- h4-06 stays a recorded limit.
+
+It also confirmed two more installed false READYs, each a hold-only item for the same repair (HARNESS.md 12.14). **Owner
+question (class a), recorded:** which release standard governs a reader repair? Under the round-4 standard every
+must-stay-held input stays held and a contained release counts as blocking. Under the parity standard a release may be
+exactly as wide as the named twin, and never wider. The session applies the round-4 standard until the owner rules;
+under it, checklist 4.6's holds stay recorded limits.
+
+(f) **The release gates of interpretation (e) of 2026-11-03 stand**, with round 7's reproduced findings repaired and
+the gates re-run on the final head. The pypdf audit stays red with its seven advisories (interpretation 68) and is
+stated, never waived.

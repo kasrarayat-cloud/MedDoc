@@ -1503,3 +1503,125 @@ decisions, each narrowing what CPT Studio says:
 (harness@2 has never been installed, so no production row exists). The inverting candidate reader is a dormant-path
 defect (D10). The exclusion-confirmation dialog also says the reviewed report waits for an excluded code, so "what holds
 the reviewed report is readiness's to say" is a rule about this row, not about every sentence on the page.
+
+### 12.14 Refutation round 6 and the owner's meaning check (2026-11-03): what changed, and where it is recorded
+
+The sixth refutation (five lenses on round 5's repairs, `0ca5e6623..ee570e4bc`) filed 12 findings; independent verifiers
+reproduced all 12, all minor. The answers lens (D10, d8-3) found nothing after eight variations and a sweep of all 30
+candidate readers. The owner's directive of 2026-11-03 then asked for a bounded check of D10 and D12: "verify that the
+displayed conclusion preserves the quotation's meaning, negation, procedure ownership and time context. A quotation
+existing verbatim must not itself establish clinical support." Three lenses (negation, procedure ownership, time
+context) filed 15 findings; independent verifiers reproduced all 15: 10 blocking, 1 major, 4 minor. **It did not hold.**
+In each blocking finding a code became READY and approvable on a verbatim quotation that does not support it: a failed
+act ("Hot snare polypectomy failed.", "Cold forceps biopsy of the antrum failed."), a denial ("No polyps were
+removed."), another procedure's sentence (an EGD's biopsy line for 45380; a separate same-day flexible sigmoidoscopy
+note), a pathology addendum's specimen line or heading, or an indication or history line ("Last colonoscopy: 9 mm polyp
+removed with hot snare."). There are two paths, and the distinction decides the repair:
+
+- **Through the harness.** A code only a participant gave, which Corti never selected, was evaluated on the proposal
+  path (section 5) and so reached READY on the participant's quotation alone; it could also recast Corti's correct base
+  code as included in it and clear CPT Studio's own unresolved-act warning (time-2). This path was new with the harness
+  and never installed. **Closed by D14** (below).
+- **On the Corti-only path**, installed since 2026-10-31 (80df1831d168). Corti's own selection quoting such a passage is
+  READY the same way. The verifiers reproduced it with Astra and Fable disabled for negation-1, -2, -3, ownership-1,
+  -2, -3, -4, -6, time-1 and time-2. I1 pins this path (parity with 80f2f2dc8), so this release neither introduced nor
+  changed it. **These are pre-existing, blocking-class defects of the installed readers.** Two of their classes were
+  already recorded as accuracy residuals, accepted because no code is approved without a reviewer: r1 release-0 (a
+  plain denial read as a done act) and r1 release-1 (an act at another time read as today's when its code cites it), in
+  ACCURACY-RESIDUALS.md. The meaning check adds members those rows do not name: failed acts, another procedure's
+  sentences, pathology addenda and indications. They are recorded in the table below and are the first target of the
+  shared-reader repair, ahead of the three false holds (h4-01, h4-03, h4-06).
+
+| decision | findings | the rule | recorded in |
+|---|---|---|---|
+| D14 | negation-1, -2, -3, ownership-1, -4, time-1, time-2 (their harness path) | **in this release a participant's code is never a proposal.** A code no decidable proposal carries (neither Corti's nor the bounded second review's) is listed as an alternative, informational, with CPT Studio's own reason (`engine.PARTICIPANT_NOT_ADDED`: "a quote found verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a participant's code is never added as a proposal of its own"), after the scope, UNLOCATED and NO_EVIDENCE reasons, which still come first. So participants never make a code ready, never count as covering a documented act, never make another code included and never clear an unresolved item. They still read, reconcile and review each other; their positions and peer reviews are shown; and a service only a participant reads as performed still makes coding completeness incomplete. Corti's proposals are assessed exactly as with no participant configured. This is the D7 pattern ("keep ... disabled until verified"). **Owner question (class a):** should a participant's own code ever become a selectable proposal again, and on what reader guarantee? The recommendation is only after the shared-reader repair passes its own refutation, and re-enabled by the owner | section 5 and I2, I3 (amended in place, superseded wording kept), 11.4, 12.6, API.md |
+
+**Round 6's repairs** (four agents, disjoint functions, each from `de6418fc6` in its own worktree):
+- **R6-TRACE** (account-1..5, falsegreen-1, -3): the owner's trace headings are neutral ("Additional codes", "Codes it
+  listed"); `engine._Harness.positions` counts only located entries, and says "again in peer review" only of a peer
+  entry that located a quote; the reports and the trace word each additional-code entry by its own quotes (D12's '' for
+  an entry none of whose quotes was located); the trace serves `phase` null for an additional code of a review the
+  current assessment did not read, worded "not read by the current assessment"; API.md lists the CSV's three
+  `peer_additional_code` statuses; two pins the round-5 tests let through.
+- **R6-ROW** (row-1, falsegreen-2, -4): `harness.clarification.open` is null while the current revision has no
+  assessment, and the row reads null as no assessment ("Waiting" while a stage runs, otherwise "Not asked"), never as
+  "None open" beside the earlier revision's questions; `listedText` names only Astra and Fable; the "· proposed after
+  peer review" title mark is pinned on the real pipeline.
+- **R6-SENDS** (parity-1, -2): an access check's receipt no longer passes on the pipeline's "the response body is
+  retained" (the check keeps no copy, only its sha256); before that clause it names the vendor's error code, else its
+  type, only in the strict shape `[a-z_]{1,48}`, never its message; the `--access-check` help and ops/INSTALL.md's Known
+  limits give the real request count.
+- **R6-MEANING** (the meaning check): D14; negation-4, ownership-7 and time-3 (one repair: a first reading's
+  'proposed' position says "quoting the document verbatim", never "with evidence located in the document"); negation-5
+  (a service only a participant reads as performed is worded with the inventory's own negated, cancelled, planned or
+  historical reading of that family, in the completeness reason and in `participants.services`, whose sentence also no
+  longer says the reason lasts "until a reviewer checks the document"); ownership-5 (the page labels CPT Studio's source
+  passages "Source passages that show the coded act" only where they are the act's own: `support.acts` non-empty, reason
+  'service', or no acts list; otherwise "Source passages of the documented service", and the cited passage is not said
+  not to show the act).
+- **At integration (the session):** three sentences D14 made false, each with a failing test and a mutation proof:
+  `review.readiness`'s blocker where every listed code is a participant's alternative ("No code is selected for
+  approval: each code listed is an independent participant's, offered only as an alternative", on the page's Still
+  needed, the draft TXT and the reviewed report's refusal; it said the provider proposed them); the source panel's
+  highlight title of a support's documented-service passages ("Passage of the documented service for <codes>", read
+  from the same rule as the chips, `serviceOnlySupport`; it said "Evidence for <code>"); and participants.summary's
+  closing sentence, which said every code a participant proposes "is judged by CPT Studio's own readers, with exact
+  evidence, by the same rules as the proposal provider's" and now says what the engine does. time-3 is pinned on its own
+  input. D14 moved R6-ROW's StaleRowTests constants (45378 is now an alternative with no questions), measured on the
+  merged tree; no assertion was weakened. In text only, four sentences that said Corti's access check sends "one
+  request" now say one coding request, after the OAuth token request its adapter sends first (R6-SENDS's observation).
+
+**Known defects of the installed readers (the Corti-only path), recorded, not repaired here.** Each is reproduced on
+the release-default Corti-only path; each sketch is the verifier's and is untried as a repair of record. They are the
+first target of the owner-directed shared-reader repair: an I1-declared change on its own branch from main, with its
+declarations before code and its own refutation cycles. Until it lands their exposure is unchanged by this release
+(I1), and D14 removes the harness's second way in. Pausing the live demonstration until then is the owner's decision.
+
+| reader | findings | the input (synthetic) | the verifier's sketch |
+|---|---|---|---|
+| `engine._second_opinion`, the own-passage release | negation-1 | "Hot snare polypectomy failed." (or "... was attempted but the polyp could not be removed."), with 45385 cited on it: a routing-era 'incomplete' reading becomes 'performed' | release only on a 'performed' reading whose passage names no failure ("failed", "unsuccessful", "abandoned", "attempted", "could not", "no tissue", ...); otherwise the inventory's act_missing hold stands |
+| `engine._second_opinion`, the own-passage release | ownership-1 | a combined report ("Procedures: EGD and colonoscopy") whose EGD part says "Biopsies were taken with cold forceps." and whose colonoscopy part says "No biopsies were taken.", with 45380 cited on the EGD's sentence | release only when the inventory's own act-placement rule puts the passage's act in that service alone; where more than one documented service could own it, the act_missing hold stands |
+| `engine._second_opinion`, the own-passage release | ownership-2 | a pathology addendum's specimen line ("Sigmoid colon polyp, hot snare polypectomy: tubular adenoma.", specimens from an earlier colonoscopy), with 45385 cited on it | do not release a passage inside a non-physician role part (pathology, nursing, anesthesia, radiology), which `reconcile` already counts only as physician or unknown |
+| `services.read_clause` | negation-2 | "Cold forceps biopsy of the antrum failed.", with 43239 cited on it | a failure vocabulary in the mention's own clause reads 'uncertain', held as "attempted" already is; HEDGE_WORDS itself is shared and not widened |
+| `engine._second_opinion`'s hold, `_status_signal` | negation-3 (r1 release-0's class) | "Procedure: Colonoscopy with hot snare polypectomy" over a body that says "No polyps were removed.", with 45385 cited on the denial | count the routing-era reader's own negated or cancelled reading as a status signal, so a denial in the matched service's own report holds the code with both readings |
+| `services._on_procedure_line` | ownership-3 | "PATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon" after a colonoscopy report, with 45385 cited on the heading | use a part's title as the procedure line only for the endoscopist's own (physician) part, the guard `_studies_reported` already uses |
+| `services.parts()` | ownership-4 | a colonoscopy report followed by "Separate note: Flexible sigmoidoscopy (fictional), 2026-10-14" and its "Biopsies of the rectal mucosa were taken with cold forceps.", with 45380 cited on that sentence | a 'Label: <service>' heading (note, procedure or addendum label, one service, nothing else) opens a new report part, so the colonoscopy's part ends there |
+| `services._time_kind` | ownership-6 | "Indication: Surveillance after a sigmoid polyp was removed with a hot snare." inside a titled colonoscopy report, with 45385 cited on it | read an indication section inside a titled report as 'indication' over its own line, as the untitled and own-line variants already are |
+| `engine._second_opinion`'s third hold arm | time-1, time-2 (r1 release-1's class) | "Last colonoscopy: 9 mm polyp removed with hot snare." above today's diagnostic examination, with 45385 cited on it | hold a routing-era 'planned' or 'historical' reading of the code's own passage by any cue, not only a section's; time-2's companion: a code the readers do not read as performed never counts as covering an act or as making a base code included |
+
+
+**Two more installed false READYs, confirmed by the shared-reader repair's design** (2026-11-03, a read-only design
+measured offline on exports of `ee570e4bc` and `80f2f2dc8`, whose readers are byte-identical; its record is
+`reader-repair/DESIGN.md` in the session's evidence directory):
+- the E/M reader reads 99204 READY on notes that are not an in-person visit of this date. The 30 orders-free twins of
+  the visit critic's must-stay-held rows all read READY: telephone, no-show, teaching-physician and retraction notes
+  among them. A no-break space defeats C4's not-in-person guard;
+- where a document names its EGD, 43244 reads READY with extent "second part of the duodenum" beside "We stopped in the
+  stomach." and ten further contradictions. Routing's extent reader reads no shallower restatement elsewhere in the
+  document.
+
+Each is a hold-only item for the same repair. The design also recommends that no rule release any of the three false
+holds now. Its visit rule (R-EM) is not to be coded. Its extent rule (X2, for h4-03) is to be coded only if the owner
+rules for a parity standard: a release may have exactly the exposure installed routing already has on the named twin
+of the same document, never wider. h4-06 stays a recorded limit. **Owner question (class a), recorded:** which release
+standard governs a reader repair, the round-4 standard or that parity standard?
+
+**Recorded, not repaired (outside the demonstrated findings):**
+- While an addendum's revision is unassessed, the earlier revision's open questions are still drawn with "Answer with
+  an addendum" buttons, which the API refuses (409). It predates D11 and is not the row's count. In the same window the
+  documents list's count ("3 open questions") is of the earlier revision's questions, which is true as worded.
+- The access check: the strict code shape `[a-z_]{1,48}` holds no key, but the credential parsers accept values of that
+  shape for `OPENAI_PROJECT`, `ANTHROPIC_WORKSPACE_ID`, `CORTI_TENANT_NAME` and `CORTI_ENVIRONMENT`, so a vendor would
+  have to echo such a value as its error code or type (the installer's credential scan still reads everything first).
+  The unknown-outcome receipt passes on the pipeline's "reconcile it before any new attempt", though the check records
+  no run to reconcile. A refused Corti token request never reaches the receipt as an exchange, so its OAuth error code
+  cannot be named.
+- `engine.assess` still computes and passes `corti_listed` and `corti_second_listed`, which `merge` no longer reads, and
+  `_Harness._lead` is unreachable: kept for the owner's D14 question, to be removed together if the answer is never.
+- The residuals of 12.9-12.13 stand, among them the dormant candidate reader's inversion (D10).
+
+**I1 at integration** (`66d8f3525`, the integrated code before this record): `tests/test_harness_engine_parity.py` and
+`tests/test_harness_pipeline.py` are unchanged since `de6418fc6`; with them, `CortiOnlyParityTests` pass (9 tests).
+`ops.gi4.replay --fixtures --base 80f2f2dc8` is EQUAL, and `ops.gi4.battery` gives 0 movements, 0 undeclared and 0 new
+violations (50 rows and 60 codes, 11 ready, 7 excluded and 42 held, as on the base). The suite there passes 5,185 tests
+in 214 modules, with ops 311, ops/verification 37 and node 127 and 91.
