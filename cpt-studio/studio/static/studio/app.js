@@ -1729,13 +1729,17 @@ function clarificationRow(doc) {
   const served = doc.harness?.clarification?.open;
   const open = Number.isInteger(served) && served >= 0 ? served : openClarifications(doc).length;
   const note = 'A participant\'s own questions never hold the reviewed report.';
-  // No assessment: one is coming while a stage runs; otherwise none was made (the text could not be read, processing
-  // stopped, the outcome is unknown), and nothing asks a question until one is. Waiting says only when the questions
-  // are known, no longer why one is asked (refutation round 5, D11): "only where the documentation leaves open
-  // something that changes the coding" did not fit a member's entry that conflicts with the document, or a diagnostic
-  // code asked about beside its interventions.
-  if (!doc.assessment && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
-  if (!doc.assessment) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
+  // No assessment of this revision: none at all (doc.assessment null), or a count the API serves as null - the current
+  // revision has none, and doc.assessment, whose questions the page draws, is an earlier revision's (after an addendum,
+  // until its revision is first assessed; refutation round 6, row-1: the API served 0 there, and the row drew "None
+  // open" beside those questions). One is coming while a stage runs; otherwise none was made (the text could not be
+  // read, processing stopped, the outcome is unknown), and nothing asks a question of this revision until one is.
+  // Waiting says only when the questions are known, no longer why one is asked (refutation round 5, D11): "only where
+  // the documentation leaves open something that changes the coding" did not fit a member's entry that conflicts with
+  // the document, or a diagnostic code asked about beside its interventions.
+  const unassessed = !doc.assessment || served === null;
+  if (unassessed && doc.pipeline?.busy) return harnessRow('clarification', 'waiting', [STAGE_LOOKS.queued, 'Waiting'], 'Clarification', ['Known once the proposals are checked.']);
+  if (unassessed) return harnessRow('clarification', 'not_run', [['muted', 'info'], 'Not asked'], 'Clarification', ['No question was asked: the proposals were not checked for this revision.']);
   if (open > 0) {
     const asked = openClarifications(doc);
     const encounter = asked.filter(item => item.scope === 'encounter' && !item.proposal_id).length;

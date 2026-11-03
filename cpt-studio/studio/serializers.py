@@ -1048,8 +1048,13 @@ def harness_json(encounter, jobs):
         'participants': [{**row, **_harness2(row, assessment, jobs)} for row in rows],
         'phase': review.assessment_phase(assessment) if assessment is not None else (1 if configured else 0),
         'reference_validation': _reference_validation(assessment, active),
+        # how many questions are open on the assessment of the current revision; None while that revision has none:
+        # none was made, or the current assessment, whose questions clarifications and open_clarifications still serve,
+        # is an earlier revision's (after an addendum, until its revision is first assessed). It was 0 there, and the
+        # page's Clarification row drew "None open" beside those questions; the row reads None as no assessment
+        # (refutation round 6, row-1)
         'clarification': {'open': assessment.clarifications.filter(state=models.Clarification.OPEN).count()
-                          if assessment is not None else 0},
+                          if assessment is not None else None},
         'final': {'state': encounter.state, 'label': review.encounter_state_label(encounter)},
     }
 
