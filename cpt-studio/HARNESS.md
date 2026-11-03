@@ -201,11 +201,17 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   service of that kind", which is true of every input by construction. ~~It says only that~~ (superseded, round 11,
   wording-1: Astra's "other GI service" quoting a transnasal esophagoscopy report's title, which the inventory files
   under the upper GI endoscopy family as performed and the approved 43197 cites, was left looking denied.) Where a
-  quote's own words hold a mention of another family read as done, and the inventory reads that family's service as
-  done too, the reason adds it, by the family's own label and the inventory's status of it: "and reads in the quoted
-  words a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)". The first quote whose places name
-  one is the entry's; a not-done reading of the participant's own kind is still named first. The participants.services
-  check says the same.
+  quote's own words hold a mention of another family read as done, and the inventory ~~reads that family's service as
+  done too, the reason adds it, by the family's own label and the inventory's status of it~~ (superseded, round 12,
+  wording-1: "an incomplete service under ERCP" was printed beside a quoted reach the reading reads as performed, the
+  incompleteness read in other passages) gives that family's service the same status, the reason adds it, by the
+  family's own label and the mention's own status: "and reads in the quoted words a performed service under Upper GI
+  endoscopy (EGD, esophagoscopy, POEM)". The first quote whose places name one is the entry's, and its passage the
+  first of those places; a not-done reading of the participant's own kind is still named first. The
+  participants.services check says the same. The clause reports the reading's own reading of the quoted mention, so
+  where that reading is wrong (a bare "endoscope" filed under its report part's family, a hedged or another
+  physician's procedure line read as performed, a plan line promoted as named inside its own report), the clause says
+  so too, as services.inventory does: those are the readers' recorded residuals, for the shared-reader repair.
 - **Clarification questions** (amended by 11.3: an open question can now be answered by a reviewer-confirmed located passage). Questions that block the reviewed report still come only from the local readers' rules
   ("focused questions only where needed"). A participant's own questions are shown as notes and never block.
 

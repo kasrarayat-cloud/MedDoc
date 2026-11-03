@@ -2940,8 +2940,9 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
 
     ``located``, when given, is a list that receives this reader's own reading of each service mention it reads, in
     reading order, as (what, family, kind, status, start, end): what is 'service' for a service's name or a report
-    title that names it, its kind the name's own, and 'instrument' for an instrument that names its family, its kind
-    the family's (refutation round 11, wording-2: an instrument names no kind of its own), exactly as each service's
+    title that names it, its kind the name's own, and 'instrument' for an instrument, its family the one this reader
+    gives it (an instrument's own, or for a bare "endoscope" its part's or its sentence's anatomy's) and its kind the
+    family's (refutation round 11, wording-2: an instrument names no kind of its own), exactly as each service's
     statuses are drafted, its status the mention's own after every rule of the reading, and start and end its own
     offsets in ``text``. It is a record kept beside the inventory, never an input to it: the inventory is the
     same with it or without it. A service read as not done keeps no passage (only one read as performed has

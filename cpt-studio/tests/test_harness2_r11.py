@@ -126,7 +126,10 @@ class FiledUnderAnotherFamilyTests(SimpleTestCase):
 
     def test_wording_1_a_service_the_inventory_reads_as_incomplete(self):
         """A colonoscopy stopped short: the inventory reads the service as incomplete and the quoted reach as a
-        performed mention, so the reason names the inventory's status of the service."""
+        performed mention. Moved by refutation round 12 (wording-1): the status named is the mention's own, never the
+        whole service's, and the two differ here, so nothing is named and only what makes the service missing is said
+        (it was "and reads in the quoted words an incomplete service under Colonoscopy", the incompleteness read in
+        the stop sentence, another passage)."""
         reach = 'The colonoscope was advanced to the transverse colon.'
         text = (r6m.HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory '
                 'surgery center\nProcedure: Colonoscopy\n' + reach + '\nThe examination was incomplete due to poor '
@@ -135,8 +138,9 @@ class FiledUnderAnotherFamilyTests(SimpleTestCase):
                         [he.read('astra', [he.code(text, '45378', reach)], services=[he.service(text, 'eus', reach)])])
         self.assertEqual([(s['family'], s['status']) for s in result.services['services']],
                          [('gi.colonoscopy', 'incomplete')])
-        self.assert_filed(result, reach, label='endoscopic ultrasound',
-                          read_in='an incomplete service under Colonoscopy')
+        item = entry(result)
+        self.assertEqual((item['read_as'], item['read_in']), ('', ''))
+        self.assertEqual(item['reason'], f'Astra reads a performed endoscopic ultrasound {r7.NOT_READ} (“{reach}”)')
 
     def test_a_not_done_reading_of_the_participant_s_own_kind_is_named_first(self):
         """Another GI service quoting a performed upper endoscopy and a manometry not performed: the manometry's own
@@ -307,13 +311,18 @@ class ReadInGateTests(SimpleTestCase):
         return _Harness._read_in(harness, (SimpleNamespace(start=span[0], end=span[1]),), families, inventory)
 
     def test_the_inventory_s_own_status_of_the_family_s_service(self):
+        """Moved by refutation round 12 (wording-1): a mention is named only with its own status, where the inventory
+        gives the family's service the same one (a performed mention of a service read as incomplete had been named
+        "an incomplete service")."""
         mention = ('service', 'gi.egd', 'egd', 'performed', 10, 20)
         self.assertEqual(self.read_in([mention], 'performed'), UPPER)
-        self.assertEqual(self.read_in([mention], 'incomplete'),
-                         'an incomplete service under Upper GI endoscopy (EGD, esophagoscopy, POEM)')
-        for status in ('negated', 'cancelled', 'planned', 'historical', 'uncertain'):
+        for status in ('incomplete', 'negated', 'cancelled', 'planned', 'historical', 'uncertain'):
             with self.subTest(status):
                 self.assertEqual(self.read_in([mention], status), '')
+        incomplete = ('service', 'gi.egd', 'egd', 'incomplete', 10, 20)
+        self.assertEqual(self.read_in([incomplete], 'incomplete'),
+                         'an incomplete service under Upper GI endoscopy (EGD, esophagoscopy, POEM)')
+        self.assertEqual(self.read_in([incomplete], 'performed'), '')
 
     def test_only_a_mention_read_as_done_inside_the_place(self):
         for mention in (('service', 'gi.egd', 'egd', 'historical', 10, 20),

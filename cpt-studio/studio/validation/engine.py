@@ -3643,21 +3643,22 @@ class _Harness:
         """What the documented-service reading reads as done (checks.POSITIVE) in one quote's words, at the places
         ``spans`` give, for missing where no quote names a not-done reading: each service mention it read as done
         inside a place (``located``: a service's name, a report title or an instrument) of a family that ``families``
-        does not hold, where its inventory reads that family's service as done too, named by that family's own label
-        (PROFILES, as the inventory heads the service) and by the inventory's status of it - a performed service the
-        inventory reads as incomplete is "an incomplete service" - never by a mention's kind, each family once, in
-        reading order: 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)'; '' when it reads none
-        there. A family ``families`` holds never has a service read as done here: missing names none then. Refutation
-        round 11, wording-1: the reason had said only that the reading reads no performed service of the participant's
-        kind, beside a quote the reading files under another family, as performed."""
-        status_of = {s.family: s.status for s in inventory.services}
-        read: list[str] = []
+        does not hold, where its inventory gives that family's service the same status, named by that family's own
+        label (PROFILES, as the inventory heads the service) and that status, never by a mention's kind, each family
+        and status once, in reading order: 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)';
+        '' when it reads none there. A family ``families`` holds never has a service read as done here: missing names
+        none then. Refutation round 11, wording-1: the reason had said only that the reading reads no performed service
+        of the participant's kind, beside a quote the reading files under another family, as performed. Round 12,
+        wording-1: the status is the mention's own, never the whole service's - "an incomplete service under ERCP" had
+        been printed beside a quoted reach the reading reads as performed, its incompleteness read in other passages."""
+        statuses = {(s.family, s.status) for s in inventory.services}
+        read: list[tuple[str, str]] = []
         for what, family, kind, status, start, end in self.located:
             if any(span.start <= start and end <= span.end for span in spans) and family not in families \
-                    and status in checks.POSITIVE and status_of.get(family) in checks.POSITIVE and family not in read:
-                read.append(family)
-        return ' and '.join(f'{"a performed" if status_of[family] == "performed" else "an incomplete"} service under '
-                            f'{PROFILES[family].label if family in PROFILES else family}' for family in read)
+                    and status in checks.POSITIVE and (family, status) in statuses and (family, status) not in read:
+                read.append((family, status))
+        return ' and '.join(f'{"a performed" if status == "performed" else "an incomplete"} service under '
+                            f'{PROFILES[family].label if family in PROFILES else family}' for family, status in read)
 
     def complete(self, complete: dict, inventory) -> None:
         """Coding completeness, incomplete beside each service only a participant reads (recorded under
