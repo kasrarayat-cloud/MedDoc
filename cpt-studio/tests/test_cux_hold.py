@@ -630,6 +630,17 @@ class NarrowEvidenceHoldTests(SimpleTestCase):
         item = proposal(run(COMBINED, [sel('45385', span(COMBINED, SNARED))]), '45385')
         self.assertEqual(item.status, 'ready')
 
+    def test_control_an_office_visit_citing_its_own_plan_sentence_is_not_held(self):
+        # validation:6's pinned reading (tests/test_repairs_r4_validation.EmNegativeAboutOtherServicesTests): the visit's
+        # own plan sentence documents that visit; the narrow hold is a procedure code's only
+        plan = 'Return in three months.'
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOffice visit note (fictional)\n'
+                'Date of service: 2026-11-03\nPlace of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'Chief complaint: heartburn.\nAssessment and plan: GERD. ' + plan + '\nMedical decision making: '
+                'moderate.\nTotal time: 32 minutes.\n')
+        item = proposal(run(text, [sel('99213', span(text, plan))]), '99213')
+        self.assertEqual(item.status, 'ready')
+
 
 class LabelledServiceHeadingTests(SimpleTestCase):
     """D7 (R8 1.3): services.labelled_service_heading, the helper P1's parts() calls - this package does not own
@@ -667,3 +678,22 @@ class LabelledServiceHeadingTests(SimpleTestCase):
                      'Separate note: history of flexible sigmoidoscopy'):
             with self.subTest(line):
                 self.assertIsNone(self.heading(line))
+
+
+class RegisterOfferTests(SimpleTestCase):
+    """The register rows' second-review offers (an unresolved item a second review could be asked about), with each
+    row's own answer and with an empty one, as tests/test_gi4_po.offers_of reads them: exactly as cux-hold.json's
+    after-code amendment records them (PO's offer battery leaves these rows to this declaration). Against the base only
+    the D12 rows' empty-answer office-visit offer is gone; no cell gains an offer."""
+
+    def test_every_register_row_offers_as_declared(self):
+        from tests.test_gi4_po import offers_of
+        declared = next(value['offer_battery'] for key, value in reversed(list(DECLARATION.items()))
+                        if isinstance(value, dict) and 'offer_battery' in value)
+        names = [n for n in battery.CASES if n.startswith('R8 ')]
+        self.assertEqual(sorted(declared), sorted(names))
+        for name in names:
+            text, codes = battery.CASES[name]
+            with self.subTest(name):
+                self.assertEqual({'own': offers_of(text, [(code, quote) for code, quote, _ in codes]),
+                                  'empty': offers_of(text)}, declared[name])
