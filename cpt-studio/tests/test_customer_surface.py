@@ -49,6 +49,9 @@ NET = {
                            r'extraction)\.[a-z_]+\b'),
     'machinery': re.compile(r'(?i)\b(?:participants?|peer[ -]reviews?|vendors?|tokens?|credits?|traces?|sha256|'
                             r'tool calls?|request ids?|replay|providers?)\b'),
+    # the readers' own words: an own-passage or disagreeing reading's stored detail names the routing-era reader, the
+    # documented-service reader and the cue that decided (engine._reconcile_reading)
+    'reader words': re.compile(r'(?i)\b(?:routing|readers?|cues?|own passages?)\b'),
 }
 
 
@@ -358,9 +361,14 @@ class SurfaceCase(HarnessCase):
         text = GI_TWO_LESIONS
         a_words, b_words = '3 mm sessile polyp in the ascending colon', '9 mm sessile polyp in the sigmoid colon'
 
-        def support(service, family, act, kind, label, index=0):
-            return {'origin': 'primary', 'service': service, 'family': family, 'state': 'performed', 'reason': 'service',
-                    'detail': f'The service is documented as performed with {label}.',
+        def support(service, family, act, kind, label, index=0, reason='service'):
+            # an own-passage reading's stored detail names the readers and a cue, as the engine words it
+            # (engine._reconcile_reading); none of it may reach a customer (the summary is built from enums and labels)
+            detail = (f'The service is documented as performed with {label}; the routing-era reader reads the passage '
+                      'the code cites as performed (cue "was removed"), and its own passage decides.'
+                      if reason == 'own_passage' else f'The service is documented as performed with {label}.')
+            return {'origin': 'primary', 'service': service, 'family': family, 'state': 'performed', 'reason': reason,
+                    'detail': detail,
                     'acts': [{'id': act, 'kind': kind, 'label': label}], 'status': 'pass', 'supporting': [index],
                     'unrelated': [], 'detail_support': 'Every provider passage shows the act.', 'source': []}
         engine = dict(text=text, rationale=STORED_RATIONALE)
@@ -374,7 +382,7 @@ class SurfaceCase(HarnessCase):
         snare = replace(pf.proposal('sel:2', '45385', [LESION_B], **engine,
                                     modifiers=(DISTINCT.format(here=b_words, there=a_words),)),
                         support=support('S2', 'gi.colonoscopy', 'S2-A2', 'snare', f'snare removal (cold snare) of the '
-                                                                                    f'{b_words}'))
+                                                                                    f'{b_words}', reason='own_passage'))
         planned = pf.proposal('exc:0', '45378', [PLAN], text=text, bucket='excluded', reinstatable=True,
                               checks=pf.standard_checks(service_status='fail'),
                               exclusion_reason=STORED_EXCLUSION, rationale=STORED_RATIONALE)
@@ -490,6 +498,10 @@ class ScenarioTests(SurfaceCase):
         self.assertEqual(codes['45378']['why'], {'quotes': [], 'qualifications': [
             'The document does not show this service as performed on the date of service.']})
         self.assertIn(STORED_RATIONALE, denied_values())
+        # the own-passage reading's stored detail names the readers and a cue: the scan must never find it served
+        detail = models.Proposal.objects.get(assessment__encounter_id=encounter_id, code='45385').support['detail']
+        self.assertEqual(sorted(net_hits(detail)['reader words']), ['cue', 'own passage', 'reader', 'routing'])
+        self.assertIn(detail, denied_values())
         self.assertClean(self.surface(encounter_id))
 
     @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
