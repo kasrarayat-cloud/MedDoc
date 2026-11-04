@@ -291,3 +291,52 @@ class CombinedTitleTests(SimpleTestCase):
         self.assertTrue(conflicts(inventory(text), 'gi.egd', 'biopsy'))
         result = run(text, [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')])
         self.assertEqual(outcomes(result)['43239'], held('conflict:biopsy'))
+
+
+# --- rule 3: a copular negation negates only its predicate nominal, at its object ---------------------------------
+
+class CopularNegationTests(SimpleTestCase):
+    SNARE = 'A 10 mm polyp in the descending colon was removed en bloc with a hot snare.'
+
+    def test_the_subject_and_the_object_state_no_act(self):
+        text = document('r3-copular-positive')
+        inv = inventory(text)
+        self.assertEqual(acts(inv, 'gi.colonoscopy', 'snare', 'negated'), [])
+        snared = next(les for les in service(inv, 'gi.colonoscopy').lesions if les.size == '10 mm')
+        self.assertEqual([x.lesion for x in acts(inv, 'gi.colonoscopy', 'biopsy', 'negated')], [snared.id])
+        self.assertEqual(conflicts(inv), [])
+        result = run(text, [('45380', 'A 5 mm sessile polyp in the hepatic flexure was removed with cold forceps.'),
+                            ('45385', self.SNARE)])
+        self.assertEqual(outcomes(result), {'45380': READY, '45385': READY})
+
+    def test_twin_verbal_negation_still_denies_the_act(self):
+        text = document('r3-twin-verbal')
+        self.assertTrue(conflicts(inventory(text), 'gi.colonoscopy', 'snare'))
+        self.assertEqual(outcomes(run(text, [('45385', self.SNARE)]))['45385'], held('conflict:snare'))
+
+    def test_twin_the_nominal_itself_is_still_denied(self):
+        text = document('r3-twin-existential')
+        self.assertTrue(conflicts(inventory(text), 'gi.colonoscopy', 'biopsy'))
+        self.assertEqual(outcomes(run(text, [('45380', 'Cold forceps biopsies were taken from the cecum.')]))['45380'],
+                         held('conflict:biopsy'))
+
+    def test_twin_another_negation_in_the_clause_reads_as_before(self):
+        text = HEAD + ('Colonoscopy report\nThe colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was '
+                       'removed with a cold snare.\nThe sigmoid polyp, which was not a large one, was not removed with a '
+                       'snare.\n')
+        self.assertTrue(conflicts(inventory(text), 'gi.colonoscopy', 'snare'))
+
+    def test_another_occurrence_is_never_performance_evidence(self):
+        text = HEAD + ('EGD report\nThe gastroscope was advanced to the second part of the duodenum.\nAn outside endoscopy '
+                       'in 2024 was a prior service, not a second upper endoscopy today.\n')
+        located = []
+        inv = services.build(text, service_date=day_of(text), routing=detect.route(text, day_of(text)),
+                             context_facts=gi_context.extract_context(text), located=located)
+        second = text.index('upper endoscopy today')
+        self.assertEqual([status for what, _, _, status, start, _ in located if start == second], ['uncertain'])
+        self.assertEqual(service(inv, 'gi.egd').status, 'performed')  # its own report still documents it
+
+    def test_not_a_repeat_act_denies_only_another_occurrence(self):
+        text = HEAD + ('Colonoscopy report\nThe colonoscope was advanced to the cecum. Cold forceps biopsies were taken from '
+                       'the ascending colon. This was not a repeat biopsy of the earlier site.\n')
+        self.assertEqual(conflicts(inventory(text)), [])

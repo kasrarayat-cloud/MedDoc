@@ -358,6 +358,45 @@ SUBORDINATOR = _rx(r'\b(?:if|unless|until|because|since|when|whenever|once|so\s+
 COORDINATED_PREDICATE = _rx(r'(?:,\s*)?\s+(?:and|or)\s+$')
 
 
+def _copular_negation(text: str, cs: int, ce: int, neg: int, pos: int, end: int) -> Optional[Reading]:
+    """Core repair 2026-11-03 (P1, rule 3; R1-services-binding section 9): the reading a copular negation gives the mention
+    at [pos, end), or None to read it as before. "S was/were/is/are not a/an/the/any N (of|for) O" classifies S: its "not"
+    negates the act N names, at O ("The forceps removal was not a biopsy of ... the snare-treated sigmoid lesion" denies
+    a biopsy of that lesion). It never negates a mention in S - S refers to an act stated elsewhere, so the clause states
+    no act of S (COPULAR_SUBJECT_CUE) - nor one in O or O's modifiers (COPULAR_OBJECT_CUE: "the snared lesion" is an
+    attribute); and "not a second/another/repeat/separate/further/additional N" denies only another occurrence, as "No
+    other/further N" does (NEG_OTHER's reading). Fail-closed: read only where the copular "not" is the clause's one
+    negated predicate (any other "not" in it, "The biopsy, which was not a routine one, was not performed", reads as
+    before), and verbal negation ("The polyp was not removed with a snare.") is no copular negation."""
+    m = COPULAR_NOT.match(text, neg, ce)
+    if m is None or sum(1 for _ in NOT_VERB.finditer(text[cs:ce])) != 1:
+        return None
+    if end <= neg:
+        return Reading('uncertain', (COPULAR_SUBJECT_CUE,))
+    if pos < m.end():
+        return None
+    of = COPULAR_OBJECT_START.search(text, m.end(), ce)
+    if of is not None and pos >= of.start():
+        return Reading('uncertain', (COPULAR_OBJECT_CUE,))
+    if COPULAR_ANOTHER.search(text, m.end(), pos):
+        return Reading('uncertain', ('no other/further: denies only acts beyond the documented ones',))
+    return None
+
+
+# Rule 3's vocabulary: a copula, "not" (or its contraction) and a determiner, read at the "not" NOT_VERB found; the word
+# that opens the nominal's object; and the words that make the nominal another occurrence.
+COPULAR_NOT = _rx(r"(?:was|were|is|are)(?:\s+not|n['’]t)\s+(?:a|an|the|any)\b")
+COPULAR_OBJECT_START = _rx(r'\b(?:of|for)\b')
+COPULAR_ANOTHER = _rx(r'\b(?:second|another|repeat|separate|further|additional|other)\b')
+COPULAR_SUBJECT_CUE = 'uncertain: the subject of a copular negation ("was not a ..."), an act stated elsewhere'
+# "not a second upper endoscopy", "no repeat colonoscopy", "never another EGD": what the service's name is governed by
+# when the clause denies another occurrence of it (rule 3), read in the 60 characters before the name
+ANOTHER_OCCURRENCE_BEFORE = _rx(r'\b(?:not|no|never)\s+(?:(?:a|an|any)\s+)?(?:second|another|repeat|separate|further|'
+                                r'additional|other)\s+(?:[\w-]+\s+){0,2}$')
+ANOTHER_OCCURRENCE_CUE = 'uncertain: names another occurrence of the service, which the clause denies'
+COPULAR_OBJECT_CUE = 'uncertain: inside the object of a copular negation ("was not a biopsy of ..."), never denied'
+
+
 def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
     """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end``."""
     if neg < end:
@@ -1895,6 +1934,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
     for not_verb in NOT_VERB.finditer(whole):
+        copular = _copular_negation(text, cs, ce, cs + not_verb.start(), pos, end)
+        if copular is not None:
+            return copular  # rule 3: "S was not a N of O" denies N at O, never an act in S or in O
         if _not_on_another_predicate(text, cs + not_verb.start(), end):
             continue
         # "was complete and was not discontinued": the negated word is the completion word, not this act.
@@ -3619,13 +3661,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=in_report)
                 hypothetical = hypothetical_reading(reading)  # a hypothetical is a hedge: never promoted below
+                # rule 3 (core repair 2026-11-03): "not a second/another/repeat <service>" denies another occurrence and
+                # is never performance evidence of the service ("That examination was a prior service, not a second
+                # upper endoscopy on 2026-11-03.")
+                another = ANOTHER_OCCURRENCE_BEFORE.search(text, max(clause[0], ms - 60), ms) is not None
+                if another:
+                    reading = Reading('uncertain', reading.cues + (ANOTHER_OCCURRENCE_CUE,))
                 if reading.status == 'uncertain' and in_report and not HEDGE_WORDS.search(text, *clause) \
-                        and not hypothetical and not _row_hold(reading):
+                        and not hypothetical and not _row_hold(reading) and not another:
                     reading = Reading('performed', reading.cues + ('performed: named inside its own current report',))
                 line_start = text.rfind('\n', 0, ms) + 1
                 line_end = text.find('\n', ms)
-                if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and PROCEDURE_FIELD.match(
-                        text[line_start:line_end if line_end >= 0 else len(text)]):
+                if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and not another \
+                        and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)]):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
@@ -3933,6 +3981,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue  # "a common bile duct dilated to 11 mm", "upstream duct dilation": a finding
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=part.kind == 'report')
+                if reading.cues[:1] in ((COPULAR_SUBJECT_CUE,), (COPULAR_OBJECT_CUE,)):
+                    continue  # rule 3: the subject or the object of a copular negation states no act of its own
                 bc = _bounded_clause(text, clause, ms, me)
                 clause_text = text[bc[0]:bc[1]]
                 row_lo = max(text.rfind('\n', max(0, ms - ROW_REACH), ms) + 1, ms - ROW_REACH, 0)
