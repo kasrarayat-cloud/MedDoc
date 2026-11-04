@@ -2100,13 +2100,38 @@ print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 # (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
 # older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
 # handed. installed_state is 057a7d398's review._derive_state with its _failed_stage_state, as they are there; the helpers
-# it calls are this revision's and byte-identical to 057a7d39's (_active_jobs, live_assessment, _unreconciled_unknown,
-# _review_state - whose readiness differs from 057a7d39's in the wording of its blockers only, never in whether there is
-# one), so a change to any of them ports 057a7d39's here first. Run in this revision's image; nothing is sent.
+# it calls are this revision's and byte-identical to 057a7d39's (_active_jobs, live_assessment), so a change to any of
+# them ports 057a7d39's here first. Two did change in the core repair (2026-11-03) and are ported below as they are at
+# 057a7d39: _unreconciled_unknown (which now also reads a run left 'sending' by a stage that no longer runs, decision
+# (k)) and _review_state (which now reads the review overlay's statuses). _review_state's readiness is this revision's:
+# its _assessment_blockers already differed from 057a7d39's before the core repair (main c9f20a148 and the installed
+# 41e03656df61 carry the same one), and now also reads the overlay - so for an encounter with a reinstatement, a
+# member's answer or an approval the overlay no longer supports, whether it is 'reviewed' is this revision's reading.
+# Only an undo to 057a7d39 itself reads this script: a revision since then recomputes the states its own app phase
+# hands it (RECOMPUTE_STATES). Run in this revision's image; nothing is sent.
 INSTALLED_STATES = '''
 from django.db import transaction
 from django.utils import timezone
 from studio import models, review
+
+
+def unreconciled_unknown(encounter):  # 057a7d39's review._unreconciled_unknown, as it is there
+    return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+
+
+def review_state(encounter, assessment):  # 057a7d39's review._review_state, as it is there
+    if review.readiness(encounter)['reviewed']:
+        return 'reviewed'
+    current = review.current_decisions(assessment)
+    reviewable = [item for item in assessment.proposals.all() if review._reviewable(item, current.get(item.pk))]
+    encounter_question = assessment.clarifications.filter(
+        state=models.Clarification.OPEN, scope='encounter', proposal__isnull=True).exists()
+    if not reviewable:
+        return 'needs_clarification' if encounter_question else 'no_codes'
+    if encounter_question or any(item.status == models.Proposal.NEEDS_CLARIFICATION and item.pk not in current
+                                 for item in reviewable):
+        return 'needs_clarification'
+    return 'ready_for_review'
 
 
 def installed_state(encounter):
@@ -2137,7 +2162,7 @@ def installed_state(encounter):
         return 'processing_failed' if run.state == Run.SUCCEEDED else 'provider_failed'
     assessment = review.live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
-        return 'provider_unknown' if review._unreconciled_unknown(encounter) else 'processing'
+        return 'provider_unknown' if unreconciled_unknown(encounter) else 'processing'
     run = assessment.provider_run
     if run is None:
         return 'provider_not_run'
@@ -2145,7 +2170,7 @@ def installed_state(encounter):
         return 'provider_unknown'
     if run.state != Run.SUCCEEDED:
         return 'provider_failed'
-    return review._review_state(encounter, assessment)
+    return review_state(encounter, assessment)
 
 
 changed = {}
