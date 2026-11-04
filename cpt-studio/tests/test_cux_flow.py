@@ -133,8 +133,11 @@ class DetailsCase(TestCase):
         return answers.details_needed(self.s.encounter, assessment or self.s.encounter.current_assessment)
 
     def row(self, fact, code='', family=None, assessment=None):
+        """The row asking ``fact`` of ``code``: a code's own question, or its service's question for a service fact
+        (asked once for the service, its code '': refutation r2, L7-08) whose affects list the code."""
         family = (COLON if code else '') if family is None else family
-        return next(r for r in self.rows(assessment) if r['id'] == answers.detail_id(fact, family, code))
+        ids = {answers.detail_id(fact, family, code), answers.detail_id(fact, family, '')}
+        return next(r for r in self.rows(assessment) if r['id'] in ids and (not code or code in r['affects']))
 
     def post(self, items, client=None, raw=None, encounter=None):
         body = json.dumps(raw if raw is not None else {'answers': items})
@@ -164,24 +167,29 @@ class DetailsCase(TestCase):
 
 
 class DetailRowsTests(DetailsCase):
-    def test_one_row_per_open_question_de_duplicated_by_fact_family_and_code(self):
+    def test_one_row_per_open_question_a_service_fact_once_for_its_service(self):
+        """De-duplicated by (fact, family, code), where a service fact's question - the profiles' required facts - is
+        its service's, asked once whichever of its codes holds on it (refutation r2, L7-08: two codes of one colonoscopy
+        each had an identical "How far was the instrument advanced?" row); a question about one code stays its own."""
         first = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'), ready('sel:1', '45380', pf.CECUM_PASSAGE),
                             questions=[pf.clarification('setting', scope='service', family=OFFICE)])
-        # the re-assessment asks the same 45385 question twice (two proposals of one code), a new one about 45380, the
-        # date and the service question again: the first assessment's re-raised rows stay open and are not read twice
-        second = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
+        # the re-assessment asks the same 45385 question twice (two proposals of one code), the same service fact of
+        # 45380, a question of each code's own, the date and the service question again: the first assessment's
+        # re-raised rows stay open and are not read twice
+        second = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent', 'base_included'),
                              asks('sel:1', '45385', pf.SNARE_PASSAGE, 'extent'),
-                             asks('sel:2', '45380', pf.CECUM_PASSAGE, 'extent'),
+                             asks('sel:2', '45380', pf.CECUM_PASSAGE, 'extent', 'base_included'),
                              questions=[pf.clarification('service_date', scope='encounter'),
                                         pf.clarification('setting', scope='service', family=OFFICE)])
         self.assertNotEqual(first, second)
         self.assertGreater(models.Clarification.objects.filter(state='open', assessment=first).count(), 0)
         rows = self.rows()
         self.assertEqual([(r['fact'], r['affects']) for r in rows],
-                         [('service_date', ['45385', '45380']), ('setting', []), ('extent', ['45385']),
-                          ('extent', ['45380'])])
-        self.assertEqual(len({r['id'] for r in rows}), 4)
-        self.assertEqual(rows[2]['id'], answers.detail_id('extent', COLON, '45385'))
+                         [('service_date', ['45385', '45380']), ('setting', []), ('extent', ['45385', '45380']),
+                          ('base_included', ['45385']), ('base_included', ['45380'])])
+        self.assertEqual(len({r['id'] for r in rows}), 5)
+        self.assertEqual(rows[2]['id'], answers.detail_id('extent', COLON, ''))
+        self.assertEqual(rows[3]['id'], answers.detail_id('base_included', COLON, '45385'))
         self.assertEqual(set(rows[0]), {'id', 'fact', 'family_label', 'prompt', 'control', 'choices', 'allow',
                                         'document_value', 'entered_value', 'quote', 'affects', 'saved',
                                         'addendum_allowed'})
@@ -232,11 +240,13 @@ class DetailRowsTests(DetailsCase):
         view = {'sel:0': View(questions=()), 'sel:1': View(questions=(added,))}  # both extents released
         rows = answers.details_needed(self.s.encounter, assessment, view)
         self.assertEqual([(r['fact'], r['affects']) for r in rows], [('setting', []), ('base_included', ['45380'])])
+        # the stored rows ask the colonoscopy's extent once for both codes: one answer stands for each of them
         answers.save_details(self.s.encounter, self.s.reviewer, [
             self.answer(self.row('extent', '45385'), 'not_documented')])
         rows = answers.details_needed(self.s.encounter, assessment, view)
         self.assertEqual([(r['fact'], r['affects'], r['saved'] is not None) for r in rows],
-                         [('setting', [], False), ('extent', ['45385'], True), ('base_included', ['45380'], False)])
+                         [('setting', [], False), ('extent', ['45385', '45380'], True),
+                          ('base_included', ['45380'], False)])
 
     def test_use_document_date_only_for_a_single_documented_value_and_never_a_prefilled_unsupported_date(self):
         cases = {
@@ -244,8 +254,9 @@ class DetailRowsTests(DetailsCase):
             'single': (pf.GI_NOTE, '1998-01-01', [answers.USE_DOCUMENT], '2026-10-21', True),
             # the document itself states two dates: each is offered as the document's, none is chosen for the member
             'two_own_dates': (TWO_DATES, '1998-01-01', ['2026-10-20', '2026-10-21'], None, False),
-            # only another occurrence's date, which the member entered: nothing is offered, nothing is the document's
-            'another_occurrence': (ELSEWHERE, '2026-11-04', [], None, False),
+            # only another occurrence's date, which the member entered: nothing is offered as the document's; the
+            # member's date can be removed (refutation r2, L7-03), and the document's wording is quoted as it stands
+            'another_occurrence': (ELSEWHERE, '2026-11-04', [answers.CLEAR], None, False),
         }
         for name, (text, entered, choices, document_value, usable) in cases.items():
             with self.subTest(name):
@@ -264,6 +275,11 @@ class DetailRowsTests(DetailsCase):
                     quote = row['quote']
                     self.assertEqual(encounter.current_revision.text[quote['start']:quote['end']], quote['text'])
                     self.assertEqual(quote, block['document_quote'])
+                elif name == 'another_occurrence':  # what the document says, never offered as its date (L7-07)
+                    quote = row['quote']
+                    self.assertEqual(quote['text'], 'Next procedure date: 11/04/2026')
+                    self.assertEqual(encounter.current_revision.text[quote['start']:quote['end']], quote['text'])
+                    self.assertIsNone(block['document_quote'])
                 else:
                     self.assertIsNone(row['quote'])
                 # no date the document does not state as its own is in the row, but the one the member typed
@@ -365,12 +381,17 @@ class DetailSaveTests(DetailsCase):
     def test_an_answer_binds_to_code_family_and_fact_and_survives_a_re_assessment(self):
         response = self.post([self.answer(self.row('extent', '45385'), 'not_documented')])
         self.assertEqual(response.status_code, 201, response.content)
-        (answer_id,) = response.json()['answer_ids']
-        # the re-assessment swaps the keys: 45380 is now sel:0 and asks the extent; 45385 is sel:1
+        (answer_id,) = response.json()['answer_ids']  # only 45385 asked it: the answer is 45385's
+        # the re-assessment swaps the keys: 45380 is now sel:0 and asks the extent too; 45385 is sel:1
         later = self.assess(asks('sel:0', '45380', pf.CECUM_PASSAGE, 'extent'),
                             asks('sel:1', '45385', pf.SNARE_PASSAGE, 'extent'))
-        self.assertEqual(self.row('extent', '45385', assessment=later)['saved']['answer_id'], answer_id)
-        self.assertIsNone(self.row('extent', '45380', assessment=later)['saved'])  # never by its position
+        # one row for the colonoscopy's extent (refutation r2, L7-08), asked again: 45380 has no answer of its own, and
+        # the one saved for 45385 is never read for it - by its position or otherwise
+        row = self.row('extent', '45385', assessment=later)
+        self.assertEqual((row['affects'], row['saved']), (['45380', '45385'], None))
+        views = review.effective_view(later)
+        self.assertEqual(views['sel:1'].reason, review.DETAIL_UNAVAILABLE)  # 45385: its answer stands
+        self.assertNotEqual(views['sel:0'].reason, review.DETAIL_UNAVAILABLE)
         (saved,) = answers.saved_answers(later)
         self.assertEqual({k: saved[k] for k in ('code', 'family', 'fact', 'value', 'answer_id', 'by')},
                          {'code': '45385', 'family': COLON, 'fact': 'extent', 'value': 'not_documented',

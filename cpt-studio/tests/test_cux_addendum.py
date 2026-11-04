@@ -5,7 +5,9 @@ accepts a details row id there"), and api.addenda used to answer 404 "That clari
 document." to every one. The server now reads a details row id as the open confirmation row of the live assessment it
 names, and answers the stored clarification that row shows - none for a question only the review overlay asks. A row
 that is not open, or whose detail takes a value rather than documentation (the date, a setting), is refused and
-nothing is made. A clarification's own id is read as before.
+nothing is made - but for the date of a document whose only date text is not a date of service this service reads,
+which documentation is what settles (refutation r2, L7-03; tests/test_cux_r2_details.py). A clarification's own id is
+read as before.
 
 DB-backed; synthetic data only; nothing is sent.
 """
@@ -107,3 +109,12 @@ class ValueRowAddendumTests(DetailsCase):
         self.assertEqual(response.status_code, 201, response.content)
         stored.refresh_from_db()
         self.assertEqual(stored.state, models.Clarification.ANSWERED)
+
+    def test_a_date_the_document_states_takes_no_documentation(self):
+        held = self.context_for(pf.GI_NOTE, '1998-01-01')  # "Use document date" settles it: no addendum needed
+        (row,) = answers.details_needed(held, None)
+        self.assertEqual((row['fact'], row['addendum_allowed']), ('service_date', False))
+        before = models.SourceRevision.objects.count()
+        response = addendum(self.client, held, row['id'])
+        self.assertEqual((response.status_code, response.json()['error']), (404, NOT_OPEN))
+        self.assertEqual(models.SourceRevision.objects.count(), before)

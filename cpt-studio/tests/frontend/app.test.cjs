@@ -716,6 +716,109 @@ test('pending answers survive a refresh; a viewer, or a busy document, gets no c
   assert.doesNotMatch(app.detailsPanel(busy, ui(busy)), /type="radio"|save-details/);
 });
 
+// --- the date row after refutation r2 (L7-02, L7-03, L7-05, L7-07) -------------------------------------------------------
+
+// The action-needed fixture's date row, varied as the server serves its other states (studio/answers.py _date_row).
+function dateDoc(overrides, docOverrides = {}) {
+  const doc = clone(fixture('encounter-action-needed.json'));
+  const row = doc.details_needed.find(item => item.control === 'date');
+  Object.assign(row, overrides);
+  Object.assign(doc, docOverrides);
+  return { doc, row };
+}
+const STATED = [{ value: '2026-10-20', label: '20 October 2026 (stated in the document)' }, { value: '2026-10-21', label: '21 October 2026 (stated in the document)' }];
+const CLEAR = [{ value: 'clear', label: 'Remove the entered date' }];
+
+test('the document\'s own dates are drawn as choices beside the date entered, never "Not stated" (L7-07)', () => {
+  const { doc, row } = dateDoc({ document_value: null, quote: null, choices: STATED, entered_value: '1998-01-01' });
+  const html = app.detailsPanel(doc, ui(doc));
+  assert.ok(html.includes('<div class="detail-document-date"><span class="detail-date-label">Document</span><strong>20 October 2026 and 21 October 2026</strong></div>'));
+  assert.ok(html.includes('<div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>1 January 1998</strong></div>'));
+  assert.doesNotMatch(html, /Not stated|use-document-date|clear-date|data-action="addendum"/);
+  for (const choice of STATED) {
+    assert.ok(html.includes(`<input type="radio" name="detail-${row.id}" id="detail-${row.id}-${choice.value}" value="${choice.value}" data-detail="${row.id}"><span>${esc(choice.label)}</span>`), choice.value);
+  }
+  assert.ok(html.includes(`Or enter another date<input type="date" id="detail-${row.id}-date" data-detail-input data-detail="${row.id}">`), 'never prefilled');
+  assert.ok(html.includes(`<fieldset class="detail-row" data-detail="${row.id}" data-fact="service_date"><legend class="detail-lead">`), 'a radio group named by its legend');
+  // the member's pick survives a refresh; the date field stays empty
+  const picked = app.detailsPanel(doc, ui(doc, { answers: new Map([[row.id, { fact: 'service_date', value: '2026-10-21' }]]) }));
+  assert.ok(picked.includes(`value="2026-10-21" data-detail="${row.id}" checked>`));
+  assert.ok(picked.includes(`data-detail-input data-detail="${row.id}">`));
+  // the document's own conflict with nothing entered, and an entered date to confirm against both (L7-02)
+  for (const entered of [null, '2026-10-21']) {
+    const asked = dateDoc({ document_value: null, quote: null, choices: STATED, entered_value: entered });
+    const askedHtml = app.detailsPanel(asked.doc, ui(asked.doc));
+    assert.ok(askedHtml.includes('<strong>20 October 2026 and 21 October 2026</strong>'), String(entered));
+    assert.ok(askedHtml.includes(`<strong>${entered ? '21 October 2026' : 'Nothing entered'}</strong>`), String(entered));
+    assert.equal(count(askedHtml, `name="detail-${asked.row.id}"`), 2);
+  }
+});
+
+test('where the document gives no date the page may show, its own wording is quoted; a held date can be removed, or settled by the physician (L7-03, L7-07)', () => {
+  const quote = { text: 'Next procedure date: 11/04/2026', start: 10, end: 41 };
+  const { doc, row } = dateDoc({ document_value: null, quote, choices: CLEAR, entered_value: '2026-10-20', addendum_allowed: true });
+  const html = app.detailsPanel(doc, ui(doc));
+  assert.ok(html.includes('<span class="detail-date-label">Document</span><strong><q>Next procedure date: 11/04/2026</q></strong></div>'));
+  assert.doesNotMatch(html, /Not stated|use-document-date|type="radio"/);
+  assert.ok(html.includes(`<button type="button" class="button secondary detail-choice" id="detail-${row.id}-clear" data-action="clear-date" data-detail="${row.id}" aria-pressed="false">Remove the entered date</button>`));
+  assert.ok(html.includes(`<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${row.id}">Add to the documentation (physician)</button>`));
+  assert.ok(html.includes(`<input type="date" id="detail-${row.id}-date" data-detail-input data-detail="${row.id}">`));
+  // the walk reads data-detail-choice as an answer the server allows (row.allow): none is drawn for a date
+  assert.doesNotMatch(html, /data-detail-choice=/);
+  const chosen = app.detailsPanel(doc, ui(doc, { answers: new Map([[row.id, { fact: 'service_date', value: 'clear' }]]) }));
+  assert.ok(chosen.includes(`data-action="clear-date" data-detail="${row.id}" aria-pressed="true">`));
+  // without the server's offer neither is drawn; a viewer gets no control at all
+  const plain = dateDoc({ document_value: null, quote, choices: [], entered_value: null, addendum_allowed: false });
+  assert.doesNotMatch(app.detailsPanel(plain.doc, ui(plain.doc)), /clear-date|data-action="addendum"/);
+  const viewer = clone(doc);
+  viewer.permissions.can_review = false;
+  assert.doesNotMatch(app.detailsPanel(viewer, ui(viewer)), /clear-date|data-action="addendum"|data-detail-input/);
+});
+
+test('a saved date the member entered shows who and when, and the same row corrects or removes it in the one save (L7-05)', () => {
+  const saved = { value: '2026-10-02', label: '2 October 2026', by: 'Synthetic Reviewer', at: '2026-11-04T10:01:00Z', answer_id: '' };
+  const ready = fixture('encounter-ready.json');
+  const { doc, row } = dateDoc({ document_value: null, quote: null, choices: CLEAR, entered_value: '2026-10-02', saved }, { state: 'ready', progress: clone(ready.progress) });
+  const html = app.detailsPanel(doc, ui(doc));
+  assert.ok(html.includes(`<span>Saved: <strong>2 October 2026</strong> — Synthetic Reviewer, ${app.formatTimestamp(saved.at)}</span></p>`));
+  assert.doesNotMatch(html, /revoke-detail/, 'no answer to withdraw: the row itself changes it');
+  assert.ok(html.includes(`<input type="date" id="detail-${row.id}-date" data-detail-input data-detail="${row.id}">`));
+  assert.ok(html.includes(`data-action="clear-date" data-detail="${row.id}"`));
+  assert.match(html, /Every detail has an answer\. You can change an answer below\./);
+  assert.equal(count(html, 'data-action="save-details"'), 1);
+  assert.equal(app.answerable(row), true);
+  assert.equal(app.answerable({ ...row, control: 'confirm', saved: { ...saved, answer_id: UUID } }), false);
+  assert.equal(app.answerable({ ...row, saved: { ...saved, answer_id: UUID } }), false);
+  // the one save sends the correction made in that row, as for an open row
+  const kept = app.state.answers;
+  app.state.answers = new Map([[row.id, { fact: 'service_date', value: '2026-10-20' }]]);
+  try {
+    assert.deepEqual(app.detailAnswers(doc), [{ id: row.id, fact: 'service_date', value: '2026-10-20' }]);
+  } finally {
+    app.state.answers = kept;
+  }
+  // a viewer, or a busy document, reads the saved date only
+  const viewer = clone(doc);
+  viewer.permissions.can_review = false;
+  const seen = app.detailsPanel(viewer, ui(viewer));
+  assert.match(seen, /Saved: <strong>2 October 2026<\/strong>/);
+  assert.doesNotMatch(seen, /data-detail-input|clear-date|save-details/);
+  const busy = clone(doc);
+  busy.progress.busy = true;
+  assert.doesNotMatch(app.detailsPanel(busy, ui(busy)), /data-detail-input|save-details/);
+});
+
+test('"Nothing is checked until you do" only while the member\'s date holds the document', () => {
+  const { doc } = dateDoc({});
+  assert.match(app.detailsPanel(doc, ui(doc)), /Choose the date of service\. Nothing is checked until you do\./);
+  const asked = clone(doc);
+  asked.state = 'awaiting_detail';
+  asked.progress.phase = 'awaiting_detail';
+  const html = app.detailsPanel(asked, ui(asked));
+  assert.doesNotMatch(html, /Nothing is checked/);
+  assert.match(html, /1 detail is needed\. Answer what you can; codes that do not depend on them stay reviewable\./);
+});
+
 // --- progress ----------------------------------------------------------------------------------------------------------
 
 test('the progress panel folds to four plain stages with their states, the active check named under the active stage', () => {
@@ -1031,6 +1134,19 @@ test('the customer bundle names no internal machinery, not even in comments', ()
   assert.equal(count(source, 'X-CSRFToken'), 1);
   // and the same scan finds a planted word, so a clean result means something
   assert.ok([...`${scanned}\n// Astra`.matchAll(terms)].length === 1);
+});
+
+// refutation r2, L4-1: the shipped denylist's bundle scan (ops/verification/customer-denylist.json, by the walk's own
+// reader ops/verify_browser.cjs) passes on the customer bundle - a developer comment naming an HTTP status failed it
+// while the narrower nets above passed
+test('the customer bundle passes the shipped bundle scan, comments included', () => {
+  const walk = require('../../ops/verify_browser.cjs');
+  const ctx = walk.scanContext({ allowed: ['cpt.quillmd.com'] });
+  for (const file of [BUNDLE, path.join(ROOT, 'studio', 'static', 'studio', 'styles.css')]) {
+    assert.deepEqual(walk.scanText(fs.readFileSync(file, 'utf8'), ctx, 'bundle', path.basename(file)), [], file);
+  }
+  const planted = walk.scanText('// HTTP 409 with {"error_code": "client_outdated"}', ctx, 'bundle', 'planted');
+  assert.deepEqual(planted.map(hit => [hit.id, hit.severity]), [['http_status', 'hard']], 'a clean result means something');
 });
 
 test('no customer page names internal machinery, in text or attributes, and the scan catches a planted word', () => {
