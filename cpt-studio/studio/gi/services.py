@@ -2923,7 +2923,9 @@ def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
 # participle is no act predicate for any other mention either (_predicate_participle). A compound that is itself the
 # predicate of an auxiliary or a subject ("The polyp was snare-resected", "was not snare-resected", "we snare-resected
 # it") states or denies the act and is read as before. ACTS and BARE_PARTICIPLE are unchanged (mention_count reads them).
-COMPOUND_PARTICIPLE_AFTER = re.compile(r'-[A-Za-z]+(?:ed|en|wn)\b')
+# a participle after the hyphen: two letters or more before its -ed / -en / -wn, and never a noun ending in -men
+# ("biopsy-specimen", "stent-lumen") or a short noun ("polypectomy-bed")
+COMPOUND_PARTICIPLE_AFTER = re.compile(r'-(?![A-Za-z]*men\b)[A-Za-z]{2,}(?:ed|en|wn)\b')
 COMPOUND_PREDICATE_BEFORE = _rx(r"(?:\b(?:was|were|is|are|be|been|being|get|gets|got|gotten|getting)|n['’]t)"
                                 r"(?:\s+(?:not|never))?(?:\s+(?:then|also|subsequently|successfully|completely|each|"
                                 r"[\w-]+ly))?\s*$"
@@ -3951,6 +3953,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         def_rows = sorted((ls, sep_end, label) for label, defs in label_defs.items() for ls, sep_end, _ in defs)
         def_starts = [row[0] for row in def_rows]
         label_index: dict[str, Optional[Lesion]] = {}
+        label_lines: dict[str, int] = {}  # the definition line that bound each label
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -4006,11 +4009,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
-                # rule 1: the label whose definition heads this mention; a lesion restated under a label it is bound to
-                # (a specimen table's "COL-1: ascending colon" over "2 mm polyp") is that lesion, never a new one -
-                # only in its own service and only where its size and its site agree with it
-                label = _heading_label(def_rows, def_starts, ss, lm.start()) if def_rows else None
-                under = label_index.get(label) if label else None
+                # rule 1: the label whose definition heads this mention; a lesion restated under another definition line
+                # of a label it is bound to (a specimen table's "COL-1: ascending colon" over "2 mm polyp") is that
+                # lesion, never a new one - only in its own service and only where its size and its site agree with it
+                # (a lesion the binding definition's own sentence goes on to describe, "and another polyp ...", is
+                # another lesion)
+                label, label_line, label_end = _heading_label(def_rows, def_starts, ss, lm.start()) if def_rows \
+                    else (None, -1, -1)
+                under = label_index.get(label) if label and label_lines.get(label) != label_line else None
                 if existing is None and under is not None and under.service == d.id \
                         and (not size or not under.size or size.replace(' ', '') == under.size.replace(' ', '')) \
                         and (not anat or _regions_compatible(anat[0][1], under.region)):
@@ -4038,8 +4044,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     own_lesions.add(lesion.id)
                     last_named[lesion.id] = lm.start()
                     placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
-                    if label:  # rule 1: a label resolves to the one lesion it heads, never to two
-                        label_index[label] = lesion if label in unique_labels and label not in label_index else None
+                    if label and label not in label_index:  # rule 1: a label resolves to the lesion it heads, only
+                        # where its definition's clause describes that lesion alone (two lesions in it: which act is
+                        # whose there is not told, so the label resolves to neither)
+                        alone = _lesions_described(text, lesion_matches, max(clause[0], label_end), clause[1]) == 1
+                        label_index[label] = lesion if label in unique_labels and alone else None
+                        label_lines[label] = label_line
+                    elif label and label_lines.get(label) != label_line:
+                        label_index[label] = None  # another definition of the label heads another lesion: neither
+                    # (a second lesion its own definition's sentence goes on to describe is no lesion the label heads)
                 elif existing is not None:
                     sentence_lesions.append(existing)
                     if size or anat or (_noun_key(lm.group('noun')) == _noun_key(existing.noun)
@@ -4067,6 +4080,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
                 # or a site of the clause's own that the lesion's tract cannot hold, leave it to the rules below
                 bound = _bound_lesion(text, clause, own_anat, label_index, drafts)
+                if bound is not None and _lesions_described(text, lesion_matches, clause[0], clause[1]) > 1:
+                    bound = None  # a clause that describes two lesions: its label says which one, not which act is whose
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
@@ -4557,14 +4572,15 @@ def _unique_labels(definitions: dict) -> frozenset:
     return frozenset(out)
 
 
-def _heading_label(definitions_by_start: list, starts: list, ss: int, pos: int) -> Optional[str]:
-    """The label whose definition heads the lesion mentioned at ``pos`` in the sentence starting at ``ss``: the last
-    definition line that starts in the sentence at or before the mention (its separator ending before it)."""
+def _heading_label(definitions_by_start: list, starts: list, ss: int, pos: int) -> tuple[Optional[str], int, int]:
+    """(the label whose definition heads the lesion mentioned at ``pos`` in the sentence starting at ``ss``, the start
+    of that definition's line, the end of its separator): the last definition line that starts in the sentence at or
+    before the mention (its separator ending before it); (None, -1, -1) when there is none."""
     i = bisect.bisect_right(starts, pos) - 1
     if i < 0:
-        return None
+        return None, -1, -1
     ls, sep_end, label = definitions_by_start[i]
-    return label if ss <= ls and sep_end <= pos else None
+    return (label, ls, sep_end) if ss <= ls and sep_end <= pos else (None, -1, -1)
 
 
 def _labels_in(text: str, start: int, end: int, index: dict) -> set:
@@ -4575,6 +4591,14 @@ def _labels_in(text: str, start: int, end: int, index: dict) -> set:
         if key in index:
             out.add(index[key])
     return out
+
+
+def _lesions_described(text: str, lesion_matches: Sequence, start: int, end: int) -> int:
+    """How many lesion mentions (LESION matches of the sentence) [start, end) describes, leaving out a lesion noun that
+    is a label's own word ("Polyp A", "Lesion 1"). Bounded: the matches of one sentence, and one label scan."""
+    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, start, end)]
+    return sum(1 for m in lesion_matches if start <= m.start() < end
+               and not any(a <= m.start() < b for a, b in labels))
 
 
 def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index: dict, drafts) -> Optional[Lesion]:

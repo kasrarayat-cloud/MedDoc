@@ -127,6 +127,12 @@ class AttributiveCompoundTests(SimpleTestCase):
             with self.subTest(line):
                 self.assertEqual(services._acts_in(line, 0, len(line)), [], line)
 
+    def test_a_noun_after_the_hyphen_is_no_participle(self):
+        for line in ('The biopsy-specimen jar was labelled.', 'The polyp was placed in the polypectomy-bed container.',
+                     'The stent-lumen was patent.'):
+            with self.subTest(line):
+                self.assertTrue(services._acts_in(line, 0, len(line)), line)
+
     def test_a_predicative_compound_is_still_the_act(self):
         for line in ('The polyp was snare-resected.', 'The polyp was not snare-resected.', 'We snare-resected it.',
                      "The polyp wasn't snare-resected."):
@@ -225,6 +231,24 @@ class LesionLabelTests(SimpleTestCase):
         self.assertTrue(conflicts(inv, 'gi.colonoscopy', 'biopsy'))  # the blanket denial still pairs (rule 7)
         self.assertEqual(outcomes(run(text, [('45380', 'a 4 mm sessile polyp was removed with cold forceps.')]))['45380'],
                          held('conflict:biopsy'))
+
+    def test_a_label_heads_only_the_lesion_its_definition_describes_alone(self):
+        head = HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+        # the definition's clause describes two lesions: which act is whose is not told, so COL-1 resolves to neither
+        # and the snare it denies reads as before - the genuine contradiction is kept
+        both = head + ('COL-1 - ascending colon: a 6 mm polyp was removed with a cold snare and another 3 mm polyp in '
+                       'the cecum was removed with cold forceps.\nNo snare was used on COL-1.\n')
+        inv = inventory(both)
+        self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [''])
+        self.assertTrue(conflicts(inv, 'gi.colonoscopy', 'snare'))
+        # a clause of its own for each lesion: COL-1 is the first; the denial binds to it and the contradiction stays
+        cut = head + ('COL-1 - ascending colon: a 6 mm polyp was removed with a cold snare, and a separate 3 mm polyp in '
+                      'the cecum was removed with cold forceps.\nNo snare was used on COL-1.\n')
+        inv = inventory(cut)
+        six = self.lesion(inv, '6 mm')
+        self.assertEqual(len(service(inv, 'gi.colonoscopy').lesions), 2)  # the second lesion is never merged into it
+        self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [six.id])
+        self.assertEqual([c.lesion for c in conflicts(inv, 'gi.colonoscopy', 'snare')], [six.id])
 
     def test_labels_are_exact_tokens_defined_over_a_site_or_a_lesion(self):
         defs = services._label_definitions('COL-1 - ascending colon: a 2 mm polyp\nP2: 6 mm polyp\nD2: normal\n'
