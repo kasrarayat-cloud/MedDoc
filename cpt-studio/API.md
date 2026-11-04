@@ -1182,3 +1182,34 @@ them.
 - **Quotations**: "Why this code?" and the approved export's evidence are one rule (`review.evidence_spans`): nothing
   unless the support reading is 'pass' or 'warn'; then CPT Studio's located passages, the matched acts' evidence and
   the supporting provider passages. The walk and the download check accept exactly those.
+
+## Core repair and customer interface (2026-11-04): refutation round 3, integration
+
+The bounded round 3, over the round-2 repairs, held the head to one standard: never read a document worse than the
+installed revision 41e03656df61, and keep the round-2 improvements. What its repairs change in the contract:
+
+- **Details and state** (the overlay-r3 owner):
+  - Every details save (confirm, clear, correct, any value) leaves the stored encounter state equal to the derived
+    one, so the list, the queue and the badge never read a stale "Ready for review".
+  - An office visit the same-day gate holds (em.same_day_if_reinstated, while a same-day procedure is reinstated or
+    approved) is asked separate_em: a confirm row with `affects` [the visit], both answers and the addendum. It reads
+    needs_detail (operator status needs_clarification), and approve stays withheld. "Not documented" or "Cannot
+    confirm" there excludes the visit, and readiness then names no same-day blocker for it.
+- **Activity:** `check_not_completed` is written for a re-check whose request failed or was not sent, when it ends. For
+  one whose outcome was unknown it is written only when that outcome is reconciled, never while it is being
+  confirmed.
+- **Progress** (the progress-r3 owner): a step reads every finished stage's recorded outcome. A document review or
+  re-check whose request failed, was not sent, was not resent or found sending disabled reads failed. An unknown
+  outcome or a blocked send reads stopped. A check's own failure leaves its step done (I10). The queued message and the
+  title share one rule (`progress.next_step_queued`): a step the panel shows done, including one kept from an earlier
+  run.
+- **Operator view** (the tools-r3 owner and the integration):
+  - Each proposal carries `overlay_reason`: the overlay's reason beside `status`, `detail_unavailable` while a
+    member's answer excludes the code, else `''`.
+  - Each proposal carries `customer`, the operator view's statement of the customer page for the code:
+    `{number, status, status_label, sub_label, reviewer_actions}` as `GET /api/encounters/<id>` serves it to a member
+    who may review. It is null where the page does not list the code.
+  - Each pipeline stage carries `step_outcome`: the state it gives its customer step (`progress._step_outcome`), or
+    null while it runs or when it did nothing for the step.
+  - The walk and the download check judge the customer page and the exports against these fields. They never
+    re-derive them, and they cannot verify without them.

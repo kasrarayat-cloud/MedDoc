@@ -270,6 +270,11 @@ last column `review_label`, the agent-executed synthetic review label on each ro
 alone decides it). `why.quotes` and the approved export's evidence are one rule (`review.evidence_spans`): nothing
 unless the support reading records the act as shown ('pass' or 'warn').
 
+**Amended 2026-11-04 (refutation round 3).** Status mapping: an office visit that a reinstated same-day procedure holds
+maps to needs_detail, with the separate_em row that asks it; never ready beside no approve. Section 9: P8's tools judge
+the customer page's statuses, actions and progress steps against the operator view's statement of them (each proposal's
+`customer`, each stage's `step_outcome`), never a re-derivation, and cannot verify without it.
+
 ## 8. P6 UI: DOM contract (P8's walk tool depends on these exact hooks)
 
 - Result list: `ol.result-list` > `li.result-row[data-proposal=<id>][data-code=<code>][data-status=<status>]` with `.result-number`,

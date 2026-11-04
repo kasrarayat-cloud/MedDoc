@@ -852,3 +852,22 @@ hyphen there already did. It is hold-only, and no battery, regression or corpus 
 
 How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
 (independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
+
+## Core repair, refutation round 3 (2026-11-04): what the bounded round leaves
+
+Round 3 attacked the round-2 repairs only, against one standard: the head never reads a document worse than the
+installed revision, and keeps the round-2 improvements. Its repairs (`tests/fixtures/gi4/declarations/cux-r3-reader.json`,
+with its integration amendment) meet that standard on every reproduced input but these, which are recorded, not
+repaired:
+
+| id | input | head and installed | why it is left |
+|---|---|---|---|
+| A8 | R8 D8's titled colonoscopy with "Indication - surveillance after a sigmoid polyp was removed with a hot snare" (a dash heading, no colon) above the procedure; 45385 cites it | ready on the head and on installed | routing's layout (`sections.layout`, frozen by the H2 gate, gi-context@4) reads no indication section there; repairing it moves the frozen context reader |
+| A3 (43239) | a combined EGD and colonoscopy narrative, with no section per service, whose gastric biopsy names no site | the head holds 43239 (installed reads it READY); 45380, which the round-2 repair made READY on the gastric biopsy, is held again | rule 4's declared cost (`cux-bind.json`): a combined title binds no family. Reading 43239 READY needs a context rule (the A1/rule-6 class closed by session decision (c)) |
+| R1a-r3 | an examination told only by its name ("The EGD showed ...") between a colon lesion and a labelled act; an instrument named in a denial | does not unbind the label (hold direction) | the guard reads instruments, not service names |
+| L1d-r3 | a header line naming another service, then the running report's findings with no instrument told | held, as installed holds it (for its extent) | no instrument resumes the running part |
+| L1e-r3 | a back-reference to a lesion two lesions back ("the first polyp") in a note | reads the part's last lesion | the reach rule reads the last current lesion |
+| R1b-r3 | a restatement with no size, told after another tract's instrument; sizes compared as written ("8 mm" vs "0.8 cm") | the label stays unresolved (hold direction) | a restatement must not contradict the definition it restates |
+| R1c-r3 | a clause naming a site of another tract than the labelled lesion's | unbinds the label as round 2 did; the denial is read at its site and at the lesion | one statement read both ways keeps both conflicts |
+| R8b-r3 | a post-modified same-day evaluation outside the closed list (opener, article, up to three adjectives, five prepositions, "of" with a possessive) | the absence statement negates the visit | a closed list; wider wording is for the accuracy evaluation |
+
