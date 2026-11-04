@@ -4267,6 +4267,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # is read performed it takes it, as before
         binding_families = [f for f in performed_families if f not in reach_only] \
             if len([f for f in performed_families if f != 'gi.office_em']) > 1 else performed_families
+        # R1a-r5 (below): more than one procedure read performed, the office visit not counted
+        several_performed = len([f for f in performed_families if f != 'gi.office_em']) > 1
+        from studio.gi.catalogue import NOT_REPORTED as never_reported  # local: catalogue reads this module
         # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
         # not record: "the polyp" after an unrecorded polyp may be that one, not the last one recorded (status-1, below)
         last_named: dict[str, int] = {}
@@ -4490,7 +4493,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # then taken with the same cold forceps used to retrieve COL-1." inside UPPER ENDOSCOPY)
                     bound = None
                 if bound is not None and not act_part_family \
-                        and _told_after(instrument_marks, instrument_starts, bound, ms, drafts) \
+                        and (_told_after(instrument_marks, instrument_starts, bound, ms, drafts)
+                             or (several_performed and not own_anat and kind not in never_reported)) \
                         and read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                         in_today_report=part.kind == 'report').status not in ('negated', 'cancelled'):
                     # R1a-r3 (reader repair, round 3; refutation A3): where nothing but the binding would give the act
@@ -4500,6 +4504,18 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # report's narrative is never the colon polyp's biopsy. A denial keeps its label (the lesion it
                     # denies is named), Mara's "No biopsy forceps were used on COL-2." among them
                     bound = None
+                    # R1a-r5 (reader repair, round 5, 2026-11-04; the lead's verification of 20a64b86 and refutation rounds
+                    # 4 and 4b): where more than one procedure is read performed, a lesion's name is never the only thing
+                    # that gives a performed act its service. An act whose own clause names no site and whose part names
+                    # no service is unbound as R1a-r3 unbinds it, whatever was or was not told since, and it takes no site
+                    # from another clause of its sentence: it is placed by what it says itself, or left unplaced, and the
+                    # code it alone supports is held. No telling is detected and no word is listed (the instrument,
+                    # service-name and prophylaxis lists of rounds 4 and 4b leaked false READYs and false holds alike). A
+                    # clip or a cannulation (catalogue.NOT_REPORTED) never needs a code of its own and keeps its label, as
+                    # Mara's "One prophylactic clip was placed at the COL-2 resection site." does; a denial keeps its
+                    # label, as before.
+                    if several_performed and not own_anat and kind not in never_reported:
+                        anat, region = [], ''
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
