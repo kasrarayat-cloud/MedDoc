@@ -6865,8 +6865,10 @@ def _pv1_compared(text: str, start: int) -> bool:
 # a telephone or audio contact ("by telephone", "telephonic", "audio-only").
 _PV1_MODE_FIELD = re.compile(r'(?:visit|encounter|appointment|contact|consult\w*|type|mode|modality|method)\b[^\n:]*?'
                              r'[ \t]*[:\-][ \t]*(?:tele)?phone\Z', re.A | re.I)
-_PV1_ATTENDANCE = re.compile(r"not\s+seen|no\s+in[- ]person|no[- ]?show|did\s+not|didn't|failed\s+to|missed|cancell?ed|"
-                             r'left\s+without|LWBS', re.A | re.I)
+# (variant repair, round 2, cux-r2-variants.json V12: the contracted "n't seen" and the hyphen's spellings of "no
+# in-person" are attendance predicates as "not seen" and "no in-person" are, so a variant takes its plain form's path)
+_PV1_ATTENDANCE = re.compile(r"not\s+seen|n['\u2019]t\s+seen|no\s+in(?: |" + cues.HYPHEN + r")person|no[- ]?show|"
+                             r"did\s+not|didn't|failed\s+to|missed|cancell?ed|left\s+without|LWBS", re.A | re.I)
 _PV1_COMPOUND = re.compile(r'(?:tele)?phone\s+(?P<noun>[\w/-]+)', re.A | re.I)
 _PV1_DATA_NOUN = re.compile(r'notes?|numbers?|lists?|logs?|records?|lines?|polic(?:y|ies)', re.A | re.I)
 # Another party to a contact: an interpreter, a historian, a clinician, a pharmacy, a family member, a caregiver
@@ -6988,7 +6990,7 @@ def _pv1_todays_mode(an: Analysis, start: int, end: int) -> bool:
     if _PV1_MODE_FIELD.search(words):
         return True  # "Visit type: Telephone", "Encounter: Telephone"
     ss, se = an.lay.window(an.lay.sentence_for(start, end), start, end, CLAUSE_REACH)
-    if _pv1_in_person_today(an, ss, se):
+    if _pv1_in_person_today(an, ss, se, own=(start, end)):
         return False  # "She called by phone yesterday; seen in person today."
     if _pv1_under_another_occasion(an, start):
         return False  # "Addendum 10/30/2026\nPathology discussed with the patient by phone."
@@ -7018,12 +7020,18 @@ _PV1_LAST_LEAD = re.compile(r'\b(?:last|previously|prior|before|earlier|first|in
                             r'were\s+)?\Z', re.A | re.I)
 
 
-def _pv1_in_person_today(an: Analysis, start: int, end: int) -> bool:
+def _pv1_in_person_today(an: Analysis, start: int, end: int, own: Optional[tuple[int, int]] = None) -> bool:
     """Whether [start, end) states that today's visit was in person (_PV1_IN_PERSON) - not one told of another time:
     no 'last', 'previously' or 'prior' right before it ("last seen in person"), and no other time in its clause
-    (_pv1_clause_other_time: "seen in person in August"). Bounded: the matches of a CLAUSE_REACH window."""
+    (_pv1_clause_other_time: "seen in person in August"). An in-person reading that overlaps ``own`` - the
+    cues.NOT_IN_PERSON match being judged - is that phrase's own words, never a statement of an in-person visit
+    (variant repair, round 2, cux-r2-variants.json V12: "Patient not  seen in person today." with two spaces, a line
+    break inside the phrase, or "wasn\u2019t seen in person", which the fixed-width lookbehinds of _PV1_IN_PERSON miss).
+    Bounded: the matches of a CLAUSE_REACH window."""
     text = an.text
     for x in _PV1_IN_PERSON.finditer(text, start, end):
+        if own is not None and x.start() < own[1] and own[0] < x.end():
+            continue
         if _PV1_LAST_LEAD.search(text, max(start, x.start() - 24), x.start()):
             continue
         cs, ce = an.lay.window(an.lay.clauses_for(x.start(), x.end())[0], x.start(), x.end(), CLAUSE_REACH)

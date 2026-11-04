@@ -716,7 +716,7 @@ R2V_IND = 'Indication: Surveillance after a sigmoid polyp was removed with a hot
 R2V_IND_DASH = 'Indication: surveillance - sigmoid polyp removed with hot snare'
 R2V_TODAY_SNARE = 'A 9 mm polyp in the sigmoid colon was removed with a hot snare.'
 R2V_BIOPSY_TODAY = 'Cold forceps biopsies were taken from the distal esophagus.'
-R2V_PREDICATE = 'A 7 mm polyp in the sigmoid colon was snare–resected.'
+R2V_PREDICATE = 'A 7 mm polyp in the sigmoid colon was snare\u2013resected.'
 R2V_EXAM = 'Vital Signs and Exam\n'
 
 
@@ -759,21 +759,21 @@ CASES.update({
         [('45380', R8_TODAY_BX, 'done'), ('45385', (R2V_IND, R8_CECUM), 'not_done')]),
     # R06 (P1 rule 2, the lead's L3): the compound's hyphen in a Unicode spelling, read where the ASCII hyphen is
     'R8 R2 V R06a en dash compound, no act today': (
-        _r8(R8_EGD_DX, _r2v_barrett('–')), [('43239', _r2v_barrett('–'), 'not_done')]),
+        _r8(R8_EGD_DX, _r2v_barrett('\u2013')), [('43239', _r2v_barrett('\u2013'), 'not_done')]),
     'R8 R2 V R06 non-breaking hyphen compound, no act today': (
-        _r8(R8_EGD_DX, _r2v_barrett('‑')), [('43239', _r2v_barrett('‑'), 'not_done')]),
+        _r8(R8_EGD_DX, _r2v_barrett('\u2011')), [('43239', _r2v_barrett('\u2011'), 'not_done')]),
     'R8 R2 V R06 em dash compound, no act today': (
-        _r8(R8_EGD_DX, _r2v_barrett('—')), [('43239', _r2v_barrett('—'), 'not_done')]),
+        _r8(R8_EGD_DX, _r2v_barrett('\u2014')), [('43239', _r2v_barrett('\u2014'), 'not_done')]),
     'R8 R2 V R06 en dash compound, biopsy-confirmed adenoma': (
-        _r8(R8_EGD_DX, 'Follow-up of a biopsy–confirmed gastric adenoma was performed.'),
-        [('43239', 'Follow-up of a biopsy–confirmed gastric adenoma was performed.', 'not_done')]),
+        _r8(R8_EGD_DX, 'Follow-up of a biopsy\u2013confirmed gastric adenoma was performed.'),
+        [('43239', 'Follow-up of a biopsy\u2013confirmed gastric adenoma was performed.', 'not_done')]),
     'R8 R2 V R06 en dash field label answered No': (
-        R2_SNARED + 'Polyp 1 - sigmoid colon, 7 mm\nSnare–resected: No\nForceps–removed: Yes\n',
+        R2_SNARED + 'Polyp 1 - sigmoid colon, 7 mm\nSnare\u2013resected: No\nForceps\u2013removed: Yes\n',
         [('45385', R2_SNARED_Q, 'no_ready')]),
     'R8 R2 V R06 control, an en dash attributive compound': (
-        R2_SNARED + 'The snare–resected sigmoid polyp was not retrieved.\n', [('45385', R2_SNARED_Q, 'done')]),
+        R2_SNARED + 'The snare\u2013resected sigmoid polyp was not retrieved.\n', [('45385', R2_SNARED_Q, 'done')]),
     'R8 R2 V R06 control, an en dash compound and a biopsy today': (
-        _r8(R8_EGD_DX, _r2v_barrett('–'), R2V_BIOPSY_TODAY), [('43239', R2V_BIOPSY_TODAY, 'done')]),
+        _r8(R8_EGD_DX, _r2v_barrett('\u2013'), R2V_BIOPSY_TODAY), [('43239', R2V_BIOPSY_TODAY, 'done')]),
     'R8 R2 V R06 control, an en dash predicate compound': (
         _r8(R8_COLON, R2V_PREDICATE), [('45378', R8_CECUM, 'done'), ('45385', R2V_PREDICATE, 'done')]),
     # R12 (R8 D12, cues.NOT_IN_PERSON): the declared phrase hyphenated, contracted, or written with two spaces
@@ -784,7 +784,7 @@ CASES.update({
     "R8 R2 V R12b wasn't seen in person, exam": (
         _r2v_exam("Patient wasn't seen in person today."), [('99204', R8_TWIN, 'no_ready')]),
     'R8 R2 V R12c the contraction with a curly apostrophe, exam': (
-        _r2v_exam('Patient wasn’t seen in person today.'), [('99204', R8_TWIN, 'no_ready')]),
+        _r2v_exam('Patient wasn\u2019t seen in person today.'), [('99204', R8_TWIN, 'no_ready')]),
     "R8 R2 V R12d isn't seen in person, exam": (
         _r2v_exam("Patient isn't seen in person today."), [('99204', R8_TWIN, 'no_ready')]),
     "R8 R2 V R12e the patient wasn't seen, exam": (
@@ -792,7 +792,7 @@ CASES.update({
     'R8 R2 V R12f two spaces in the phrase, exam': (
         _r2v_exam('Patient not  seen in person today.'), [('99204', R8_TWIN, 'no_ready')]),
     'R8 R2 V R12g non-breaking hyphen in in-person, exam': (
-        _r2v_exam('Patient not seen in‑person today.'), [('99204', R8_TWIN, 'no_ready')]),
+        _r2v_exam('Patient not seen in\u2011person today.'), [('99204', R8_TWIN, 'no_ready')]),
     'R8 R2 V R12 control, seen in-person today': (
         _r2v_exam('Patient seen in-person today.'), [('99204', R8_TWIN, 'done')]),
 })
