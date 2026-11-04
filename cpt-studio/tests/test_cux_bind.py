@@ -232,23 +232,42 @@ class LesionLabelTests(SimpleTestCase):
         self.assertEqual(outcomes(run(text, [('45380', 'a 4 mm sessile polyp was removed with cold forceps.')]))['45380'],
                          held('conflict:biopsy'))
 
-    def test_a_label_heads_only_the_lesion_its_definition_describes_alone(self):
+    def test_twin_a_label_over_two_lesions_resolves_to_neither(self):
         head = HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\n'
-        # the definition's clause describes two lesions: which act is whose is not told, so COL-1 resolves to neither
-        # and the snare it denies reads as before - the genuine contradiction is kept
-        both = head + ('COL-1 - ascending colon: a 6 mm polyp was removed with a cold snare and another 3 mm polyp in '
-                       'the cecum was removed with cold forceps.\nNo snare was used on COL-1.\n')
-        inv = inventory(both)
-        self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [''])
-        self.assertTrue(conflicts(inv, 'gi.colonoscopy', 'snare'))
-        # a clause of its own for each lesion: COL-1 is the first; the denial binds to it and the contradiction stays
-        cut = head + ('COL-1 - ascending colon: a 6 mm polyp was removed with a cold snare, and a separate 3 mm polyp in '
-                      'the cecum was removed with cold forceps.\nNo snare was used on COL-1.\n')
-        inv = inventory(cut)
-        six = self.lesion(inv, '6 mm')
-        self.assertEqual(len(service(inv, 'gi.colonoscopy').lesions), 2)  # the second lesion is never merged into it
-        self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [six.id])
-        self.assertEqual([c.lesion for c in conflicts(inv, 'gi.colonoscopy', 'snare')], [six.id])
+        # the definition line describes two lesions - in one clause or in two, the second with a site of its own or
+        # none: which one COL-1 names is not told, so it resolves to neither, the snare it denies reads as before (no
+        # lesion) and the genuine contradiction is kept
+        for line in ('a 6 mm polyp was removed with a cold snare and another 3 mm polyp in the cecum was removed with '
+                     'cold forceps.',
+                     'a 6 mm polyp was removed with a cold snare, and a separate 3 mm polyp in the cecum was removed with '
+                     'cold forceps.',
+                     'a 2 mm polyp was removed with cold forceps, and a separate 5 mm polyp was removed with a cold snare.'):
+            with self.subTest(line):
+                inv = inventory(head + 'COL-1 - ascending colon: ' + line + '\nNo snare was used on COL-1.\n')
+                self.assertEqual(len(service(inv, 'gi.colonoscopy').lesions), 2)  # never merged into one
+                self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [''])
+                self.assertTrue(conflicts(inv, 'gi.colonoscopy', 'snare'))
+
+    def test_twin_a_denial_naming_a_lesion_of_its_own_is_placed_as_before(self):
+        # "No snare was used on COL-1 or the 3 mm polyp.": the clause names a lesion of its own beside the label, so the
+        # label does not place it; it is placed as before (on the 3 mm polyp) and the contradiction there is kept
+        text = (HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+                'COL-1 - ascending colon: a 2 mm polyp was removed with cold forceps.\n'
+                'COL-2 - sigmoid colon: a 3 mm polyp was removed with a cold snare.\n')
+        for denial in ('No snare was used on COL-1 or the 3 mm polyp.', 'No snare was used on COL-1 or the polyp.'):
+            with self.subTest(denial):
+                inv = inventory(text + denial + '\n')
+                three = self.lesion(inv, '3 mm')
+                self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [three.id])
+                self.assertEqual([c.lesion for c in conflicts(inv, 'gi.colonoscopy', 'snare')], [three.id])
+
+    def test_a_label_alone_binds_the_denial_to_the_lesion_it_names(self):
+        text = (HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+                'COL-1 - ascending colon: a 2 mm polyp was removed with cold forceps.\n'
+                'COL-2 - sigmoid colon: a 3 mm polyp was removed with a cold snare.\n')
+        inv = inventory(text + 'No snare was used on COL-1.\n')
+        self.assertEqual([x.lesion for x in acts(inv, kind='snare', status='negated')], [self.lesion(inv, '2 mm').id])
+        self.assertEqual(conflicts(inv, 'gi.colonoscopy', 'snare'), [])
 
     def test_labels_are_exact_tokens_defined_over_a_site_or_a_lesion(self):
         defs = services._label_definitions('COL-1 - ascending colon: a 2 mm polyp\nP2: 6 mm polyp\nD2: normal\n'

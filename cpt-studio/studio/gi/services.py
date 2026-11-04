@@ -595,6 +595,8 @@ LESION = _rx(r'(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d
              r'raised|pale|nonbleeding|non-bleeding|bleeding|hypoechoic|irregular|ulcerated|clean-based|semi-?pedunculated|'
              r'serrated|small|large|diminutive|lateral\s+spreading|laterally\s+spreading|polypoid|submucosal|'
              r'subepithelial|carpet-?like)[\s,]+){0,3})(?P<noun>' + LESION_NOUN + r')\b')
+# the leads of a lesion mention that describes a lesion of its own (with a size, or a number): the inventory records it
+CREATING_LEADS = ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several', 'multiple', 'a separate', 'another')
 SPECIMEN = _rx(r'\b(?:specimen|jar|container|bottle|pot)s?\s+(?P<label>[A-Z0-9]{1,2})\b|\((?:jar|specimen|container)\s+'
                r'(?P<label2>[A-Z0-9]{1,2})\)')
 ANAPHORA = _rx(r'\W*(?:(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])\s+)?(?:this|that|the|it|its)\b(?:\s+(?:\d+(?:\.\d+)?\s*(?:mm|cm)\s+)?'
@@ -4027,8 +4029,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         and (not size or not under.size or size.replace(' ', '') == under.size.replace(' ', '')) \
                         and (not anat or _regions_compatible(anat[0][1], under.region)):
                     existing = under
-                creatable = (size or lead in ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several',
-                                              'multiple', 'a separate', 'another') or lead.isdigit())
+                creatable = (size or lead in CREATING_LEADS or lead.isdigit())
                 if existing is None and creatable and anat and (status or lesion_status(clause, lm, part)) not in (
                         'negated', 'historical', 'planned'):
                     if lm.group('noun').lower().rstrip('s') in ('stricture', 'ring', 'erosion') and not size:
@@ -4051,11 +4052,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     last_named[lesion.id] = lm.start()
                     placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
                     if label and label not in label_index:  # rule 1: a label resolves to the lesion it heads, only
-                        # where its definition's clause describes that lesion alone (two lesions in it: which act is
-                        # whose there is not told, so the label resolves to neither)
-                        if described is None:
-                            described = _described_starts(text, lesion_matches, ss, read_end)
-                        alone = _lesions_described(described, max(clause[0], label_end), clause[1]) == 1
+                        # where its definition line describes that lesion alone (two lesions on it, in one clause or in
+                        # two: which one the label names is not told, so it resolves to neither)
+                        alone = _defines_one_lesion(text, label_line, label_end)
                         label_index[label] = lesion if label in unique_labels and alone else None
                         label_lines[label] = label_line
                     elif label and label_lines.get(label) != label_line:
@@ -4091,8 +4090,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if bound is not None:
                     if described is None:
                         described = _described_starts(text, lesion_matches, ss, read_end)
-                    if _lesions_described(described, clause[0], clause[1]) > 1:
-                        bound = None  # a clause that describes two lesions: its label says which, not which act is whose
+                    if _lesions_described(described, clause[0], clause[1]):
+                        bound = None  # a clause naming a lesion of its own (not a label's word) is placed as before
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
@@ -4612,13 +4611,37 @@ def _described_starts(text: str, lesion_matches: Sequence, ss: int, end: int) ->
     out: list[int] = []
     i = 0
     for m in lesion_matches:
-        p = m.start()
+        p = m.start('noun')  # "the Polyp B": the mention's noun is the label's own word, whatever leads it
         while i < len(labels) and labels[i][1] <= p:
             i += 1
         if i < len(labels) and labels[i][0] <= p:
             continue  # the label's own word
-        out.append(p)
+        out.append(m.start())
     return out
+
+
+def _defines_one_lesion(text: str, ls: int, sep_end: int) -> bool:
+    """Whether a label definition's line, from its separator to its end, describes exactly one lesion: one lesion mention
+    that is no label's own word and that the inventory records as a lesion of its own (a size, an indefinite or a
+    numeric lead, CREATING_LEADS) - within LABEL_DEF_CHARS of the line's start; a longer line is prose under a label,
+    and which of its lesions the label names is not told (rule 1). Bounded: LABEL_DEF_CHARS characters, scanned once
+    per pattern."""
+    bound = min(len(text), ls + LABEL_DEF_CHARS)
+    le = text.find('\n', sep_end, bound)
+    if le < 0:
+        if bound < len(text):
+            return False
+        le = len(text)
+    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, sep_end, le)]
+    count = 0
+    for m in LESION.finditer(text, sep_end, le):
+        if any(a <= m.start('noun') < b for a, b in labels):
+            continue  # the label's own word ("the Polyp B")
+        lead = (m.group('lead') or '').strip().lower()
+        lead = re.sub(r'\s+', ' ', lead)
+        if m.group('size') or lead in CREATING_LEADS or lead.isdigit():
+            count += 1
+    return count == 1
 
 
 def _lesions_described(starts: Sequence[int], start: int, end: int) -> int:
