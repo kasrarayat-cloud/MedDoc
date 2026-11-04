@@ -3398,5 +3398,11 @@
    "R8 R3 H note label alone in a combined head, Part 2 | 43239": "selected/needs_clarification",
    "R8 R3 H note label alone in a combined head, second procedure | 43239": "selected/needs_clarification"
   }
+ },
+ "after_code_20261104_integration_combined_head": {
+  "battery": "python -m ops.gi4.battery --base e90f03d36 (the declaration commit) --head the code: 209 rows, base violations 5, head 2 (the known S2/S3); 3 movements, exactly the 3 declared, 0 undeclared, 0 new violations; the other 206 rows unmoved",
+  "offers": "unchanged by the code: the declared offer table stands",
+  "mutation": "'if note_named and not cuts[-1][1]' replaced by 'if False': R3RowsTests and test_gi4_battery fail; restored, sha256 equal",
+  "modules": "tests.test_cux_r3_reader, test_cux_r2_bind, test_cux_r2_em, test_cux_r2_variants, test_cux_bind, test_cux_hold, test_cux_lead, test_gi4_battery, test_gi4_state, test_harness_engine_parity, test_harness2_r2_parity, test_harness_pipeline, test_cux_review: 314 tests OK"
  }
 }

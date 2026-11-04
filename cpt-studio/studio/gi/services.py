@@ -1087,6 +1087,12 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                                                 stripped), 'role'))
             continue
         note_named = _note_families(text, lines, index, cuts[-1][4], lay)
+        if note_named and not cuts[-1][1]:
+            # L1-h (integration, round 3; cux-r3-reader.json amendment_20261104_integration_combined_head): a note label
+            # opens a note part only where it interrupts a report of one service (the running part has a family: R8 D7's
+            # shape). In a combined report's head, or any part of no family, the line lists or names today's procedures
+            # ('Note 2: Colonoscopy' over shared findings), and what follows reads as installed reads it
+            note_named = frozenset()
         if note_named and DATED_NOTE_LABEL.match(line) \
                 and not (cuts[-1][1] and _names_service_date(dates, date_starts, ls, le, service_date)):
             # L1c-r3, after code (reader repair, round 3): a numbered "Procedure 2:" line or a "Subsequent" or
