@@ -11110,5 +11110,43 @@
    "The lead's note on the --d variant says it reads E3-1g's 45380 READY 'where main and installed hold it'; the lead's own output (rc4-x-41e03656df61.json) reads that cell READY on installed. Main and this form hold it.",
    "ops.gi4.battery --declare reads only a declaration's top-level 'battery', so a superseding amendment is checked with a scratch file that copies its 'battery' verbatim (H4_battery)."
   ]
+ },
+ "amendment_20261104_site_only_lift": {
+  "declared_before_code": true,
+  "declared_at": "2026-11-04T22:33:58Z",
+  "provenance": "HONEST ORDER OF WORK. The narrowing, its patch script (/home/claude/cpt-studio-ux-20261103/verify-r4/apply_b_site.py: it asserts its one anchor once and prints services.py's sha256 before and after) and every measurement below were designed, prototyped and measured by the lead session BEFORE this amendment, on the lead's prototype tree verify-r4/proto-Z21b (a sealed git-archive export of 2ffe3593 with that script applied). They are the lead's and are recorded as the lead's. This amendment is committed alone, before the branch's code changes; the committed code must reproduce the prototype byte for byte and every reading below.",
+  "governs": "rule (b) of amendment_20261104_hold_only_r5b (services._merge_acts), narrowed; nothing else changes",
+  "refute_round_5c": {
+   "results": "/home/claude/cpt-studio-ux-20261103/refute-r5c-results.json (r5crefute:X, r5crefute:Y, with their r5cverify verdicts)",
+   "X-R5C-1": "REPRODUCED, blocking, pre-existing against main (main reads it READY with no addendum), worse than installed: a restatement or addendum naming the colonoscope or colonoscopy only to say the biopsies were taken AFTER it ('After withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A.', posted from 45380's own detail row) lifted the hold through rule (b), because the reader's sentence reading of that instrument gives the statement the colonoscopy; 45380 became READY, was approved and was exported.",
+   "X-R5C-2": "REPRODUCED, blocking, pre-existing against main, worse than installed: 'The hemostatic clip was placed prophylactically at the Polyp B stalk site during the colonoscopy.' lifted 45382's hold the same way, and the prophylactic clip's misread as bleeding control (a recorded residual installed has in colonoscopy-only notes) became READY.",
+   "Y-R5C-1": "REPRODUCED, major, recorded not fixed: a code the bounded re-check added (held) is not carried to the revision an addendum makes, and a second re-check is refused for the same document and date; main loses a re-check's code on a new revision the same way (pre-existing), but the hold invites the addendum.",
+   "Y-R5C-2": "REPRODUCED, major, recorded not fixed: an addendum whose act sentence names neither a site nor anything the reader binds ('Polyp A was removed with a cold snare. This was done during the colonoscopy.') does not lift the hold; each attempt re-runs the primary provider."
+  },
+  "rule": "(b) narrowed: a statement of the act merged into a name-only statement lifts services.NAME_ONLY_CUE only when it names a site of its own (the merged act's anatomy is non-empty); a service its sentence's instrument or its part gives it never lifts the mark. A merge whose first statement carries no cue keeps that statement's cues, as before.",
+  "patch": {
+   "script": "/home/claude/cpt-studio-ux-20261103/verify-r4/apply_b_site.py",
+   "services_py_sha256_before": "d0ed5996c0481554e40e621e0afe6fdb38569e32c7a6d6049990f357bf001242",
+   "services_py_sha256_after": "80f905a58468c284bbf044b4ce196ee8833e2409a56a343d3206f1c6defba525"
+  },
+  "expected": {
+   "battery_278_rows_against_2ffe3593": "no movement (measured: 0 movements, 0 undeclared, 0 new violations)",
+   "X-R5C-1 as an in-document restatement": "'R8 R5 R1 dash' with 'Impression: After withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A.' appended: 45380 selected/needs_clarification [performed_status], reason named_only (2ffe3593: READY)",
+   "X-R5C-2 as an in-document restatement": "'R8 R5 R2 dash combined' with 'Impression: The hemostatic clip was placed prophylactically at the Polyp B stalk site during the colonoscopy.' appended: 45382 selected/needs_clarification [performed_status], reason named_only (2ffe3593: READY)",
+   "sited restatements": "Z1 and Z2 still lift the hold (45385 READY, reason service), as on 2ffe3593",
+   "merge unit": "_merge_acts: a name-only statement merged with an uncued statement of no site keeps the mark; with an uncued statement naming a site, the mark is lifted; an uncued first statement keeps its cues"
+  },
+  "lead_measurements": {
+   "refute_round_5c_cases (verify-r4/refuter-cases5.json, 371 cases)": "against main: 0 cells toward READY (2ffe3593 also 0); violations installed lacks 32 on 2ffe3593, 2 on this form; violations main lacks 0; main's violations fixed 23 on 2ffe3593, 53 here; held where main reads READY with truth done 171 on 2ffe3593, 208 here",
+   "refuter_cases4 (2,924 cases, rounds 4 to 5b)": "against main 0 cells toward READY; against 2ffe3593 0 toward READY; violations installed lacks 2 (the recorded B3 base-code-alone residual, pre-existing on main); main's violations fixed 113; held where main reads READY with truth done 383 on 2ffe3593, 437 here",
+   "base_probes2 and the lead cases": "byte-identical to 2ffe3593 (bp2-proto-Z21a.json, c18b-proto-Z21a.json)",
+   "battery (main 209 rows)": "against main 1 movement (R8 R3 A3 control), 0 new violations; against installed 0 new violations",
+   "corpus (invdump_main, 5,980 texts)": "0 inventories differ from main"
+  },
+  "residuals_measured": {
+   "R1 only-restated withdrawn": "the act's own sentence names the colonoscope's withdrawal ('After withdrawal of the colonoscope, biopsies were taken ...') and nothing else states it: the sentence reading places it in the colonoscopy, so it is no name-only statement; 45380 READY on main and here, held on installed: worse than installed, pre-existing on main (R3's family of instrument-order readings)",
+   "Y-R5C-1": "recorded above; pre-existing on main for any re-check code",
+   "Y-R5C-2": "recorded above: an addendum lifts the hold only when its act sentence names the site"
+  }
  }
 }
