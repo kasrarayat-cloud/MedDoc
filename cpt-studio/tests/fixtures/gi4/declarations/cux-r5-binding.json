@@ -11148,5 +11148,12 @@
    "Y-R5C-1": "recorded above; pre-existing on main for any re-check code",
    "Y-R5C-2": "recorded above: an addendum lifts the hold only when its act sentence names the site"
   }
+ },
+ "after_code_20261104_site_only_lift": {
+  "recorded_at": "2026-11-04T22:36:03Z",
+  "code_commit": "0c5d7c16b631bbfbb01fdad351da216e4ef88b4c",
+  "reproduces_the_prototype": "services.py at the code commit is byte-identical (cmp) to verify-r4/proto-Z21b/cpt-studio/studio/gi/services.py, sha256 80f905a58468c284bbf044b4ce196ee8833e2409a56a343d3206f1c6defba525; every other file under cpt-studio/ that the reader runs is unchanged from 2ffe3593, so the lead's measurements in amendment_20261104_site_only_lift are of this code",
+  "tests": "tests.test_cux_r5_binding: MergedCueTests.test_the_cue_survives_a_merge_unless_a_statement_names_its_own_site (replaces test_the_cue_survives_a_merge_only_when_every_statement_carries_it: a merged statement with a site lifts the mark, one with no site keeps it, an uncued first statement keeps its cues) and SiteOnlyLiftTests (X-R5C-1 and X-R5C-2 as in-document restatements: 45380 and 45382 held [performed_status] named_only, no violation); MergedCueTests and SiteOnlyLiftTests ran 4 tests OK on the test server (t.sh suffix r5d1)",
+  "mutation_proof": "the narrowing reverted in place (lifted = cue on the first statement and none on the second, whatever its site), applied and read back True; MergedCueTests and SiteOnlyLiftTests: FAILED (failures=3), killed; services.py restored from a copy and its sha256 compared: 80f905a58468c284 equal (t.sh suffix r5d2)"
  }
 }

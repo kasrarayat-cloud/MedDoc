@@ -1136,3 +1136,49 @@ the lead's 2,924 cases it fixes 122 of main's violations. But it moves one cell 
 form hold that cell. Installed reads it READY too, so the lead's note that installed holds it is not right. A violation
 main lacks is what the standard forbids. The variant would also have held the B3 dash probe's base code; that residual is
 recorded above instead.
+
+## Core repair, round 5c (2026-11-04): a name-only mark lifts only for a statement naming a site
+
+**Refutation round 5c** (bounded: two lenses aimed at the paths the offline reader does not reach, every finding
+reproduced independently; results in the lead's refute-r5c-results.json) found that rule (b) of round 5b lifted the hold
+for the wrong statement.
+
+- **X-R5C-1:** a restatement or addendum named the colonoscope only to say the biopsies were taken after it: "After
+  withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A.", posted from
+  45380's own detail row. It lifted the hold, because the reader's sentence reading of that instrument gives the
+  statement the colonoscopy. 45380 was approved and exported.
+- **X-R5C-2:** the same happened for the prophylactic clip's 45382 ("... placed prophylactically at the Polyp B stalk
+  site during the colonoscopy.").
+
+Both are pre-existing against main, which reads them READY with no addendum, and worse than installed.
+
+**The repair (amendment_20261104_site_only_lift):** a statement merged into a name-only one lifts the mark only when it
+names a site of its own. A service its sentence's instrument or its part gives it no longer lifts the mark.
+
+Measured by the lead before code:
+
+| set | measure | result |
+|---|---|---|
+| round 5c's 371 cases | violations installed lacks | 32 before, 2 now |
+| | cells toward READY against main or round 5b's head | 0 |
+| | main's violations fixed | 23 before, 53 now |
+| the 2,924 earlier cases | cells toward READY | 0 |
+| | held where main reads READY | 383 before, 437 now |
+| the branch's 278 battery rows | movements | 0 |
+
+### What round 5c leaves (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| the act's own sentence names the colonoscope's withdrawal, and nothing else states the act | "After withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A." as the only statement of the biopsy; truth: the colonoscopy's 45380 not done | ready | held | ready | Main's sentence reading of an instrument places the act in the colonoscopy, so it is no name-only statement. This is round 3's family of instrument-order readings (the R3 shape). Pre-existing on main, worse than installed; the 2 cells left above |
+| a code the bounded re-check added (held), then an addendum (Y-R5C-1) | the re-check adds 45385 held; an addendum from its detail row makes revision 2, where the primary provider again does not select it | ready at revision 1 (no addendum needed) | ready | the code is not carried to revision 2, and a second re-check is refused for the same document and date | Main loses a re-check's code on a new revision the same way. The hold invites the addendum. Carrying re-check codes across revisions is a product change, not a reader repair |
+| an addendum whose act sentence names no site (Y-R5C-2) | "Polyp A was removed with a cold snare. This was done during the colonoscopy." or "... It was located in the sigmoid colon."; truth: done | ready | ready | held | Only a statement of the act that names its site lifts the mark ("Polyp A was removed with a cold snare in the sigmoid colon." does). Each addendum re-runs the primary provider |
+
+**What a customer can do with a held code of the declared class:**
+
+- add an addendum whose own sentence states where the act was done (its site), which lifts the hold;
+- or answer the detail "Not documented" or "Cannot confirm", which excludes the code;
+- or reject it.
+
+No member answer can confirm the binding itself. Whether a reviewer should be able to confirm "this act was part of
+this procedure" is an open product question, recorded for the owner.

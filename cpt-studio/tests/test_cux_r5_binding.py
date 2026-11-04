@@ -526,17 +526,25 @@ class MergedCueTests(SimpleTestCase):
                 self.assertEqual(read(name)['45385'], (READY, [], 'service', []))
                 self.assertEqual(DECLARED.get((name, '45385')), None)  # main reads it READY too: no movement
 
-    def test_the_cue_survives_a_merge_only_when_every_statement_carries_it(self):
+    def test_the_cue_survives_a_merge_unless_a_statement_names_its_own_site(self):
+        # amendment_20261104_site_only_lift: only a statement naming a site of its own lifts the mark; one that names no
+        # site (its service read from its sentence's instrument or its part: X-R5C-1) leaves it
         inv = inventory(text_of(Y1))
         (named,) = acts(inv, 'gi.colonoscopy', 'snare')  # the label-only statement: the cue
         self.assertIn(CUE, named.cues)
-        sited = replace(named, cues=tuple(c for c in named.cues if c != CUE),
-                        evidence=named.evidence + named.evidence)  # a statement of the same act with no cue
-        for order in ((named, sited), (sited, named)):
-            with self.subTest(first_has_cue=order[0] is named):
-                (merged,) = services._merge_acts(list(order))
-                self.assertNotIn(CUE, merged.cues)
-                self.assertEqual([c for c in merged.cues if c != CUE], [c for c in named.cues if c != CUE])
+        self.assertEqual(named.anatomy, ())
+        bare = tuple(c for c in named.cues if c != CUE)
+        sited = replace(named, cues=bare, anatomy=('sigmoid colon',), evidence=named.evidence + named.evidence)
+        unsited = replace(named, cues=bare, evidence=named.evidence + named.evidence)
+        (merged,) = services._merge_acts([named, sited])
+        self.assertNotIn(CUE, merged.cues)  # a statement of the act naming its site lifts the mark
+        self.assertEqual(list(merged.cues), list(bare))
+        (merged,) = services._merge_acts([named, unsited])
+        self.assertIn(CUE, merged.cues)  # a statement naming no site of its own never does
+        for first in (sited, unsited):
+            with self.subTest(first_names_a_site=first is sited):
+                (merged,) = services._merge_acts([first, named])
+                self.assertNotIn(CUE, merged.cues)  # an uncued first statement keeps its own cues, as before
         (merged,) = services._merge_acts([named, replace(named, evidence=named.evidence)])
         self.assertIn(CUE, merged.cues)  # every statement label-only: the mark stays
 
@@ -545,6 +553,27 @@ class MergedCueTests(SimpleTestCase):
         for name in (Y1, Y3, H1146):
             with self.subTest(name):
                 self.assertEqual(read(name)['45385'], (HELD, ['performed_status'], 'named_only', []))
+
+
+class SiteOnlyLiftTests(SimpleTestCase):
+    """Refutation round 5c, X-R5C-1 and X-R5C-2 (amendment_20261104_site_only_lift): a restatement that names the
+    colonoscope or the colonoscopy only to say the act came after it, or that names no site, leaves the name-only hold -
+    the wrong colonoscopy code and the prophylactic clip's bleeding control stay held; a restatement naming the act's site
+    still lifts it (Z1, Z2: MergedCueTests)."""
+
+    WITHDRAWN = ('Impression: After withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to '
+                 'retrieve Polyp A.')
+    CLIP = 'Impression: The hemostatic clip was placed prophylactically at the Polyp B stalk site during the colonoscopy.'
+
+    def test_a_restatement_naming_no_site_of_its_own_keeps_the_hold(self):
+        for name, line, code in (('R8 R5 R1 dash', self.WITHDRAWN, '45380'),
+                                 ('R8 R5 R2 dash combined', self.CLIP, '45382')):
+            with self.subTest(name):
+                text, codes = battery.CASES[name]
+                self.assertEqual(read(name)[code][:3], (HELD, ['performed_status'], 'named_only'))  # the row alone
+                restated = text.rstrip('\n') + '\n' + line + '\n'
+                self.assertEqual(read(name, text=restated, codes=codes)[code],
+                                 (HELD, ['performed_status'], 'named_only', []))
 
 
 class HeldCodeCarriesItsActsTests(SimpleTestCase):
