@@ -774,9 +774,10 @@ function detailRow(row, doc, ui) {
   const control = row.saved ? savedAnswer(row, editable)
     : !editable ? '<p class="detail-wait">Answers can be saved once processing has finished.</p>'
       : row.control === 'date' ? dateControl(row, ui) : row.control === 'choice' ? choiceControl(row, ui) : confirmControl(row, ui);
+  // a choice is a radio group, named by its legend; the legend comes first, holding the family and the prompt
   const tag = row.control === 'choice' && !row.saved && editable ? 'fieldset' : 'div';
-  const lead = tag === 'fieldset' ? `<legend class="detail-prompt">${escapeHtml(row.prompt)}</legend>` : `<p class="detail-prompt">${escapeHtml(row.prompt)}</p>`;
-  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span>${lead}${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${control}</${tag}>`;
+  const lead = tag === 'fieldset' ? 'legend' : 'div';
+  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${control}</${tag}>`;
 }
 
 function detailsPanel(doc, ui = {}) {

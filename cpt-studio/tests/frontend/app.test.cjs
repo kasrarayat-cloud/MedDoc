@@ -365,6 +365,19 @@ test('every quote in the customer fixtures is an exact code-point slice of its d
 });
 
 // --- status ----------------------------------------------------------------------------------------------------------
+// The fixtures are hand-made to the contract now and regenerated from the real serializer at integration, so what the
+// server writes (summaries, prompts, reasons, messages) is read from the fixture; what the page writes is pinned here.
+
+const esc = app.escapeHtml;
+// One result row's markup: from its own tag to the next row or the end of the list (a row holds nested lists).
+const rowOf = (html, id) => {
+  const at = html.indexOf(`id="card-${id}"`);
+  assert.ok(at >= 0, `no row for ${id}`);
+  const ends = [html.indexOf('<li class="result-row"', at), html.indexOf('</ol>', at)].filter(index => index > at);
+  return html.slice(at, Math.min(...ends));
+};
+const words = items => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
+const STEP_TEXT = { done: 'Done', active: 'In progress', waiting: 'Waiting to start', not_started: 'Not started', failed: 'Did not finish', stopped: 'Stopped', skipped: 'Not needed' };
 
 test('status mapping: the four statuses keep their fixed labels and tones; anything else is never shown as reviewable', () => {
   assert.deepEqual(app.codeStatus({ status: 'ready' }), { key: 'ready', label: 'Ready for review', tone: 'green', icon: '' });
@@ -376,32 +389,44 @@ test('status mapping: the four statuses keep their fixed labels and tones; anyth
   assert.deepEqual(app.codeStatus({ status: 'weird', status_label: 'Something' }), { key: 'weird', label: 'Something', tone: 'gray', icon: '' });
   assert.deepEqual(app.codeStatus({}), { key: 'unknown', label: 'Not reviewable', tone: 'gray', icon: '' });
   assert.equal(app.codeStatus({ status: '__proto__' }).label, 'Not reviewable');
-  const html = render(fixture('encounter-awaiting-detail.json'));
-  assert.match(html, /<span class="status amber" data-status="needs_detail">.*?Needs a detail<\/span>/);
-  assert.match(html, /<span class="status green" data-status="ready">Ready for review<\/span>/);
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    const html = render(doc);
+    for (const code of doc.codes) {
+      const status = app.codeStatus(code);
+      const svg = status.icon ? `<svg class="" aria-hidden="true"><use href="#i-${status.icon}"/></svg>` : '';
+      assert.ok(rowOf(html, code.id).includes(`<span class="status ${status.tone}" data-status="${code.status}">${svg}${status.label}</span>`), `${name} ${code.code}`);
+    }
+  }
 });
 
 test('an agent approval labels the row and the approved download as agent-executed synthetic review', () => {
   const doc = fixture('encounter-reviewed.json');
   const html = render(doc);
-  for (const code of doc.codes.filter(item => item.status === 'approved')) {
-    const row = html.slice(html.indexOf(`id="card-${code.id}"`), html.indexOf('</li>', html.indexOf(`id="card-${code.id}"`)));
-    assert.match(row, /<p class="result-sub">Agent-executed synthetic review — not clinical approval<\/p>/, code.code);
-    assert.match(row, /Approved by CPT Studio review agent \(automated agent\)/, code.code);
+  const approved = doc.codes.filter(code => code.status === 'approved' && code.decision?.by_kind === 'agent');
+  assert.ok(approved.length >= 1 && doc.readiness.approved === true, 'the scenario: agent approvals, every decision made');
+  for (const code of approved) {
+    const row = rowOf(html, code.id);
+    assert.ok(row.includes('<p class="result-sub">Agent-executed synthetic review — not clinical approval</p>'), code.code);
+    assert.ok(row.includes(`<strong>Approved by ${esc(code.decision.by)}</strong>`), code.code);
     assert.equal(count(row, 'gent-executed synthetic review — not clinical approval'), 1, `${code.code}: said once per row`);
   }
-  // the label holds even when the server's line under the code is empty
-  const bare = clone(doc);
-  bare.codes[0].sub_label = '';
-  assert.equal(app.rowSubLabel(bare.codes[0]), app.AGENT_REVIEW);
-  assert.match(render(bare), /<p class="result-sub">Agent-executed synthetic review — not clinical approval<\/p>/);
-  // the agent-confirmed exclusion says it on its decision line, its own line under the code being the server's
-  const excluded = doc.codes.find(item => item.status === 'excluded');
-  assert.match(app.decisionLine(excluded), /agent-executed synthetic review — not clinical approval/);
+  // the label holds even when the server's line under the code says something else, or nothing
+  for (const sub of ['', 'Approved in review.']) {
+    const bare = clone(doc);
+    const first = bare.codes.find(code => code.id === approved[0].id);
+    first.sub_label = sub;
+    assert.equal(app.rowSubLabel(first), app.AGENT_REVIEW);
+    assert.ok(rowOf(render(bare), first.id).includes('<p class="result-sub">Agent-executed synthetic review — not clinical approval</p>'), JSON.stringify(sub));
+  }
+  // an agent's other decisions say it on their decision line, the line under the code being the server's
+  const confirmed = { ...clone(approved[0]), status: 'excluded', sub_label: 'Exclusion confirmed in review.' };
+  confirmed.decision.action = 'confirm';
+  assert.match(app.decisionLine(confirmed), /Exclusion confirmed by .* · agent-executed synthetic review — not clinical approval/);
   // the approved download's wording in the export dialog
   assert.match(app.exportStatusText(doc), /Includes agent-executed synthetic review — not clinical approval\.$/);
   const human = clone(doc);
-  for (const code of human.codes) code.decision = { ...code.decision, by: 'Synthetic Reviewer', by_kind: 'human' };
+  for (const code of human.codes) if (code.decision) code.decision = { ...code.decision, by: 'Synthetic Reviewer', by_kind: 'human' };
   assert.doesNotMatch(app.exportStatusText(human), /agent/);
   assert.equal(app.hasAgentDecision(human), false);
 });
@@ -414,48 +439,51 @@ test('a rejection says it was rejected in review; a human approval carries no ag
   const approved = { ...doc.codes[0], status: 'approved', sub_label: '', decision: { action: 'approve', by: 'Synthetic Reviewer', by_kind: 'human', at: '2026-10-29T10:00:00Z', note: 'Read it.', modifiers: [] } };
   assert.equal(app.rowSubLabel(approved), '');
   const line = app.decisionLine(approved);
-  assert.match(line, /Approved by Synthetic Reviewer/);
-  assert.match(line, /synthetic review — not clinical approval/);
+  assert.match(line, /<strong>Approved by Synthetic Reviewer<\/strong><p>29 Oct 2026, 10:00 UTC · synthetic review — not clinical approval<\/p><p>Note: Read it\.<\/p>/);
   assert.doesNotMatch(line, /agent/);
-  assert.match(line, /Note: Read it\./);
 });
 
 // --- the codes-first list ----------------------------------------------------------------------------------------------
 
 test('the result list is numbered in the served order, one row per code, with the hooks the walk reads', () => {
   const doc = fixture('encounter-mara.json');
+  assert.deepEqual(doc.codes.map(code => code.code), ['43239', '45380', '45385'], 'the Mara scenario');
   const html = render(doc);
   assert.equal(count(html, '<ol class="result-list" aria-label="Suggested CPT codes">'), 1);
   const rows = [...html.matchAll(/<li class="result-row" id="card-([^"]+)" tabindex="-1" data-proposal="([^"]+)" data-code="([^"]+)" data-status="([^"]+)" data-units="(\d*)" data-modifiers="([^"]*)">/g)];
-  assert.deepEqual(rows.map(match => [match[1] === match[2], match[3], match[4]]), [[true, '43239', 'ready'], [true, '45380', 'ready'], [true, '45385', 'ready']]);
-  assert.deepEqual([...html.matchAll(/<span class="result-number">(\d+)<\/span><span class="result-code">(\d{5})<\/span>/g)].map(match => [match[1], match[2]]), [['1', '43239'], ['2', '45380'], ['3', '45385']]);
-  for (const hook of ['result-units', 'result-modifiers', 'result-sub', 'result-summary']) assert.equal(count(html, `class="${hook}"`), 3, hook);
+  assert.deepEqual(rows.map(match => match.slice(1)), doc.codes.map(code => [code.id, code.id, code.code, code.status, String(code.units), code.modifiers.join(' ')]));
+  assert.deepEqual([...html.matchAll(/<span class="result-number">(\d+)<\/span><span class="result-code">([^<]+)<\/span>/g)].map(match => [Number(match[1]), match[2]]),
+    doc.codes.map(code => [code.number, code.code]));
+  for (const code of doc.codes) assert.ok(rowOf(html, code.id).includes(`<p class="result-summary">${esc(code.summary)}</p>`), code.code);
+  for (const hook of ['result-units', 'result-modifiers', 'result-sub', 'result-summary', 'result-foot']) assert.equal(count(html, `class="${hook}"`), doc.codes.length, hook);
   // the order is the server's, never sorted here
   const reversed = clone(doc);
   reversed.codes.reverse();
-  assert.deepEqual([...render(reversed).matchAll(/data-code="(\d{5})"/g)].map(match => match[1]), ['45385', '45380', '43239']);
+  assert.deepEqual([...render(reversed).matchAll(/data-code="([^"]+)"/g)].map(match => match[1]), reversed.codes.map(code => code.code));
   // a missing number falls back to the position
   const numberless = clone(doc);
   for (const code of numberless.codes) code.number = null;
-  assert.deepEqual([...render(numberless).matchAll(/<span class="result-number">(\d+)<\/span>/g)].map(match => match[1]), ['1', '2', '3']);
+  assert.deepEqual([...render(numberless).matchAll(/<span class="result-number">(\d+)<\/span>/g)].map(match => Number(match[1])), numberless.codes.map((_, index) => index + 1));
 });
 
 test('only the served allowed actions are drawn, each with its proposal id', () => {
-  const doc = fixture('encounter-ready.json');
-  const html = render(doc);
   // in the page's own fixed order (approve, reject, reinstate, confirm, undo), whatever order the server lists them in
   const order = ['approve', 'reject', 'reinstate', 'confirm', 'revoke'];
-  for (const code of doc.codes) {
-    const drawn = [...html.matchAll(new RegExp(`data-decision="(\\w+)" data-proposal="${code.id}"`, 'g'))].map(match => match[1]);
-    assert.deepEqual(drawn, order.filter(action => code.allowed_actions.includes(action)), code.code);
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    const html = render(doc);
+    for (const code of doc.codes) {
+      const drawn = [...html.matchAll(new RegExp(`data-decision="(\\w+)" data-proposal="${code.id}"`, 'g'))].map(match => match[1]);
+      assert.deepEqual(drawn, order.filter(action => code.allowed_actions.includes(action)), `${name} ${code.code}`);
+    }
   }
+  const doc = fixture('encounter-ready.json');
   const none = clone(doc);
   for (const code of none.codes) code.allowed_actions = [];
   assert.equal(count(render(none), 'data-decision='), 0);
   const odd = clone(doc);
   odd.codes[0].allowed_actions = ['approve', 'delete', '__proto__'];
-  assert.deepEqual([...render(odd).matchAll(/data-decision="(\w+)"/g)].map(match => match[1]), ['approve', 'reinstate', 'confirm']);
-  assert.equal(count(render(fixture('encounter-reviewed.json')), 'data-decision="revoke"'), 3);
+  assert.deepEqual([...rowOf(render(odd), odd.codes[0].id).matchAll(/data-decision="(\w+)"/g)].map(match => match[1]), ['approve']);
 });
 
 test('units and modifiers: units always stated, a chosen modifier named, a modifier review said as such', () => {
@@ -468,23 +496,28 @@ test('units and modifiers: units always stated, a chosen modifier named, a modif
   assert.equal(app.modifierLabel({ status: 'approved', modifiers: ['XS'], modifier_review: review }), 'Modifier XS');
   assert.equal(app.modifierLabel({ status: 'ready', modifiers: [], modifier_review: null }), '');
   const doc = fixture('encounter-reviewed.json');
-  const html = render(doc);
-  assert.match(html, /data-code="45380" data-status="approved" data-units="1" data-modifiers="XS">/);
-  assert.match(html, /<span class="result-code">45380<\/span><span class="result-units">1 unit<\/span><span class="result-modifiers">Modifier XS<\/span>/);
+  const chosen = doc.codes.find(code => code.modifiers.length);
+  assert.ok(chosen, 'the scenario: an approval with a modifier');
+  const row = rowOf(render(doc), chosen.id);
+  assert.ok(row.includes(`data-modifiers="${esc(chosen.modifiers.join(' '))}">`), 'the row carries the modifier');
+  assert.ok(row.includes(`<span class="result-code">${esc(chosen.code)}</span><span class="result-units">${app.unitsLabel(chosen.units)}</span><span class="result-modifiers">Modifier ${esc(chosen.modifiers.join(', '))}</span>`));
   const units = clone(doc);
   units.codes[0].units = 2;
-  assert.match(render(units), /<span class="result-units">2 units<\/span>/);
+  assert.ok(rowOf(render(units), units.codes[0].id).includes('<span class="result-units">2 units</span>'));
 });
 
 test('other codes sit behind a closed disclosure; "Not separately coded" and the limitations are listed', () => {
   const doc = fixture('encounter-mara.json');
+  assert.ok(doc.other_codes.length && doc.not_separately_coded.length && doc.limitations.length, 'the scenario');
   const html = render(doc);
   assert.match(html, /<details class="other-codes" data-key="other-codes"><summary>Other codes considered \(not suggested\)<\/summary>/);
-  assert.match(html, /<span class="other-code">99204<\/span><span>No separate office evaluation and management visit is documented on this date\.<\/span>/);
-  assert.equal(count(html, 'data-code="99204"'), 0, 'an alternative is never a result row');
+  for (const item of doc.other_codes) {
+    assert.ok(html.includes(`<span class="other-code">${esc(item.code)}</span><span>${esc(item.reason)}</span>`), item.code);
+    assert.equal(count(html, `data-code="${esc(item.code)}"`), 0, `${item.code}: an alternative is never a result row`);
+  }
   assert.match(render(doc, { open: new Set(['other-codes']) }), /<details class="other-codes" data-key="other-codes" open>/);
-  assert.match(html, /<h3>Not separately coded<\/h3><ul><li><strong>Clip placement at the COL-2 resection site<\/strong><span>A clip placed to prevent bleeding/);
-  assert.match(html, /<h3>Limitations<\/h3><ul class="limitation-list"><li>CPT descriptors are not shown: no licensed CPT content is connected\.<\/li>/);
+  assert.ok(html.includes(`<h3>Not separately coded</h3><ul>${doc.not_separately_coded.map(item => `<li><strong>${esc(item.label)}</strong><span>${esc(item.reason)}</span></li>`).join('')}</ul>`));
+  assert.ok(html.includes(`<h3>Limitations</h3><ul class="limitation-list">${doc.limitations.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`));
   const bare = clone(doc);
   bare.other_codes = [];
   bare.not_separately_coded = [];
@@ -500,23 +533,25 @@ test('other codes sit behind a closed disclosure; "Not separately coded" and the
 test('"Why this code?" is a closed disclosure holding the exact quotes with their offsets and pages, and the qualifications', () => {
   const doc = fixture('encounter-mara.json');
   const layout = app.documentLayout(doc);
-  const code = doc.codes[1];
+  const code = doc.codes.find(item => item.why.quotes.length >= 2 && item.why.qualifications.length);
+  assert.ok(code, 'the scenario: a code with quotes and a qualification');
   const why = app.whyThisCode(code, layout, ui(doc));
-  assert.match(why, new RegExp(`^<details class="why-code" data-key="why:${code.id}"><summary>Why this code\\?</summary>`));
+  assert.ok(why.startsWith(`<details class="why-code" data-key="why:${code.id}"><summary>Why this code?</summary>`));
   const quotes = [...why.matchAll(/<button type="button" class="why-quote" data-evidence="([^"]+)" data-start="(\d+)" data-end="(\d+)" data-page="(\d+)" title="Show this passage in the document">([^<]*)<\/button>/g)];
   assert.equal(quotes.length, code.why.quotes.length);
   const points = [...doc.document.text];
   quotes.forEach((match, index) => {
     assert.equal(match[1], `${code.id}:q${index}`);
     const [start, end, page] = [Number(match[2]), Number(match[3]), Number(match[4])];
-    assert.equal(app.escapeHtml(points.slice(start, end).join('')), match[5], 'the button text is the exact slice');
+    assert.equal(esc(points.slice(start, end).join('')), match[5], 'the button text is the exact slice');
     assert.equal(page, code.why.quotes[index].page);
   });
-  assert.match(why, /<li class="why-qualification">COL-1 and COL-2 are documented as different lesions at separate colonic sites\.<\/li>/);
-  assert.match(app.whyThisCode(code, layout, ui(doc, { open: new Set([`why:${code.id}`]) })), /<details class="why-code" data-key="why:[^"]+" open>/);
+  for (const item of code.why.qualifications) assert.ok(why.includes(`<li class="why-qualification">${esc(item)}</li>`), item);
+  assert.match(app.whyThisCode(code, layout, ui(doc, { open: new Set([`why:${code.id}`]) })), /^<details class="why-code" data-key="why:[^"]+" open>/);
   // every row has one, and none is open unless the member opened it
-  assert.equal(count(render(doc), '<details class="why-code"'), 3);
-  assert.equal(count(render(doc), '<details class="why-code" data-key="why:c1a00000-0000-4000-8000-000000000011" open>'), 0);
+  const page = render(doc);
+  assert.equal(count(page, '<details class="why-code"'), doc.codes.length);
+  assert.equal(count(page, '" open><summary>Why this code?'), 0);
   const quiet = clone(code);
   quiet.why = { quotes: [], qualifications: [] };
   assert.match(app.whyThisCode(quiet, layout, ui(doc)), /No passage of the document is quoted for this code\./);
@@ -524,34 +559,41 @@ test('"Why this code?" is a closed disclosure holding the exact quotes with thei
 
 test('a quote that is not at its offsets is shown as not found and never highlighted', () => {
   const doc = clone(fixture('encounter-ready.json'));
-  doc.codes[0].why.quotes[0].start += 1;
-  doc.codes[0].why.quotes[1].exact = false;
+  const code = doc.codes.find(item => item.why.quotes.length >= 2);
+  code.why.quotes[0].start += 1;
+  code.why.quotes[1].exact = false;
   const layout = app.documentLayout(doc);
-  assert.deepEqual([...layout.unlocated], [`${doc.codes[0].id}:q0`, `${doc.codes[0].id}:q1`]);
-  const why = app.whyThisCode(doc.codes[0], layout, ui(doc));
+  assert.deepEqual([...layout.unlocated], [`${code.id}:q0`, `${code.id}:q1`]);
+  const why = app.whyThisCode(code, layout, ui(doc));
   assert.equal(count(why, '<span class="why-quote unlocated"'), 2);
   assert.equal(count(why, 'Not found at this place in the document.'), 2);
-  assert.equal(count(why, `data-evidence="${doc.codes[0].id}:q`), 0);
-  assert.equal(count(app.sourcePanel(doc, layout), `${doc.codes[0].id}:q`), 0);
+  assert.equal(count(why, `data-evidence="${code.id}:q`), 0);
+  assert.equal(count(app.sourcePanel(doc, layout), `${code.id}:q`), 0);
 });
 
 test('the modifier review states its dated source and that nothing is added automatically', () => {
   const doc = fixture('encounter-mara.json');
-  const why = app.whyThisCode(doc.codes[2], app.documentLayout(doc), ui(doc));
-  assert.match(why, /<div class="why-modifier"><strong>Modifier review<\/strong><p>COL-1 \(ascending colon\) and COL-2 \(sigmoid colon\)/);
-  assert.match(why, /<p class="why-sources">Source: CMS claims manual Pub\. 100-04 ch\. 12 \(Rev\. 13753, 2026-05-07\)<\/p>/);
-  assert.match(why, /No modifier is added automatically; the reviewer may choose one when approving\./);
-  assert.doesNotMatch(app.whyThisCode(doc.codes[0], app.documentLayout(doc), ui(doc)), /why-modifier/);
+  const layout = app.documentLayout(doc);
+  const reviewed = doc.codes.filter(code => code.modifier_review);
+  assert.ok(reviewed.length >= 2, 'the Mara scenario: two lesions treated separately');
+  for (const code of reviewed) {
+    const why = app.whyThisCode(code, layout, ui(doc));
+    assert.ok(why.includes(`<div class="why-modifier"><strong>Modifier review</strong><p>${esc(code.modifier_review.text)}</p><p class="why-sources">${esc(`Source: ${code.modifier_review.sources.join('; ')}`)}</p>`), code.code);
+    assert.ok(why.includes('No modifier is added automatically; the reviewer may choose one when approving.'), code.code);
+    assert.match(code.modifier_review.sources.join(' '), /\d{4}-\d{2}-\d{2}/, `${code.code}: the source is dated`);
+  }
+  for (const code of doc.codes.filter(item => !item.modifier_review)) assert.doesNotMatch(app.whyThisCode(code, layout, ui(doc)), /why-modifier/);
 });
 
 test('source marks title the codes they are cited for and the document date', () => {
   const doc = fixture('encounter-mara.json');
   const html = app.sourcePanel(doc, app.documentLayout(doc));
-  assert.match(html, /<button type="button" class="evidence-mark" data-evidence="date:document" data-keys="date:document" title="Date of service in the document">Date of service 2026-11-03<\/button>/);
-  assert.match(html, /title="Cited for 43239">Biopsies/);
-  assert.match(html, /title="Cited for 45385">COL-2 - sigmoid colon/);
-  assert.match(html, /<a href="\/api\/encounters\/c1000000-0000-4000-8000-000000000010\/original" download>/);
+  const date = doc.service_date.document_quote;
+  assert.ok(html.includes(`<button type="button" class="evidence-mark" data-evidence="date:document" data-keys="date:document" title="Date of service in the document">${esc(date.text)}</button>`));
+  for (const code of doc.codes) assert.ok(html.includes(`title="Cited for ${esc(code.code)}">`), code.code);
+  assert.ok(html.includes(`<a href="${esc(doc.document.original_url)}" download>`));
   const pasted = fixture('encounter-stopped.json');
+  assert.equal(pasted.document.original_url, null);
   assert.doesNotMatch(app.sourcePanel(pasted, app.documentLayout(pasted)), /Download original/);
 });
 
@@ -561,33 +603,40 @@ test('the details panel: one row per detail with its family, prompt and the code
   const doc = fixture('encounter-awaiting-detail.json');
   const html = app.detailsPanel(doc, ui(doc));
   assert.match(html, /^<section class="details-panel" aria-labelledby="detailsTitle">.*<h2 id="detailsTitle">A few details needed<\/h2>/);
-  assert.deepEqual([...html.matchAll(/class="detail-row[^"]*" data-detail="([^"]+)" data-fact="([^"]+)"/g)].map(match => match[2]), ['patient_status', 'extent', 'setting']);
-  assert.match(html, /<p class="detail-affects">Affects 45385<\/p>/);
+  assert.deepEqual([...html.matchAll(/class="detail-row[^"]*" data-detail="([^"]+)" data-fact="([^"]+)"/g)].map(match => [match[1], match[2]]), doc.details_needed.map(row => [row.id, row.fact]));
+  for (const row of doc.details_needed) {
+    assert.ok(html.includes(`<span class="detail-family">${esc(row.family_label)}</span><span class="detail-prompt">${esc(row.prompt)}</span>`), row.fact);
+    if (row.affects.length) assert.ok(html.includes(`<p class="detail-affects">Affects ${esc(words(row.affects))}</p>`), row.fact);
+  }
   assert.equal(count(html, 'data-action="save-details"'), 1);
-  assert.match(html, /2 details are needed\. Answer what you can; codes that do not depend on them stay reviewable\./);
+  const open = doc.details_needed.filter(row => !row.saved).length;
+  assert.ok(html.includes(`${open === 1 ? '1 detail is' : `${open} details are`} needed. Answer what you can; codes that do not depend on them stay reviewable.`));
   assert.equal(app.detailsPanel({ ...doc, details_needed: [] }, ui(doc)), '');
   // a supported, independent code stays reviewable while others wait
   const page = render(doc);
-  assert.match(page, /data-code="43239" data-status="ready"/);
-  assert.match(page, /data-decision="approve" data-proposal="c1a00000-0000-4000-8000-000000000001"/);
-  assert.doesNotMatch(page, /data-decision="approve" data-proposal="c1a00000-0000-4000-8000-000000000002"/);
+  const ready = doc.codes.find(code => code.status === 'ready');
+  const waiting = doc.codes.filter(code => code.status === 'needs_detail');
+  assert.ok(ready && waiting.length, 'the scenario: one code reviewable while others wait');
+  assert.ok(page.includes(`data-decision="approve" data-proposal="${ready.id}"`));
+  for (const code of waiting) assert.ok(!page.includes(`data-decision="approve" data-proposal="${code.id}"`), code.code);
 });
 
 test('a date conflict shows the document date and the entered date side by side, with "Use document date"; the input is never prefilled', () => {
   const doc = fixture('encounter-action-needed.json');
+  const row = doc.details_needed.find(item => item.control === 'date');
+  assert.ok(row && row.document_value && row.entered_value && row.document_value !== row.entered_value, 'the scenario: two different dates');
   const html = app.detailsPanel(doc, ui(doc));
-  const row = doc.details_needed[0];
-  assert.match(html, /<div class="detail-document-date"><span class="detail-date-label">Document<\/span><strong>28 October 2026<\/strong><q class="detail-quote">Date of service: 2026-10-28<\/q><\/div>/);
-  assert.match(html, /<div class="detail-entered-date"><span class="detail-date-label">You entered<\/span><strong>21 October 2026<\/strong><\/div>/);
-  assert.match(html, new RegExp(`<button type="button" class="button secondary detail-choice" id="detail-${row.id}-use_document" data-action="use-document-date" data-detail="${row.id}" aria-pressed="false">Use document date</button>`));
-  assert.match(html, new RegExp(`<input type="date" id="detail-${row.id}-date" data-detail-input data-detail="${row.id}">`), 'no value attribute');
+  assert.ok(html.includes(`<div class="detail-document-date"><span class="detail-date-label">Document</span><strong>${app.formatDate(row.document_value, true)}</strong><q class="detail-quote">${esc(row.quote.text)}</q></div>`));
+  assert.ok(html.includes(`<div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${app.formatDate(row.entered_value, true)}</strong></div>`));
+  assert.ok(html.includes(`<button type="button" class="button secondary detail-choice" id="detail-${row.id}-use_document" data-action="use-document-date" data-detail="${row.id}" aria-pressed="false">Use document date</button>`));
+  assert.ok(html.includes(`<input type="date" id="detail-${row.id}-date" data-detail-input data-detail="${row.id}">`), 'no value attribute');
   assert.match(html, /Choose the date of service\. Nothing is checked until you do\./);
   // the member's own pending entry is kept across a refresh, never a date from the server
   const typed = app.detailsPanel(doc, ui(doc, { answers: new Map([[row.id, { fact: 'service_date', value: '2026-10-27' }]]) }));
-  assert.match(typed, /data-detail-input data-detail="[^"]+" value="2026-10-27">/);
+  assert.ok(typed.includes(`data-detail-input data-detail="${row.id}" value="2026-10-27">`));
   const chosen = app.detailsPanel(doc, ui(doc, { answers: new Map([[row.id, { fact: 'service_date', value: 'use_document' }]]) }));
-  assert.match(chosen, /data-action="use-document-date" data-detail="[^"]+" aria-pressed="true">/);
-  assert.doesNotMatch(chosen, /value="2026-10-2[18]"/);
+  assert.ok(chosen.includes(`data-action="use-document-date" data-detail="${row.id}" aria-pressed="true">`));
+  assert.ok(!chosen.includes(`value="${row.document_value}"`) && !chosen.includes(`value="${row.entered_value}"`));
   // the page says Action needed at once, and nothing is checked
   const page = render(doc);
   assert.match(page, /<section class="progress-panel" data-phase="action_needed"/);
@@ -598,8 +647,9 @@ test('a date conflict shows the document date and the entered date side by side,
 
 test('"Use document date" is offered only when the document states a date', () => {
   const doc = clone(fixture('encounter-action-needed.json'));
-  doc.details_needed[0].document_value = null;
-  doc.details_needed[0].quote = null;
+  const row = doc.details_needed.find(item => item.control === 'date');
+  row.document_value = null;
+  row.quote = null;
   const html = app.detailsPanel(doc, ui(doc));
   assert.doesNotMatch(html, /use-document-date/);
   assert.match(html, /<strong>Not stated<\/strong>/);
@@ -609,42 +659,49 @@ test('"Use document date" is offered only when the document states a date', () =
 test('choices are radios named per detail; "Not documented" and "Cannot confirm" only where allowed; a confirm row asks for no clinical fact', () => {
   const doc = fixture('encounter-awaiting-detail.json');
   const html = app.detailsPanel(doc, ui(doc));
-  const [status, extent] = doc.details_needed;
-  assert.equal(count(html, `<input type="radio" name="detail-${status.id}"`), 2);
-  assert.match(html, new RegExp(`<fieldset class="detail-row" data-detail="${status.id}" data-fact="patient_status"><span class="detail-family">Office visit</span><legend class="detail-prompt">`));
-  assert.match(html, new RegExp(`id="detail-${status.id}-not_documented" data-detail-choice="not_documented" data-detail="${status.id}" aria-pressed="false">Not documented</button>`));
-  assert.doesNotMatch(html, new RegExp(`detail-${status.id}-cannot_confirm`));
-  const extentRow = html.slice(html.indexOf(`data-detail="${extent.id}" data-fact="extent"`), html.indexOf('</div>', html.indexOf(`data-detail="${extent.id}" data-fact="extent"`) + 400));
-  assert.match(extentRow, /data-detail-choice="not_documented"/);
-  assert.match(extentRow, /data-detail-choice="cannot_confirm"/);
-  assert.doesNotMatch(extentRow, /type="radio"|type="date"|<textarea|type="text"/);
-  assert.match(html, new RegExp(`<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${extent.id}">Add to the documentation \\(physician\\)</button>`));
-  assert.equal(count(html, 'data-action="addendum"'), 1, 'only where the server allows the physician path');
-  const pending = app.detailsPanel(doc, ui(doc, { answers: new Map([[status.id, { fact: 'patient_status', value: 'established' }], [extent.id, { fact: 'extent', value: 'cannot_confirm' }]]) }));
-  assert.match(pending, /value="established" data-detail="[^"]+" checked>/);
-  assert.match(pending, new RegExp(`id="detail-${extent.id}-cannot_confirm" data-detail-choice="cannot_confirm" data-detail="${extent.id}" aria-pressed="true">`));
+  const choice = doc.details_needed.find(row => row.control === 'choice' && !row.saved);
+  const confirm = doc.details_needed.find(row => row.control === 'confirm' && !row.saved);
+  assert.ok(choice && confirm, 'the scenario: a choice and a confirmation');
+  assert.equal(count(html, `<input type="radio" name="detail-${choice.id}"`), choice.choices.length);
+  for (const option of choice.choices) assert.ok(html.includes(`value="${esc(option.value)}" data-detail="${choice.id}"><span>${esc(option.label)}</span>`), option.value);
+  // a radio group is named by its legend, which comes first and holds the family and the prompt
+  assert.ok(html.includes(`<fieldset class="detail-row" data-detail="${choice.id}" data-fact="${choice.fact}"><legend class="detail-lead"><span class="detail-family">${esc(choice.family_label)}</span><span class="detail-prompt">${esc(choice.prompt)}</span></legend>`));
+  assert.ok(html.includes(`<div class="detail-row" data-detail="${confirm.id}" data-fact="${confirm.fact}"><div class="detail-lead"><span class="detail-family">`));
+  for (const row of [choice, confirm]) {
+    for (const value of ['not_documented', 'cannot_confirm']) {
+      assert.equal(html.includes(`id="detail-${row.id}-${value}" data-detail-choice="${value}" data-detail="${row.id}" aria-pressed="false">`), row.allow.includes(value), `${row.fact} ${value}`);
+    }
+  }
+  const confirmRow = html.slice(html.indexOf(`data-detail="${confirm.id}" data-fact="${confirm.fact}"`), html.indexOf('</div>', html.indexOf(`data-detail="${confirm.id}" data-fact="${confirm.fact}"`) + 400));
+  assert.doesNotMatch(confirmRow, /type="radio"|type="date"|<textarea|type="text"/);
+  assert.equal(count(html, 'data-action="addendum"'), doc.details_needed.filter(row => row.addendum_allowed && !row.saved).length, 'only where the server allows the physician path');
+  if (confirm.addendum_allowed) assert.ok(html.includes(`<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${confirm.id}">Add to the documentation (physician)</button>`));
+  const pending = app.detailsPanel(doc, ui(doc, { answers: new Map([[choice.id, { fact: choice.fact, value: choice.choices[1].value }], [confirm.id, { fact: confirm.fact, value: confirm.allow[confirm.allow.length - 1] }]]) }));
+  assert.ok(pending.includes(`value="${esc(choice.choices[1].value)}" data-detail="${choice.id}" checked>`));
+  assert.ok(pending.includes(`data-detail-choice="${confirm.allow[confirm.allow.length - 1]}" data-detail="${confirm.id}" aria-pressed="true">`));
 });
 
 test('a saved answer is shown with who and when, and can be changed; only open rows count', () => {
   const doc = fixture('encounter-awaiting-detail.json');
   const html = app.detailsPanel(doc, ui(doc));
-  const saved = doc.details_needed[2];
-  assert.match(html, /<p class="detail-saved"><svg[^>]*><use href="#i-check"\/><\/svg><span>Saved: <strong>Office<\/strong> — Synthetic Reviewer, 30 Oct 2026, 15:12 UTC<\/span>/);
-  assert.match(html, new RegExp(`data-action="revoke-detail" data-answer="${saved.saved.answer_id}"`));
-  assert.doesNotMatch(html, new RegExp(`name="detail-${saved.id}"`), 'a saved row is not asked again');
+  const saved = doc.details_needed.find(row => row.saved);
+  assert.ok(saved, 'the scenario: an answer already saved');
+  assert.ok(html.includes(`<span>Saved: <strong>${esc(saved.saved.label)}</strong> — ${esc(saved.saved.by)}, ${app.formatTimestamp(saved.saved.at)}</span>`));
+  assert.ok(html.includes(`data-action="revoke-detail" data-answer="${saved.saved.answer_id}"`));
+  assert.ok(!html.includes(`name="detail-${saved.id}"`), 'a saved row is not asked again');
   const all = clone(doc);
   for (const row of all.details_needed) row.saved = { value: 'not_documented', label: '', by: 'Synthetic Reviewer', at: '2026-10-30T15:20:00Z', answer_id: saved.saved.answer_id };
   const done = app.detailsPanel(all, ui(all));
   assert.match(done, /Every detail has an answer\. You can change an answer below\./);
   assert.equal(count(done, 'save-details'), 0);
-  assert.equal(count(done, 'Saved: <strong>Not documented</strong>'), 3);
-  assert.equal(app.listBody('documents', [{ ...fixture('encounters.json').encounters[0], open_details: 2 }]).includes('2 details needed'), true);
+  assert.equal(count(done, 'Saved: <strong>Not documented</strong>'), all.details_needed.length);
 });
 
 test('pending answers survive a refresh; a viewer, or a busy document, gets no controls', () => {
   const doc = fixture('encounter-awaiting-detail.json');
-  const answers = new Map([[doc.details_needed[0].id, { fact: 'patient_status', value: 'new' }]]);
-  assert.match(render(doc, { answers }), /value="new" data-detail="[^"]+" checked>/);
+  const choice = doc.details_needed.find(row => row.control === 'choice' && !row.saved);
+  const answers = new Map([[choice.id, { fact: choice.fact, value: choice.choices[0].value }]]);
+  assert.ok(render(doc, { answers }).includes(`value="${esc(choice.choices[0].value)}" data-detail="${choice.id}" checked>`));
   const viewer = clone(doc);
   viewer.permissions.can_review = false;
   const seen = app.detailsPanel(viewer, ui(viewer));
@@ -662,12 +719,10 @@ test('the progress panel folds to four plain stages with their states, the activ
   const html = app.progressPanel(doc, ui(doc));
   assert.match(html, /^<section class="progress-panel progress-card" data-phase="processing" aria-labelledby="progressTitle">/);
   const steps = [...html.matchAll(/<li class="progress-step( is-animated)?" data-step="(\w+)" data-state="(\w+)">.*?<strong>([^<]+)<\/strong><small>([^<]+)<\/small>/g)];
-  assert.deepEqual(steps.map(match => [match[2], match[3], match[4], match[5], Boolean(match[1])]), [
-    ['reading', 'done', 'Reading your document', 'Done', false],
-    ['identifying', 'done', 'Identifying procedures', 'Done', false],
-    ['checking', 'active', 'Checking suggested codes', 'In progress · Independent checks', true],
-    ['preparing', 'not_started', 'Preparing your results', 'Not started', false],
-  ]);
+  const labels = { reading: 'Reading your document', identifying: 'Identifying procedures', checking: 'Checking suggested codes', preparing: 'Preparing your results' };
+  assert.ok(doc.progress.steps.some(step => step.state === 'active') && doc.progress.active_detail, 'the scenario: a check running');
+  assert.deepEqual(steps.map(match => [match[2], match[3], match[4], match[5], Boolean(match[1])]), doc.progress.steps.map(step => [
+    step.key, step.state, labels[step.key], `${STEP_TEXT[step.state]}${step.state === 'active' ? ` · ${doc.progress.active_detail}` : ''}`, step.state === 'active']));
   assert.match(html, /<p class="leave-note">You can leave this page — processing continues, and the document stays in Documents\.<\/p>/);
   assert.match(html, /<button type="button" class="button secondary" data-action="stop">/);
   assert.doesNotMatch(html, /data-action="resume"/);
@@ -678,22 +733,26 @@ test('the progress panel folds to four plain stages with their states, the activ
   assert.equal(count(oddHtml, 'data-state="not_started"'), 4);
   assert.doesNotMatch(oddHtml, /Astra/);
   // the checks: three functional labels with their states
+  const checkText = { done: 'Done', running: 'In progress', waiting: 'Waiting', unavailable: 'Unavailable', not_run: 'Not run' };
+  const checkLabels = { document_review: 'Document review', independent_checks: 'Independent checks', coding_validation: 'Coding validation' };
   assert.deepEqual([...app.checksPanel(doc).matchAll(/<li class="check-step" data-check="(\w+)" data-state="(\w+)">.*?<strong>([^<]+)<\/strong><small>([^<]+)<\/small>/g)].map(match => match.slice(1)),
-    [['document_review', 'done', 'Document review', 'Done'], ['independent_checks', 'running', 'Independent checks', 'In progress'], ['coding_validation', 'waiting', 'Coding validation', 'Waiting']]);
+    doc.checks.map(check => [check.key, check.state, checkLabels[check.key], checkText[check.state]]));
 });
 
 test('while busy the panel shows elapsed time that ticks; a finished one states the total; never a percentage or a forecast', () => {
   const doc = fixture('encounter-processing.json');
   const now = Date.parse(doc.progress.server_time);
-  const html = app.progressPanel(doc, ui(doc, { nowMs: now }));
-  assert.match(html, /<p class="progress-time">Elapsed <span data-elapsed data-since="2026-11-02T14:00:04Z">1 min 06 s<\/span><\/p>/);
-  // the server's clock, not the browser's: a browser five minutes behind still says 1 min 06 s
-  assert.match(app.progressPanel(doc, ui(doc, { nowMs: now - 300000, clock: 300000 })), />1 min 06 s</);
+  const elapsed = app.durationText(now - Date.parse(doc.progress.started_at));
+  assert.ok(app.progressPanel(doc, ui(doc, { nowMs: now })).includes(`<p class="progress-time">Elapsed <span data-elapsed data-since="${doc.progress.started_at}">${elapsed}</span></p>`));
+  // the server's clock, not the browser's: a browser five minutes behind says the same
+  assert.ok(app.progressPanel(doc, ui(doc, { nowMs: now - 300000, clock: 300000 })).includes(`>${elapsed}<`));
   const finished = fixture('encounter-ready.json');
+  const took = app.durationText(Date.parse(finished.progress.finished_at) - Date.parse(finished.progress.started_at));
   const done = app.progressPanel(finished, ui(finished));
   assert.match(done, /^<section class="progress-panel progress-done" data-phase="completed"/);
-  assert.match(done, /<strong>Results ready<\/strong> · finished in <span data-elapsed data-since="2026-10-29T09:30:04Z" data-until="2026-10-29T09:32:52Z">2 min 48 s<\/span>/);
-  assert.match(app.progressPanel(fixture('encounter-failed.json'), ui(fixture('encounter-failed.json'))), /Ran for <span data-elapsed[^>]*data-until=[^>]*>36 s<\/span>/);
+  assert.ok(done.includes(`<strong>Results ready</strong> · finished in <span data-elapsed data-since="${finished.progress.started_at}" data-until="${finished.progress.finished_at}">${took}</span>`));
+  const failed = fixture('encounter-failed.json');
+  assert.ok(app.progressPanel(failed, ui(failed)).includes(`Ran for <span data-elapsed data-since="${failed.progress.started_at}" data-until="${failed.progress.finished_at}">${app.durationText(Date.parse(failed.progress.finished_at) - Date.parse(failed.progress.started_at))}</span>`));
   for (const name of ENCOUNTERS) {
     const page = everything(fixture(name));
     assert.doesNotMatch(page, /\d\s?%|percent|\bETA\b|estimated time|minutes? (?:left|remaining)|about \d+ min/i, name);
@@ -720,26 +779,31 @@ test('no step or icon is animated when processing failed, stopped or waits on th
 });
 
 test('failed: the plain error and its action; stopped: Resume; being confirmed: no Stop and the settling message', () => {
-  const failed = app.progressPanel(fixture('encounter-failed.json'), ui(fixture('encounter-failed.json')));
+  const failedDoc = fixture('encounter-failed.json');
+  const failed = app.progressPanel(failedDoc, ui(failedDoc));
   assert.match(failed, /<section class="progress-panel" data-phase="failed"/);
   assert.match(failed, /<h2 id="progressTitle">Processing could not finish<\/h2>/);
-  assert.match(failed, /<div class="progress-error" role="alert">.*<p>No text could be read from this file\. Upload a copy with a text layer, or paste the text\.<\/p><button type="button" class="button secondary" data-action="upload">Upload a new document<\/button>/);
-  assert.match(failed, /data-step="reading" data-state="failed"/);
-  const resumable = clone(fixture('encounter-failed.json'));
+  const action = { new_document: 'data-action="upload">Upload a new document', resume: 'data-action="resume">Resume processing' }[failedDoc.progress.error.action];
+  assert.ok(failed.includes(`<div class="progress-error" role="alert">`) && failed.includes(`<p>${esc(failedDoc.progress.error.text)}</p>${action ? `<button type="button" class="button secondary" ${action}</button>` : ''}`));
+  for (const step of failedDoc.progress.steps) assert.ok(failed.includes(`data-step="${step.key}" data-state="${step.state}"`), step.key);
+  const resumable = clone(failedDoc);
   resumable.progress.error.action = 'resume';
   assert.match(app.progressPanel(resumable, ui(resumable)), /data-action="resume">Resume processing<\/button>/);
   resumable.progress.error.action = 'none';
   assert.doesNotMatch(app.progressPanel(resumable, ui(resumable)), /progress-error[^]*data-action/);
-  const stopped = app.progressPanel(fixture('encounter-stopped.json'), ui(fixture('encounter-stopped.json')));
+  const stoppedDoc = fixture('encounter-stopped.json');
+  assert.ok(stoppedDoc.progress.can_resume, 'the scenario: a stop that can be resumed');
+  const stopped = app.progressPanel(stoppedDoc, ui(stoppedDoc));
   assert.match(stopped, /<section class="progress-panel" data-phase="stopped"/);
-  assert.match(stopped, /data-step="checking" data-state="stopped"/);
+  assert.match(stopped, /data-state="stopped"/);
   assert.match(stopped, /<button type="button" class="button primary" data-action="resume">Resume processing/);
   assert.doesNotMatch(stopped, /data-action="stop"/);
-  const viewer = clone(fixture('encounter-stopped.json'));
+  const viewer = clone(stoppedDoc);
   viewer.permissions.can_review = false;
   assert.doesNotMatch(app.progressPanel(viewer, ui(viewer)), /data-action="resume"/);
-  const confirming = app.progressPanel(fixture('encounter-being-confirmed.json'), ui(fixture('encounter-being-confirmed.json')));
-  assert.match(confirming, /We are confirming whether an earlier check completed\. Nothing will be sent again until that is settled\./);
+  const confirmingDoc = fixture('encounter-being-confirmed.json');
+  const confirming = app.progressPanel(confirmingDoc, ui(confirmingDoc));
+  assert.ok(confirming.includes(`<p class="progress-message">${esc(confirmingDoc.progress.message)}</p>`));
   assert.doesNotMatch(confirming, /data-action="stop"|data-action="resume"|progress-card/);
 });
 
@@ -752,8 +816,11 @@ test('the reconnecting line is hidden until a poll fails, and only shown while t
 });
 
 test('polling follows the server: busy, queued and being confirmed poll; results, action needed, failed and stopped do not', () => {
-  const polls = Object.fromEntries(ENCOUNTERS.map(name => [name, app.shouldPoll(fixture(name))]));
-  assert.deepEqual(Object.keys(polls).filter(name => polls[name]).sort(), ['encounter-being-confirmed.json', 'encounter-processing.json', 'encounter-queued.json']);
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    assert.equal(app.shouldPoll(doc), doc.progress.busy === true || ['queued', 'processing', 'being_confirmed'].includes(doc.progress.phase), name);
+  }
+  assert.deepEqual(ENCOUNTERS.filter(name => app.shouldPoll(fixture(name))).sort(), ['encounter-being-confirmed.json', 'encounter-processing.json', 'encounter-queued.json']);
   assert.equal(app.shouldPoll(null), false);
   assert.equal(app.shouldPoll({ progress: { busy: true, phase: 'completed' } }), true);
   assert.equal(app.progressPhase({ state: 'failed' }), 'failed');
@@ -778,20 +845,21 @@ test('elapsed and duration text: seconds, minutes and hours, never negative', ()
 // --- upload ------------------------------------------------------------------------------------------------------------
 
 test('the upload is acknowledged from the 201 before the first read, and stays in the panel while processing', () => {
+  const queued = fixture('encounter-queued.json');
   const at = Date.parse('2026-11-02T14:20:00Z');
-  const ack = { id: 'c1000000-0000-4000-8000-000000000011', at };
+  const ack = { id: queued.id, at };
   const placeholder = app.ackView(ack);
   assert.match(placeholder, /<div class="upload-ack" role="status">.*<strong>Uploaded\. Reading your document…<\/strong><p>Received 2 Nov 2026, 14:20 UTC\. You can leave this page; the document stays in Documents\.<\/p>/);
-  const queued = fixture('encounter-queued.json');
   const panel = app.progressPanel(queued, ui(queued, { ack }));
   assert.match(panel, /data-phase="queued"/);
-  assert.match(panel, /<div class="upload-ack" role="status">/);
+  assert.match(panel, /<div class="upload-ack" role="status">.*<strong>Uploaded\. Reading your document…<\/strong>/);
   assert.match(panel, /data-step="reading" data-state="waiting"/);
   assert.doesNotMatch(app.progressPanel(queued, ui(queued, { ack: { ...ack, id: 'another' } })), /upload-ack/);
   // once the document has been read, the stages say what is happening; the acknowledgement no longer says reading
   const checking = { ...fixture('encounter-processing.json'), id: ack.id };
   assert.match(app.progressPanel(checking, ui(checking, { ack })), /<div class="upload-ack" role="status">.*<strong>Uploaded\.<\/strong><p>Received 2 Nov 2026, 14:20 UTC\.<\/p>/);
-  assert.doesNotMatch(app.progressPanel(fixture('encounter-ready.json'), ui(fixture('encounter-ready.json'), { ack: { ...ack, id: fixture('encounter-ready.json').id } })), /upload-ack/);
+  const ready = fixture('encounter-ready.json');
+  assert.doesNotMatch(app.progressPanel(ready, ui(ready, { ack: { ...ack, id: ready.id } })), /upload-ack/);
   assert.equal(app.uploadAck(null), '');
 });
 
@@ -828,47 +896,63 @@ test('the upload form refuses what the server would refuse, before anything is s
 
 test('the export dialog offers the draft as suggestions, and the approved download only when every decision is made, listing what is missing', () => {
   const ready = fixture('encounter-mara.json');
+  assert.ok(ready.readiness.draft === true && ready.readiness.approved === false && ready.readiness.blockers.length, 'the scenario: a draft with decisions to make');
   const html = app.exportOptions(ready);
   assert.match(html, /<div class="evidence-label">Suggested codes — not approved<\/div><button type="button" class="export-option" data-export-kind="draft" data-export-fmt="txt">/);
   assert.match(html, /data-export-kind="draft" data-export-fmt="csv">/);
   assert.match(html, /data-export-kind="approved" data-export-fmt="txt" disabled>/);
   assert.match(html, /data-export-kind="approved" data-export-fmt="csv" disabled>/);
-  assert.match(html, /<div class="export-blockers"><p>Not available yet:<\/p><ul><li>43239, 45380 and 45385 are waiting for a review decision\.<\/li><\/ul><\/div>/);
+  assert.ok(html.includes(`<div class="export-blockers"><p>Not available yet:</p><ul>${ready.readiness.blockers.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>`));
   const reviewed = app.exportOptions(fixture('encounter-reviewed.json'));
   assert.match(reviewed, /data-export-kind="approved" data-export-fmt="txt">/);
   assert.doesNotMatch(reviewed, /export-blockers/);
   const nothing = app.exportOptions(fixture('encounter-processing.json'));
   assert.equal(count(nothing, ' disabled>'), 4);
-  assert.match(render(ready), /<button type="button" class="button secondary" data-action="export">.*Review and download<\/button>/);
-  assert.match(render(ready), /<div class="heading-actions">.*data-action="export"/);
+  const page = render(ready);
+  assert.match(page, /<button type="button" class="button secondary" data-action="export">.*Review and download<\/button>/);
+  assert.match(page, /<div class="heading-actions">.*data-action="export"/);
   assert.doesNotMatch(render(fixture('encounter-processing.json')), /data-action="export"/);
 });
 
 test('earlier downloads link only while they match the saved decisions', () => {
-  const html = app.exportOptions(fixture('encounter-reviewed.json'));
-  assert.match(html, /<li class="report-item"><a href="\/api\/reports\/c1e00000-0000-4000-8000-000000000001\/download" download>cpt-studio-approved-colonoscopy-two-lesions\.txt<\/a><small>Approved codes · 27 Oct 2026, 08:31 UTC · CPT Studio review agent \(automated agent\)<\/small><\/li>/);
-  assert.match(html, /<li class="report-item stale"><span>cpt-studio-draft-colonoscopy-two-lesions\.csv<\/span><small>Suggested codes \(draft\) · .* · No longer matches the saved decisions; create a new download\.<\/small><\/li>/);
-  assert.equal(count(html, '/api/reports/c1e00000-0000-4000-8000-000000000002/download'), 0);
-  const bad = clone(fixture('encounter-reviewed.json'));
+  const doc = fixture('encounter-reviewed.json');
+  const current = doc.reports.filter(report => report.current === true);
+  const stale = doc.reports.filter(report => report.current !== true);
+  assert.ok(current.length && stale.length, 'the scenario: a current and a stale download');
+  const html = app.exportOptions(doc);
+  for (const report of current) assert.ok(html.includes(`<li class="report-item"><a href="${esc(report.download_url)}" download>${esc(report.filename)}</a><small>`), report.filename);
+  for (const report of stale) {
+    assert.ok(html.includes(`<li class="report-item stale"><span>${esc(report.filename)}</span><small>`), report.filename);
+    assert.ok(html.includes('No longer matches the saved decisions; create a new download.'));
+    assert.equal(count(html, report.download_url), 0, report.filename);
+  }
+  const bad = clone(doc);
   bad.reports[0].download_url = 'javascript:alert(1)';
-  assert.doesNotMatch(app.exportOptions(bad), /javascript:|href="javascript/);
+  assert.doesNotMatch(app.exportOptions(bad), /javascript:/);
 });
 
 test('the export status never claims an approval the server did not report', () => {
   const doc = fixture('encounter-ready.json');
-  assert.match(app.exportStatusText(doc), /^Draft only: the codes are suggestions, not approvals\. Before the approved download: 45385 is waiting/);
+  assert.equal(app.exportStatusText(doc), `Draft only: the codes are suggestions, not approvals. Before the approved download: ${doc.readiness.blockers.join(' ')}`);
   assert.equal(app.exportStatusText({ readiness: { draft: false, approved: false, blockers: [] } }), 'Nothing can be downloaded yet.');
   assert.equal(app.exportStatusText({ readiness: { draft: true, approved: 'yes', blockers: [] } }), 'Draft only: the codes are suggestions, not approvals.');
-  assert.match(app.exportStatusText({ readiness: { approved: true, blockers: [] }, codes: [] }), /^Every suggested code has a decision\. The approved download lists only approved codes\.$/);
-  assert.equal(app.tallyText(fixture('encounter-awaiting-detail.json')), '1 ready for review · 2 need a detail');
-  assert.equal(app.tallyText(fixture('encounter-reviewed.json')), '2 approved · 1 excluded');
-  assert.equal(app.tallyText(fixture('encounter-processing.json')), 'No codes yet');
+  assert.equal(app.exportStatusText({ readiness: { approved: true, blockers: [] }, codes: [] }), 'Every suggested code has a decision. The approved download lists only approved codes.');
+  for (const name of ENCOUNTERS) {
+    const doc2 = fixture(name);
+    const tally = { approved: 0, ready: 0, needs_detail: 0, excluded: 0 };
+    for (const code of doc2.codes) tally[code.status] += 1;
+    const expected = [tally.approved ? `${tally.approved} approved` : '', tally.ready ? `${tally.ready} ready for review` : '',
+      tally.needs_detail ? `${tally.needs_detail} ${tally.needs_detail === 1 ? 'needs' : 'need'} a detail` : '', tally.excluded ? `${tally.excluded} excluded` : ''].filter(Boolean).join(' · ') || 'No codes yet';
+    assert.equal(app.tallyText(doc2), expected, name);
+  }
 });
 
 test('the review dialog offers none, 59 or XS only for a code with a modifier review, never prefilled', () => {
   const mara = fixture('encounter-mara.json');
-  assert.deepEqual(app.reviewModifierOptions(mara.codes[1]), [['', 'No modifier'], ['59', '59'], ['XS', 'XS']]);
-  assert.deepEqual(app.reviewModifierOptions(mara.codes[0]), []);
+  for (const code of mara.codes) {
+    assert.deepEqual(app.reviewModifierOptions(code), code.modifier_review ? [['', 'No modifier'], ...['59', 'XS'].filter(choice => code.modifier_review.options.includes(choice)).map(choice => [choice, choice])] : [], code.code);
+  }
+  assert.ok(mara.codes.some(code => code.modifier_review) && mara.codes.some(code => !code.modifier_review), 'the scenario');
   assert.deepEqual(app.reviewModifierOptions({ modifier_review: { options: ['XS', '59', '25', 'XU'] } }), [['', 'No modifier'], ['59', '59'], ['XS', 'XS']]);
   assert.deepEqual(app.reviewModifierOptions({ modifier_review: { options: ['25'] } }), []);
   assert.deepEqual(app.reviewModifierOptions({ modifier_review: 'yes' }), []);
@@ -937,12 +1021,12 @@ test('the customer bundle names no internal machinery, not even in comments', ()
   const source = fs.readFileSync(BUNDLE, 'utf8');
   // the only exception: the protocol names Django's CSRF protection requires
   const scanned = source.replaceAll('X-CSRFToken', 'X-CSRF').replaceAll('csrfmiddlewaretoken', 'csrfmiddleware');
-  const words = /corti|astra|fable|openai|anthropic|claude|gpt|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|sha-256|harness|pipeline|engine|orchestrat|diagnostic|operator|replay|request[\s_-]?id|requestid|rule[\s_-]?id|ruleid|response[\s_-]?id|tool[\s_-]?call|cms-|ncci\.|pfs\.|mue\./gi;
-  const hits = [...scanned.matchAll(words)].map(match => `${match[0]} @${scanned.slice(0, match.index).split('\n').length}`);
+  const terms = /corti|astra|fable|openai|anthropic|claude|gpt|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|sha-256|harness|pipeline|engine|orchestrat|diagnostic|operator|replay|request[\s_-]?id|requestid|rule[\s_-]?id|ruleid|response[\s_-]?id|tool[\s_-]?call|cms-|ncci\.|pfs\.|mue\./gi;
+  const hits = [...scanned.matchAll(terms)].map(match => `${match[0]} @${scanned.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(hits, []);
   assert.equal(count(source, 'X-CSRFToken'), 1);
   // and the same scan finds a planted word, so a clean result means something
-  assert.ok([...`${scanned}\n// Astra`.matchAll(words)].length === 1);
+  assert.ok([...`${scanned}\n// Astra`.matchAll(terms)].length === 1);
 });
 
 test('no customer page names internal machinery, in text or attributes, and the scan catches a planted word', () => {
@@ -964,17 +1048,18 @@ test('no customer page names internal machinery, in text or attributes, and the 
   for (const word of ['corti', 'gpt-', 'ncci.ptp', '81406f7f']) assert.match(found, new RegExp(word, 'i'), word);
   // the document's own words are the member's document, shown as it is: a synthetic patient named Claude is not a leak
   const own = clone(fixture('encounter-ready.json'));
-  own.document.text = own.document.text.replace('Lena Ortiz', 'Claude Ortiz');
+  own.document.text = own.document.text.replace(/Patient: \w+/, 'Patient: Claude');
+  assert.ok(own.document.text.includes('Patient: Claude'), 'the control plants the name');
   assert.deepEqual(leaks(app.sourcePanel(own, app.documentLayout(own)), own), []);
 });
 
 test('the stylesheet and the templates carry no internal-machinery words either', () => {
-  const words = /corti|astra|fable|openai|anthropic|claude|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|harness/gi;
+  const terms = /corti|astra|fable|openai|anthropic|claude|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|harness/gi;
   const css = fs.readFileSync(path.join(ROOT, 'studio', 'static', 'studio', 'styles.css'), 'utf8');
-  assert.deepEqual([...css.matchAll(words)].map(match => match[0]), []);
+  assert.deepEqual([...css.matchAll(terms)].map(match => match[0]), []);
   for (const name of ['index.html', 'login.html']) {
     const html = fs.readFileSync(path.join(ROOT, 'studio', 'templates', 'studio', name), 'utf8').replace(/\{%\s*csrf_token\s*%\}/g, '');
-    assert.deepEqual([...html.matchAll(words)].map(match => match[0]), [], name);
+    assert.deepEqual([...html.matchAll(terms)].map(match => match[0]), [], name);
   }
 });
 
@@ -982,17 +1067,21 @@ test('the stylesheet and the templates carry no internal-machinery words either'
 
 test('list rows show the plain state, the kind, the details needed and the date; the queue lists what waits on the member', () => {
   const rows = fixture('encounters.json').encounters;
+  const kinds = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
+  for (const row of rows) {
+    const html = app.documentRow(row);
+    assert.ok(html.startsWith(`<a class="document-row" href="#doc/${row.id}">`), row.id);
+    const open = row.open_details > 0 ? `${row.open_details} ${row.open_details === 1 ? 'detail' : 'details'} needed` : '';
+    assert.ok(html.includes(`<small>${[kinds[row.kind], open].filter(Boolean).join(' · ')}</small>`), row.id);
+    assert.ok(html.includes(`>${esc(app.formatDate(row.service_date) || (row.date_conflict ? 'Date to choose' : 'Not documented'))}</span>`), row.id);
+  }
   const action = rows.find(row => row.state === 'action_needed');
-  const html = app.documentRow(action);
-  assert.match(html, /<a class="document-row" href="#doc\/c1000000-0000-4000-8000-000000000002">/);
-  assert.match(html, /<small>Uploaded file · 1 detail needed<\/small>/);
-  assert.match(html, /<span class="status amber">Action needed<\/span>/);
-  assert.match(html, /<span class="doc-row-date">Date to choose<\/span>/);
+  assert.match(app.documentRow(action), /<span class="status amber">Action needed<\/span>/);
   assert.match(app.documentRow({ ...action, state: 'mystery', state_label: '', date_conflict: false, service_date: '2026-10-28' }), /<span class="status gray">Unknown<\/span>.*28 Oct 2026/);
-  const queued = rows.filter(app.inQueue).map(row => row.state);
-  assert.deepEqual([...new Set(queued)].sort(), ['action_needed', 'awaiting_detail', 'ready']);
+  const queued = rows.filter(app.inQueue);
+  assert.deepEqual(queued.map(row => row.state).filter((value, index, all) => all.indexOf(value) === index).sort(), ['action_needed', 'awaiting_detail', 'ready']);
   assert.equal(count(app.listBody('queue', rows), 'class="document-row"'), queued.length);
-  assert.equal(count(app.listBody('workspace', rows), 'class="document-row"'), 5);
+  assert.equal(count(app.listBody('workspace', rows), 'class="document-row"'), Math.min(5, rows.length));
   assert.match(app.listBody('queue', []), /Nothing is waiting for you\./);
   assert.equal(app.listDescription('documents', rows), `${rows.length} synthetic documents in this workspace.`);
   assert.equal(fixture('session.json').counts.queue, queued.length);
