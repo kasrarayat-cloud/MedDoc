@@ -17,6 +17,7 @@ Every document is synthetic and opens "SYNTHETIC TEST DOCUMENT - FICTIONAL". Not
 synthetic (ops.gi4.battery.response) or the project's in-process FakeProvider.
 """
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -455,3 +456,31 @@ class MemberStatusEndToEndTests(TestCase):
         page = self.client.get(f'/api/encounters/{eid}').json()
         self.assertNotIn(answers.detail_id('patient_status', OFFICE_EM, ''), [r['id'] for r in page['details_needed']])
         self.assertEqual({c['code']: c['status'] for c in page['codes']}.get('99213'), 'ready')
+
+
+class EmRowsTests(SimpleTestCase):
+    """The reader-em rows the lead added to the battery at integration (cux-r2-em.json's integration amendment): each of
+    the four moved codes ends where the amendment records it, F09 and the two controls keep the visit code as the
+    pre-repair head read it, and no row has a violation."""
+
+    def test_the_rows(self):
+        from tests.test_cux_r2_bind import row, state
+        declaration = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations'
+                                  / 'cux-r2-em.json').read_text(encoding='utf-8'))
+        moved = {(name, code): after for name, code, _, after in declaration['amendment_20261104_integration_rows']['battery']}
+        names = [name for name in battery.CASES if name.startswith('R8 R2 EM ')]
+        self.assertEqual(len(names), 7)
+        self.assertEqual({name for name, _ in moved} <= set(names), True)
+        for name in names:
+            result = row(name)
+            for code in result['proposals']:
+                with self.subTest(name, code=code):
+                    if (name, code) in moved:
+                        self.assertEqual(state(result, code), moved[(name, code)])
+                    self.assertEqual(result['proposals'][code]['violations'], [])
+        unmoved = {'R8 R2 EM F09 billed separately, by design', 'R8 R2 EM rule 8 control, the absence statement alone',
+                   'R8 R2 EM rule 8 control, a future clinic visit'}
+        for name in unmoved:
+            with self.subTest(name):
+                self.assertEqual(state(row(name), '99213'), 'excluded/excluded')
+

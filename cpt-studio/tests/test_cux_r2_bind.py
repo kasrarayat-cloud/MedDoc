@@ -71,7 +71,9 @@ class R2RowsTests(SimpleTestCase):
 
     def test_the_rows(self):
         names = DECLARATION['battery_rows_added']
-        self.assertEqual(sorted(names), sorted(n for n in battery.CASES if n.startswith('R8 R2 ')))
+        # the reader-em rows (R8 R2 EM, cux-r2-em.json) and the variants' (R8 R2 V, cux-r2-variants.json) are their own
+        others = ('R8 R2 EM ', 'R8 R2 V ')
+        self.assertEqual(sorted(names), sorted(n for n in battery.CASES if n.startswith('R8 R2 ') and not n.startswith(others)))
         for name in names:
             result = row(name)
             for code in result['proposals']:
