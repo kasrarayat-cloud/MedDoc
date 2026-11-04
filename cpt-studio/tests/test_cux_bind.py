@@ -467,7 +467,10 @@ class EmAbsenceTests(SimpleTestCase):
         for line in ('Office visit not billed separately.', 'The office visit was not separately billable.',
                      'The office visit was not separately reported.', 'An office visit was also completed today.',
                      'No biopsies were taken and an office visit was documented.', 'No separate cyst-management visit '
-                     'occurred today.'):
+                     'occurred today.',
+                     # round-2 repair (L2/F07; tests/test_cux_r2_em.py): a hedge, and a negator of another noun
+                     'The office visit is not documented here; it is documented in the clinic note of today.',
+                     "No medication changes at today's office visit were documented."):
             with self.subTest(line):
                 self.assertIsNone(cues.EM_ABSENCE.search(line))
 
