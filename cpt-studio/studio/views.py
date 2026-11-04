@@ -70,12 +70,15 @@ def login_view(request):
         else:
             user = authenticate(request, username=username, password=password) if username == submitted else None
             LoginAttempt.objects.create(username=username, client=client, succeeded=user is not None)
-            member = user is not None and user.memberships.filter(active=True).exists()
-            # A platform operator may hold no membership (CORE-UX-DESIGN.md 5): they sign in on this same page and land
-            # on the operator diagnostics; a member - an operator who is one too - lands where they asked to go.
-            if user is not None and (member or is_operator(user)):
+            if user is not None and user.memberships.filter(active=True).exists():
                 login(request, user)
-                return redirect(next_url if member or next_url != '/' else '/ops/')
+                return redirect(next_url)
+            if user is not None and is_operator(user):
+                # A platform operator may hold no membership (CORE-UX-DESIGN.md 5): they sign in on this same page and
+                # land on the operator diagnostics, or where they asked to go (an operator who is also a member signs in
+                # as the member, above)
+                login(request, user)
+                return redirect(next_url if next_url != '/' else '/ops/')
             error = 'The username or password is not correct.'
     context = {'error': error, 'next': next_url,
                'username': UNSTORABLE.sub('\ufffd', request.POST.get('username', ''))[:150] if error else ''}
