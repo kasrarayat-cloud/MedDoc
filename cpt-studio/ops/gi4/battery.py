@@ -84,6 +84,14 @@ R8_EM = _r8_edit((boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression
     encoding='utf-8'), ('\n' + R8_L40, ''), (R8_L39, R8_TWIN))
 
 
+R8_NAMED_EGD = _r8_edit((boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-03.txt').read_text(
+    encoding='utf-8'), ('Variceal Banding Session', 'EGD with Variceal Band Ligation'))
+R8_STOPPED = _r8_edit(R8_NAMED_EGD, ('Retroflexion showed no gastric varices.',
+                                     'Retroflexion showed no gastric varices. We stopped in the stomach.'))
+R8_BANDS_PASSED = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+R8_BANDS = 'Large esophageal varices with red wale marks; six bands placed for primary prophylaxis.'
+
+
 def _r8_earlier(line):
     """R8 time-1's document: an earlier colonoscopy's polypectomy on its own line, then today's diagnostic one."""
     return (R8_DIAG + line + '\nProcedure: Colonoscopy\n' + R8_CECUM_LM + '\nA 15 mm sessile polyp was seen in the '
@@ -472,6 +480,12 @@ CASES = {
         _r8_edit(R8_EM, ('Vital Signs and Exam\n',
                          'Vital Signs and Exam\nPatient not\u00a0seen\u00a0in\u00a0person today.\n')),
         [('99204', R8_TWIN, 'no_ready')]),
+    # D13: a named EGD whose extent a statement of its own contradicts (h4-03 with the EGD named; the walk's date)
+    'R8 D13 named EGD control, h4-03 as written': (R8_NAMED_EGD, [('43244', R8_BANDS_PASSED, 'done')]),
+    'R8 D13 named EGD, we stopped in the stomach': (R8_STOPPED, [('43244', R8_BANDS_PASSED, 'no_ready')]),
+    'R8 D13 named EGD, stopped in the stomach, two passages': (
+        R8_STOPPED, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'no_ready')]),
+    'R8 D13 named EGD control, two passages': (R8_NAMED_EGD, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'done')]),
     # D10: an attached prior report's title
     'R8 D10 attached prior EGD report title': (
         R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
@@ -483,6 +497,9 @@ R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
     'R8 D12 E/M control, h4-01 time-only twin', 'R8 D12 E/M not seen in person, history, plain',
     'R8 D12 E/M not seen in person, history, NBSP', 'R8 D12 E/M not seen in person, exam, plain',
     'R8 D12 E/M not seen in person, exam, NBSP')}
+R8_USER.update({name: {'service_date': '2026-10-06'} for name in (
+    'R8 D13 named EGD control, h4-03 as written', 'R8 D13 named EGD, we stopped in the stomach',
+    'R8 D13 named EGD, stopped in the stomach, two passages', 'R8 D13 named EGD control, two passages')})
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')

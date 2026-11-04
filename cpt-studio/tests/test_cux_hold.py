@@ -143,6 +143,8 @@ UNMOVED = {
     ('R8 D9 release-1 ordered by the referrer', '45378'): HELD,
     ('R8 D10 attached prior EGD report title', '45378'): READY,
     ('R8 D12 E/M control, h4-01 time-only twin', '99204'): READY,
+    ('R8 D13 named EGD control, h4-03 as written', '43244'): READY,
+    ('R8 D13 named EGD control, two passages', '43244'): READY,
 }
 
 
@@ -508,3 +510,40 @@ class NotInPersonOnAFoldedCopyTests(SimpleTestCase):
                      ('Vital Signs and Exam\n', f'Vital Signs and Exam\nBlood{NB}pressure 118/72.\n')):
             with self.subTest(pair[1][-40:]):
                 self.assertEqual(self.visit(em_chassis(pair)), ('selected', 'ready'))
+
+
+H403 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h4-03.txt').read_text(encoding='utf-8')
+NAMED_EGD = H403.replace('Variceal Banding Session', 'EGD with Variceal Band Ligation', 1)
+RETROFLEXION = 'Retroflexion showed no gastric varices.'
+BANDS_PASSED = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+
+
+class StoppedShortOfTheExtentTests(SimpleTestCase):
+    """D13 (the design's item 4; R8 1.2): a named EGD whose extent a statement of its own contradicts - the examination,
+    the procedure, the scope or "we" stopped, halted, ended, was terminated or aborted at or in a landmark shallower
+    than the deepest one read as reached - has its extent withheld (detect._upper_extent, _p2_stopped_short), so the
+    code is held [extent], as the unnamed twin already is. Never a pause on withdrawal or a stop to do something there,
+    and never another thing stopping (a medication, an ooze)."""
+
+    def extent_status(self, text, *quotes):
+        item = proposal(run(text, [sel('43244', *(span(text, q) for q in quotes))],
+                            user_values={'service_date': '2026-10-06'}), '43244')
+        return item.status, sorted(c.fact for c in item.clarifications)
+
+    def test_d13_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D13 ')
+
+    def test_a_stop_short_of_the_reach_withholds_the_extent(self):
+        for stop in ('We stopped in the stomach.', 'The examination ended in the esophagus.',
+                     'The procedure was stopped in the stomach because of retained food.'):
+            with self.subTest(stop):
+                text = NAMED_EGD.replace(RETROFLEXION, RETROFLEXION + ' ' + stop, 1)
+                self.assertEqual(self.extent_status(text, BANDS_PASSED), ('needs_clarification', ['extent']))
+
+    def test_controls_a_pause_or_another_stop_keeps_the_extent(self):
+        self.assertEqual(self.extent_status(NAMED_EGD, BANDS_PASSED), ('ready', []))  # "Carvedilol was stopped ..."
+        for other in ('On withdrawal we stopped in the stomach to take biopsies.',
+                      'Oozing from a band site stopped in the stomach after irrigation.'):
+            with self.subTest(other):
+                text = NAMED_EGD.replace(RETROFLEXION, RETROFLEXION + ' ' + other, 1)
+                self.assertEqual(self.extent_status(text, BANDS_PASSED), ('ready', []))

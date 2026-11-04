@@ -6003,6 +6003,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if _p2_stopped_short(an, sentences, depth):
+        return None  # P2 READ-HOLD, R8 D13: "We stopped in the stomach." beside a reach to the duodenum: withheld (asked)
     if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
                                                                                  labelled):
         return None  # "introduced into the esophagus": where the examination starts, never how far it went
@@ -6019,6 +6021,38 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
+
+
+# P2 READ-HOLD, R8 D13 (reader-repair DESIGN item 4): a statement that the upper examination itself stopped, halted,
+# ended or was terminated or aborted - its subject the examination, the procedure, the scope or "we" - and the landmark
+# it stopped at or in; never a pause on withdrawal or a stop to do something there ("On withdrawal we stopped in the
+# stomach to take biopsies."), and never another thing stopping ("Carvedilol was stopped", "Oozing ... stopped").
+_P2_UPPER_STOP = re.compile(
+    r'\b(?:we|the\s+(?:examination|exam|procedure|study|endoscopy|upper\s+endoscopy|EGD|scope|endoscope|gastroscope|'
+    r'instrument))\s+(?:was\s+|were\s+|had\s+been\s+|had\s+)?(?:stopped|halted|ended|terminated|aborted|turned\s+back'
+    r'|went\s+no\s+further|could\s+go\s+no\s+further|did\s+not\s+(?:go|proceed|advance)\s+(?:any\s+)?further)\b',
+    re.A | re.I)
+_P2_UPPER_PAUSE = re.compile(
+    r'\b(?:on|during|after|before|while)\s+(?:the\s+)?(?:withdrawal|withdrawing|exit|removal\s+of\s+the\s+scope)\b'
+    r'|\bon\s+the\s+way\s+(?:out|in|back)\b|\bbriefly\b|\bto\s+(?:take|obtain|place|band|ligate|biopsy|inspect|examine|'
+    r'photograph|retroflex|apply|treat|inject|clip|suction|irrigate|wash|lavage|look|assess|evaluate|document)\b',
+    re.A | re.I)
+
+
+def _p2_stopped_short(an: Analysis, sentences, depth: int) -> bool:
+    """Whether a clause of the upper service's sentences states that the examination stopped at or in a landmark
+    shallower than ``depth``, the deepest reached (_P2_UPPER_STOP, then an UPPER_LANDMARKS name after it in the clause):
+    the document then contradicts its own extent, so the extent is withheld (held [extent], as the unnamed twin is;
+    hold-only). Bounded: a search per clause, the landmark table only in a clause that states a stop."""
+    text = an.text
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            stop = _P2_UPPER_STOP.search(text, cs, ce)
+            if stop is None or _P2_UPPER_PAUSE.search(text, cs, ce):
+                continue
+            if any(d < depth and pattern.search(text, stop.end(), ce) for _, d, pattern in cues.UPPER_LANDMARKS):
+                return True
+    return False
 
 
 def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
