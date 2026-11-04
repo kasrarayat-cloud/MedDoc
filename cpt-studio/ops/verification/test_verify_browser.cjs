@@ -2481,6 +2481,35 @@ test('checkProgressDom: the served phase and steps, elapsed time, no percentage 
   assert.ok(failed(vb.checkProgressDom(CUST(), domOf(panelHtml(CUST(), { card: true })))).includes('progress.dom.card_while_busy'));
 });
 
+// refutation round 3, C-R3-5 and the progress owner's request: a finished stage gives its step the outcome the operator
+// view serves (step_outcome, by progress._step_outcome), folded as the page folds them - a stop or an outcome still being
+// confirmed outranks a failure, and a failure outranks done; an operator view with no step_outcome falls back to the state
+test('foldedSteps reads each finished stage by the outcome the operator view serves, with the page\'s precedence', () => {
+  const at = (kind, state, step_outcome) => (step_outcome === 'absent' ? { kind, state, error: '', finished_at: null }
+    : { kind, state, error: '', finished_at: null, step_outcome });
+  const fold = stages => vb.foldedSteps({ pipeline: { stages } });
+  const head = [at('extract', 'succeeded', 'done'), at('analyze', 'succeeded', 'done')];
+  // a document review whose job succeeded but whose request failed (or was not sent): the step failed, never done
+  assert.equal(fold([...head, at('predict', 'succeeded', 'failed')]).checking, 'failed');
+  // one whose outcome is unknown, or a send an unknown outcome blocked: stopped, never done and never failed
+  assert.equal(fold([...head, at('predict', 'succeeded', 'stopped')]).checking, 'stopped');
+  // a stop outranks a failure in one step
+  assert.equal(fold([...head, at('predict', 'succeeded', 'failed'), at('astra', 'succeeded', 'stopped')]).checking, 'stopped');
+  // a stage that did nothing for its step (a skip, a held send) does not count
+  assert.equal(fold([...head, at('predict', 'succeeded', null)]).checking, 'none');
+  assert.equal(fold([...head, at('predict', 'succeeded', null), at('astra', 'succeeded', 'done')]).checking, 'done');
+  // no step_outcome served: the job's own state, as before
+  assert.equal(fold([...head, at('predict', 'succeeded', 'absent')]).checking, 'done');
+  assert.equal(fold([...head, at('predict', 'running', 'done')]).checking, 'active');
+  // the walk fails a page that calls a failed document review done
+  const enc = CUST();
+  const op = { pipeline: { stages: [...head, at('predict', 'succeeded', 'failed'), at('assess', 'succeeded', 'done')] } };
+  enc.progress.steps[2].state = 'done';
+  assert.deepEqual(failed(vb.checkProgressFold(enc, op)), ['progress.backend_stage']);
+  enc.progress.steps[2].state = 'failed';
+  assert.deepEqual(failed(vb.checkProgressFold(enc, op)), []);
+});
+
 test('foldedSteps and checkProgressFold: the served steps are the jobs\' own state, folded as P5 folds them', () => {
   const op = OP();
   assert.deepEqual(vb.foldedSteps(op), { reading: 'done', identifying: 'done', checking: 'done', preparing: 'done' });

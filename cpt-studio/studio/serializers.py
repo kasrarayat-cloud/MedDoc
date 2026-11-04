@@ -1128,6 +1128,12 @@ def harness_json(encounter, jobs):
     }
 
 
+def _step_outcome(job):
+    """progress._step_outcome for a finished stage, None while it is queued or running."""
+    from . import progress  # local import: progress reads the review layer this module serializes
+    return None if job.state in (models.Job.QUEUED, models.Job.RUNNING) else progress._step_outcome(job)
+
+
 def encounter_detail(encounter, membership):
     from .jobs import busy, second_review_status  # local import: jobs imports this module's peers
 
@@ -1158,8 +1164,12 @@ def encounter_detail(encounter, membership):
                      'can_resume': review.can_resume(encounter) and membership.can_review,
                      # A member's Stop, as opposed to a stage the system cancelled (expired, or left by a dead worker).
                      'stopped_by_member': encounter.stopped_at is not None,
+                     # step_outcome: the state the finished stage gives its customer step, by the page's own rule
+                     # (progress._step_outcome: done, failed, stopped, or None when it did nothing for the step), so the
+                     # walk folds the steps a member is shown from the persisted stages without a second copy of it
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
-                                 'finished_at': _iso(j.finished_at)} for j in jobs]},
+                                 'finished_at': _iso(j.finished_at),
+                                 'step_outcome': _step_outcome(j)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],
         # The run the provider_failed state reads, named so the page never picks one by recency (ec5 skeptic).
         'state_run': str(state_run.pk) if state_run is not None else None,

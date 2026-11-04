@@ -2043,16 +2043,27 @@ function foldedSteps(op) {
     if (kind !== 'assess') return STEP_OF_KIND[kind] || null;
     return stages.slice(index + 1).some(later => PEER_KINDS.has(later.kind)) ? 'checking' : 'preparing';
   };
+  // A finished stage gives its step the outcome the operator view serves (step_outcome: the page's own rule,
+  // progress._step_outcome - done, failed, stopped, or null when it did nothing for the step); an operator view that
+  // serves none falls back to the job's own state. One step reads its stages as the page does: a stop or an outcome
+  // still being confirmed outranks a failure, and a failure outranks done (refutation round 3, C-R3-5).
+  const effective = stage => {
+    if (stage.state === 'running' || stage.state === 'queued') return stage.state;
+    if (!Object.prototype.hasOwnProperty.call(stage, 'step_outcome')) return stage.state;
+    return stage.step_outcome;
+  };
   const last = new Map();
   stages.forEach((stage, index) => {
     const key = keyOf(index);
-    if (key) last.set(`${key}|${stage.kind}|${stage.kind === 'assess' ? key : ''}`, { key, state: stage.state });
+    const state = effective(stage);
+    if (key && state !== null && state !== undefined) last.set(`${key}|${stage.kind}|${stage.kind === 'assess' ? key : ''}`, { key, state });
   });
   const steps = {};
   for (const key of Object.keys(VOCAB.steps)) {
     const states = [...last.values()].filter(item => item.key === key).map(item => item.state);
     steps[key] = !states.length ? 'none' : states.some(s => s === 'running' || s === 'queued') ? 'active'
-      : states.some(s => s === 'failed') ? 'failed' : states.some(s => s === 'unknown') ? 'unknown' : states.some(s => s === 'cancelled') ? 'stopped' : 'done';
+      : states.some(s => s === 'stopped' || s === 'cancelled') ? 'stopped' : states.some(s => s === 'unknown') ? 'unknown'
+        : states.some(s => s === 'failed') ? 'failed' : 'done';
   }
   return steps;
 }
