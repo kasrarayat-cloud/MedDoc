@@ -291,3 +291,37 @@ class UnresolvedWordingTests(SimpleTestCase):
                          ['Office / outpatient evaluation and management: no supported code was found for it.'])
         self.assertEqual(customer_api._unresolved({}, [{'id': 'S1', 'family': 'gi.office_em', 'status': 'uncertain'}]),
                          ['An office visit is mentioned but is not documented as a separate service.'])
+
+
+class OverlayBlockerWordingTests(SimpleTestCase):
+    def test_every_blocker_the_overlay_raises_is_worded_for_the_member(self):
+        """The readiness blockers of an approval the review overlay no longer supports (review_view.review_view,
+        _held_blocker) in the member's words, never the generic sentence nor the machinery's."""
+        from tests.test_cux_review import D14_BLOCKER
+        cases = {
+            D14_BLOCKER: '45378 was approved, but 45385 was reinstated: its diagnostic examination is normally included '
+                         'in that intervention; undo one of the decisions.',
+            '45378 was approved, but a detail it needs was answered as not documented: revoke the approval':
+                '45378 was approved, but a detail it needs was answered as not documented; undo the decision.',
+            '43235 was approved, but its examination is the endoscopic portion of the endoscopic ultrasound documented '
+            'with it and is normally included in it; revoke the approval':
+                '43235 was approved, but its examination is part of the endoscopic ultrasound documented with it and is '
+                'normally included in it; undo the decision.',
+            '45378 was approved, but the documented colonoscopy includes snare removal, which this diagnostic code does '
+            'not account for; revoke the approval':
+                '45378 was approved, but the documented colonoscopy includes snare removal, which this diagnostic code '
+                'does not account for; undo the decision.',
+            '45378 was approved, but it now needs clarification; revoke the approval':
+                '45378 was approved, but it now needs a detail; undo the decision.',
+            '45380 was approved with modifier XS, but the separate-lesion modifier review no longer applies to it; revoke '
+            'the approval and decide it again':
+                '45380 was approved with modifier XS, but the separate-lesion modifier review no longer applies to it; '
+                'undo the decision and decide it again.',
+        }
+        for blocker, words in cases.items():
+            with self.subTest(blocker):
+                self.assertEqual(customer_api.customer_blocker(blocker), words)
+        # a composed tail the guard refuses falls back to the generic sentence
+        self.assertEqual(customer_api.customer_blocker('45378 was approved, but the documented colonoscopy includes the '
+                                                       'routing reading, which this diagnostic code does not account '
+                                                       'for; revoke the approval'), 'The review is not complete yet.')
