@@ -3969,6 +3969,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             lesion_matches = list(LESION.finditer(text, ss, read_end))
             if not mentions and not lesion_matches:
                 continue
+            described: Optional[list[int]] = None  # rule 1: _described_starts of this sentence, read when first needed
             cls = clauses_of(ss, read_end)
             anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
@@ -4052,7 +4053,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     if label and label not in label_index:  # rule 1: a label resolves to the lesion it heads, only
                         # where its definition's clause describes that lesion alone (two lesions in it: which act is
                         # whose there is not told, so the label resolves to neither)
-                        alone = _lesions_described(text, lesion_matches, max(clause[0], label_end), clause[1]) == 1
+                        if described is None:
+                            described = _described_starts(text, lesion_matches, ss, read_end)
+                        alone = _lesions_described(described, max(clause[0], label_end), clause[1]) == 1
                         label_index[label] = lesion if label in unique_labels and alone else None
                         label_lines[label] = label_line
                     elif label and label_lines.get(label) != label_line:
@@ -4085,8 +4088,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
                 # or a site of the clause's own that the lesion's tract cannot hold, leave it to the rules below
                 bound = _bound_lesion(text, clause, own_anat, label_index, drafts)
-                if bound is not None and _lesions_described(text, lesion_matches, clause[0], clause[1]) > 1:
-                    bound = None  # a clause that describes two lesions: its label says which one, not which act is whose
+                if bound is not None:
+                    if described is None:
+                        described = _described_starts(text, lesion_matches, ss, read_end)
+                    if _lesions_described(described, clause[0], clause[1]) > 1:
+                        bound = None  # a clause that describes two lesions: its label says which, not which act is whose
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
@@ -4598,12 +4604,26 @@ def _labels_in(text: str, start: int, end: int, index: dict) -> set:
     return out
 
 
-def _lesions_described(text: str, lesion_matches: Sequence, start: int, end: int) -> int:
-    """How many lesion mentions (LESION matches of the sentence) [start, end) describes, leaving out a lesion noun that
-    is a label's own word ("Polyp A", "Lesion 1"). Bounded: the matches of one sentence, and one label scan."""
-    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, start, end)]
-    return sum(1 for m in lesion_matches if start <= m.start() < end
-               and not any(a <= m.start() < b for a, b in labels))
+def _described_starts(text: str, lesion_matches: Sequence, ss: int, end: int) -> list[int]:
+    """The starts, in order, of a sentence's lesion mentions (its LESION matches over [ss, end)) that are no label's own
+    word ("Polyp A", "Lesion 1"), for rule 1's count of the lesions a clause describes. One label scan of the sentence
+    and one pass over its matches (both in order)."""
+    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, ss, end)]
+    out: list[int] = []
+    i = 0
+    for m in lesion_matches:
+        p = m.start()
+        while i < len(labels) and labels[i][1] <= p:
+            i += 1
+        if i < len(labels) and labels[i][0] <= p:
+            continue  # the label's own word
+        out.append(p)
+    return out
+
+
+def _lesions_described(starts: Sequence[int], start: int, end: int) -> int:
+    """How many of a sentence's described lesion mentions (_described_starts) start in [start, end): two bisections."""
+    return bisect.bisect_left(starts, end) - bisect.bisect_left(starts, start)
 
 
 def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index: dict, drafts) -> Optional[Lesion]:
