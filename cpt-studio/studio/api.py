@@ -2,6 +2,11 @@
 
 Every handler resolves the caller's ACTIVE membership first and scopes every
 row through it, so another workspace's records answer 404.
+
+This is the CUSTOMER surface (CORE-UX-DESIGN.md 5, 7): every payload is built by studio.customer_api's allowlist, and
+every refusal raised below this module reaches the member only through customer_api.customer_error (a fixed
+vocabulary; no stored or exception text). The full record - providers, models, usage, runs, hashes, the trace, every
+stored artifact - is a platform operator's, served under /ops/ by studio.operator.
 """
 import functools
 import json
@@ -15,7 +20,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, intake, jobs, models, reports, review, serializers
+from . import audit, customer_api, intake, jobs, models, reports, review
 from .access import active_membership, scoped_encounter
 from .ingest import canonicalize
 from .storage import read_original
@@ -80,11 +85,12 @@ def api_view(view):
         except Http404:
             return JsonResponse({'error': 'Not found.'}, status=404)
         except PermissionDenied as exc:
-            return JsonResponse({'error': str(exc) or 'Your role cannot do that.'}, status=403)
+            return JsonResponse({'error': customer_api.customer_error(str(exc)) if str(exc)
+                                 else 'Your role cannot do that.'}, status=403)
         except review.AttestationRefused as exc:
-            return JsonResponse({'error': ' '.join(exc.messages)}, status=400)
+            return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=400)
         except ValidationError as exc:
-            return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
+            return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=409)
         except RecursionError:  # a backstop: a nested value that reached code recursing per level
             return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
     return wrapper
@@ -148,7 +154,7 @@ def _clean_title(raw, fallback):
 @api_view
 def session(request):
     membership = active_membership(request.user)
-    return JsonResponse(serializers.session_json(request.user, membership))
+    return JsonResponse(customer_api.session_json(request.user, membership))
 
 
 @api_view
@@ -157,7 +163,7 @@ def encounters(request):
     if request.method == 'GET':
         rows = membership.workspace.encounters.select_related(
             'current_revision', 'current_context', 'current_assessment').order_by('-created_at')
-        return JsonResponse({'encounters': [serializers.encounter_summary(e) for e in rows]})
+        return JsonResponse({'encounters': [customer_api.list_row(e) for e in rows]})
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -182,7 +188,7 @@ def encounters(request):
             membership=membership, user=request.user, title=title, service_date=service_date, data=data,
             filename=filename, text='' if upload is not None else text)
     except ValidationError as exc:
-        raise ApiError(400, ' '.join(exc.messages))
+        raise ApiError(400, customer_api.customer_error(' '.join(exc.messages)))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
 
 
@@ -190,19 +196,7 @@ def encounters(request):
 @api_view
 def encounter_detail(request, encounter_id):
     encounter, membership = scoped_encounter(request.user, encounter_id)
-    return JsonResponse(serializers.encounter_detail(encounter, membership))
-
-
-@require_GET
-@api_view
-def trace(request, encounter_id):
-    """The administrative trace of the current revision (HARNESS.md 7): each participant's runs and full readings, the
-    retrieval traces and the reconciliation table. A workspace owner's alone: 403 for a reviewer or a viewer (404, as
-    everywhere, outside the caller's workspaces)."""
-    encounter, membership = scoped_encounter(request.user, encounter_id)
-    if not serializers.is_owner(membership):
-        raise PermissionDenied('Only a workspace owner can open the administrative trace.')
-    return JsonResponse(serializers.trace_json(encounter))
+    return JsonResponse(customer_api.encounter_json(encounter, membership))
 
 
 @require_POST
@@ -231,8 +225,8 @@ def decisions(request, encounter_id):
                 acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'), modifiers=modifiers)
         except review.ModifierRefused as exc:
             raise ApiError(400, ' '.join(exc.messages))
-    return JsonResponse({**serializers._decision_json(decision), 'modifiers': list(decision.modifiers or [])},
-                        status=201)
+    # the customer decision shape (customer_api.decision_response: the contract's decision, modifiers included)
+    return JsonResponse(customer_api.decision_response(decision), status=201)
 
 
 @require_POST
@@ -250,7 +244,7 @@ def confirm_finding(request, encounter_id, clarification_id):
     is recorded."""
     encounter, membership = scoped_encounter(request.user, encounter_id)
     if not review.confirmations_offered():
-        raise ApiError(409, review.CONFIRMATIONS_NOT_OFFERED)
+        raise ApiError(409, customer_api.customer_error(review.CONFIRMATIONS_NOT_OFFERED))
     data = _payload(request)
     _require_reviewer(membership)
     if not encounter.clarifications.filter(pk=clarification_id).exists():
@@ -266,8 +260,15 @@ def confirm_finding(request, encounter_id, clarification_id):
             encounter=encounter, clarification_id=clarification_id, candidate_id=candidate_id,
             attestation=attestation, user=request.user, membership=membership)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
-    return JsonResponse({**serializers.confirmation_json(confirmation), 'effect': effect}, status=201)
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    # never who located the passage or which runs did (participant names, run ids): those are an operator's (/ops/)
+    return JsonResponse({'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
+                         'fact': confirmation.fact, 'value': confirmation.value,
+                         'confirmed_by': confirmation.confirmed_by.label(),
+                         'confirmed_by_kind': confirmation.confirmed_by.actor_kind,
+                         'attestation': confirmation.attestation,
+                         'created_at': confirmation.created_at.isoformat(),
+                         'current_effect': customer_api.confirmation_effect(confirmation), 'effect': effect}, status=201)
 
 
 @require_POST
@@ -339,7 +340,7 @@ def context(request, encounter_id):
     try:
         ctx = jobs.change_context(encounter, request.user, values)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     return JsonResponse({'context_id': str(ctx.pk)}, status=201)
 
 
@@ -359,10 +360,10 @@ def resume(request, encounter_id):
     try:
         job = jobs.resume(encounter, request.user)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     if job is None:
         raise ApiError(409, 'There is no stopped stage to resume.')
-    return JsonResponse({'resumed': job.kind}, status=201)
+    return JsonResponse({'resumed': True}, status=201)  # never the stage's kind: kinds name the participants
 
 
 @require_POST
@@ -375,66 +376,56 @@ def second_review(request, encounter_id):
     try:
         jobs.request_second_review(encounter, request.user)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     return JsonResponse({'second_review': 'queued'}, status=201)
 
 
 @require_POST
 @api_view
-def reconcile(request, encounter_id):
-    data = _payload(request)
-    encounter, membership = scoped_encounter(request.user, encounter_id)
-    _require_reviewer(membership)
-    note = _text_field(data, 'note', 'The reconciliation note').strip()
-    if len(note) < 12:
-        raise ApiError(400, 'Describe how the unknown outcome was reconciled (at least 12 characters).')
-    try:
-        run = encounter.provider_runs.get(pk=_identifier(data.get('provider_run_id')))
-    except (models.ProviderRun.DoesNotExist, ValueError, ValidationError):
-        raise ApiError(404, 'That provider request is not part of this document.')
-    try:
-        recorded = jobs.reconcile(encounter, run, request.user, note)
-    except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
-    if recorded is None:
-        raise ApiError(409, 'Only an unreconciled unknown outcome can be reconciled.')
-    return JsonResponse({'reconciled': str(run.pk)}, status=201)
-
-
-@require_POST
-@api_view
 def create_report(request, encounter_id):
+    """A customer report (cpt-studio-customer-report@1): ``{"kind": "draft"|"approved", "fmt": "txt"|"csv"}`` - the
+    suggested codes, or the approved items only. 'reviewed', the name the page used before, is read as 'approved'.
+    The operator's full report is made at /ops/ (studio.operator)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     kind, fmt = str(data.get('kind', '')), str(data.get('fmt', ''))
-    if kind not in {models.ReportArtifact.DRAFT, models.ReportArtifact.REVIEWED} or fmt not in {'txt', 'csv'}:
-        raise ApiError(400, 'Choose a draft or reviewed report as TXT or CSV.')
+    kind = reports.APPROVED if kind == models.ReportArtifact.REVIEWED else kind
+    if kind not in reports.CUSTOMER_KINDS or fmt not in {'txt', 'csv'}:
+        raise ApiError(400, 'Choose a draft or an approved export as TXT or CSV.')
     if encounter.current_assessment_id is None:
-        raise ApiError(409, 'There is nothing to report yet.')
-    if kind == models.ReportArtifact.REVIEWED:
-        ready = review.readiness(encounter)
-        if not ready['reviewed']:
-            raise ApiError(409, 'The reviewed report is not available yet.', blockers=ready['blockers'])
+        raise ApiError(409, 'There is nothing to export yet.')
+    if kind == reports.APPROVED:
+        ready = customer_api.readiness(encounter)
+        if not ready['approved']:
+            raise ApiError(409, 'The approved export is not available yet.', blockers=ready['blockers'])
     try:
-        report = reports.generate(encounter, kind, fmt, request.user)
+        report = reports.generate_customer(encounter, kind, fmt, request.user)
+    except reports.CustomerExportNotReady as exc:  # its blockers are customer_api.readiness's, already worded
+        raise ApiError(409, 'The approved export is not available yet.', blockers=exc.blockers)
     except ValueError as exc:
-        raise ApiError(409, str(exc))
-    return JsonResponse(serializers._report_json(report), status=201)
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse(customer_api.report_json(report), status=201)
 
 
 @require_GET
 @api_view
 def download_report(request, report_id):
+    """A customer artifact of the caller's workspace, as stored (no sha256 header). Any other artifact - an operator's,
+    or one recorded before the audience existed, which names the review participants - answers 404; an approved export
+    that no longer matches the persisted decisions answers 409."""
     try:
         report = models.ReportArtifact.objects.select_related('encounter').get(pk=report_id)
     except (models.ReportArtifact.DoesNotExist, ValueError, ValidationError):
         raise Http404()
     active_membership(request.user, report.encounter.workspace_id)
+    if report.audience != models.ReportArtifact.CUSTOMER:
+        raise Http404()
+    if report.kind == reports.APPROVED and not reports.customer_artifact_current(report):
+        raise ApiError(409, customer_api.STALE_EXPORT)
     content = bytes(report.content)
     content_type = 'text/csv; charset=utf-8' if report.fmt == 'csv' else 'text/plain; charset=utf-8'
     response = HttpResponse(content, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{report.filename}"'
-    response['X-Content-SHA256'] = report.sha256
     return response
 
 
@@ -449,5 +440,4 @@ def original(request, encounter_id):
     response = HttpResponse(data, content_type=source.media_type)
     safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', source.original_name)[:120] or 'original'
     response['Content-Disposition'] = f'attachment; filename="{safe_name}"'
-    response['X-Content-SHA256'] = source.sha256
-    return response
+    return response  # no sha256 header for a customer (an operator's /ops/ download carries it)

@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from studio import audit, jobs, models, review
 from tests.test_pipeline_api import drain
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
 
@@ -26,7 +27,7 @@ def nested(depth, leaf='"x"'):
 
 
 @override_settings(**LIVE)
-class SweptPredictSettlesByItsOutcomeTests(ApiHarness, TestCase):
+class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:1 — a predict whose provider outcome was recorded before its worker died is settled by that
     outcome by the stale sweep, never offered as a resumable stage that re-sends an identical failed request."""
 
@@ -58,7 +59,7 @@ class SweptPredictSettlesByItsOutcomeTests(ApiHarness, TestCase):
         drain()
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertEqual(encounter.state, 'provider_failed')
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertFalse(detail['pipeline']['can_resume'])
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 409)
         drain()
@@ -92,7 +93,7 @@ class SweptPredictSettlesByItsOutcomeTests(ApiHarness, TestCase):
         run.refresh_from_db()
         self.assertEqual((job.state, run.state), (models.Job.CANCELLED, models.ProviderRun.NOT_SENT))
         self.assertNotIn('settled', job.result or {})
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual(len(self.provider.requests), 1)
@@ -113,7 +114,7 @@ class SweptPredictSettlesByItsOutcomeTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class NonStringIdentifiersTests(ApiHarness, TestCase):
+class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:2 — a nested list in an identifier field answers the endpoint's JSON 404, never an HTML 500
     (the ORM lookup recursed once per level)."""
 
@@ -134,7 +135,9 @@ class NonStringIdentifiersTests(ApiHarness, TestCase):
         for path, raw in cases.items():
             for depth_raw in (raw, raw.replace(nested(1500), nested(3000)), raw.replace(nested(1500), '17')):
                 with self.subTest(path=path, size=len(depth_raw)):
-                    response = self.client.post(f'/api/encounters/{encounter_id}/{path}', data=depth_raw,
+                    # moved by the customer interface change (CORE-UX-DESIGN.md 5): the reconciliation is operator work, under /ops/
+                    prefix = '/ops/api' if path == 'reconcile' else '/api'
+                    response = self.client.post(f'{prefix}/encounters/{encounter_id}/{path}', data=depth_raw,
                                                 content_type='application/json')
                     self.assertEqual(response.status_code, 404, response.content[:200])
                     self.assertIn('error', response.json())
@@ -193,7 +196,7 @@ class NonStringIdentifiersTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class NonTextFieldsTests(ApiHarness, TestCase):
+class NonTextFieldsTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:4 — a note, acknowledgement or addendum sent as anything but a JSON string answers 400 and is
     never stored (or sent to the provider) as its Python repr."""
 
@@ -244,7 +247,7 @@ class NonTextFieldsTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class MigrationBackfillRoundTripTests(ApiHarness, TransactionTestCase):
+class MigrationBackfillRoundTripTests(OperatorReads, ApiHarness, TransactionTestCase):
     """Round 3, evidence:3 — migration 0003 itself backfills ProviderRun.service_date on a database at 0002 (the
     round-2 test called the helper directly, so dropping the RunPython step from 0003 left it green)."""
 
@@ -270,14 +273,14 @@ class MigrationBackfillRoundTripTests(ApiHarness, TransactionTestCase):
 
 
 @override_settings(**LIVE)
-class SystemCancelledStagesAreNotMemberStopsTests(ApiHarness, TestCase):
+class SystemCancelledStagesAreNotMemberStopsTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:3 — the detail tells a member's Stop apart from a stage the system cancelled, and keeps the cause."""
 
     def test_an_expired_stage_is_not_a_member_stop(self):
         encounter_id = self.create()
         models.Job.objects.filter(encounter_id=encounter_id).update(deadline_at=timezone.now() - timedelta(seconds=1))
         drain()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertEqual(detail['state'], 'stopped')
         self.assertIs(detail['pipeline']['stopped_by_member'], False)
         cancelled = [stage for stage in detail['pipeline']['stages'] if stage['state'] == 'cancelled']
@@ -287,13 +290,13 @@ class SystemCancelledStagesAreNotMemberStopsTests(ApiHarness, TestCase):
         encounter_id = self.create()
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
         drain()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertEqual(detail['state'], 'stopped')
         self.assertIs(detail['pipeline']['stopped_by_member'], True)
 
 
 @override_settings(**LIVE)
-class ContextChangeAfterACancelledAssessTests(ApiHarness, TestCase):
+class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCase):
     """Round 3, orchestrator:0 — the run in use is the revision's newest finished request even when the assess that
     would have used it was cancelled (a member's Stop during the send, a swept or expired assess), so a setting or
     billing change, or a Resume after one, never re-sends an identical request that already failed."""
@@ -384,7 +387,7 @@ class ContextChangeAfterACancelledAssessTests(ApiHarness, TestCase):
         self.provider.outcomes = ['unknown']
         encounter_id = self.create()
         drain()
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': self.unknown_run_id(encounter_id),
                               'note': 'Checked the synthetic provider console: no result exists.'})
         self.assertEqual(response.status_code, 201, response.content)

@@ -122,7 +122,7 @@ class Steps(Base):
     def reconcile(self, encounter_id):
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN,
                                                  reconciled_at__isnull=True)
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), **RECONCILE})
         self.assertEqual(reply.status_code, 201, reply.content)
         drain()

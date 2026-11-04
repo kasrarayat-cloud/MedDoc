@@ -1788,14 +1788,21 @@ def _filename(snap, fmt):
     return f'CPT-Studio-{snap["kind"]}-{snap["encounter"]["id"][:8]}-r{snap["revision"]["number"]}-{stamp}.{fmt}'
 
 
-def generate(encounter, kind, fmt, user):
-    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest."""
+def generate(encounter, kind, fmt, user, *, operator=False):
+    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest. This is the
+    operator's full report (audience 'operator'; CORE-UX-DESIGN.md 5): a member of the workspace may make one through
+    this function, and a platform operator through /ops/ (``operator=True``: a grant, never a membership, is checked).
+    Customers are served generate_customer's report instead."""
     if fmt not in RENDERERS:
         raise ValueError('Choose a TXT or CSV report.')
     if kind not in KINDS:
         raise ValueError('Choose a draft or reviewed report.')
-    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
-                                                         active=True).exists()):
+    if operator:
+        from .operator import is_operator  # local import: the operator module's views import this one
+        if not is_operator(user):
+            raise PermissionDenied('Only a platform operator can generate an operator report here.')
+    elif not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                           active=True).exists()):
         raise PermissionDenied('Only an active member of this workspace can generate its reports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
@@ -1804,7 +1811,197 @@ def generate(encounter, kind, fmt, user):
         artifact = ReportArtifact.objects.create(
             encounter=locked, assessment_id=snap['assessment']['id'], kind=kind, fmt=fmt,
             filename=_filename(snap, fmt), content=content, sha256=hashlib.sha256(content).hexdigest(),
-            snapshot_sha256=snapshot_digest(snap), generated_by=user)
+            snapshot_sha256=snapshot_digest(snap), generated_by=user, audience=ReportArtifact.OPERATOR)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
-                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt)
+                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt, audience=ReportArtifact.OPERATOR)
+    return artifact
+
+
+# --- the customer report (CORE-UX-DESIGN.md 5): cpt-studio-customer-report@1 ----------------------------------------
+#
+# Built from the customer contract (studio.customer_api), never from the operator snapshot above: the suggested codes
+# with their status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations (the
+# draft), or the approved items only (the approved export), then the concise limitations, between two SYNTHETIC
+# banners. No participant, model, usage, hash, rule id, run id, engine or profile version, check id or source key
+# appears. The snapshot digest is stored with the artifact (snapshot_sha256), so a download can tell whether an
+# approved export still matches the persisted decisions (customer_artifact_current).
+
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+APPROVED = ReportArtifact.APPROVED
+CUSTOMER_KINDS = (DRAFT, APPROVED)
+CUSTOMER_HEADLINES = {DRAFT: 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
+CUSTOMER_TITLES = {DRAFT: 'Suggested codes — not approved', APPROVED: 'Approved codes'}
+CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers',
+                        'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text',
+                        'evidence_page', 'evidence_start', 'evidence_end')
+
+
+class CustomerExportNotReady(ValueError):
+    """The approved export was asked for before it is available."""
+
+    def __init__(self, blockers):
+        self.blockers = list(blockers)
+        super().__init__('The approved export is not available yet.')
+
+
+def _customer_quote(quote):
+    return {'text': quote['text'], 'page': quote.get('page'), 'start': quote['start'], 'end': quote['end']}
+
+
+def customer_snapshot(encounter, kind):
+    """Everything a customer report shows, read from persisted rows through the customer contract."""
+    from . import customer_api  # local import: the customer layer reads this module
+
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    encounter = Encounter.objects.select_related('workspace').get(pk=encounter.pk)
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        raise ValueError('There is no assessment of the current revision to report yet.')
+    revision = assessment.revision
+    current = review.current_decisions(assessment)
+    ready = customer_api.readiness(encounter, assessment, current)
+    if kind == APPROVED and not ready['approved']:
+        raise CustomerExportNotReady(ready['blockers'])
+    snap = {'format_version': CUSTOMER_FORMAT, 'kind': kind,
+            'encounter': {'id': str(encounter.pk), 'title': encounter.title},
+            'revision': {'id': str(revision.pk), 'number': revision.number}, 'assessment': str(assessment.pk),
+            'date_of_service': customer_api.service_date_block(encounter)['value'],
+            'limitations': customer_api.limitations(assessment, revision)}
+    if kind == APPROVED:
+        items = customer_api.approved_items(assessment, current)
+        snap['items'] = [{'number': number, 'code': item['code'], 'units': item['units'],
+                          'modifiers': list(item['modifiers']), 'status': 'approved', 'approver': item['approver'],
+                          'approver_kind': item['approver_kind'], 'agent': bool(item['agent']),
+                          'decided_at': item['decided_at'], 'decision': item['decision_id'], 'summary': item['summary'],
+                          'quotes': [_customer_quote(q) for q in item['evidence']]}
+                         for number, item in enumerate(items, start=1)]
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    else:
+        view = customer_api.effective_view(assessment, current)
+        rows, _ = customer_api.code_rows(assessment, current, view)
+        snap['items'] = [{'number': row['number'], 'code': row['code'], 'units': row['units'],
+                          'modifiers': list(row['modifiers']), 'status': row['status'],
+                          'status_label': row['status_label'], 'sub_label': row['sub_label'], 'summary': row['summary'],
+                          'decision': row['_decision'], 'quotes': [_customer_quote(q) for q in row['why']['quotes']]}
+                         for row in rows]
+        snap['agent_review'] = False
+    return snap
+
+
+def customer_snapshot_digest(snap):
+    """sha256 of the customer snapshot: equal persisted decisions and results, equal digest (generation time and who
+    generated it are not part of the snapshot)."""
+    return sha256_json(snap)
+
+
+def customer_digest(encounter, kind):
+    """The digest a customer report of ``kind`` would carry now, or None when none could be made now."""
+    try:
+        return customer_snapshot_digest(customer_snapshot(encounter, kind))
+    except ValueError:
+        return None
+
+
+def customer_artifact_current(report) -> bool:
+    """Whether a customer artifact still matches the persisted decisions and results it was made from."""
+    return report.snapshot_sha256 == customer_digest(report.encounter, report.kind)
+
+
+def _customer_header(snap, generated):
+    lines = [CUSTOMER_HEADLINES[snap['kind']], SYNTHETIC_LINE]
+    if snap.get('agent_review'):
+        lines.append(AGENT_LINE)
+    return lines + [f'Report format: {snap["format_version"]}', f'Encounter: {snap["encounter"]["title"]}',
+                    f'Date of service: {snap["date_of_service"] or "not established"}',
+                    f'Generated: {generated["at"]} by {generated["by"]}']
+
+
+def _modifier_words(modifiers):
+    return ', '.join(modifiers) if modifiers else 'none'
+
+
+def render_customer_txt(snap, generated) -> bytes:
+    kind = snap['kind']
+    lines = _customer_header(snap, generated) + ['', CUSTOMER_TITLES[kind]]
+    if not snap['items']:
+        lines.append('   No code was suggested for this document.')
+    for item in snap['items']:
+        if kind == APPROVED:
+            lines.append(f'{item["number"]}. {item["code"]} — units {item["units"]} — modifiers: '
+                         f'{_modifier_words(item["modifiers"])}')
+            lines.append(f'   Approved by {item["approver"]} ({item["approver_kind"]}) at {item["decided_at"]}')
+            if item['agent']:
+                lines.append(f'   {AGENT_LINE}')
+        else:
+            lines.append(f'{item["number"]}. {item["code"]} — {item["status_label"]} — units {item["units"]} — '
+                         f'modifiers: {_modifier_words(item["modifiers"])}')
+            if item['sub_label']:
+                lines.append(f'   {item["sub_label"]}')
+        lines.append(f'   {item["summary"]}')
+        for quote in item['quotes']:
+            page = f'page {quote["page"]}' if quote.get('page') else 'page not known'
+            where = f'{page}, characters {quote["start"]}–{quote["end"]}' if kind == APPROVED else page
+            lines.append(f'   Quote: "{quote["text"]}" ({where})')
+    lines += ['', 'Limitations', *[f'- {item}' for item in snap['limitations']]]
+    return (_join(lines) + f'\n\n{SYNTHETIC_LINE}\n').encode('utf-8')
+
+
+def render_customer_csv(snap, generated) -> bytes:
+    """RFC 4180 as the operator CSV: every field quoted, formula-leading cells neutralised, CRLF, UTF-8. A banner row
+    (``report_format`` = the SYNTHETIC line) follows the header and closes the file; every other row is one quotation
+    of one code (a code with none has one row with empty evidence cells), its number repeated."""
+    approved = snap['kind'] == APPROVED
+    base = {'report_format': snap['format_version'], 'encounter_title': snap['encounter']['title'],
+            'date_of_service': snap['date_of_service'] or ''}
+    banner = {column: '' for column in CUSTOMER_CSV_COLUMNS}
+    banner['report_format'] = SYNTHETIC_LINE
+    rows = [banner]
+    for item in snap['items']:
+        cells = {**base, 'number': item['number'], 'code': item['code'], 'units': item['units'],
+                 'modifiers': ';'.join(item['modifiers']), 'status': item['status'],
+                 'approved_by': item['approver'] if approved else '',
+                 'approver_kind': item['approver_kind'] if approved else '',
+                 'approved_at': item['decided_at'] if approved else '', 'summary': item['summary']}
+        for quote in item['quotes'] or [None]:
+            rows.append({**cells, 'evidence_text': quote['text'] if quote else '',
+                         'evidence_page': (quote.get('page') or '') if quote else '',
+                         'evidence_start': quote['start'] if quote else '', 'evidence_end': quote['end'] if quote else ''})
+    rows.append(banner)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
+    writer.writerow([neutralise(column) for column in CUSTOMER_CSV_COLUMNS])
+    for row in rows:
+        writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell)
+                         for cell in (row[column] for column in CUSTOMER_CSV_COLUMNS)])
+    return buffer.getvalue().encode('utf-8')
+
+
+CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
+
+
+def generate_customer(encounter, kind, fmt, user):
+    """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the snapshot
+    digest. Any active member of the workspace may make one (as before, viewers included)."""
+    if fmt not in CUSTOMER_RENDERERS:
+        raise ValueError('Choose a TXT or CSV export.')
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                         active=True).exists()):
+        raise PermissionDenied('Only an active member of this workspace can create its exports.')
+    with transaction.atomic():
+        locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        snap = customer_snapshot(locked, kind)
+        now = timezone.now()
+        generated = {'at': _ts(now), 'by': user.label()}
+        content = CUSTOMER_RENDERERS[fmt](snap, generated)
+        stamp = now.astimezone(dt_timezone.utc).strftime('%Y%m%dT%H%M%S')
+        artifact = ReportArtifact.objects.create(
+            encounter=locked, assessment_id=snap['assessment'], kind=kind, fmt=fmt,
+            filename=f'CPT-Studio-{kind}-r{snap["revision"]["number"]}-{stamp}.{fmt}', content=content,
+            sha256=hashlib.sha256(content).hexdigest(), snapshot_sha256=customer_snapshot_digest(snap),
+            generated_by=user, audience=ReportArtifact.CUSTOMER)
+        audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
+                     assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
     return artifact

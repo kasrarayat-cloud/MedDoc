@@ -6,6 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from tests.test_pipeline_api import drain
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
 from tests.test_repairs_r4_ingest import mark_over_snare, printed_ticked_under_off, two_column, wrapped_checklist
 from tests.test_repairs_r4_ingest_docx import FORCEPS, SNARE, bulleted
@@ -15,7 +16,7 @@ DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 
 @override_settings(**LIVE)
-class UploadsHoldWhatTheyCannotReadTests(MultiEvidenceApiCase, TestCase):
+class UploadsHoldWhatTheyCannotReadTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def upload(self, name, data, content_type, *selections):
         self.provider.selections = list(selections)
         with self.captureOnCommitCallbacks(execute=True):

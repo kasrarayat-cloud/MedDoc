@@ -26,10 +26,14 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by', 'permissions', 'revision', 'context',
                'routing', 'pipeline', 'provider_runs', 'assessment', 'clarifications', 'decisions', 'readiness',
                'reports', 'activity'}
-# The API contract the website renders (HARNESS.md 7, 12.6): encounter detail's harness and permissions, each proposal's
-# harness fields, the provider runs and the owner's trace - the serializer's own keys, which
-# tests.test_harness_api.FrontendContractTests pins against the real API (refutation r1 FG-5: these had drifted from it,
-# so a fixture taken from the real API was rejected, and no frontend test could see a key the API serves).
+# The OPERATOR contract (HARNESS.md 7, 12.6; CORE-UX-DESIGN.md 5): encounter detail's harness and permissions, each
+# proposal's harness fields, the provider runs and the trace - the operator serializer's own keys, served at
+# /ops/api/encounters/<id> and /ops/api/encounters/<id>/trace to platform operators and rendered by the operator console
+# (studio/operator/ops.js, tests/operator/ops.test.cjs), which tests.test_harness_api.FrontendContractTests pins against
+# the real /ops/ API (refutation r1 FG-5: these had drifted from it, so a fixture taken from the real API was rejected,
+# and no frontend test could see a key the API serves). The fixtures in tests/fixtures/api are operator payloads. The
+# CUSTOMER contract served at /api/ is CORE-UX-DESIGN.md 7's, pinned key by key by tests.test_customer_surface
+# (assert_contract), with its own fixtures in tests/fixtures/customer (tests.test_customer_fixtures).
 PARTICIPANTS = ['corti', 'astra', 'fable']
 PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes',
                     'unlisted_codes', 'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd',

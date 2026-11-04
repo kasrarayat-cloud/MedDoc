@@ -37,6 +37,7 @@ from django.utils import timezone
 from studio import jobs, models, review
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
 from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
@@ -78,7 +79,7 @@ class Provider(TwoPassProvider):
 
 
 @override_settings(**LIVE)
-class Base(TestCase):
+class Base(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -251,7 +252,7 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.close(timezone.now())['hazards'], {encounter_id: ['unknown']})
         # cleared the documented way, on this revision's web: its reconcile holds the conflict and sends nothing
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN)
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: nothing billed.'})
         self.assertEqual(reply.status_code, 201, reply.content)
         drain()

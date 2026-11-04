@@ -441,6 +441,13 @@ class Job(models.Model):
 
 class ReportArtifact(ImmutableModel):
     DRAFT, REVIEWED = 'draft', 'reviewed'
+    # A customer report's approved export (cpt-studio-customer-report@1): approved items only (CORE-UX-DESIGN.md 5).
+    APPROVED = 'approved'
+    # Who an artifact is for. Every row recorded before this column existed names the review participants, so the
+    # database default makes it an operator artifact without an ORM update (ImmutableModel is never involved), and a row
+    # an older release inserts during a rollback is an operator artifact too (the safe direction). Customers download
+    # only customer artifacts; operators download any, as stored.
+    OPERATOR, CUSTOMER = 'operator', 'customer'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='reports')
     assessment = models.ForeignKey(Assessment, on_delete=models.PROTECT, related_name='reports')
@@ -452,6 +459,30 @@ class ReportArtifact(ImmutableModel):
     snapshot_sha256 = models.CharField(max_length=64)
     generated_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     generated_at = models.DateTimeField(auto_now_add=True)
+    audience = models.CharField(max_length=10, default=OPERATOR, db_default=OPERATOR)
+
+
+class OperatorGrant(ImmutableModel):
+    """A platform-operator grant (CORE-UX-DESIGN.md 5): the only thing that opens the operator diagnostics at /ops/. Held
+    by a user, never conferred by a workspace role - a practice owner gains nothing from it. Append-only: recorded by
+    the ``grant_operator`` management command (never over HTTP), ended by an OperatorRevocation row."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='operator_grants')
+    reason = models.TextField()
+    granted_by = models.CharField(max_length=120)  # the label of whoever ran the command (its own words)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class OperatorRevocation(ImmutableModel):
+    """The end of one OperatorGrant, recorded by the ``revoke_operator`` management command; the grant row stays."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    grant = models.OneToOneField(OperatorGrant, on_delete=models.PROTECT, related_name='revocation')
+    reason = models.TextField()
+    revoked_by = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class AuditEvent(ImmutableModel):

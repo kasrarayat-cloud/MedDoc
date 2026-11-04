@@ -864,3 +864,78 @@ validated against NCCI procedure-to-procedure edits or payer modifier policy)"),
 over the current review decisions. The structured modifier review, the chosen modifier and the approved items are served
 to the customer by the customer API (package P4), from `review.effective_view(assessment)` and
 `review.approved_items(assessment)`.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+**This section supersedes the customer-facing shapes above where they differ** (CORE-UX-DESIGN.md 5, 7). The sections
+above describe the full serializer, which is now the **operator** serializer: served only under `/ops/api/` to platform
+operators. A workspace member - owner, reviewer or viewer - is served the customer contract, built by allowlist in
+`studio/customer_api.py`: every key is written out, nothing stored is passed through, and no provider or model name,
+usage, credit, request id, run id, hash, rule id, source key, trace link or engine sentence appears.
+
+**Customer endpoints (`/api/`).**
+
+- `GET /api/session` → `{user: {id, label, initials, actor_kind}, workspace: {id, name}, role, can_review,
+  acknowledgement, counts: {documents, queue}, synthetic_only}` (no `provider_mode`, no `release`).
+- `GET /api/encounters` → `{encounters: [{id, title, state, state_label, service_date, date_conflict, open_details,
+  created_at, kind}]}`.
+- `GET /api/encounters/{id}` → exactly the contract of CORE-UX-DESIGN.md 7: `id, title, created_at, updated_at, state,
+  state_label, permissions{can_review}, document{kind, name, media_type, size, page_count, revision, text, pages,
+  reading{status, label, messages}, original_url}, service_date{value, source, document_value, document_quote,
+  entered_value, conflict, can_use_document_date}, progress{phase, busy, steps[{key, label, state, started_at,
+  finished_at}], active_detail, started_at, finished_at, server_time, slow, message, can_stop, can_resume, can_leave,
+  error}, checks[{key, label, state}], codes[{id, number, code, units, modifiers, modifier_review, status,
+  status_label, sub_label, summary, why{quotes[{text, start, end, page, exact}], qualifications}, detail_ids,
+  allowed_actions, decision}], other_codes[{code, reason}], not_separately_coded[{label, reason}], details_needed[...],
+  unresolved, limitations, readiness{draft, approved, blockers}, reports[{id, kind, fmt, filename, generated_at,
+  generated_by, download_url, current}], activity[{event, summary, actor, actor_kind, at}]`. States: `processing,
+  action_needed, awaiting_detail, ready, reviewed, no_codes, stopped, failed, being_confirmed`; code statuses `ready,
+  needs_detail, approved, excluded`. `activity` lists only allowlisted events under customer keys (`document_added`,
+  `decision_recorded`, `report_created`, ...); provider events, operator reads and operator reports never appear.
+  Committed examples: `tests/fixtures/customer/*.json` (generated from the real serializer).
+- `POST /api/encounters/{id}/decisions` → `201 {proposal_id, code, decision{action, by, by_kind, at, note,
+  modifiers}}`.
+- `POST /api/encounters/{id}/resume` → `201 {"resumed": true}` (never the stage's kind).
+- `POST /api/encounters/{id}/reports` `{"kind": "draft"|"approved", "fmt": "txt"|"csv"}` ("reviewed" is read as
+  "approved") → `201 {id, kind, fmt, filename, generated_at, generated_by, download_url, current}`; the approved
+  export answers 409 with `details.blockers` (customer wording) until `readiness.approved`. Format
+  `cpt-studio-customer-report@1`: the draft lists the numbered suggested codes ("Suggested codes — not approved") with
+  status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations with their page;
+  the approved export lists the approved items only, each with units, modifiers, approver, "Agent-executed synthetic
+  review — not clinical approval" for an agent's approval, the decision time and its quotations with page and character
+  offsets; then the limitations; a SYNTHETIC banner opens and closes the file. CSV columns: `report_format,
+  encounter_title, date_of_service, number, code, units, modifiers, status, approved_by, approver_kind, approved_at,
+  summary, evidence_text, evidence_page, evidence_start, evidence_end` (one row per quotation of a code; a banner row,
+  `report_format` = the SYNTHETIC line, follows the header and ends the file; formula-leading cells neutralised).
+- `GET /api/reports/{id}/download` → a customer artifact of the caller's workspace as stored, **without**
+  `X-Content-SHA256`. Any other artifact (an operator report, or one recorded before the `audience` column existed:
+  they name the review participants) answers 404; an approved export whose snapshot no longer matches the persisted
+  decisions answers `409 {"error": "This export no longer matches the saved decisions; create a new one."}`. Stored
+  artifacts are never modified.
+- `GET /api/encounters/{id}/original` → the original as stored, without `X-Content-SHA256`.
+- **Removed:** `GET /api/encounters/{id}/trace` and `POST /api/encounters/{id}/reconcile` answer 404 for everyone.
+- **Errors** use a fixed customer vocabulary (`customer_api.customer_error`): a refusal raised below the API is passed
+  through only when it is a known customer sentence, re-worded when it names the machinery, and otherwise answered
+  "This action is not available right now." No stored or exception text reaches a member.
+
+**Operator diagnostics (`/ops/`).** Every URL answers anyone without a platform-operator grant exactly what an unknown
+URL answers (Django's 404) - signed out, any workspace role, any workspace's owner, a revoked operator. A grant is a
+user-level row (`OperatorGrant`, ended by an `OperatorRevocation`) recorded only by `manage.py grant_operator
+--username U --reason-file F` and `revoke_operator ...`; no role confers it and no URL records one. An operator with no
+membership signs in on the same login page and lands on `/ops/`.
+
+| method + path | serves |
+|---|---|
+| `GET /ops/` | the operator console (`templates/studio/ops.html`, one script `/ops/assets/ops.js`) |
+| `GET /ops/assets/ops.js`, `/ops/assets/ops.css` | the console bundle (today's website, API base `/ops/api/`), from `studio/operator/`, never `static/` |
+| `GET /ops/api/session` | the console's session (`serializers.session_json`'s shape; role `operator`) |
+| `GET /ops/api/encounters[?workspace=<uuid>]` | every workspace's rows: `serializers.encounter_summary` + `workspace{id, name}` + `provider_runs` (count) |
+| `GET /ops/api/encounters/{id}` | the full `serializers.encounter_detail` (the operator's own membership when they hold one, else read-only) |
+| `GET /ops/api/encounters/{id}/trace` | `serializers.trace_json` |
+| `GET` / `POST /ops/api/encounters/{id}/reports` | every artifact with `audience`, `sha256`, `snapshot_sha256`; POST makes the operator report (`cpt-studio-report@4`) |
+| `GET /ops/api/reports/{id}/download` | any artifact, stored bytes, `X-Content-SHA256` |
+| `GET /ops/api/encounters/{id}/original` | the original with `X-Content-SHA256` |
+| `POST /ops/api/encounters/{id}/reconcile` | `{"provider_run_id", "note"}` as before (reconciliation is operator work) |
+
+An operator's reads of an encounter are audited as `operator.viewed` (once per operator, encounter and view in ten
+minutes); they are never part of an encounter's activity, the customer's or the operator's.

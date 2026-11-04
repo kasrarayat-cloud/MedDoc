@@ -141,7 +141,7 @@ class MeaningCase(Surfaces, hp.Harness2Case):
             models.ReferenceCodeFact.objects.create(source=mue, code=value, facts=hp.MUE_ROW)
 
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -772,7 +772,7 @@ class D14BlockerTests(MeaningCase):
         status_block = txt[start:txt.index('', start)]
         self.assertIn(f'  - {said}', status_block)
         self.assertFalse(any(unsaid in line for line in status_block), status_block)
-        refused = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        refused = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(refused.status_code, 409, refused.content)
         self.assertIn(said, refused.json()['details']['blockers'])
         return detail

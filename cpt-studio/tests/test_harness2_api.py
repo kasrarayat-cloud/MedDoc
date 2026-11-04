@@ -16,7 +16,7 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import candidates, jobs, models, review
+from studio import candidates, customer_api, jobs, models, review
 from studio.participants.anthropic_fable import FableParticipant
 from studio.participants.openai_astra import AstraParticipant
 from studio.gi import context as gi_context
@@ -24,6 +24,7 @@ from studio.providers.base import canonical_body
 from studio.providers.replay import ReplayProvider
 from studio.types import ExtractionResult, PageSpan, to_jsonable
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS
 from tests.test_harness2_pipeline import ColonCase as PipelineColonCase
@@ -106,7 +107,7 @@ def questions_of(assessment):
     return {**out, 'by_key': by_key}
 
 
-class Harness2Case(TestCase):
+class Harness2Case(OperatorReads, TestCase):
     """One encounter carried through harness@2 as the pipeline records it: the document's context as its reader reads
     it; Corti's run, read by Corti's own normalizer; Astra's and Fable's frozen first readings (Astra's with a tool
     call); assess #1, the engine's, with its open questions; both peer reviews (Astra's with a tool call), built from
@@ -459,7 +460,9 @@ class ConfirmationRefusalTests(Harness2Case):
         phase_one = self.persist([self.entry(name) for name in ADAPTERS])  # an assess #1 whose peer stages follow
         self.assertFalse(review.is_final(phase_one))
         question = phase_one.clarifications.get(fact='extent', proposal__key='sel:0')
-        self.assertRefused(self.confirm('extent', question=question), 409, 'peer reviews of this document have not')
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a refusal reaches a member in the customer vocabulary
+        self.assertRefused(self.confirm('extent', question=question), 409,
+                           'independent checks for this document have not finished')
 
     def test_a_question_that_is_not_open(self):
         candidate = self.verified('extent')
@@ -503,10 +506,12 @@ class ConfirmationRefusalTests(Harness2Case):
         self.assertRefused(self.confirm('extent'), 409, 'Wait for processing to finish')
 
     def test_a_refusal_of_the_effect_records_nothing(self):
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a refusal reaches a member in the customer vocabulary
+        # (a refusal the vocabulary does not know, such as these, is "This action is not available right now.")
         with mock.patch('studio.jobs.reassess_after_confirmation', side_effect=jobs.Refused('Synthetic refusal.')):
-            self.assertRefused(self.confirm('extent'), 409, 'Synthetic refusal.')
+            self.assertRefused(self.confirm('extent'), 409, customer_api.GENERIC_ERROR)
         with mock.patch('studio.jobs.change_context', side_effect=jobs.Refused('Synthetic context refusal.')):
-            self.assertRefused(self.confirm('service_date'), 409, 'Synthetic context refusal.')
+            self.assertRefused(self.confirm('service_date'), 409, customer_api.GENERIC_ERROR)
 
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
@@ -618,7 +623,7 @@ class ConfirmationTests(Harness2Case):
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DetailTests(Harness2Case):
     def detail(self, user=None):
-        response = self.client_for(user or self.reviewer).get(f'/api/encounters/{self.encounter.pk}')
+        response = self.client_for(user or self.reviewer).get(f'/ops/api/encounters/{self.encounter.pk}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -767,7 +772,7 @@ class DetailTests(Harness2Case):
 @override_settings(**BOTH)
 class TraceTests(Harness2Case):
     def test_the_trace_shows_exchanges_tool_calls_peer_reviews_and_each_assessment_s_frozen_list(self):
-        response = self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}/trace')
+        response = self.client_for(self.owner).get(f'/ops/api/encounters/{self.encounter.pk}/trace')
         self.assertEqual(response.status_code, 200, response.content)
         trace = response.json()
         astra = next(p for p in trace['participants'] if p['name'] == 'astra')
@@ -851,7 +856,7 @@ class DescriptorLikeTextTests(Harness2Case):
     def test_a_participant_row_lists_only_the_codes_the_engine_lists_for_every_role(self):
         for user in (self.reviewer, self.viewer, self.owner):
             with self.subTest(user=user.username):
-                response = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}')
+                response = self.client_for(user).get(f'/ops/api/encounters/{self.encounter.pk}')
                 self.assertEqual(response.status_code, 200, response.content)
                 self.assertNotIn(DESCRIPTOR_LIKE, response.content.decode('utf-8'))
                 astra = next(row for row in response.json()['harness']['participants'] if row['name'] == 'astra')
@@ -859,7 +864,7 @@ class DescriptorLikeTextTests(Harness2Case):
                 self.assertTrue(astra['detail'].endswith(UNLISTED_ONE), astra['detail'])
 
     def test_the_owner_s_trace_names_each_long_code_like_value_by_its_length(self):
-        response = self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}/trace')
+        response = self.client_for(self.owner).get(f'/ops/api/encounters/{self.encounter.pk}/trace')
         self.assertEqual(response.status_code, 200, response.content)
         self.assertNotIn(DESCRIPTOR_LIKE, response.content.decode('utf-8'))
         first, peer_run = next(p for p in response.json()['participants'] if p['name'] == 'astra')['runs']
@@ -905,7 +910,7 @@ NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded 
 
 class _Decisions:
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -1024,7 +1029,8 @@ class DecisionInvalidationTests(_Decisions, PipelineCase):
         self.assertEqual([p['allowed_actions'] for p in detail['assessment']['proposals']],
                          [[] for _ in detail['assessment']['proposals']])
         response = self.decide(encounter_id, '99213')
-        self.assertEqual((response.status_code, response.json()['error']), (409, NOT_FINAL))
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a refusal reaches a member in the customer vocabulary
+        self.assertEqual((response.status_code, response.json()['error']), (409, customer_api.customer_error(NOT_FINAL)))
         self.assertFalse(models.Decision.objects.filter(encounter_id=encounter_id).exists())
         self.assertIn(NOT_FINAL_BLOCKER, detail['readiness']['blockers'])
         # once the peer reviews are assessed, the final assessment takes the decision

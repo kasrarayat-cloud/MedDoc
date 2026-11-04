@@ -31,11 +31,12 @@ from studio import jobs, models, reports, review
 from studio.providers.base import ProviderUnavailable
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_services_second_review import TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
+APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 HELD = 'Nothing was sent: the service date entered as encounter metadata conflicts with the document'
 VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
 # A colonoscopy whose snare removal is ready for review and whose separate forceps biopsy has no supported proposal,
@@ -131,7 +132,7 @@ class SecondUnbuildable(TwoPassProvider):
 
 
 @override_settings(**LIVE)
-class Pipeline(TestCase):
+class Pipeline(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -156,7 +157,7 @@ class Pipeline(TestCase):
             return self.client.post(path, data=json.dumps(data or {}), content_type='application/json')
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def draft(self, encounter_id):
         encounter = models.Encounter.objects.get(pk=encounter_id)
@@ -190,7 +191,7 @@ class HeldRunReadsAsHeldTests(Pipeline):
         blockers = detail['readiness']['blockers']
         self.assertIn(HELD, blockers)
         self.assertNotIn('The provider request failed', blockers)
-        reviewed = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reviewed = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reviewed.status_code, 409, reviewed.content)
         self.assertNotIn('The provider request failed', reviewed.json()['details']['blockers'])
         draft = self.draft(encounter_id)
@@ -334,7 +335,7 @@ class UnknownSecondReviewStateTests(Pipeline):
     def queue_page(self):
         node = shutil.which('node')
         self.assertIsNotNone(node, 'node is not installed; the queue page is checked by running the shipped app.js')
-        listed = self.client.get('/api/encounters').json()
+        listed = self.client.get('/ops/api/encounters').json()
         done = subprocess.run([node, '-e', QUEUE_NODE, str(APP)], input=json.dumps(listed), capture_output=True,
                               text=True, timeout=60, check=True)
         return done.stdout
@@ -351,7 +352,7 @@ class UnknownSecondReviewStateTests(Pipeline):
                          'One document waits on a workspace member: a clarification, a review decision, a '
                          'reconciliation, a second review that can be asked for, or coding left incomplete.')
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: no response.'})
         self.assertIn(reply.status_code, (200, 201), reply.content)
         drain()

@@ -15,13 +15,14 @@ from django.test import TestCase, override_settings
 from ops.gi4 import regression
 from studio import jobs, models
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_gi4_state import LIVE, RetainedProvider, seed_reference
 
 DOCS = regression.load_fixtures()
 
 
 @override_settings(**LIVE)
-class MemberAskedOfferTests(TestCase):
+class MemberAskedOfferTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -48,7 +49,7 @@ class MemberAskedOfferTests(TestCase):
             jobs.run_job(job)
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def offered(self, encounter_id):
         items = self.detail(encounter_id)['assessment']['completeness']['unresolved_items']

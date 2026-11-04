@@ -40,6 +40,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from studio import models, review
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
 from tests.test_services_second_review import LIVE, TwoPassProvider
@@ -134,7 +135,7 @@ def scripts(world, older=None, fail=None, interrupt=None):
 
 
 @override_settings(**LIVE)
-class Base(TestCase):
+class Base(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -167,7 +168,7 @@ class Base(TestCase):
 
     def listed(self, encounter_id):
         """(state, label) of the encounter's row in this revision's GET /api/encounters."""
-        (row,) = [r for r in self.client.get('/api/encounters').json()['encounters'] if r['id'] == encounter_id]
+        (row,) = [r for r in self.client.get('/ops/api/encounters').json()['encounters'] if r['id'] == encounter_id]
         return row['state'], row['state_label']
 
     def refused(self, tag):
@@ -428,7 +429,7 @@ class SecondReviewRefusedTests(Base):
         JSON object: refused whole, and read by the current assessment."""
         self.provider.first, self.provider.later = list(primary), list(primary)
         encounter_id = self.create(tag, text=REPORT)
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']['available'])
         self.provider.outcomes = ['refused']
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
         drain()

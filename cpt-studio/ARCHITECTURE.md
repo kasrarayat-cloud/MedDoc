@@ -3215,3 +3215,37 @@ AssessmentResult's sha256 equal on every battery and replay call), and `checks.e
   `detail_unavailable` (not reinstatable, no decision required, never approvable) until the answer is revoked;
   readiness treats it as resolved; removal is monotone (an answered base question is read over the effective set, and a
   code is never re-admitted within one reading). A documented service's answer closes that question only.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+Owner directive of 2026-11-03, section 2 (CORE-UX-DESIGN.md 5, 7). Two surfaces, split on the server:
+
+- **The customer surface** (`/api/`, `studio/api.py`) serves every payload through `studio/customer_api.py`, an
+  allowlist: each key is written out and every sentence is re-derived from structured fields - statuses, check ids
+  and their states, act kinds, exact spans of the revision text - in CPT Studio's own fixed wording. Stored engine
+  sentences, participant readings, adapter and job errors sit on immutable rows and name vendors, models and rule ids,
+  so they are never passed through, whatever their wording today (R4-api-leak-surface 6.1(1)). A label CPT Studio
+  composed from the document's own words (an act's anatomy, a lesion) is used only when it passes the server-side guard
+  `customer_api.plain`; otherwise the fixed sentence stands in. Refusals raised below the API reach a member only
+  through `customer_api.customer_error`'s fixed vocabulary. Customer reports are their own format
+  (`cpt-studio-customer-report@1`, `reports.generate_customer`), built from the customer contract, stored with
+  `ReportArtifact.audience = 'customer'`; the approved export holds approved items only and its snapshot digest is
+  re-checked at download (409 once the decisions changed).
+- **The operator surface** (`/ops/`, `studio/operator.py`) serves the complete record - `studio/serializers.py`
+  (unchanged, now the operator serializer), the trace, every artifact as stored with its sha256, the original with its
+  sha256, the operator report (`cpt-studio-report@4`) and the reconciliation of an unknown outcome - to platform
+  operators only. Operator access is a user-level grant (`OperatorGrant`/`OperatorRevocation`, append-only, recorded by
+  the `grant_operator`/`revoke_operator` commands with a reason file), never a workspace role: a practice owner is not
+  an operator, and `operator.is_operator` reads no Membership. Every `/ops/` URL answers a non-operator exactly what an
+  unknown URL answers. The console is today's website frozen as `studio/operator/ops.js` and `ops.css` (API base
+  `/ops/api/`), served by a gated view and never from `static/`, which WhiteNoise serves to anyone.
+
+Schema (migration `0009_cux_operator`, additive for the rolling install): the two grant tables and
+`ReportArtifact.audience` with a database default of `'operator'`, so every artifact recorded before it - each names
+the review participants - and every row an older release inserts is an operator artifact without an ORM update.
+Customers download only customer artifacts; legacy bytes stay byte-identical for operators (rollback evidence).
+
+The truth rules of section 2 stand on both surfaces: a customer code shows CPT Studio's own located passages first and
+the provider's exact passages only where the support record says they show the act, never a passage that does not
+support; agent approvals are labelled "Agent-executed synthetic review — not clinical approval"; a recorded test
+response is said to be one ("These results come from a recorded test response, not a live check.").

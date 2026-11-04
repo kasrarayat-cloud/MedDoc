@@ -1,4 +1,8 @@
-"""Persisted rows -> the JSON shapes in API.md. Read-only; no business rules."""
+"""Persisted rows -> the JSON shapes in API.md. Read-only; no business rules.
+
+This is the OPERATOR serializer (CORE-UX-DESIGN.md 5): complete provenance - participants, models, usage, runs,
+hashes, rule ids, the trace - served only to platform operators under /ops/ (studio.operator). A workspace member
+is served studio.customer_api's allowlist, never these payloads."""
 from django.conf import settings
 
 from . import models, participants, review
@@ -416,7 +420,7 @@ def confirmation_json(confirmation):
 def _report_json(report):
     return {'id': str(report.pk), 'kind': report.kind, 'fmt': report.fmt, 'filename': report.filename,
             'sha256': report.sha256, 'generated_at': _iso(report.generated_at),
-            'generated_by': report.generated_by.label(), 'download_url': f'/api/reports/{report.pk}/download'}
+            'generated_by': report.generated_by.label(), 'download_url': f'/ops/api/reports/{report.pk}/download'}
 
 
 ACTIVITY_SUMMARIES = {
@@ -432,6 +436,7 @@ ACTIVITY_SUMMARIES = {
     'account.provisioned': 'Account provisioned',
     'finding.confirmed': "Finding confirmed from a participant's located passage (not a decision)",
 }
+OPERATOR_VIEWED = 'operator.viewed'  # studio.operator.VIEWED (that module imports this one's peers)
 # Repair gi2 (the recovery lens): 'provider.sending' is recorded before the exchange, so it says only that the attempt
 # started, and 'provider.finished' is worded from the outcome its own row recorded (every revision records the state and
 # the HTTP status there). An attempt the adapter recorded as not sent, or whose outcome is unknown, read "Provider request
@@ -1119,7 +1124,10 @@ def encounter_detail(encounter, membership):
         'readiness': review.readiness(encounter),
         'coding': review.coding_completeness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
-        'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],
+        # the encounter's own history: an operator's reads of it (operator.viewed, studio.operator) are the access log,
+        # kept as audit rows and never part of the encounter's activity
+        'activity': [_activity_json(e) for e in encounter.audit_events.exclude(event=OPERATOR_VIEWED)
+                     .select_related('actor').order_by('created_at')],
     }
 
 

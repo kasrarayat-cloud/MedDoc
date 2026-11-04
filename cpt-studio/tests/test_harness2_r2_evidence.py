@@ -96,11 +96,11 @@ class EvidenceCase(Harness2Case):
                                              state=models.Clarification.OPEN)
 
     def served(self, encounter_id, question):
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         return next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
 
     def served_proposal(self, encounter_id, code_value):
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         return next(p for p in detail['assessment']['proposals']
                     if p['code'] == code_value and p['bucket'] == 'selected')
 
@@ -124,7 +124,9 @@ class EvidenceCase(Harness2Case):
         self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']), (False, why, ''))
         response = self.confirm(encounter_id, question, candidate)
         self.assertEqual(response.status_code, 409, response.content)
-        self.assertEqual(response.json()['error'], NOT_VERIFIED + why)
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a member is told the refusal's fixed head; the
+        # candidate's reason, composed from stored readings, stays on the operator payload (candidate['why'])
+        self.assertEqual(response.json()['error'], NOT_VERIFIED.rstrip(': ') + '.')
         self.assertFalse(models.FindingConfirmation.objects.exists())
         drain()
         served = self.served_proposal(encounter_id, code_value)
@@ -537,7 +539,9 @@ class DateEvidenceTests(EvidenceCase):
         self.assertEqual((candidate['verified'], candidate['why'], candidate['attestation']), (False, why, ''))
         response = self.confirm(encounter_id, question, candidate)
         self.assertEqual(response.status_code, 409, response.content)
-        self.assertEqual(response.json()['error'], NOT_VERIFIED + why)
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a member is told the refusal's fixed head; the
+        # candidate's reason, composed from stored readings, stays on the operator payload (candidate['why'])
+        self.assertEqual(response.json()['error'], NOT_VERIFIED.rstrip(': ') + '.')
         drain()
         encounter = self.encounter(encounter_id)
         # nothing entered the context and nothing more was sent: the date of service is still asked
@@ -576,7 +580,7 @@ def page(detail):
     node = shutil.which('node')
     if node is None:
         raise AssertionError('node is not installed; the page checks need it')
-    app = f'{settings.BASE_DIR}/studio/static/studio/app.js'
+    app = f'{settings.BASE_DIR}/studio/operator/ops.js'
     done = subprocess.run([node, '-e', PAGE_NODE, app], input=json.dumps(detail), capture_output=True, text=True,
                           timeout=60, check=False)
     if done.returncode:
@@ -597,7 +601,7 @@ class ContextChangedTests(ColonCase):
         drain()
         final = self.encounter(encounter_id).current_assessment
         question = final.clarifications.get(proposal__key='sel:0', fact='extent', state=models.Clarification.OPEN)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         served = next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
         candidate = next(c for c in served if c['verified'])  # the control: offered while the context is current
         self.assertIn('data-action="confirm-finding"', page(detail))
@@ -608,7 +612,7 @@ class ContextChangedTests(ColonCase):
         encounter = self.encounter(encounter_id)
         self.assertEqual((encounter.current_assessment, encounter.state), (final, 'stopped'))
         self.assertNotEqual(final.context_id, encounter.current_context_id)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertEqual((detail['pipeline']['busy'], detail['permissions']['can_confirm']), (False, True))
         self.assertEqual([c['candidates'] for c in detail['clarifications']], [[] for _ in detail['clarifications']])
         self.assertNotIn('data-action="confirm-finding"', page(detail))
@@ -707,7 +711,7 @@ class ConfirmationAcrossChangesCase(ColonCase):
     answers 45385's with the landmark passage, which a reviewer confirms through the endpoint."""
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def confirm_extent(self, encounter_id, user=None):
         detail = self.detail(encounter_id)
