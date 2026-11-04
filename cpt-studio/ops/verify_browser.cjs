@@ -92,6 +92,9 @@ const DECIDED = new Set(['approved', 'rejected']);
 const DECISION_STATES = { approve: 'approved', reject: 'rejected', confirm: 'exclusion_confirmed' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
 const UI_TIMEOUT_MS = 30000;
+// Decision (l) (2026-11-03; studio/client_contract.py): a direct customer API call names the current page build, as
+// the page itself does (static/studio/app.js api()); a call without it is answered 409 client_outdated.
+const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-03' };
 const POLL_MS = 2000;
 const MAX_POLL_ERRORS = 3;
 const INCOMPLETE_SIGNAL = /incomplete|discontinu|reduced|\b5[23]\b/i;
@@ -2789,7 +2792,7 @@ async function remember(ctx, method, where, response, via = 'walk') {
 
 async function fetchCustomer(page, ctx, id) {
   const where = `/api/encounters/${id}`;
-  const response = await page.request.get(`${ctx.base}${where}`, { headers: { Accept: 'application/json' }, timeout: UI_TIMEOUT_MS });
+  const response = await page.request.get(`${ctx.base}${where}`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS }, timeout: UI_TIMEOUT_MS });
   const body = await remember(ctx, 'GET', where, response);
   if (!response.ok()) throw new Error(`GET ${where} answered HTTP ${response.status()}`);
   return JSON.parse(body);
@@ -2797,7 +2800,7 @@ async function fetchCustomer(page, ctx, id) {
 
 // The encounter ids of the customer's list (GET /api/encounters).
 async function customerListIds(page, ctx) {
-  const response = await page.request.get(`${ctx.base}/api/encounters`, { headers: { Accept: 'application/json' }, timeout: UI_TIMEOUT_MS });
+  const response = await page.request.get(`${ctx.base}/api/encounters`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS }, timeout: UI_TIMEOUT_MS });
   const body = await remember(ctx, 'GET', '/api/encounters', response);
   if (!response.ok()) throw new Error(`GET /api/encounters answered HTTP ${response.status()}`);
   const list = JSON.parse(body);
@@ -2834,7 +2837,7 @@ async function postJson(page, ctx, where, json) {
   const cookies = await page.context().cookies(ctx.base);
   const token = (cookies.find(cookie => cookie.name === CSRF_COOKIE) || {}).value || '';
   const response = await page.request.post(`${ctx.base}${where}`, { data: json, timeout: UI_TIMEOUT_MS, maxRedirects: 0,
-    headers: { Accept: 'application/json', 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });
+    headers: { Accept: 'application/json', ...CLIENT_HEADERS, 'X-CSRFToken': token, Origin: ctx.base, Referer: `${ctx.base}/` } });
   const body = await remember(ctx, 'POST', where, response);
   let parsed = {};
   try {
@@ -2863,7 +2866,7 @@ async function signIn(page, base, creds) {
 
 async function login(page, base, creds) {
   await signIn(page, base, creds);
-  const response = await page.request.get(`${base}/api/session`, { headers: { Accept: 'application/json' } });
+  const response = await page.request.get(`${base}/api/session`, { headers: { Accept: 'application/json', ...CLIENT_HEADERS } });
   if (!response.ok()) throw new Error(`GET /api/session answered HTTP ${response.status()}`);
   return response.json();
 }
@@ -3312,7 +3315,7 @@ async function probeAuthorization(page, ctx, op, anonymous, id, reportIds, opera
       if (ctx.bodies.length < 600) ctx.bodies.push({ via: `authorization:${who}`, method, path: where, status: response.status(), headers: response.headers(), body: body.slice(0, 200000) });
     }
   };
-  const get = (request, where) => request.get(`${base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS, headers: { Accept: 'application/json' } }).catch(() => null);
+  const get = (request, where) => request.get(`${base}${where}`, { maxRedirects: 0, timeout: UI_TIMEOUT_MS, headers: { Accept: 'application/json', ...CLIENT_HEADERS } }).catch(() => null);
   for (const where of [...OPS_GET_PATHS(id), ...reportIds.map(report => `/ops/api/reports/${report}/download`), ...REMOVED_PATHS(id)]) await record('customer', 'GET', where, await get(page.request, where));
   const cookies = await page.context().cookies(base);
   const token = (cookies.find(cookie => cookie.name === CSRF_COOKIE) || {}).value || '';
