@@ -6,6 +6,7 @@ row through it, so another workspace's records answer 404.
 import functools
 import json
 import re
+import uuid
 from datetime import date
 
 from django.conf import settings
@@ -139,6 +140,18 @@ def _PIPE_choice(data, name, choices, message):
     return value
 
 
+# P5 FLOW: the upload attempt's key, a UUID the page generates per attempt (8-4-4-4-12 hex digits).
+_CLIENT_KEY = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+
+def _client_key(value):
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str) or not _CLIENT_KEY.fullmatch(value):
+        raise ApiError(400, 'The upload key must be a UUID.')
+    return uuid.UUID(value)
+
+
 def _clean_title(raw, fallback):
     title = re.sub(r'\s+', ' ', UNSTORABLE.sub(' ', str(raw or ''))).strip()[:160]
     return title or fallback
@@ -177,10 +190,21 @@ def encounters(request):
         data, filename = None, ''
         fallback_title = f'Pasted note {timezone.now():%Y-%m-%d %H:%M}'
     title = _clean_title(request.POST.get('title'), fallback_title)
+    # P5 FLOW: a repeated POST of the same upload attempt (its client_key, by the same member, within 24 h, of the same
+    # document) answers with the encounter the first made - 201 with the same id - and creates nothing
+    client_key = _client_key(request.POST.get('client_key'))
+    pasted = '' if upload is not None else text
     try:
-        encounter = intake.create_encounter(
-            membership=membership, user=request.user, title=title, service_date=service_date, data=data,
-            filename=filename, text='' if upload is not None else text)
+        encounter = intake.find_upload(user=request.user, workspace=membership.workspace, client_key=client_key,
+                                       data=data, text=pasted)
+        if encounter is None:
+            encounter = intake.create_encounter(
+                membership=membership, user=request.user, title=title, service_date=service_date, data=data,
+                filename=filename, text=pasted, client_key=client_key)
+    except intake.DuplicateUpload as exc:
+        encounter = exc.encounter
+    except intake.UploadKeyRefused as exc:
+        raise ApiError(409, str(exc))
     except ValidationError as exc:
         raise ApiError(400, ' '.join(exc.messages))
     return JsonResponse({'id': str(encounter.pk)}, status=201)

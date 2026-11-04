@@ -699,3 +699,98 @@ class DateHoldProgressTests(TestCase):
         encounter.refresh_from_db()
         self.assertIn(progress.encounter_progress(encounter)['phase'], ('awaiting_detail', 'completed', 'partial'))
         self.assertEqual(len(self.provider.sent), 1)
+
+
+# --- upload idempotency (POST /api/encounters with client_key) ---------------------------------------------------------
+
+class UploadKeyTests(TestCase):
+    def setUp(self):
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('uploader'))
+        self.other = f.member(self.ws, f.user('colleague'))
+        self.client = self.login(self.reviewer)
+
+    def login(self, user):
+        client = Client(enforce_csrf_checks=False)
+        client.force_login(user)
+        return client
+
+    def upload(self, key, *, client=None, text=pf.GI_NOTE, **extra):
+        data = {'text': text, 'synthetic_attestation': 'yes', **extra}
+        if key is not None:
+            data['client_key'] = key
+        return (client or self.client).post('/api/encounters', data)
+
+    def counts(self):
+        return (models.Encounter.objects.count(), models.SourceRevision.objects.count(), models.Job.objects.count(),
+                models.AuditEvent.objects.filter(event='encounter.created').count())
+
+    def test_the_same_key_twice_is_one_encounter_with_the_same_id(self):
+        key = str(uuid.uuid4())
+        first = self.upload(key)
+        self.assertEqual(first.status_code, 201, first.content)
+        before = self.counts()
+        second = self.upload(key)
+        self.assertEqual((second.status_code, second.json()), (201, first.json()))
+        self.assertEqual(self.counts(), before)  # nothing created: no encounter, revision, stage or audit row
+        encounter = models.Encounter.objects.get(pk=first.json()['id'])
+        self.assertEqual((encounter.client_key, encounter.created_by), (uuid.UUID(key), self.reviewer))
+        # a file upload the same: one encounter, one stored original
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        file_key = str(uuid.uuid4())
+        made = [self.client.post('/api/encounters', {'file': SimpleUploadedFile('note.txt', pf.GI_NOTE.encode()),
+                                                     'synthetic_attestation': 'yes', 'client_key': file_key})
+                for _ in range(2)]
+        self.assertEqual([r.status_code for r in made], [201, 201])
+        self.assertEqual(made[0].json(), made[1].json())
+        self.assertEqual(models.SourceFile.objects.filter(encounter_id=made[0].json()['id']).count(), 1)
+
+    def test_another_member_s_same_key_is_a_new_encounter_and_no_key_is_as_before(self):
+        key = str(uuid.uuid4())
+        mine = self.upload(key).json()['id']
+        theirs = self.upload(key, client=self.login(self.other))
+        self.assertEqual(theirs.status_code, 201, theirs.content)
+        self.assertNotEqual(theirs.json()['id'], mine)
+        before = models.Encounter.objects.count()
+        self.assertNotEqual(self.upload(None).json()['id'], self.upload(None).json()['id'])
+        self.assertEqual(models.Encounter.objects.count(), before + 2)
+
+    def test_a_key_is_never_reused_for_another_document_or_after_its_window(self):
+        key = str(uuid.uuid4())
+        encounter_id = self.upload(key).json()['id']
+        before = self.counts()
+        other = self.upload(key, text=pf.GI_NOTE + 'A second paragraph.\n')
+        self.assertEqual((other.status_code, other.json()['error']), (409, intake.KEY_OTHER_DOCUMENT))
+        models.Encounter.objects.filter(pk=encounter_id).update(created_at=timezone.now() - timedelta(hours=25))
+        late = self.upload(key)
+        self.assertEqual((late.status_code, late.json()['error']), (409, intake.KEY_USED))
+        for bad in ('not-a-uuid', '12345678123456781234567812345678', '{%s}' % uuid.uuid4()):
+            with self.subTest(bad):
+                response = self.upload(bad)
+                self.assertEqual((response.status_code, response.json()['error']),
+                                 (400, 'The upload key must be a UUID.'))
+        self.assertEqual(self.counts(), before)
+
+    def test_a_concurrent_post_of_the_same_attempt_answers_with_the_first_encounter(self):
+        key = str(uuid.uuid4())
+        encounter_id = self.upload(key).json()['id']
+        before = self.counts()
+        real, calls = intake.find_upload, []
+
+        def first_misses(**kwargs):  # the second POST read before the first committed
+            calls.append(kwargs['client_key'])
+            return None if len(calls) == 1 else real(**kwargs)
+        with mock.patch('studio.intake.find_upload', side_effect=first_misses):
+            response = self.upload(key)
+        self.assertEqual((response.status_code, response.json()), (201, {'id': encounter_id}))
+        self.assertEqual(len(calls), 2)  # the database's unique index refused the second row, then it was read
+        self.assertEqual(self.counts(), before)
+
+    def test_the_index_is_unique_per_member_and_key_and_ignores_rows_with_no_key(self):
+        key = uuid.uuid4()
+        models.Encounter.objects.create(workspace=self.ws, title='a', created_by=self.reviewer, client_key=key)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            models.Encounter.objects.create(workspace=self.ws, title='b', created_by=self.reviewer, client_key=key)
+        models.Encounter.objects.create(workspace=self.ws, title='c', created_by=self.other, client_key=key)
+        for title in ('d', 'e'):  # every row an older release writes has no key: never refused
+            models.Encounter.objects.create(workspace=self.ws, title=title, created_by=self.reviewer)
