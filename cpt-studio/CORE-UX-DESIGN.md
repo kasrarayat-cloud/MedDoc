@@ -256,6 +256,12 @@ support. Session (`GET /api/session`): `user {id, label, initials, actor_kind}, 
 acknowledgement, counts, synthetic_only` (no provider_mode, no release). List rows: `id, title, state, state_label, service_date,
 date_conflict, open_details, created_at, kind`.
 
+**Amended 2026-11-04 (integration; session decisions (n) and (o), `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`).**
+The contract gains two keys, and nothing else changes: `"recheck": {"available": bool, "can_request": bool}` after
+`unresolved` - the bounded second review the installed page offered, kept as "Check what is still open again" (R4's open
+question 1 answered by keeping the installed capability) - and `in_queue` (boolean) on each list row, the predicate the
+session's `counts.queue` counts, so the queue lists exactly what its badge counts.
+
 ## 8. P6 UI: DOM contract (P8's walk tool depends on these exact hooks)
 
 - Result list: `ol.result-list` > `li.result-row[data-proposal=<id>][data-code=<code>][data-status=<status>]` with `.result-number`,

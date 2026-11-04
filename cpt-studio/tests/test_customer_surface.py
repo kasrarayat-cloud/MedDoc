@@ -133,7 +133,8 @@ def denied_values():
 
 TOP_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date',
             'progress', 'checks', 'codes', 'other_codes', 'not_separately_coded', 'details_needed', 'unresolved',
-            'limitations', 'readiness', 'reports', 'activity'}
+            'recheck', 'limitations', 'readiness', 'reports', 'activity'}
+RECHECK_KEYS = {'available', 'can_request'}  # session decision (n), 2026-11-04
 DOCUMENT_KEYS = {'kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading',
                  'original_url'}
 PAGE_KEYS = {'page', 'start', 'end'}
@@ -165,7 +166,7 @@ SESSION_KEYS = {'user', 'workspace', 'role', 'can_review', 'acknowledgement', 'c
 SESSION_USER_KEYS = {'id', 'label', 'initials', 'actor_kind'}
 SESSION_WORKSPACE_KEYS = {'id', 'name'}
 COUNT_KEYS = {'documents', 'queue'}
-LIST_ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'date_conflict', 'open_details', 'created_at',
+LIST_ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'date_conflict', 'open_details', 'in_queue', 'created_at',
                  'kind'}
 STATES = set(customer_api.STATE_LABELS)
 STATUSES = set(customer_api.STATUS_LABELS)
@@ -236,6 +237,10 @@ def assert_contract(case, doc):
         if item['saved'] is not None:
             case.assertEqual(set(item['saved']), SAVED_KEYS)
     case.assertTrue(all(isinstance(item, str) for item in doc['unresolved'] + doc['limitations']))
+    case.assertEqual(set(doc['recheck']), RECHECK_KEYS)
+    case.assertTrue(all(type(value) is bool for value in doc['recheck'].values()))
+    case.assertTrue(doc['recheck']['available'] or not doc['recheck']['can_request'])
+    case.assertTrue(doc['permissions']['can_review'] or not doc['recheck']['can_request'])
     case.assertEqual(set(doc['readiness']), READINESS_KEYS)
     for report in doc['reports']:
         case.assertEqual(set(report), REPORT_KEYS)

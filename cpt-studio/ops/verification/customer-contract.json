@@ -43,7 +43,7 @@
                       "started_at": "iso?", "finished_at": "iso?"}},
     "list_row": {"keys": {"id": "string", "title": "string", "state": {"ref": "state"}, "state_label": "string",
                           "service_date": "date?", "date_conflict": "boolean", "open_details": "integer", "created_at": "iso",
-                          "kind": {"enum": ["upload", "paste", "addendum"]}}}
+                          "kind": {"enum": ["upload", "paste", "addendum"]}, "in_queue": "boolean"}}
   },
   "session": {"keys": {
     "user": {"keys": {"id": "string", "label": "string", "initials": "string", "actor_kind": {"enum": ["human", "agent"]}}},
@@ -74,7 +74,8 @@
     "other_codes": {"items": {"keys": {"code": "string", "reason": "string"}}},
     "not_separately_coded": {"items": {"keys": {"label": "string", "reason": "string"}}},
     "details_needed": {"items": {"ref": "detail"}},
-    "unresolved": {"items": "string"}, "limitations": {"items": "string"},
+    "unresolved": {"items": "string"}, "recheck": {"keys": {"available": "boolean", "can_request": "boolean"}},
+    "limitations": {"items": "string"},
     "readiness": {"keys": {"draft": "boolean", "approved": "boolean", "blockers": {"items": "string"}}},
     "reports": {"items": {"keys": {"id": "string", "kind": {"enum": ["draft", "approved"]}, "fmt": {"enum": ["txt", "csv"]},
                                    "filename": "string", "generated_at": "iso", "generated_by": "string", "download_url": "string",

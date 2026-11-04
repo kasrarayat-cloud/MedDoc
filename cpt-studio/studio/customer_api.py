@@ -50,8 +50,8 @@ UNAVAILABLE_SUB_LABEL = 'A needed detail is not documented'
 # the member's answer that left a code's needed detail unavailable (review_view.View.answer)
 UNAVAILABLE_SUB_LABELS = {'not_documented': UNAVAILABLE_SUB_LABEL,
                           'cannot_confirm': 'A needed detail could not be confirmed'}
-# The states the customer page lists in its review queue (app.js QUEUE_STATES): a date to choose, details to answer,
-# codes to review. The session's count is wider (session_json).
+# The customer states that wait on the member (a date to choose, details to answer, codes to review): the review queue
+# lists these and what the review queue's own rule holds waiting (in_queue).
 QUEUE_STATES = ('action_needed', 'awaiting_detail', 'ready')
 GENERIC_ERROR = 'This action is not available right now.'
 STALE_EXPORT = 'This export no longer matches the saved decisions; create a new one.'
@@ -906,18 +906,26 @@ def customer_state(encounter, assessment=None):
     return state
 
 
+def in_queue(encounter, state=None):
+    """Whether the customer's review queue lists ``encounter`` - and the session counts it: one predicate for both
+    (session decision (o), 2026-11-04), so the badge never counts a document the queue does not list. A customer state
+    that waits on the member (QUEUE_STATES: a date to choose, details to answer, codes to review), or what the review
+    queue's own rule holds waiting (serializers.queue_reasons, refutations gi2 RC6 and ec5: an open question or a code
+    to decide, an unknown outcome being confirmed, coding left incomplete, a re-check that can be asked for, a state that
+    always waited). ``state``: the customer state already read for this encounter."""
+    from .serializers import QUEUE_STATES as WAITING_STATES, queue_reasons  # the review queue's own rule
+    state = customer_state(encounter) if state is None else state
+    return state in QUEUE_STATES or encounter.state in WAITING_STATES or bool(queue_reasons(encounter))
+
+
 def session_json(user, membership):
-    """GET /api/session. ``counts.queue`` counts what waits on a workspace member by the review queue's own rule
-    (serializers.queue_reasons, refutation gi2 RC6 and ec5: an open question or a decision, an unknown outcome, coding
-    left incomplete, a second review that can be asked, a state that always waited) and every encounter the customer
-    page lists in its queue (QUEUE_STATES, read from the customer state), so it never counts fewer than the page
-    lists."""
-    from .serializers import QUEUE_STATES as WAITING_STATES, _initials, queue_reasons  # the review queue's own rule
+    """GET /api/session. ``counts.queue`` counts the documents the review queue lists (in_queue, the predicate each list
+    row carries as ``in_queue``)."""
+    from .serializers import _initials
     workspace = membership.workspace
     encounters = list(workspace.encounters.select_related('current_revision', 'current_context',
                                                           'current_assessment'))
-    queued = sum(1 for encounter in encounters if customer_state(encounter) in QUEUE_STATES
-                 or encounter.state in WAITING_STATES or queue_reasons(encounter))
+    queued = sum(1 for encounter in encounters if in_queue(encounter))
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': _initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name},
@@ -929,8 +937,8 @@ def session_json(user, membership):
 
 def list_row(encounter):
     """One row of GET /api/encounters: its state, the date of service in use and whether a member's date conflicts with
-    the document's (answers.service_date_block), and the details still unanswered (the rows the document page shows
-    without a saved answer)."""
+    the document's (answers.service_date_block), the details still unanswered (the rows the document page shows
+    without a saved answer), and whether the review queue lists it (in_queue, which the session's count counts)."""
     assessment = review.live_assessment(encounter)
     state = customer_state(encounter, assessment)
     date = answers.service_date_block(encounter)
@@ -940,7 +948,18 @@ def list_row(encounter):
             'service_date': date['value'], 'date_conflict': date['conflict'],
             'open_details': sum(1 for row in rows if row['saved'] is None), 'created_at': _iso(encounter.created_at),
             'kind': revision.kind if revision is not None and revision.kind in ('upload', 'paste', 'addendum')
-            else 'upload'}
+            else 'upload', 'in_queue': in_queue(encounter, state)}
+
+
+def recheck_block(encounter, membership):
+    """The bounded re-check of what is still open - the one second review of the current assessment (ARCHITECTURE 5.11)
+    that the installed page offered as an ask - kept on the customer page by function (session decision (n),
+    2026-11-04): ``available`` when one can be asked for now (jobs.second_review_status: a documented service left
+    without a supported code and no bound standing - the predicate POST second-review accepts an ask by), ``can_request``
+    when this member may also ask (owners and reviewers). Never queued by an assessment (owner decision 2026-10-27)."""
+    from . import jobs  # local import: the job layer is not this module's reader
+    available = bool(jobs.second_review_status(encounter)['available'])
+    return {'available': available, 'can_request': available and bool(membership.can_review)}
 
 
 def encounter_json(encounter, membership):
@@ -970,6 +989,7 @@ def encounter_json(encounter, membership):
         'not_separately_coded': _not_separately_coded(completeness, services),
         'details_needed': details,
         'unresolved': _unresolved(completeness, services),
+        'recheck': recheck_block(encounter, membership),
         'limitations': limitations(assessment, revision),
         'readiness': readiness(encounter, assessment, current),
         'reports': _reports(encounter),

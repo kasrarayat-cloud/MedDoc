@@ -31,8 +31,12 @@ const STATE_LABELS = {
   reviewed: 'Reviewed', no_codes: 'No codes suggested', stopped: 'Stopped', failed: 'Could not finish', being_confirmed: 'Being confirmed',
 };
 const STATE_TONES = { ready: 'green', reviewed: 'green', action_needed: 'amber', awaiting_detail: 'amber', being_confirmed: 'amber', failed: 'amber' };
-// The review queue: documents that wait on a member (a date to choose, a detail to answer, codes to review).
+// The customer states that wait on a member (a date to choose, a detail to answer, codes to review). The review queue
+// lists the rows the server marks in_queue - these and what the review queue's rule holds waiting - and the badge counts
+// the same rows (customer_api.in_queue).
 const QUEUE_STATES = new Set(['action_needed', 'awaiting_detail', 'ready']);
+const RECHECK_LABEL = 'Check what is still open again';
+const RECHECK_NOTE = 'The document review is asked once more about what is still open. This can be asked for once for this result.';
 // status -> [label, badge tone, badge icon]
 const CODE_STATUSES = {
   ready: ['Ready for review', 'green', ''],
@@ -507,7 +511,7 @@ function documentRow(row) {
 }
 
 function inQueue(row) {
-  return QUEUE_STATES.has(row?.state);
+  return row?.in_queue === true;
 }
 
 function listRows(name, rows) {
@@ -524,7 +528,7 @@ function listBody(name, rows) {
 function listDescription(name, rows) {
   if (name === 'queue') {
     const count = listRows('queue', rows).length;
-    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: a date to choose, a detail to answer, or codes to review.` : 'No document waits on you for a date, a detail or a review decision.';
+    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: a date to choose, a detail to answer, codes to review, or something still open.` : 'No document waits on you for a date, a detail, a review decision or something still open.';
   }
   return `${plural(rows.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
 }
@@ -546,7 +550,7 @@ function overviewView() {
 
 function documentsView(name) {
   const queue = name === 'queue';
-  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'A date to choose, a detail to answer, or codes to review: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'A date to choose, a detail to answer, codes to review, or something still open: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
 }
 
 function howItWorksView() {
@@ -909,11 +913,19 @@ function otherCodes(doc, ui = {}) {
   return `<details class="other-codes" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Other codes considered (not suggested)</summary><ul>${items.map(item => `<li><span class="other-code">${escapeHtml(item.code)}</span><span>${escapeHtml(text(item.reason) || 'Not supported by the document.')}</span></li>`).join('')}</ul></details>`;
 }
 
+// The re-check of what is still open (customer_api.recheck_block): offered only when the server says this member can
+// ask for it now; it is asked for once per result and never runs by itself.
+function recheckOffer(doc) {
+  if (doc?.recheck?.can_request !== true) return '';
+  return `<div class="recheck-offer"><button type="button" class="button secondary" data-action="recheck">${escapeHtml(RECHECK_LABEL)}</button><p class="recheck-note">${escapeHtml(RECHECK_NOTE)}</p></div>`;
+}
+
 function notesSection(doc) {
   const unresolved = strings(doc.unresolved);
   const limitations = strings(doc.limitations);
-  if (!unresolved.length && !limitations.length) return '';
-  return `<section class="result-notes limitations">${unresolved.length ? `<h3>Still open</h3><ul class="unresolved-list">${unresolved.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${limitations.length ? `<h3>Limitations</h3><ul class="limitation-list">${limitations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`;
+  const recheck = recheckOffer(doc);
+  if (!unresolved.length && !limitations.length && !recheck) return '';
+  return `<section class="result-notes limitations">${unresolved.length || recheck ? `<h3>Still open</h3>${unresolved.length ? `<ul class="unresolved-list">${unresolved.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${recheck}` : ''}${limitations.length ? `<h3>Limitations</h3><ul class="limitation-list">${limitations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`;
 }
 
 function activityLog(doc, ui = {}) {
@@ -1720,6 +1732,20 @@ function stopProcessing(button) {
   });
 }
 
+function requestRecheck(button) {
+  if (!state.doc) return undefined;
+  return guarded('recheck', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
+      await afterChange('Asked. The document review looks once more at what is still open.');
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function resumeProcessing(button) {
   if (!state.doc) return undefined;
   return guarded('resume', async () => {
@@ -1836,6 +1862,7 @@ function onClick(event) {
     'revoke-detail': () => revokeDetail(action),
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
+    recheck: () => requestRecheck(action),
     reload: () => location.reload(),
     retry: route,
   })[action.dataset.action]?.();
@@ -1939,8 +1966,8 @@ if (typeof module === 'object' && module.exports) {
     modifierLabel, reviewModifierOptions, hasAgentDecision, attestationText, tallyText, exportStatusText, serviceDateText,
     documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
     documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, resultRow, resultList,
-    resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, activityLog, reviewView,
-    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES,
+    resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
+    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE,
     STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,
   };
 }

@@ -331,16 +331,18 @@ class CustomerFixtureTests(SurfaceCase):
         self.assertTrue(details['encounter-approved.json']['readiness']['approved'])
         self.assertEqual({report['kind'] for report in details['encounter-approved.json']['reports']},
                          {'approved', 'draft'})
-        # the list is every encounter of the workspace; the session counts what the page's queue lists and every
-        # encounter the review queue's rule holds waiting on a member (the operator view's queue_reasons)
+        # the list is every encounter of the workspace; the queue lists the rows marked in_queue - the three customer
+        # states that wait on the member and every encounter the review queue's rule holds waiting (the operator view's
+        # queue_reasons) - and the session counts exactly those rows (session decision (o), 2026-11-04)
         self.assertEqual(sorted(row['id'] for row in rows), sorted(doc['id'] for doc in details.values()))
         queue = {row['id'] for row in rows if row['state'] in ('action_needed', 'awaiting_detail', 'ready')}
         self.assertEqual({row['state'] for row in rows if row['id'] in queue}, {'action_needed', 'awaiting_detail', 'ready'})
         waiting = {row['id'] for row in ops.client(f.user('platform-operator')).get('/ops/api/encounters').json()
                    ['encounters'] if row['queue_reasons']}
-        self.assertGreater(len(waiting - queue), 0, 'a scenario the review queue holds that the page does not list')
-        self.assertEqual((session['counts']['queue'], agent_session['counts']['queue']),
-                         (len(queue | waiting), len(queue | waiting)))
+        self.assertGreater(len(waiting - queue), 0, 'a scenario the review queue holds beyond the three states')
+        listed = {row['id'] for row in rows if row['in_queue'] is True}
+        self.assertEqual(listed, queue | waiting)
+        self.assertEqual((session['counts']['queue'], agent_session['counts']['queue']), (len(listed), len(listed)))
         self.assertEqual((session['user']['actor_kind'], agent_session['user']['actor_kind']), ('human', 'agent'))
 
     def test_the_customer_fixtures_are_what_the_customer_serializer_emits(self):

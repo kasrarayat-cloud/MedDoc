@@ -66,7 +66,8 @@
  *   modifiers: {"45385": "XS"}   the modifier chosen in the review dialog when that code is approved: "59" or "XS"
  *   stop_and_resume: true        Stop the document while it processes, check the stopped state, then Resume it
  * and the document-level key expected_no_em_questions: true (no office E/M question may be asked: no separate E/M
- * service is documented). review_plan.second_review is not carried out: the customer contract offers no second review.
+ * service is documented). review_plan.second_review is not carried out: it spends one bounded paid request, and the
+ * walk holds the contract's `recheck` offer to its keys only (session decision (n), 2026-11-04).
  *
  * --acceptance-reviewer (CPT Studio GI interpretation 63) is kept as before: a human reviewer account, approvals only,
  * each recorded as that reviewer's. It records HUMAN approvals: the 2026-11-03 directive labels every test approval an

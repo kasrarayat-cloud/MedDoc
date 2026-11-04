@@ -2073,3 +2073,24 @@ carry a client contract header, and a call without the current one is answered 4
 (m) **Disclosures.** CPT Studio has no privacy or subprocessor page, and after this change no customer screen names a
 subprocessor. Whether a disclosure is legally required elsewhere is an owner or legal question, recorded here and not
 answered.
+
+**Session decisions (n) and (o), 2026-11-04 (lead integration, session a12d8fb3).** Both close seams the wiring report
+found. Each keeps a capability or a ruled rule rather than removing one, so neither is a product decision without
+precedent, and neither is an accepted-capability loss.
+
+(n) **The customer page keeps the bounded second review.** The installed page (41e03656df61) offers it to owners and
+reviewers as "Ask the provider once more". The new customer contract left it out without a decision: CORE-UX-DESIGN.md
+section 7 never names it, and R4's open question 1 ("keep as a customer action with functional wording, or make it
+operator-only?") was left undecided. Making it operator-only would take away something customers have, which is the
+owner's trade to accept. Keeping it is the installed state. So it stays, worded by what it does and naming no provider:
+"Check what is still open again", under "Still open".
+- The server sends `recheck: {available, can_request}`. `available` reads `jobs.second_review_status`, the same predicate
+  POST second-review accepts an ask by. `can_request` is true only for owners and reviewers.
+- An assessment never queues one (owner decision 2026-10-27), and the offer itself sends nothing.
+
+(o) **The customer queue lists what its badge counts.** The badge kept the review queue's rule, which refutations gi2
+RC6 and ec5 pinned (`serializers.queue_reasons`, joined with the three customer states that wait on the member). The page
+listed only those three states, so the badge could count documents the queue never showed: in the fixtures it counted 9
+and listed 7. The rule is unchanged. Each list row now carries `in_queue`, the predicate the session counts
+(`customer_api.in_queue`), and the queue lists exactly those rows. The queue's wording names "something still open"
+beside a date, a detail and codes to review.

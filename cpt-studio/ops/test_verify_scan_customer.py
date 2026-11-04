@@ -181,7 +181,8 @@ class StubSite:
             return self.send(request, 200, session)
         if route == ('GET', '/api/encounters'):
             row = {'id': self.id, 'title': self.encounter['title'], 'state': 'reviewed', 'state_label': 'Reviewed', 'service_date': '2026-11-03',
-                   'date_conflict': False, 'open_details': 0, 'created_at': self.encounter['created_at'], 'kind': 'paste'}
+                   'date_conflict': False, 'open_details': 0, 'created_at': self.encounter['created_at'], 'kind': 'paste',
+                   'in_queue': self.encounter['state'] in ('action_needed', 'awaiting_detail', 'ready')}
             return self.send(request, 200, {'encounters': [row]})
         if route == ('GET', f'/api/encounters/{self.id}/original') and self.leak.get('original'):
             headers = [('X-Content-SHA256', 'cd' * 32)] if self.leak.get('original_hash') else []

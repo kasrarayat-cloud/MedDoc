@@ -277,7 +277,8 @@ test('layout never inserts or loses visible text (seeded property check)', () =>
 
 const CONTRACT = {
   top: ['id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date', 'progress', 'checks', 'codes',
-    'other_codes', 'not_separately_coded', 'details_needed', 'unresolved', 'limitations', 'readiness', 'reports', 'activity'],
+    'other_codes', 'not_separately_coded', 'details_needed', 'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'],
+  recheck: ['available', 'can_request'],
   document: ['kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading', 'original_url'],
   reading: ['status', 'label', 'messages'],
   service_date: ['value', 'source', 'document_value', 'document_quote', 'entered_value', 'conflict', 'can_use_document_date'],
@@ -295,7 +296,7 @@ const CONTRACT = {
   report: ['id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current'],
   activity: ['event', 'summary', 'actor', 'actor_kind', 'at'],
   session: ['user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts', 'synthetic_only'],
-  row: ['id', 'title', 'state', 'state_label', 'service_date', 'date_conflict', 'open_details', 'created_at', 'kind'],
+  row: ['id', 'title', 'state', 'state_label', 'service_date', 'date_conflict', 'open_details', 'created_at', 'kind', 'in_queue'],
 };
 const sorted = keys => [...keys].sort();
 
@@ -1068,6 +1069,31 @@ test('the stylesheet and the templates carry no internal-machinery words either'
 
 // --- lists ---------------------------------------------------------------------------------------------------------------
 
+// session decision (n), 2026-11-04: the bounded re-check of what is still open (the installed page's second review),
+// offered only where the server says this member can ask for it now
+test('the re-check of what is still open is offered only when the server says this member can ask for it', () => {
+  const base = fixture('encounter-reviewed.json');
+  const open = ['Colonoscopy: biopsy: no supported code was found for it.'];
+  const offered = { ...base, unresolved: open, recheck: { available: true, can_request: true } };
+  const html = app.notesSection(offered);
+  assert.equal(count(html, 'data-action="recheck"'), 1);
+  assert.ok(html.includes(`<button type="button" class="button secondary" data-action="recheck">${app.RECHECK_LABEL}</button>`));
+  assert.ok(html.includes(`<p class="recheck-note">${app.RECHECK_NOTE}</p>`));
+  assert.ok(html.indexOf('<h3>Still open</h3>') < html.indexOf('data-action="recheck"'));
+  assert.match(html, /<li>Colonoscopy: biopsy: no supported code was found for it\.<\/li>/);
+  for (const recheck of [{ available: true, can_request: false }, { available: false, can_request: false },
+    { available: true, can_request: 'true' }, undefined, null]) {
+    assert.equal(count(app.notesSection({ ...offered, recheck }), 'data-action="recheck"'), 0, JSON.stringify(recheck));
+  }
+  // offered with nothing listed as open still says where it is; never a section with nothing in it
+  const bare = app.notesSection({ ...base, unresolved: [], limitations: [], recheck: { available: true, can_request: true } });
+  assert.match(bare, /<h3>Still open<\/h3><div class="recheck-offer">/);
+  assert.equal(app.notesSection({ ...base, unresolved: [], limitations: [], recheck: { available: false, can_request: false } }), '');
+  for (const word of ['Corti', 'provider', 'Astra', 'Fable', 'second review']) {
+    assert.ok(!html.toLowerCase().includes(word.toLowerCase()), word);
+  }
+});
+
 test('list rows show the plain state, the kind, the details needed and the date; the queue lists what waits on the member', () => {
   const rows = fixture('encounters.json').encounters;
   const kinds = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
@@ -1082,14 +1108,17 @@ test('list rows show the plain state, the kind, the details needed and the date;
   assert.match(app.documentRow(action), /<span class="status amber">Action needed<\/span>/);
   assert.match(app.documentRow({ ...action, state: 'mystery', state_label: '', date_conflict: false, service_date: '2026-10-28' }), /<span class="status gray">Unknown<\/span>.*28 Oct 2026/);
   const queued = rows.filter(app.inQueue);
-  assert.deepEqual(queued.map(row => row.state).filter((value, index, all) => all.indexOf(value) === index).sort(), ['action_needed', 'awaiting_detail', 'ready']);
+  assert.deepEqual(queued, rows.filter(row => row.in_queue === true));
+  for (const row of rows.filter(row => app.QUEUE_STATES.has(row.state))) assert.equal(row.in_queue, true, row.id);
+  assert.ok(queued.some(row => !app.QUEUE_STATES.has(row.state)), 'a row the review queue\'s rule holds beyond the three states');
   assert.equal(count(app.listBody('queue', rows), 'class="document-row"'), queued.length);
+  assert.equal(app.inQueue({ ...rows[0], in_queue: 'true' }), false);
   assert.equal(count(app.listBody('workspace', rows), 'class="document-row"'), Math.min(5, rows.length));
   assert.match(app.listBody('queue', []), /Nothing is waiting for you\./);
   assert.equal(app.listDescription('documents', rows), `${rows.length} synthetic documents in this workspace.`);
-  // the badge is the server's count of what waits on a member (the review queue's rule: an open question or decision,
-  // an unknown outcome, incomplete coding, a second review that can be asked); the page's queue lists the three
-  // states it reads from the list rows, which carry no queue reasons (design section 7) - never more than the count
+  // the badge is the server's count of the rows the queue lists (session decision (o), 2026-11-04: customer_api.in_queue,
+  // one predicate for both) - never more and never fewer than the page lists
   const counted = fixture('session.json').counts.queue;
-  assert.ok(Number.isInteger(counted) && counted >= queued.length, `${counted} counted, ${queued.length} listed`);
+  assert.equal(counted, queued.length, `${counted} counted, ${queued.length} listed`);
+  assert.equal(app.listDescription('queue', rows), `${queued.length} documents wait on you: a date to choose, a detail to answer, codes to review, or something still open.`);
 });

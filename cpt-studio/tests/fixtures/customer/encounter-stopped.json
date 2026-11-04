@@ -102,6 +102,10 @@
  "not_separately_coded": [],
  "details_needed": [],
  "unresolved": [],
+ "recheck": {
+  "available": false,
+  "can_request": false
+ },
  "limitations": [
   "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
   "CPT code-set membership for the date of service is not verified.",

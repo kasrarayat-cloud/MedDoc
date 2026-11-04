@@ -2755,7 +2755,8 @@ function fakeSite({ leak = {} } = {}) {
   const customerGet = where => {
     state.gets.push(where);
     if (where === '/api/encounters') return json(200, { encounters: [{ id, title: state.customer.title, state: state.customer.state, state_label: state.customer.state_label,
-      service_date: '2026-11-03', date_conflict: false, open_details: 0, created_at: state.customer.created_at, kind: 'paste' }] });
+      service_date: '2026-11-03', date_conflict: false, open_details: 0, created_at: state.customer.created_at, kind: 'paste',
+      in_queue: ['action_needed', 'awaiting_detail', 'ready'].includes(state.customer.state) }] });
     if (where === `/api/encounters/${id}`) {
       const body = clone(state.customer);
       if (leak.vendorKey) body.codes[0].vendor = 'OpenAI';

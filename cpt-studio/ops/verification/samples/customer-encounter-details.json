@@ -241,6 +241,10 @@
     }
   ],
   "unresolved": [],
+  "recheck": {
+    "available": false,
+    "can_request": false
+  },
   "limitations": [
     "CPT descriptions are withheld: no licensed CPT description is connected.",
     "Procedure-to-procedure edits and payer modifier policies are not checked.",

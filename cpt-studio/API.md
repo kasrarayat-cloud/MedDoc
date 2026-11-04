@@ -1076,7 +1076,18 @@ corrected here where this changes them):
 - **`counts.queue` in the customer session** keeps the review queue's rule above (`queue_reasons`), joined with the
   customer queue's states (`action_needed`, `awaiting_detail`, `ready`), so it never counts fewer than the page's queue
   lists. The page lists only those states (the list rows carry no queue reasons), so its badge can count more than its
-  queue shows: an open item.
+  queue shows: an open item. **Closed 2026-11-04 (session decision (o))**: each list row carries `in_queue` (boolean,
+  `customer_api.in_queue`: one of the three customer states, or what `queue_reasons` holds waiting), the page's queue
+  lists exactly the rows marked `in_queue: true`, and `counts.queue` counts exactly those rows. The rule is unchanged;
+  the page now lists what it counts.
+- **`recheck`** (session decision (n), 2026-11-04): `{"available": bool, "can_request": bool}` beside `unresolved`. The
+  installed page offered the bounded second review ("Ask the provider once more"); the customer page keeps it, worded by
+  function: "Check what is still open again" under "Still open", shown only while `can_request` is `true`, posting
+  `POST /api/encounters/{id}/second-review` `{}` (201 `{"second_review": "queued"}`; a refusal answers 409 in the
+  customer error vocabulary). `available` is `jobs.second_review_status`'s (a documented service left without a supported
+  code and no bound standing: the predicate the POST accepts an ask by); `can_request` is `available` for an owner or
+  reviewer, never for a viewer. An assessment never queues one (owner decision 2026-10-27), and the offer sends
+  nothing.
 - **"Taking longer than usual"** (`progress.slow`) is past 60% of the bound each stage really has where it runs
   (`progress.stage_bound`: extract 240 s, analyze 60 s, document review and its second review 150 s, assess 120 s, an
   independent check's stage 580 s), a display threshold only; no sentence promises an automatic stop or start.

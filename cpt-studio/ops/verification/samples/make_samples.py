@@ -296,7 +296,8 @@ def customer_encounter() -> dict:
         'other_codes': [{'code': '45378', 'reason': 'Considered, not suggested: a diagnostic colonoscopy is included '
                                                    'when a removal is coded.'}],
         'not_separately_coded': [],
-        'details_needed': [], 'unresolved': [], 'limitations': LIMITATIONS,
+        'details_needed': [], 'unresolved': [], 'recheck': {'available': False, 'can_request': False},
+        'limitations': LIMITATIONS,
         'readiness': {'draft': True, 'approved': True, 'blockers': []},
         'reports': [{'id': REPORTS[key], 'kind': key[0], 'fmt': key[1], 'filename': f'CPT-Studio-{key[0]}.{key[1]}',
                      'generated_at': GENERATED, 'generated_by': AGENT,
