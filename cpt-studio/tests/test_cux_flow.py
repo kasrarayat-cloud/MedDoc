@@ -19,7 +19,7 @@ from django.db import IntegrityError, transaction
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import answers, intake, jobs, models, review
+from studio import answers, intake, jobs, models, progress, review
 from studio.gi import context as gi_context
 from studio.types import ExtractionResult, PageSpan, sha256_json
 from tests.support import factories as f
@@ -423,3 +423,279 @@ class DateHoldDetailTests(TestCase):
         self.assertEqual((queued.kind, queued.idempotency_key), ('predict', f'predict:{encounter.current_context_id}'))
         drain()
         self.assertEqual(len(self.provider.sent), 1)  # the one request, for the document's date
+
+
+# --- the progress fold (progress.py) -------------------------------------------------------------------------------------
+
+PROGRESS_KEYS = {'phase', 'busy', 'steps', 'active_detail', 'started_at', 'finished_at', 'server_time', 'slow', 'message',
+                 'can_stop', 'can_resume', 'can_leave', 'error'}
+STEP_KEYS = {'key', 'label', 'state', 'started_at', 'finished_at'}
+# never a percentage, a remaining time or an estimate, and none of the words the customer surface never carries
+UNSAID = re.compile(r'%|\beta\b|remaining|estimat|percent|minutes? left|\bcorti\b|\bastra\b|\bfable\b|openai|anthropic|'
+                    r'claude|provider|participant|peer|\btokens?\b|credit|trace|sha256|request id', re.I)
+CHAIN = ('extract', 'analyze', 'predict')
+
+
+def strings(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from strings(item)
+    elif isinstance(value, str):
+        yield value
+
+
+class ProgressCase(TestCase):
+    def setUp(self):
+        self.s = pf.scenario()
+        self.enc, self.rev = self.s.encounter, self.s.revision
+        self.t0 = timezone.now() - timedelta(minutes=30)
+
+    def job(self, kind, state, at, *, length=3, key=None, run=None, result=None):
+        """A job of the current revision queued ``at`` seconds after t0, started then (unless queued) and finished
+        ``length`` seconds later (when terminal) - a successor queued at its predecessor's start + 2 s joins its run."""
+        created = self.t0 + timedelta(seconds=at)
+        job = models.Job.objects.create(encounter=self.enc, revision=self.rev, kind=kind, state=state,
+                                        idempotency_key=key or f'{kind}:{uuid.uuid4()}',
+                                        deadline_at=created + jobs.QUEUE_DEADLINE, context=self.s.context,
+                                        provider_run=run, result=result or {})
+        models.Job.objects.filter(pk=job.pk).update(
+            created_at=created, started_at=None if state == 'queued' else created,
+            finished_at=created + timedelta(seconds=length) if state in models.Job.TERMINAL else None)
+        job.refresh_from_db()
+        return job
+
+    def chain(self, *kinds, last='succeeded', at=0):
+        """A run of stages, each queued 2 s after its predecessor started (so while it ran); all succeeded but the last."""
+        made = []
+        for index, kind in enumerate(kinds):
+            key = None
+            if isinstance(kind, tuple):
+                kind, key = kind
+            made.append(self.job(kind, last if index == len(kinds) - 1 else 'succeeded', at + 2 * index, key=key))
+        return made
+
+    def set(self, job, state, *, started=None):
+        fields = {'state': state}
+        if state in models.Job.TERMINAL:
+            fields['finished_at'] = job.created_at + timedelta(seconds=3)
+        if started is not None:
+            fields['started_at'] = started
+        models.Job.objects.filter(pk=job.pk).update(**fields)
+
+    def progress(self, now=None):
+        self.enc.refresh_from_db()
+        out = progress.encounter_progress(self.enc, now or timezone.now())
+        self.assertEqual(set(out), PROGRESS_KEYS)
+        self.assertEqual([step['key'] for step in out['steps']], ['reading', 'identifying', 'checking', 'preparing'])
+        for step in out['steps']:
+            self.assertEqual(set(step), STEP_KEYS)
+            self.assertIn(step['state'], progress.STEP_STATES)
+        self.assertIn(out['phase'], progress.PHASES)
+        said = [text for text in strings(out) if UNSAID.search(text)]
+        self.assertEqual(said, [], 'a percentage, an estimate or an internal word in the progress block')
+        if out['phase'] in ('failed', 'stopped'):  # no step animates once the job failed or stopped
+            self.assertFalse({step['state'] for step in out['steps']} & {'active', 'waiting'})
+        self.assertTrue(out['can_leave'])
+        return out
+
+    def states(self, out):
+        return [step['state'] for step in out['steps']]
+
+    def final(self, *proposals, **kwargs):
+        return pf.assess(self.enc, pf.result(*(proposals or (ready('sel:0', '45380', pf.CECUM_PASSAGE),)), **kwargs))
+
+
+class ProgressFoldTests(ProgressCase):
+    def test_queued_then_each_step_as_its_job_runs(self):
+        extract = self.job('extract', 'queued', 0)
+        out = self.progress(now=extract.created_at + timedelta(seconds=5))
+        self.assertEqual((out['phase'], out['busy'], out['can_stop'], out['can_resume'], out['error']),
+                         ('queued', True, True, False, None))
+        self.assertEqual(self.states(out), ['waiting', 'not_started', 'not_started', 'not_started'])
+        self.assertEqual((out['message'], out['active_detail']), (progress.MESSAGES['queued'], ''))
+        self.assertEqual(out['started_at'], extract.created_at.isoformat())
+        self.set(extract, 'running', started=extract.created_at)
+        self.assertEqual(self.states(self.progress()), ['active', 'not_started', 'not_started', 'not_started'])
+        self.set(extract, 'succeeded')
+        analyze = self.job('analyze', 'running', 2)
+        out = self.progress()
+        self.assertEqual((out['phase'], self.states(out)), ('processing', ['done', 'active', 'not_started',
+                                                                           'not_started']))
+        self.assertEqual(out['steps'][0]['finished_at'], (extract.created_at + timedelta(seconds=3)).isoformat())
+        self.set(analyze, 'succeeded')
+        self.job('predict', 'running', 4)
+        out = self.progress()
+        self.assertEqual((self.states(out), out['active_detail']), (['done', 'done', 'active', 'not_started'],
+                                                                    'Document review'))
+        self.assertIsNone(out['finished_at'])
+        self.assertEqual(progress.checks_summary(self.enc), [
+            {'key': 'document_review', 'label': 'Document review', 'state': 'running'},
+            {'key': 'independent_checks', 'label': 'Independent checks', 'state': 'not_run'},  # none configured
+            {'key': 'coding_validation', 'label': 'Coding validation', 'state': 'waiting'}])
+
+    def test_checking_spans_the_independent_checks_assess_one_and_the_peer_reviews(self):
+        jobs_ = self.chain(*CHAIN, 'astra', 'fable', ('assess', 'assess:ctx:run:p:0123456789ab'), 'astra_peer',
+                           last='running')
+        out = self.progress()
+        self.assertEqual((self.states(out), out['active_detail']), (['done', 'done', 'active', 'not_started'],
+                                                                    'Independent checks'))
+        self.set(jobs_[-1], 'succeeded')
+        self.job('fable_peer', 'succeeded', 14)  # queued while astra_peer ran (12-15), as its stage queues it
+        final = self.job('assess', 'running', 16, key='assess:ctx:run:p:0123456789ab:q:ba9876543210')
+        out = self.progress()
+        self.assertEqual((self.states(out), out['active_detail']), (['done', 'done', 'done', 'active'],
+                                                                    'Coding validation'))
+        self.assertEqual(out['steps'][2]['started_at'], jobs_[2].created_at.isoformat())  # predict began the step
+        self.set(final, 'succeeded')
+        self.final()
+        out = self.progress()
+        self.assertEqual((out['phase'], self.states(out), out['busy']), ('completed', ['done'] * 4, False))
+        self.assertEqual(out['finished_at'], (final.created_at + timedelta(seconds=3)).isoformat())
+
+    def test_a_re_assessment_run_keeps_what_was_read_and_checked_before(self):
+        self.chain(*CHAIN, 'assess')
+        self.final()
+        again = self.job('assess', 'queued', 600)  # a member's save, long after: a run of its own
+        out = self.progress()
+        self.assertEqual((out['phase'], self.states(out)), ('queued', ['done', 'done', 'done', 'waiting']))
+        self.assertEqual(out['started_at'], again.created_at.isoformat())
+
+    def test_awaiting_detail_until_every_detail_is_answered_then_completed(self):
+        self.chain(*CHAIN, 'assess')
+        self.final(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'))
+        out = self.progress()
+        self.assertEqual((out['phase'], out['message']), ('awaiting_detail', progress.MESSAGES['awaiting_detail']))
+        (row,) = answers.details_needed(self.enc, self.enc.current_assessment)
+        answers.save_details(self.enc, self.s.reviewer, [{'id': row['id'], 'fact': 'extent',
+                                                          'value': 'not_documented'}])
+        self.assertEqual(self.progress()['phase'], 'completed')
+
+    def test_partial_when_an_independent_check_or_the_reading_is_incomplete(self):
+        self.chain(*CHAIN, 'assess')
+        records = [{'name': 'astra', 'state': 'failed', 'run': None, 'reason': 'synthetic failure'},
+                   {'name': 'fable', 'state': 'read', 'run': None, 'peer_state': 'read', 'peer_run': None}]
+        review.persist_assessment(encounter=self.enc, revision=self.rev, context=self.s.context,
+                                  routing_run=pf.routing(self.rev), provider_run=pf.provider_run(self.enc, self.rev),
+                                  result=pf.result(ready('sel:0', '45380', pf.CECUM_PASSAGE)), participants=records)
+        out = self.progress()
+        self.assertEqual((out['phase'], out['message']), ('partial', progress.MESSAGES['partial']))
+        self.assertEqual([c['state'] for c in progress.checks_summary(self.enc)], ['done', 'unavailable', 'not_run'])
+        other = pf.scenario()
+        partial = f.pasted_revision(other.encounter, other.reviewer, pf.GI_NOTE, extract=False)
+        f.record(partial, ExtractionResult(status='partial', method='paste', text=pf.GI_NOTE,
+                                           pages=(PageSpan(page=1, start=0, end=len(pf.GI_NOTE)),)))
+        pf.context(other.encounter, partial)
+        self.enc, self.rev, self.s = other.encounter, partial, other
+        self.s.context = other.encounter.current_context
+        self.chain(*CHAIN, 'assess')
+        self.final()
+        self.assertEqual(self.progress()['phase'], 'partial')
+
+    def test_failed_phases_say_what_to_do_and_never_a_job_s_own_words(self):
+        noise = 'The analyze stage failed unexpectedly; Corti answered HTTP 503 (req_synthetic_1).'
+        cases = []
+        failed = pf.scenario()
+        unread = f.pasted_revision(failed.encounter, failed.reviewer, pf.GI_NOTE, extract=False)
+        f.record(unread, ExtractionResult(status='failed', method='paste', text=''))
+        cases.append(('extraction_failed', failed.encounter, unread, ('extract',)))
+        for state, kinds in (('processing_failed', ('extract', 'analyze')), ('provider_failed', CHAIN)):
+            scenario = pf.scenario()
+            cases.append((state, scenario.encounter, scenario.revision, kinds))
+        for state, encounter, revision, kinds in cases:
+            with self.subTest(state):
+                self.enc, self.rev = encounter, revision
+                self.s = mock.Mock(context=encounter.current_context)
+                made = self.chain(*kinds, last='succeeded' if state == 'extraction_failed' else 'failed')
+                models.Job.objects.filter(pk=made[-1].pk).update(error=noise)
+                if state == 'provider_failed':
+                    pf.provider_run(encounter, revision, state='failed')
+                out = self.progress()
+                self.assertEqual(out['phase'], 'failed')
+                text, action = progress.ERRORS[state]
+                self.assertEqual((out['error'], out['message']), ({'text': text, 'action': action}, text))
+                self.assertNotIn('req_synthetic', json.dumps(out))
+                self.assertEqual(out['steps'][len(kinds) - 1]['state'], 'failed')
+        not_run = pf.scenario()
+        self.enc, self.rev, self.s = not_run.encounter, not_run.revision, not_run
+        self.chain(*CHAIN, 'assess')
+        pf.assess(self.enc, pf.result(ready('sel:0', '45380', pf.CECUM_PASSAGE)), no_provider=True)
+        out = self.progress()
+        self.assertEqual((out['phase'], out['error']), ('failed', {'text': progress.ERRORS['provider_not_run'][0],
+                                                                   'action': 'none'}))
+
+    def test_stopped_and_being_confirmed(self):
+        made = self.chain(*CHAIN, last='cancelled')
+        models.Encounter.objects.filter(pk=self.enc.pk).update(stopped_at=timezone.now(), stopped_by=self.s.reviewer)
+        out = self.progress()
+        self.assertEqual((out['phase'], out['error'], out['can_resume']),
+                         ('stopped', {'text': progress.STOPPED_BY_MEMBER, 'action': 'resume'}, True))
+        self.assertEqual(self.states(out), ['done', 'done', 'stopped', 'not_started'])
+        models.Encounter.objects.filter(pk=self.enc.pk).update(stopped_at=None, stopped_by=None)  # an expiry instead
+        self.assertEqual(self.progress()['error']['text'], progress.STOPPED_BY_SYSTEM)
+        self.set(made[-1], 'succeeded')
+        pf.provider_run(self.enc, self.rev, state='unknown')
+        out = self.progress()
+        self.assertEqual((out['phase'], out['message'], out['error'], out['can_resume']),
+                         ('being_confirmed', progress.MESSAGES['being_confirmed'], None, False))
+
+    def test_slow_only_from_the_stage_s_own_bound(self):
+        self.chain('extract', 'analyze')
+        predict = self.job('predict', 'running', 4)
+        bound = progress.settings.JOB_DEADLINE_SECONDS['predict']
+        for share, slow, message in ((0.5, False, progress.MESSAGES['processing']),
+                                     (0.7, True, progress.SLOW_MESSAGES['predict']),
+                                     (1.1, True, progress.OVERDUE)):
+            with self.subTest(share):
+                out = self.progress(now=predict.started_at + timedelta(seconds=share * bound))
+                self.assertEqual((out['slow'], out['message']), (slow, message))
+        self.set(predict, 'succeeded')
+        astra = self.job('astra', 'running', 6)
+        out = self.progress(now=astra.started_at + timedelta(seconds=0.7 * 580))
+        self.assertEqual((out['slow'], out['message']), (True, progress.SLOW_MESSAGES['astra']))
+        self.set(astra, 'succeeded')
+        waiting = self.job('fable', 'queued', 8)
+        out = self.progress(now=waiting.created_at + timedelta(seconds=0.7 * jobs.QUEUE_DEADLINE.total_seconds()))
+        self.assertEqual((out['phase'], out['slow'], out['message']), ('queued', True, progress.QUEUE_SLOW))
+        models.Job.objects.filter(pk=waiting.pk).update(result={'requeued': 'the provider lock is busy'})
+        out = self.progress(now=waiting.created_at + timedelta(seconds=5))
+        self.assertEqual((out['slow'], out['message']), (False, progress.TAKING_TURN))
+
+
+@override_settings(**LIVE)
+class DateHoldProgressTests(TestCase):
+    def setUp(self):
+        self.provider = FakeProvider()
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_action_needed_right_after_analyze_never_implying_processing_began(self):
+        encounter = pasted(MARA, service_date='1998-01-01', title='Mara (synthetic)')
+        run_stages(2)  # extract, analyze: the hold is recorded and only its assess is queued
+        encounter.refresh_from_db()
+        out = progress.encounter_progress(encounter)
+        self.assertEqual((out['phase'], out['busy'], out['message']),
+                         ('action_needed', True, progress.MESSAGES['action_needed']))
+        self.assertEqual([s['state'] for s in out['steps']], ['done', 'done', 'skipped', 'waiting'])
+        self.assertEqual([c['state'] for c in progress.checks_summary(encounter)], ['not_run', 'not_run', 'waiting'])
+        drain()
+        encounter.refresh_from_db()
+        out = progress.encounter_progress(encounter)
+        self.assertEqual((out['phase'], out['busy']), ('action_needed', False))
+        self.assertEqual([s['state'] for s in out['steps']], ['done', 'done', 'skipped', 'done'])
+        self.assertEqual([c['state'] for c in progress.checks_summary(encounter)][:2], ['not_run', 'not_run'])
+        self.assertEqual(self.provider.sent, [])
+        (row,) = [r for r in answers.details_needed(encounter, encounter.current_assessment)
+                  if r['fact'] == 'service_date']
+        answers.save_details(encounter, encounter.created_by, [{'id': row['id'], 'fact': 'service_date',
+                                                                'value': 'use_document'}])
+        encounter.refresh_from_db()
+        self.assertEqual(progress.encounter_progress(encounter)['phase'], 'queued')  # the request is made now
+        drain()
+        encounter.refresh_from_db()
+        self.assertIn(progress.encounter_progress(encounter)['phase'], ('awaiting_detail', 'completed', 'partial'))
+        self.assertEqual(len(self.provider.sent), 1)
