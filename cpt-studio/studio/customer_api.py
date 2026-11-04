@@ -495,12 +495,16 @@ def _qualifications(proposal, status, view, code):
         out.append(f'The document has conflicting statements about the {_act_label(kinds[0] if kinds else "")}; '
                    'a detail is needed before this code can be approved.')
     if status in ('needs_detail', 'ready'):
+        same_day = view is not None and view.same_day_held
         for question in questions:
             fact = question.get('fact') if isinstance(question, dict) else ''
             if fact == 'base_included':
                 out.append(f'{code} may be included in another code reported for this examination; a detail is '
                            'needed before it can be approved.' if code else
                            'This code may be included in another code reported for this examination.')
+            elif fact == 'separate_em' and same_day:
+                # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
+                out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:
@@ -838,20 +842,51 @@ ACTIVITY = {
 }
 
 
+# A re-check's outcome known not to have completed when its request ended: it failed, or it was not sent. An outcome
+# still unknown is never one (refutation round 3, C-R3-2): it is being confirmed and may have been answered
+# (progress.JOB_STEP_STATES, MESSAGES['being_confirmed']), and is said once a reconciliation settles it.
+RECHECK_ENDED = (ProviderRun.FAILED, ProviderRun.NOT_SENT)
+_RUN_ID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+
+
+def _reconciled_rechecks(encounter, events):
+    """The ids of this document's re-check runs (purpose second_review) whose unknown outcome a reconciliation settled,
+    among the runs ``events``' provider.reconciled rows name: the re-check then did not complete, whichever path left its
+    outcome unknown - a read that timed out after sending, a worker that died mid-send (jobs.mark_stale) or an outcome
+    that could not be recorded (jobs._settle_unrecorded), the last two with no provider.finished row (refutation round 3,
+    C-R3-3)."""
+    named = set()
+    for event in events:
+        run = event.data.get('run') if isinstance(event.data, dict) else None
+        if event.event == 'provider.reconciled' and isinstance(run, str) and _RUN_ID.fullmatch(run):
+            named.add(run)
+    if not named:
+        return set()
+    return {str(pk) for pk in encounter.provider_runs.filter(
+        pk__in=named, purpose=ProviderRun.SECOND_REVIEW, state=ProviderRun.UNKNOWN,
+        reconciled_at__isnull=False).values_list('pk', flat=True)}
+
+
 def activity(encounter):
     out = []
-    for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk'):
+    events = list(encounter.audit_events.select_related('actor').order_by('created_at', 'pk'))
+    reconciled = _reconciled_rechecks(encounter, events)
+    for event in events:
         data = event.data if isinstance(event.data, dict) else {}
         entry = ACTIVITY.get(event.event)
-        if (event.event == 'provider.finished' and data.get('purpose') == 'second_review'
-                and data.get('state') != 'succeeded'):
+        actor = event.actor
+        kind = event.actor_kind if event.actor_kind in ('human', 'agent') else 'system'
+        if (event.event == 'provider.finished' and data.get('purpose') == ProviderRun.SECOND_REVIEW
+                and data.get('state') in RECHECK_ENDED):
             entry = RECHECK_NOT_COMPLETED  # the re-check's own outcome, said once it is known (refutation round 2, L5-5)
+        elif event.event == 'provider.reconciled' and data.get('run') in reconciled:
+            # an unknown outcome settled (refutation round 3, C-R3-3), said as CPT Studio's: a reconciliation is the
+            # platform operator's work, and who did it is the operator's record, never the practice's activity
+            entry, actor, kind = RECHECK_NOT_COMPLETED, None, 'system'
         if entry is None:
             continue
         if event.event == 'report.generated' and data.get('audience', ReportArtifact.CUSTOMER) != ReportArtifact.CUSTOMER:
             continue  # an operator's report is the operator's record, never the practice's activity
-        actor = event.actor
-        kind = event.actor_kind if event.actor_kind in ('human', 'agent') else 'system'
         out.append({'event': entry[0], 'summary': entry[1], 'actor': actor.label() if actor else 'CPT Studio',
                     'actor_kind': kind, 'at': _iso(event.created_at)})
     return out

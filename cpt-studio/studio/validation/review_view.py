@@ -27,6 +27,13 @@ A reinstated exclusion is held to the gates a selected code meets (checks.reinst
 review.reinstatement check names what approval waits for, the view asks exactly that of it - the questions a selected
 code of its family is asked - and reads it as needing clarification, never as ready (refutation round 2, L3-8).
 
+An office visit the same-day gate holds once a reviewer reinstates a same-day procedure (its em.same_day_if_reinstated
+check: "this E/M then cannot be approved until a significant, separately identifiable E/M service is documented") is
+held exactly as beside a procedure the engine selected: it is asked that question (fact separate_em, the engine's own
+checks.separate_em_clarification wording) and reads as needing clarification, never as ready beside no approve
+(refutation round 3, B-05). An approval made before keeps the same-day gate's own readiness blocker
+(review._same_day_blocker), so the view adds none of its own for it.
+
 What it never does: release a hold by any rule but the engine's own (a rejection releases a base only when nothing the
 base rule reads still holds it), choose a modifier, or read a participant.
 """
@@ -51,6 +58,7 @@ PRESENCE_CHECK = 'pfs.presence'
 DATE_CHECK = checks.PROPOSAL_DATE_CHECK.id  # an unknown service date holds every proposal (engine._proposal)
 SAME_DAY_EM_GATE = 'em.same_day_if_reinstated'  # review.SAME_DAY_EM_GATE
 SAME_DAY_PROCEDURE = 'review.same_day_em'  # review.SAME_DAY_PROCEDURE
+SEPARATE_EM_FACT = 'separate_em'  # checks.separate_em_clarification's fact: the visit's question beside a procedure
 # A member's answer that a material detail is not in the documentation (P5's details flow): the code it is asked of
 # leaves the effective set, needs no decision and is never approvable, until the answer is revoked. No other value is
 # read here (a context fact goes through the context path and a new assessment).
@@ -276,25 +284,47 @@ def _reinstatement_waits(p: Stored) -> tuple:
                   'reason': reason} for fact, question in asked)
 
 
-def _open_facts(p: Stored, held, readable: bool, counted: bool = False) -> list:
+def _open_facts(p: Stored, held, readable: bool, counted: bool = False, same_day: bool = False) -> list:
     """The facts of ``p``'s open proposal-scoped questions once the base rule is read over the counted set (``held``:
     what it holds ``p`` beside there, None when it does not), in order; for a reinstated exclusion (``counted``), also
-    what its approval waits for (_reinstatement_waits)."""
+    what its approval waits for (_reinstatement_waits); for a visit a reinstated same-day procedure holds
+    (``same_day``), also the separately identifiable visit it waits for (_same_day_question)."""
     facts = [q.get('fact') for q in p.questions if q.get('scope') == 'proposal']
     if readable:
         facts = [fact for fact in facts if fact != BASE_FACT] + ([BASE_FACT] if held else [])
     if counted and p.bucket == EXCLUDED:
         facts += [q['fact'] for q in _reinstatement_waits(p)]
+    if same_day and SEPARATE_EM_FACT not in facts:
+        facts.append(SEPARATE_EM_FACT)
     return facts
 
 
-def _unavailable_by(p: Stored, held, readable: bool, answered: Mapping, counted: bool = False) -> tuple[str, str]:
+def _unavailable_by(p: Stored, held, readable: bool, answered: Mapping, counted: bool = False,
+                    same_day: bool = False) -> tuple[str, str]:
     """(fact, value) of the first open question of ``p`` a member answered as unavailable, ('', '') when none."""
-    for fact in _open_facts(p, held, readable, counted):
+    for fact in _open_facts(p, held, readable, counted, same_day):
         value = answered.get((p.code, p.family, fact))
         if value:
             return fact, value
     return '', ''
+
+
+def _gated(p: Stored) -> bool:
+    """An E/M the engine marked as held if a same-day procedure is reinstated (its em.same_day_if_reinstated check)."""
+    return any(c.get('id') == SAME_DAY_EM_GATE for c in p.checks)
+
+
+def _same_day_question(p: Stored, procedures: Sequence[Stored]) -> dict:
+    """The question a visit the reinstatement of ``procedures`` (marked same-day procedures) holds is asked: whether a
+    significant, separately identifiable visit is documented - the engine's own question beside a procedure it selected
+    (checks.separate_em_clarification), with a reason naming the reinstated codes. A dict {id: '', scope, family, fact,
+    question, reason}, as the overlay's other added questions."""
+    codes = [procedure.code for procedure in procedures]
+    verb = 'was reinstated as a same-day procedure' if len(codes) == 1 else 'were reinstated as same-day procedures'
+    return {'id': '', 'scope': 'proposal', 'family': p.family, 'fact': SEPARATE_EM_FACT,
+            'question': checks.SEPARATE_EM_QUESTION,
+            'reason': (f'{checks._join(codes)} {verb}; a significant, separately identifiable E/M service is not '
+                       'established by this document.')}
 
 
 def _pfs_rows(retrieval) -> dict:
@@ -476,14 +506,20 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
     candidates = [p for p in rows if counts(p, decided.get(p.key))]
     counted = {p.key for p in candidates}
     bases = _bases(candidates, service, readable)
+    # a reinstated same-day procedure holds the gated E/M (a hold: the counted set, whatever a member answered of it)
+    same_day_procedures = [p for p in rows if p.key in counted and p.bucket == EXCLUDED
+                           and any(c.get('id') == SAME_DAY_PROCEDURE for c in p.checks)]
+    reinstated_procedures = bool(same_day_procedures)
     # Member answers: a code whose open question (as that reading leaves it; for a reinstated exclusion, also what its
-    # approval waits for) a member answered as not documented or not confirmable is detail_unavailable - that code, and
-    # nothing else. One pass: no answer moves a hold, so no answer moves another code's questions. A code no decision
-    # leaves billed is closed by an answered open question too.
+    # approval waits for; for a visit a reinstated same-day procedure holds, also the separate visit it waits for) a
+    # member answered as not documented or not confirmable is detail_unavailable - that code, and nothing else. One
+    # pass: no answer moves a hold, so no answer moves another code's questions. A code no decision leaves billed is
+    # closed by an answered open question too.
     unavailable = {}
     for p in rows:
         if p.key in counted:
-            by = _unavailable_by(p, bases.get(p.code), readable, answered, counted=True)
+            by = _unavailable_by(p, bases.get(p.code), readable, answered, counted=True,
+                                 same_day=reinstated_procedures and _gated(p))
         else:
             by = _unavailable_by(p, None, False, answered)
         if by[0]:
@@ -505,15 +541,12 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
                        if decidable(p) and any(c.get('id') == PRESENCE_CHECK and c.get('status') == 'pass'
                                                for c in p.checks))
     active_rows = engine.endoscopic_rows((p.code, pfs.get(p.code)) for p in effective)
-    # a reinstated same-day procedure holds the gated E/M (a hold: the counted set, whatever a member answered of it)
-    reinstated_procedures = any(p.key in counted and p.bucket == EXCLUDED
-                                and any(c.get('id') == SAME_DAY_PROCEDURE for c in p.checks) for p in rows)
     views = {}
     for p in rows:
         d = decided.get(p.key)
         action = d.action if d is not None else ''
         chosen = tuple(d.modifiers) if d is not None and action == APPROVE else ()
-        same_day = any(c.get('id') == SAME_DAY_EM_GATE for c in p.checks) and reinstated_procedures
+        same_day = _gated(p) and reinstated_procedures
         if p.key in unavailable:
             fact, value = unavailable[p.key]
             words = ANSWER_WORDS.get(value, 'unavailable')
@@ -614,6 +647,14 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
             elif chosen and (review is None or any(m not in review['options'] for m in chosen)):
                 blocker = (f'{p.code} was approved with modifier {", ".join(chosen)}, but the separate-lesion '
                            'modifier review no longer applies to it; revoke the approval and decide it again')
+        if same_day and active and not any(q.get('fact') == SEPARATE_EM_FACT for q in questions):
+            # A visit a reinstated same-day procedure holds is asked the separate visit it waits for and needs
+            # clarification (refutation round 3, B-05): the engine's question beside a procedure it selected, asked once.
+            # Read after the gates above, which it changes in nothing: approve stays withheld (same_day_held), and an
+            # approval made before keeps the same-day gate's own readiness blocker (review._same_day_blocker).
+            questions.append(_same_day_question(p, same_day_procedures))
+            added.append(SEPARATE_EM_FACT)
+            status = NEEDS_CLARIFICATION
         views[p.key] = View(
             key=p.key, code=p.code, bucket=p.bucket, decision=action, active=active, status=status, reason='',
             checks=tuple(items), questions=tuple(questions), added=tuple(added), released=tuple(released),

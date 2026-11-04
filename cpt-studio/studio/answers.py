@@ -619,7 +619,8 @@ def save_details(encounter, user, items) -> dict:
     jobs.change_context call; 'not_documented' / 'cannot_confirm' are MemberAnswer rows, one for each question the row
     answers (a later answer withdraws the earlier one). A date typed outside the panel that the member confirms with the
     document's own dates in view is recorded as confirmed (a detail.answered row; nothing is re-assessed or sent). An
-    answer already in effect is left as it is, so a repeated identical save makes nothing."""
+    answer already in effect is left as it is, so a repeated identical save makes nothing. Every save ends by
+    re-deriving the stored list state (review.refresh_state), after its last row is written."""
     parsed = _parse(items)
     with transaction.atomic():
         encounter = jobs._locked(encounter)
@@ -698,12 +699,16 @@ def save_details(encounter, user, items) -> dict:
                 dated = {'revision': revision, 'value': changed[name]} if name == DATE_FACT else {}
                 audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=name,
                              family=row.family, code=row.code, kind='context', context=str(context.pk), **dated)
-        elif recorded or superseded:
-            review.refresh_state(encounter)  # the overlay reads the answers: the list state follows them
         if confirming is not None:
             audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=DATE_FACT,
                          family='', code='', kind='context', confirmed=True, context=str(encounter.current_context_id),
                          revision=revision, value=values[DATE_FACT])
+        # The list state follows every save, derived once the save's last row is written: the answers the overlay
+        # reads, the confirmation readiness reads (review.DATE_CONFIRMATION_BLOCKER) and a context change's
+        # re-assessment (refutation round 3, B-01 and C-R3-1: a save that only confirmed the date never refreshed it, and
+        # one that also recorded an answer refreshed it before the confirmation was written, so a finished review read
+        # "Ready for review" and stayed on the review queue).
+        review.refresh_state(encounter)
     withdrawn = [answer for answer in superseded if answer.fact not in changed]  # counted once with its value
     return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
             'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed)}
