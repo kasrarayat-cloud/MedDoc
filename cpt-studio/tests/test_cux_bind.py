@@ -560,30 +560,23 @@ class EmAbsenceTests(SimpleTestCase):
         self.assertNotIn(detect.EM_ABSENT_CUE, [c for m in finding.mentions for c in m.cues])
 
 
-# --- R3 7.5.3: office E/M documentation questions are asked only where they decide something -------------------------
+# --- decision (b) of 2026-11-03: E/M questions are removed at the reader only, never by a validation-side gate ---------
 
-class EmQuestionGatingTests(SimpleTestCase):
-    BIOPSY = [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')]
+class EmQuestionsStayForAStatedVisitTests(SimpleTestCase):
+    """The completeness critique's counterexample: a separate visit the note states ("An office visit was also completed
+    today.") beside a procedure, with no time or decision-making documented, still asks its E/M questions - no
+    validation-side suppression hides them (only an explicit "no separate E/M ... documented" statement does, at the
+    reader)."""
 
-    def test_a_procedure_day_visit_with_no_basis_and_no_code_asks_nothing(self):
-        result = run(document('v7-em-without-basis'), self.BIOPSY)
-        self.assertEqual(em_questions(result), set())
-        self.assertIn('1 documented service not established as performed and read by no proposal',
-                      result.completeness['reasons'])  # still named as not established
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+            'Procedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+            'Procedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum.\n'
+            'Cold forceps biopsies were taken from the gastric antrum.\n'
+            'An office visit was also completed today.\n')
 
-    def test_twin_with_an_em_code_to_decide_the_questions_stay(self):
-        result = run(document('v7-em-without-basis'), self.BIOPSY + [('99213', 'An office visit was also completed '
-                                                                                'today.')])
-        p = outcomes(result)['99213']
-        self.assertEqual(p[:2], ('selected', 'needs_clarification'))
-        self.assertTrue((set(p[2]) | em_questions(result)) & EM_QUESTIONS)
-
-    def test_twin_a_visit_read_uncertain_for_another_reason_still_asks(self):
-        inv = SimpleNamespace(services=(SimpleNamespace(family='gi.office_em', status='uncertain'),))
-        mention = SimpleNamespace(status='uncertain', cues=('uncertain: the note may document no in-person visit',))
-        routing = SimpleNamespace(finding=lambda f: SimpleNamespace(status='uncertain', mentions=(mention,)))
-        self.assertTrue(engine._em_documentation_asked(inv.services[0], (), routing))
-        self.assertTrue(engine._em_documentation_asked(inv.services[0], (), None))  # no routing: as before
+    def test_a_stated_visit_with_no_basis_still_asks(self):
+        result = run(self.TEXT, [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')])
+        self.assertTrue(em_questions(result) & EM_QUESTIONS, em_questions(result))
 
 
 # --- Mara, end to end, with the retained provider response (design section 10's acceptance) ------------------------

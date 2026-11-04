@@ -276,7 +276,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                                                          _accounted_elsewhere(usable, included_by, routing)),
                                                 separate_em=documented_em))
     service_questions = (_service_questions(usable, proposals, context,
-                                            confirmation.answered if confirmation is not None else (), routing=routing)
+                                            confirmation.answered if confirmation is not None else ())
                          if usable else [])
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
@@ -928,25 +928,15 @@ def _member_conflict_questions(context, asked, proposals) -> list[ClarificationS
     return out
 
 
-def _service_questions(inventory, proposals, context=None, answered=(), routing=None) -> list[ClarificationSpec]:
+def _service_questions(inventory, proposals, context=None, answered=()) -> list[ClarificationSpec]:
     """Every materially necessary question about a documented service, asked together and once: its missing
     documentation (a sparse visit note's setting, status and basis together) and each conflict in the record. A
     question a proposal of the same family already asks is not asked again; nor is one a reviewer-confirmed finding
     answers (``answered``: (family, fact) pairs, _Confirmations.answered) - answering it at one scope never makes it
-    asked again at another.
-
-    Core repair 2026-11-03 (P1, R3 7.5.3): an office E/M service the documentation does not establish as separate - the
-    inventory reads it uncertain, and every uncertain routing reading of the visit is the procedure-day hold alone
-    (detect.EM_WITHOUT_BASIS: procedure documentation with no MDM or E/M time) - is asked no documentation question
-    (setting, patient status, E/M basis) while no E/M code is proposed for a decision (_em_documentation_asked): those
-    questions decide nothing. They are asked as before when an E/M code is selected or excluded and reinstatable, and
-    whenever the visit is documented performed or incomplete. ``routing``: the routing result (None reads as before).
-    The service still counts as documented and not established (completeness)."""
+    asked again at another."""
     asked = {(c.family, c.fact) for p in proposals for c in p.clarifications} | set(answered)
     out: list[ClarificationSpec] = []
     for service in inventory.services:
-        if not _em_documentation_asked(service, proposals, routing):
-            continue
         for spec in reconcile.documentation_clarifications(service, context):
             if (spec.family, spec.fact) not in asked:
                 asked.add((spec.family, spec.fact))
@@ -958,23 +948,6 @@ def _service_questions(inventory, proposals, context=None, answered=(), routing=
             asked.add((spec.family, spec.fact))
             out.append(spec)
     return out
-
-
-def _em_documentation_asked(service, proposals, routing) -> bool:
-    """Whether a documented service's documentation questions are asked (_service_questions, R3 7.5.3): always, except
-    for an office E/M service read uncertain only by the procedure-day hold - every uncertain routing mention of the
-    visit carries detect.EM_WITHOUT_BASIS and none another doubt - with no decidable E/M proposal (selected, or excluded
-    and reinstatable). Fail-closed: no routing result, any other doubt, or any E/M code to decide asks as before."""
-    if service.family != 'gi.office_em' or service.status != 'uncertain' or routing is None:
-        return True
-    from studio.gi.detect import EM_WITHOUT_BASIS  # the procedure-day hold's cue, as routing writes it
-    finding = routing.finding('gi.office_em') if hasattr(routing, 'finding') else None
-    held = [m for m in (finding.mentions if finding is not None else ()) if m.status == 'uncertain']
-    if finding is None or finding.status != 'uncertain' or not held \
-            or not all(EM_WITHOUT_BASIS in m.cues for m in held):
-        return True
-    return any(p.family in checks.EM_FAMILIES and (p.bucket == 'selected' or (p.bucket == 'excluded' and p.reinstatable))
-               for p in proposals)
 
 
 # --- phase 1: each selected code on its own --------------------------------------------
@@ -4238,7 +4211,7 @@ class _Confirmations:
         index = {key: i for i, key in enumerate(keys)}
         held = {p.key: p for p in keyed}
         asked = {(p.key, q.family, q.fact) for p in keyed for q in p.clarifications}
-        services = {(q.family, q.fact) for q in (_service_questions(inventory, proposals, context, routing=routing)
+        services = {(q.family, q.fact) for q in (_service_questions(inventory, proposals, context)
                                                  if inventory is not None else ()) if q.scope == 'service'}
         # each decidable proposal's identity, as these inputs make it without any confirmation (_identity reads no check
         # and no status, so the same proposal has it whichever confirmations an assessment reads)
