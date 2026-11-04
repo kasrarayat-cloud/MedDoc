@@ -1046,6 +1046,55 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     return _time_parts(text, out, lay)
 
 
+# P2 READ-HOLD, R8 D7: a note, procedure or addendum label before a heading of its own ("Separate note: Flexible
+# sigmoidoscopy (fictional), 2026-10-14", "Second procedure: ...", "Note 2: ...", "Addendum - ..."). Never a bare field
+# label: "Procedure: Colonoscopy" is a field of today's report (TITLE_FIELD stays as it is).
+LABELLED_NOTE = _rx(r'^[ \t\-*#]*(?:(?:separate|second|another|additional|same[- ]day|subsequent|follow-?on)[ \t]+'
+                    r'(?:note|procedure|report|examination|exam|study|service)|(?:note|procedure|report|part)[ \t]+\d{1,2}'
+                    r'|addend(?:um|a))[ \t]*(?::|[-\u2013\u2014](?=[ \t]))[ \t]*(?=\S)')
+
+
+def labelled_service_heading(text: str, ls: int, le: int, *, service_date: Optional[date], dates, date_starts,
+                             documented: frozenset) -> Optional[tuple[str, Span]]:
+    """(family, the line's span) when the line [ls, le) is a 'Label: <service>' heading that opens a report part of
+    one service (package P2 READ-HOLD, R8 D7: "Separate note: Flexible sigmoidoscopy (fictional), 2026-10-14" had
+    opened no part, so the colonoscopy's titled part ran on over the next note and its biopsy went to the colonoscopy):
+    a note, procedure or addendum label (LABELLED_NOTE), then a heading naming exactly one family that carries nothing
+    but that service's name, its acts, heading vocabulary, its attributes and today's date (_bare_service_heading on
+    the heading after the label, with _heading_time's other-time and doubt checks), on a line with no plan, history or
+    earlier-span word and no history or plan heading. None otherwise. Bounded: at most 100 characters of the line.
+
+    NOT called on this branch: parts() is package P1's. The one wiring line, in parts() right after the role-heading
+    check (before ``numbered = PART_NUMBER.match(line)``), is:
+
+        labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
+                                            date_starts=date_starts, documented=documented)
+        if labelled is not None:
+            family = labelled[0]
+            cuts.append((ls, family, 'physician', labelled[1], 'report'))
+            kind_now = 'report'
+            continue
+    """
+    line = text[ls:le]
+    stripped = line.strip()
+    if not stripped or len(stripped) > 100:
+        return None
+    label = LABELLED_NOTE.match(line)
+    if label is None or PLAN_WORDS.search(line) or HISTORY_WORDS.search(line) or EARLIER_SPAN.search(line) \
+            or HISTORY_HEADING.match(line) or PLAN_HEADING.match(line):
+        return None
+    rest = ls + label.end()
+    families = {f for f, _, pattern in SERVICES if pattern.search(text, rest, le)}
+    if len(families) != 1:
+        return None
+    family = next(iter(families))
+    if not _bare_service_heading(text, rest, le, family, service_date=service_date, dates=dates,
+                                 date_starts=date_starts, documented=documented):
+        return None
+    s = ls + line.index(stripped)
+    return family, Span(s, s + len(stripped), stripped)
+
+
 def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
     """Whether routing's layout reads the line [ls, le) inside a section a heading opened above it (an
     "Indication:" paragraph) that goes on across the line, with no section of its own opening on it (one bisection)."""

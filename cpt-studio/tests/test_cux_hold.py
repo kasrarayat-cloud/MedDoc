@@ -629,3 +629,41 @@ class NarrowEvidenceHoldTests(SimpleTestCase):
         # the combined report's own colonoscopy passages for its own code
         item = proposal(run(COMBINED, [sel('45385', span(COMBINED, SNARED))]), '45385')
         self.assertEqual(item.status, 'ready')
+
+
+class LabelledServiceHeadingTests(SimpleTestCase):
+    """D7 (R8 1.3): services.labelled_service_heading, the helper P1's parts() calls - this package does not own
+    parts(), so it is NOT wired on this branch and the register's H1 row does not move here. A 'Label: <service>'
+    line - a note, procedure or addendum label, then a heading naming exactly one family with only that service's name,
+    heading vocabulary, attributes and today's date (_bare_service_heading) - opens a report part; never a bare
+    'Procedure:' field (the trap R8 1.3 records: widening TITLE_FIELD made 'Procedure: Colonoscopy' a report title), a
+    line of another time or a plan, or a line naming two services."""
+
+    def heading(self, line, day=date(2026, 10, 14)):
+        from studio.gi import services as gi_services
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+                'Date of service: 2026-10-14\nProcedure: Colonoscopy\n' + CECUM + '\n\n' + line + '\nThe flexible '
+                'sigmoidoscope was advanced to 60 cm in the descending colon.\n')
+        ls = text.index(line)
+        dates = gi_context.find_dates(text)
+        found = gi_services.labelled_service_heading(
+            text, ls, ls + len(line), service_date=day, dates=dates, date_starts=[d.start for d in dates],
+            documented=frozenset(('gi.colonoscopy',)))
+        return found if found is None else (found[0], found[1].text)
+
+    def test_a_labelled_single_service_heading_opens_a_report_part(self):
+        for line in ('Separate note: Flexible sigmoidoscopy (fictional), 2026-10-14',
+                     'Second procedure: Flexible sigmoidoscopy', 'Note 2: Flexible sigmoidoscopy (fictional)',
+                     'Addendum - flexible sigmoidoscopy'):
+            with self.subTest(line):
+                self.assertEqual(self.heading(line), ('gi.flex_sig', line))
+
+    def test_must_stay_lines_open_no_part(self):
+        for line in ('Procedure: Colonoscopy', 'Procedure: Flexible sigmoidoscopy',
+                     'Last colonoscopy: 9 mm polyp removed with hot snare.', 'Prior note: Flexible sigmoidoscopy (2023)',
+                     'Separate note: Flexible sigmoidoscopy planned next year', 'Separate note: EGD and colonoscopy',
+                     'Addendum - flexible sigmoidoscopy performed the same day by Dr. Vale',
+                     'Second procedure: Flexible sigmoidoscopy (2023-05-02)',
+                     'Separate note: history of flexible sigmoidoscopy'):
+            with self.subTest(line):
+                self.assertIsNone(self.heading(line))
