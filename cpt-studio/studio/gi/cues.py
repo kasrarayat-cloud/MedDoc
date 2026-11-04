@@ -822,6 +822,11 @@ _EM_EVAL_ADVERBS = (r'(?:(?:' + _words('also', 'separately', 'additionally', 'th
                                        'being', 'previously', 'recently', 'later', 'clinically', 'promptly', 'both')
                     + r')[\s,]+){0,3}')
 _EM_EVAL_VERB = r'(?:seen|evaluated|re-?evaluated|examined|re-?examined|assessed|re-?assessed|interviewed)'
+# Round 3 (R8b-r3): the adjectives an evaluation noun heading its sentence may carry before a postmodifier (a closed
+# list: "A focused history and physical for ...", "A GI consultation for ..."), at most three
+_EM_EVAL_HEAD_ADJECTIVES = (r'(?:(?:separate|problem[- ](?:focused|oriented)|focused|brief|full|complete|detailed|'
+                            r'comprehensive|clinical|medical|formal|initial|additional|GI|gastroenterology|hepatology|'
+                            r'office|clinic|outpatient|same[- ]day)[ \t]+){0,3}')
 _EM_EVAL_BE = r'(?:was|were|is|are|has\s+been|have\s+been|had\s+been)'
 EM_EVALUATION_STATED = rx(
     r"\b(?:she|he|patient|pt|(?-i:(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][\w'-]*))\s+(?:" + _EM_EVAL_BE + r'|got)\s+'
@@ -843,7 +848,16 @@ EM_EVALUATION_STATED = rx(
     r'elicited|held|provided|undertaken|documented)\b'
     r'|\bphysical\s+exam(?:ination)?\b'
     r'|\b(?:HPI|history\s+of\s+(?:the\s+)?present\s+illness|review\s+of\s+systems|(?-i:ROS))\b'
-    r'|\b(?:clinic|office|visit|consult(?:ation)?|E/M|H\s*&\s*P)\s+notes?\b')
+    r'|\b(?:clinic|office|visit|consult(?:ation)?|E/M|H\s*&\s*P)\s+notes?\b'
+    # reader repair, round 3 (cux-r3-reader.json R8b-r3; refutation A5): the declared form above with a postmodifier
+    # between its noun and its verb, where the noun heads its sentence ("An evaluation for new-onset jaundice was
+    # performed today.", "An assessment of her new-onset jaundice, a separate problem, was documented today.")
+    r'|' + r'(?:(?<![^\n])|(?<=[.!?][ \t])|(?<=[.!?][ \t]{2}))[ \t]*(?:[-*\u2022][ \t]+)?'
+    r'(?:(?:today|separately|also|additionally),?[ \t]+)?(?:(?:a|an)[ \t]+)?' + _EM_EVAL_HEAD_ADJECTIVES
+    + r'(?:history(?:\s+and\s+(?:physical|exam(?:ination)?))?|H\s*&\s*P|evaluation|assessment|consultation|consult)'
+    r'\s+(?:(?:for|regarding|concerning|about|addressing)\s+|of\s+(?:her|his|their|(?:the|this)\s+patient[\'\u2019]s)\b)'
+    r'[^.;:!?\n]{0,80}?,?\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:performed|obtained|taken|done|completed|'
+    r'conducted|carried\s+out|elicited|held|provided|undertaken|documented)\b')
 EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of)\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
