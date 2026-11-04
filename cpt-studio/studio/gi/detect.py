@@ -6515,12 +6515,20 @@ EM_ABSENT_CONTRADICTED = ('uncertain: the note states that no separate office E/
 
 def _em_absent(an: Analysis, m: Mention) -> bool:
     """Whether the visit mention [m.start, m.end) lies inside an explicit E/M absence statement (cues.EM_ABSENCE) of its
-    sentence, and that sentence names no date other than the service date. Bounded: one pattern over the sentence."""
+    sentence, and that sentence names no date other than the service date. Bounded: the pattern and the date test once
+    per sentence (an.memo), then one bisection per mention - a sentence of many visit mentions is read once, not once
+    for each of them."""
     ss, se = an.lay.sentence_for(m.start, m.end)
-    if not any(x.start() <= m.start and m.end <= x.end() for x in cues.EM_ABSENCE.finditer(an.text, ss, se)):
-        return False
-    return all(an.service_date is not None and d.precision == 'day' and ctx.compare_to_service(d, an.service_date) == 0
-               for d in an.dates_in(ss, se))
+    key = ('em_absence', ss, se)
+    found = an.memo.get(key)
+    if found is None:
+        spans = [x.span() for x in cues.EM_ABSENCE.finditer(an.text, ss, se)]
+        dated = bool(spans) and all(an.service_date is not None and d.precision == 'day'
+                                    and ctx.compare_to_service(d, an.service_date) == 0 for d in an.dates_in(ss, se))
+        found = an.memo[key] = ([a for a, _ in spans], spans, dated)
+    starts, spans, dated = found
+    at = bisect.bisect_right(starts, m.start) - 1  # the matches never overlap: only the last one starting at or before
+    return dated and at >= 0 and m.end <= spans[at][1]
 
 
 # GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
@@ -8170,7 +8178,7 @@ def _route(an: Analysis) -> RoutingResult:
     an.references = _references(an, attributed)
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
-    absent = [m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)]
+    absent = {m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)}  # a set: one look per other reading
     if absent and any(r.status in ('performed', 'incomplete', 'uncertain') for m, r in base.items() if m not in absent):
         # rule 8 (core repair 2026-11-03): any other E/M statement that reads the visit as done or open (performed, or
         # held - a telephone visit, a hedged one) outranks the absence statement, which is then held: the note
