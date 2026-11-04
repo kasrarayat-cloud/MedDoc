@@ -176,6 +176,9 @@ class FailedActIsNeverReleasedTests(SimpleTestCase):
         ('ercp', '43274', 'Stent placement was unsuccessful.'),
         ('ercp', '43264', 'Stone extraction was unsuccessful.'),
         ('ercp', '43264', 'Balloon sweep failed to clear the stone.'),
+        # routing's 'incomplete' readings that name no failure word: only the performed-only gate holds them
+        ('colon', '45385', 'Hot snare polypectomy was discontinued because of bleeding.'),
+        ('colon', '45385', 'Hot snare polypectomy was terminated early.'),
     )
     HEADS = {'colon': (HEAD + CECUM + '\n' + SEEN + '\n', '45378', CECUM), 'egd': (EGD_HEAD, '43235', EGD_BASE),
              'ercp': (ERCP_HEAD, '43260', ERCP_BASE)}
@@ -458,6 +461,11 @@ class IndicationInATitledReportTests(SimpleTestCase):
                 self.assertIn(('gi.colonoscopy', 'biopsy', 'performed'), acts(text))
                 item = proposal(run(text, [sel('45380', span(text, TODAY_BX))]), '45380')
                 self.assertEqual(item.status, 'ready')
+        # the trap R8 1.3 records: today's biopsy right under an unterminated indication line, with no heading between
+        text = TITLED.replace('{indication}\nProcedure: Colonoscopy\n' + CECUM + '\n{body}\n',
+                              'Indication: surveillance\n' + TODAY_BX + '\nProcedure: Colonoscopy\n' + CECUM + '\n')
+        self.assertIn(('gi.colonoscopy', 'biopsy', 'performed'), acts(text))
+        self.assertEqual(proposal(run(text, [sel('45380', span(text, TODAY_BX))]), '45380').status, 'ready')
 
 
 H401 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h4-01.txt').read_text(encoding='utf-8')
