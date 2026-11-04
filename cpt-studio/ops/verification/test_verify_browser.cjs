@@ -2146,6 +2146,13 @@ test('foldedSteps and checkProgressFold: the served steps are the jobs\' own sta
     ['assess', 'succeeded'], ['astra_peer', 'running'], ['fable_peer', 'queued']]), { reading: 'done', identifying: 'done', checking: 'active', preparing: 'none' });
   assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'failed']]).checking, 'failed');
   assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'cancelled']]).checking, 'stopped');
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]).checking, 'unknown');
+  const confirming = CUST();
+  confirming.progress.steps[2].state = 'waiting';
+  confirming.progress.steps[3].state = 'not_started';
+  assert.deepEqual(failed(vb.checkProgressFold(confirming, { pipeline: { stages: stages([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]) } })), []);
+  confirming.progress.steps[2].state = 'done';
+  assert.deepEqual(failed(vb.checkProgressFold(confirming, { pipeline: { stages: stages([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]) } })), ['progress.backend_stage']);
   // a resumed stage: the last job of the kind is what counts
   assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'cancelled'], ['predict', 'succeeded'], ['assess', 'succeeded']]),
     { reading: 'done', identifying: 'done', checking: 'done', preparing: 'done' });

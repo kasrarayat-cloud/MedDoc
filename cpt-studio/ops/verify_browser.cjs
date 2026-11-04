@@ -177,8 +177,9 @@ const STEP_OF_KIND = { extract: 'reading', analyze: 'identifying', predict: 'che
   astra_peer: 'checking', fable_peer: 'checking', review2: 'checking' };
 const PEER_KINDS = new Set(['astra_peer', 'fable_peer']);
 // The customer step states a job state may be drawn as (queued may read as the active step or a waiting one).
-const STEP_STATES_FOR = { done: ['done', 'skipped'], active: ['active', 'waiting'], failed: ['failed'], stopped: ['stopped', 'failed'],
-  none: ['not_started', 'waiting', 'skipped'] };
+// An outcome left unknown is being confirmed (CORE-UX-DESIGN 6): its step may read failed, waiting or active, never done.
+const STEP_STATES_FOR = { done: ['done', 'skipped'], active: ['active', 'waiting'], failed: ['failed'], unknown: ['failed', 'waiting', 'active'],
+  stopped: ['stopped', 'failed'], none: ['not_started', 'waiting', 'skipped'] };
 // An office E/M question (directive section 4: none when no separate E/M service is documented).
 const EM_FACTS = new Set(['patient_status', 'em_basis', 'em_level', 'em_time', 'visit_level', 'em_code']);
 const EM_WORDING = /\b(?:office visit|office-visit|evaluation and management|E\/M|new or established|new\/established)\b/i;
@@ -1879,7 +1880,8 @@ function checkDetailsPanel(cust, dom) {
     if (row.id !== detail.id || row.fact !== detail.fact) problems.push(`${where} is ${row.id}/${row.fact}`);
     if (detail.control === 'date') {
       if (!row.date_input) problems.push(`${where} has no date field`);
-      if (detail.document_value && !(row.document_date || '').includes(detail.document_value) && !(row.document_date || '').length) problems.push(`${where} does not show the document's date`);
+      // the page may write the date in words: the document's date and the entered one are each shown, side by side
+      if (detail.document_value && !(row.document_date || '').trim()) problems.push(`${where} does not show the document's date`);
       if (detail.entered_value && row.entered_date === null) problems.push(`${where} does not show the entered date beside the document's`);
       const offered = detail.fact === 'service_date' && cust?.service_date?.can_use_document_date === true;
       if (row.use_document !== offered) problems.push(`${where} ${row.use_document ? 'offers' : 'does not offer'} "Use document date" (the API ${offered ? 'allows' : 'does not allow'} it)`);
@@ -1955,7 +1957,7 @@ function foldedSteps(op) {
   for (const key of Object.keys(VOCAB.steps)) {
     const states = [...last.values()].filter(item => item.key === key).map(item => item.state);
     steps[key] = !states.length ? 'none' : states.some(s => s === 'running' || s === 'queued') ? 'active'
-      : states.some(s => s === 'failed' || s === 'unknown') ? 'failed' : states.some(s => s === 'cancelled') ? 'stopped' : 'done';
+      : states.some(s => s === 'failed') ? 'failed' : states.some(s => s === 'unknown') ? 'unknown' : states.some(s => s === 'cancelled') ? 'stopped' : 'done';
   }
   return steps;
 }
