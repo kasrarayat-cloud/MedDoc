@@ -19,6 +19,7 @@ import ast
 import base64
 import datetime as dt
 import fcntl
+import getpass
 import hashlib
 import http.client
 import io
@@ -1593,17 +1594,14 @@ def established_to(port) -> int:
 NGINX_PID_FILE = Path('/run/nginx.pid')
 
 
-def nginx_processes(proc_root=Path('/proc'), pid_file=NGINX_PID_FILE) -> dict:
-    """{'visible', 'shutting_down'}: the host nginx's processes this user can see, and how many are workers still
-    'shutting down' from a reload (each finishes the requests it accepted under its old configuration). The host
-    master is read from its pid file and only its children count; without a readable pid file every nginx process
-    on the host counts (a co-tenant's too), which can only lengthen a drain. Seeing none at all is not read as 'none
-    shutting down': the caller cannot tell."""
+def _nginx_scan(proc_root, pid_file):
+    """(master pid or None, [(pid, cmdline)] of the nginx processes counted): the host master read from its pid file and
+    its children; every nginx process on the host when there is no readable pid file."""
     try:
         master = int(Path(pid_file).read_text().strip())
     except (OSError, ValueError):
         master = None
-    visible = shutting = 0
+    found = []
     for entry in os.scandir(proc_root):
         if not entry.name.isdigit():
             continue
@@ -1616,9 +1614,63 @@ def nginx_processes(proc_root=Path('/proc'), pid_file=NGINX_PID_FILE) -> dict:
         except (OSError, ValueError, IndexError):  # the process ended mid-scan
             continue
         if cmdline.startswith(b'nginx: '):
-            visible += 1
-            shutting += b'shutting down' in cmdline
-    return {'visible': visible, 'shutting_down': shutting, 'master': master}
+            found.append((int(entry.name), cmdline))
+    return master, found
+
+
+def nginx_processes(proc_root=Path('/proc'), pid_file=NGINX_PID_FILE) -> dict:
+    """{'visible', 'shutting_down'}: the host nginx's processes this user can see, and how many are workers still
+    'shutting down' from a reload (each finishes the requests it accepted under its old configuration). The host
+    master is read from its pid file and only its children count; without a readable pid file every nginx process
+    on the host counts (a co-tenant's too), which can only lengthen a drain. Seeing none at all is not read as 'none
+    shutting down': the caller cannot tell."""
+    master, found = _nginx_scan(proc_root, pid_file)
+    return {'visible': len(found), 'shutting_down': sum(b'shutting down' in cmdline for _, cmdline in found),
+            'master': master}
+
+
+# Refutation r2, L6-1 and L6-7: which configuration nginx runs is not what `systemctl reload nginx` answered. systemd runs
+# a reload job it took even when its client is interrupted (Ctrl-C) or times out, and a master that cannot apply a
+# configuration (a listen on an address in use passes `nginx -t`) keeps the one it has while the signaller exits 0.
+# nginx applies a reload by starting NEW worker processes (and asking the old ones to finish), and refuses one by keeping
+# its workers - so a worker pid absent from an earlier reading is a configuration loaded after that reading.
+RELOAD_SEEN_ATTEMPTS, RELOAD_SEEN_INTERVAL = 40, 0.25  # up to 10 s for the master to start its new workers
+
+
+def nginx_generation(proc_root=Path('/proc'), pid_file=NGINX_PID_FILE):
+    """(master pid, frozenset of its worker pids not shutting down) of the host nginx, or None when that cannot be told
+    (no readable pid file, no such worker seen, or /proc unreadable). Never raises."""
+    try:
+        master, found = _nginx_scan(proc_root, pid_file)
+    except Exception:  # noqa: BLE001 — cannot tell
+        return None
+    if master is None:
+        return None
+    workers = frozenset(pid for pid, cmdline in found if pid != master
+                        and cmdline.startswith(b'nginx: worker process') and b'shutting down' not in cmdline)
+    return (master, workers) if workers else None
+
+
+def nginx_moved(before, after):
+    """Whether nginx loaded a configuration between two nginx_generation readings: True (another master, or a worker
+    ``before`` did not have), False (the same workers), None (either reading is missing: it cannot be told)."""
+    if before is None or after is None:
+        return None
+    return before[0] != after[0] or bool(after[1] - before[1])
+
+
+def nginx_applied(before):
+    """After a reload: whether nginx was seen starting workers with a configuration loaded since ``before`` (an
+    nginx_generation reading), observed for up to RELOAD_SEEN_ATTEMPTS x RELOAD_SEEN_INTERVAL; None when it cannot be
+    told. Never raises."""
+    try:
+        passed, observations = poll(lambda: ((lambda moved: (moved is True, {'moved': moved}))(
+            nginx_moved(before, nginx_generation()))), attempts=RELOAD_SEEN_ATTEMPTS, interval=RELOAD_SEEN_INTERVAL)
+    except Exception:  # noqa: BLE001 — an unreadable /proc is "cannot tell", never a pass
+        return None
+    if passed:
+        return True
+    return None if observations[-1]['moved'] is None else False
 
 
 def published_by(port) -> list:
@@ -1912,6 +1964,15 @@ def undo_hazards():
     def request(run):
         return (run.provider, run.adapter_version, run.request_sha256)
 
+    def standing_answers(revision_id):  # the answers that stand on a revision, as the review overlay reads them
+        try:
+            from studio import answers as member_answers
+        except ImportError:
+            member_answers = None
+        if member_answers is not None and hasattr(member_answers, 'standing_answers'):
+            return member_answers.standing_answers(revision_id)
+        return list(models.MemberAnswer.objects.filter(revision_id=revision_id, revocation__isnull=True))
+
     def day(value, *, member=False):  # a date as 057a7d39 reads one, else None: a member's value must also be
         try:                            # written YYYY-MM-DD (its merge_user_values); a stored one need not be
             if member and not re.fullmatch('[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
@@ -1986,11 +2047,14 @@ def undo_hazards():
                     found.setdefault(str(encounter.pk), set()).add('second_review_unread')
         # core repair 2026-11-03: a member's answer that stands, or a chosen modifier on a current decision - no older
         # revision reads either, so its page asks the answered question again, or shows the approval without the
-        # modifier (read only where this image has them)
-        if (encounter.current_assessment_id is not None and hasattr(models, 'MemberAnswer')
-                and models.MemberAnswer.objects.filter(assessment_id=encounter.current_assessment_id,
-                                                       revocation__isnull=True).exists()):
-            found.setdefault(str(encounter.pk), set()).add('member_answer')
+        # modifier (read only where this image has them). A standing answer belongs to its REVISION, not to the
+        # assessment it was given on, and the overlay applies it to every assessment of that revision (refutation r2,
+        # L3-4: after a context change re-assessed the revision, an assessment_id filter missed it): read as the overlay
+        # reads them (answers.standing_answers), for the shown assessment's revision and the current one.
+        if hasattr(models, 'MemberAnswer'):
+            revisions = {encounter.current_revision_id} | ({assessment.revision_id} if assessment is not None else set())
+            if any(standing_answers(revision_id) for revision_id in sorted(map(str, revisions))):
+                found.setdefault(str(encounter.pk), set()).add('member_answer')
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers for decision in review.current_decisions(assessment).values()):
             found.setdefault(str(encounter.pk), set()).add('modifier')
@@ -2901,24 +2965,43 @@ def drain_web(port, *, clock=time.monotonic, sleep=time.sleep, sample=None, ngin
         sleep(1)
 
 
-def switch_upstream(ctx, preflight, from_port, to_port, *, revision, progress) -> dict:
+def baseline_problem(drifted, what) -> str:
+    """The refusal when co-tenant routing or app.quillmd.com no longer answer as the preflight baseline recorded
+    (refutation r2, L6-4): the switch is verified against that baseline, so it would fail after nginx moved - and after
+    an undo had closed members' stages - for a reason the switch did not cause."""
+    return (f'{"; ".join(drifted)} since this install\'s preflight baseline, which the switch is verified against, so '
+            f'{what}. Run --phase preflight again (it records the baseline afresh), then rerun this phase.')
+
+
+def switch_upstream(ctx, preflight, from_port, to_port, *, revision, progress, from_revision=None) -> dict:
     """The vhost's upstream from 127.0.0.1:``from_port`` to ``to_port``, through publish_vhost. The live file must be
-    this revision's HTTPS rendering for ``from_port`` (refused otherwise, before anything changes); it is replaced
+    this revision's HTTPS rendering for ``from_port``, and co-tenant routing and app.quillmd.com must still answer as the
+    preflight baseline recorded (refutation r2, L6-4) - refused otherwise, before anything changes; it is replaced
     atomically by the rendering for ``to_port`` - the two differ in their proxy_pass line alone - validated (nginx -t,
     no new warning), reloaded gracefully (old nginx workers finish what they accepted), and verified through the
-    public path: /health/ serves ``revision``, and the co-tenants and app.quillmd.com answer as the preflight baseline
-    recorded. On any failure publish_vhost puts the exact previous bytes back and reloads again. ``progress`` gets
-    'applied_at' (a UTC datetime) once the file is being replaced and 'reloaded' once nginx runs with it: an undo closes
-    what the incoming side may have started from that moment, and drains it only when it took traffic."""
+    public path: /health/ serves ``revision`` (the web's on ``to_port``), and the co-tenants and app.quillmd.com answer
+    as the preflight baseline recorded. When the web on ``from_port`` is the same revision (``from_revision``, the same
+    when not given), /health/ cannot tell the two apart, so nginx must also be seen loading the switched file - new
+    workers since it was written (nginx_applied; refutation r2, L6-7: a reload that exits 0 while the master keeps its
+    old configuration). On any failure publish_vhost puts the exact previous bytes back and reloads again - whenever a
+    reload was asked for, whatever it answered (L6-1). ``progress`` gets 'generation_at_apply' (nginx_generation) and
+    'applied_at' (a UTC datetime) once the file is being replaced, and publish_vhost's 'reload_attempted', 'reloaded'
+    and 'restore_reloaded': an undo closes what the incoming side may have started from that moment, and reads from them
+    whether nginx may run the switched file (nginx_may_have_read)."""
     before = rendered_vhosts(ctx.revision, from_port)['https'].encode()
     after = rendered_vhosts(ctx.revision, to_port)['https'].encode()
     sha_before, sha_after = sha256(before), sha256(after)
+    same = (from_revision or revision) == revision
     state = vhost_state()
     if state['file_sha256'] != sha_before or state['link_target'] != VHOST_LINK_TARGET:
         raise InstallError(f'quillmd-cpt is not this revision\'s HTTPS stage for port {from_port}; the upstream was '
                            'not switched.')
+    drifted = ingress_checks(ctx, preflight)
+    if drifted:
+        raise InstallError(baseline_problem(drifted, 'the upstream was not switched'), details={'baseline': drifted})
 
     def apply():
+        progress['generation_at_apply'] = nginx_generation()
         progress['applied_at'] = dt.datetime.now(dt.timezone.utc)
         vhost_operation('replace', expected_sha256=sha_before, content=base64.b64encode(after).decode())
 
@@ -2928,6 +3011,12 @@ def switch_upstream(ctx, preflight, from_port, to_port, *, revision, progress) -
 
     def verify():
         problems, evidence = https_checks(ctx, revision)
+        if same:
+            evidence['nginx_applied'] = applied = nginx_applied(progress.get('generation_at_apply'))
+            if applied is not True:
+                problems.append(f'nginx was not seen loading the switched vhost (no new worker since it was written: '
+                                f'{"cannot be told" if applied is None else "none"}), and both webs are revision '
+                                f'{revision[:12]}, so /health/ cannot tell which one answers')
         problems += ingress_checks(ctx, preflight)
         if problems:
             raise InstallError('; '.join(problems) + '.', details=evidence)
@@ -2936,7 +3025,58 @@ def switch_upstream(ctx, preflight, from_port, to_port, *, revision, progress) -
     return {'from': from_port, 'to': to_port, 'vhost_sha_before': sha_before, 'vhost_sha_after': sha_after,
             'applied_at': progress['applied_at'].isoformat(), 'nginx_t_log': result.get('nginx_t_log'),
             'https_observations': (result.get('https') or {}).get('observations'),
-            'https_final_status': ((result.get('https') or {}).get('final') or {}).get('status')}
+            'https_final_status': ((result.get('https') or {}).get('final') or {}).get('status'),
+            'nginx_applied': (result.get('https') or {}).get('nginx_applied')}
+
+
+def nginx_may_have_read(progress) -> bool:
+    """Whether nginx may run the vhost a switch wrote, after publish_vhost put the previous bytes back (switch_upstream's
+    ``progress``): a reload of it was asked for - whatever the call answered (refutation r2, L6-1) - or nginx loaded a
+    configuration since the file was written (anyone's reload: the TLS renewal hook's, a co-tenant's), or that cannot
+    be told. Only a file that was never replaced, or one nginx is seen never to have reloaded since, is not."""
+    if progress.get('applied_at') is None:
+        return False
+    if progress.get('reload_attempted') or progress.get('reloaded'):
+        return True
+    try:
+        return nginx_moved(progress.get('generation_at_apply'), nginx_generation()) is not False
+    except Exception:  # noqa: BLE001 — cannot tell: it may have
+        return True
+
+
+def settle_vhost(ctx, *, port, revision, other_revision) -> dict:
+    """After a switch's previous vhost was put back while nginx may have run the switched one (nginx_may_have_read):
+    nginx reloaded with the file once more and PROVEN to route to the web on ``port`` (refutation r2, L6-1) - the file
+    is this revision's rendering for ``port``, nginx -t passes, a reload is seen applied (new workers) and the public
+    /health/ is answered by ``revision``, that web's; health alone proves it only when the other web is another
+    revision (``other_revision``), the new workers alone when it is the same (L6-7). {'proven', ...}; never raises
+    (a Ctrl-C here too is 'not proven'): what is not proven keeps both webs running."""
+    record = {'port': port, 'proven': False}
+    try:
+        expected = sha256(rendered_vhosts(ctx.revision, port)['https'].encode())
+        state = vhost_state()
+        if state['file_sha256'] != expected or state['link_target'] != VHOST_LINK_TARGET:
+            record['problem'] = f'quillmd-cpt is not this revision\'s HTTPS stage for port {port}'
+            return record
+        test = nginx_test()
+        record['nginx_t_ok'] = test['ok']
+        if not test['ok']:
+            record['problem'] = 'nginx -t does not pass'
+            return record
+        generation = nginx_generation()
+        nginx_reload()
+        record['reloaded'] = True
+        record['nginx_applied'] = applied = nginx_applied(generation)
+        served, observations = public_health(revision)
+        record['health'] = {'revision': revision, 'served': served, 'observations': observations[-3:]}
+        record['proven'] = bool(served) and (applied is True or revision != other_revision)
+        if not record['proven']:
+            record['problem'] = ('the public /health/ did not answer revision ' + revision[:12] if not served else
+                                 'nginx was not seen loading the restored vhost, and both webs are revision '
+                                 + revision[:12])
+    except BaseException as error:  # noqa: BLE001 — what is not proven keeps both webs; the caller says so
+        record['problem'] = f'{type(error).__name__}: {error}'
+    return record
 
 
 def serving_summary() -> dict:
@@ -3048,6 +3188,10 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     if problems:
         raise InstallError('The blue/green switch cannot start, so nothing was started or stopped: '
                            + '; '.join(problems) + '.', details={'plan': plan})
+    drifted = ingress_checks(ctx, preflight)  # refutation r2, L6-4: before anything starts, not only after S3's reload
+    if drifted:
+        raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'),
+                           details={'plan': plan, 'baseline': drifted})
     steps, parked, started, progress = {}, {}, {}, {}
     record = {'mode': 'blue-green', 'ports': {'from': live, 'to': idle}, 'steps': steps}
     reached = [None]
@@ -3065,7 +3209,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
         step('S2')
         parked['worker'] = park('worker')
         step('S3')
-        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=ctx.revision, progress=progress)
+        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=ctx.revision, progress=progress,
+                                           from_revision=plan['web']['revision'])
         step('S4')
         docker('run', '-d', *service_args('worker', image_id, ctx.revision, provider_mode, authorization_ref,
                                           participants), input=env_bytes, quiet=True)
@@ -3108,14 +3253,16 @@ def left_summary() -> dict:
 def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, parked, progress) -> tuple:
     """(message, details) after a blue/green step failed, with the site kept served (the failure matrix, ops/INSTALL.md
     app). S1, S2: the incoming web is removed and the old worker runs again - nothing reached the new pair. S3: the vhost
-    is already back (publish_vhost); what the incoming web may have started since the file changed is closed, the list
-    states the old revision labels otherwise are put back, the incoming web is drained when it took traffic and removed,
-    and the old worker is put back - held while the close names records it would act on (today's rule). S4: the new
-    worker is stopped and what the new pair started is closed; when the close names a state the old web would SHOW
-    wrongly (and the pair is another revision) the NEW web keeps serving, with the old worker parked and the new one
-    stopped; otherwise the states are put back, the vhost is switched back (a graceful reload, /health/ = the old
-    revision), the incoming web is drained and removed and the old worker put back (or held). S5: the new pair serves
-    and nothing is undone."""
+    is already back (publish_vhost); when nginx may have run the switched file it is proven to run the restored one
+    before anything else (undo_switch_s3; refutation r2, L6-1) - both webs stay otherwise; what the incoming web may
+    have started since the file changed is closed, and closed again once it was drained (L6-3), the list states the
+    old revision labels otherwise are put back, the incoming web is removed, and the old worker is put back - held
+    while a close names records it would act on, or ones only this revision's web writes (L6-6). S4: the new worker is
+    stopped and what the new pair started is closed; when the close names a state the old web would SHOW wrongly (and
+    the pair is another revision) the NEW web keeps serving, with the old worker parked and the new one stopped;
+    otherwise return_to_old_web switches the vhost back (a graceful reload, /health/ = the old revision), drains the
+    incoming web, closes again, removes it and puts the old worker back (or holds it). S5: the new pair serves and
+    nothing is undone."""
     cause = str(failure) or type(failure).__name__
     live, idle = plan['live'], plan['idle']
     web, worker = SERVICES['web'], SERVICES['worker']
@@ -3175,53 +3322,189 @@ def close_and_put_back(image_id, env_bytes, since, revision, reason, kinds, prev
 
 
 def undo_switch_s3(ctx, cause, *, image_id, env_bytes, plan, parked, progress, previous, kinds, reason) -> tuple:
+    """S3's undo (publish_vhost has put the previous vhost back): the incoming web is removed only once nginx is known
+    not to route to it - it never read the switched file, or it was reloaded with the restored one and that was proven
+    (settle_vhost; refutation r2, L6-1: an attempted reload may have been applied whatever its call answered) -
+    otherwise both webs are left running and the old worker parked. What the incoming web may have started is closed
+    from the moment the file was replaced, and closed again once it was drained (L6-3: requests it had accepted ran
+    during the drain); the old worker is held while either close names a record it would act on, or one only this
+    revision's web writes, which it made while it served (WEB_WRITTEN_HAZARDS, L6-6)."""
     live, idle = plan['live'], plan['idle']
+    worker = SERVICES['worker']
     web = SERVICES['web']
-    incoming_sha = sha256(rendered_vhosts(ctx.revision, idle)['https'].encode())
-    if (vhost_state()['file_sha256'] == incoming_sha
-            or (progress.get('reloaded') and not progress.get('restore_reloaded'))):
-        # publish_vhost could not put the previous vhost back, or not reload nginx with it: the file or nginx may still
-        # name the incoming web, so both webs stay up and the old worker parked until a person looks.
-        return (f'{cause}; quillmd-cpt or nginx may still name the incoming web ({INCOMING_WEB}, port {idle}), so both '
-                f'webs were left running and the old worker parked ({SERVICES["worker"]}-previous): read "left" in '
-                'this receipt, then ops/INSTALL.md, Recovery notes (a switch that stopped half way).', {})
-    details, notes, hold = {}, [], False
-    if progress.get('applied_at') is not None:
-        undone = close_and_put_back(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds, previous)
-        details.update(stages_closed=undone['closed'], states_put_back=undone['put_back'])
-        notes += undone['problems']
-        acting = undone['acting']
-        if undone['closed'] is not None and (acting is None or acting):
-            notes.append((hazard_summary(acting) if acting is not None else 'the close did not say which encounters')
-                         + ' hold records the old revision would act on under its own rules')
-        hold = bool(undone['problems']) or acting is None or bool(acting)
-        if undone['shown']:
-            notes.append(f'{hazard_summary(undone["shown"])} hold states an older revision shows wrongly; the old web '
-                         'never stopped showing them and no new worker ran, so the receipt names them only')
-    if progress.get('reloaded'):
+    old_revision = plan['web']['revision']
+    applied = progress.get('applied_at') is not None
+    halfway = (f'both webs were left running and the old worker parked ({worker}-previous): read "left" in this '
+               'receipt, then ops/INSTALL.md, Recovery notes (a switch that stopped half way)')
+    details = {}
+    if applied and vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https'].encode()):
+        # publish_vhost could not put the previous vhost back: the file still names the incoming web
+        return (f'{cause}; quillmd-cpt still names the incoming web ({INCOMING_WEB}, port {idle}), so {halfway}.',
+                details)
+    touched = nginx_may_have_read(progress)
+    if touched:
+        details['settle'] = settle_vhost(ctx, port=live, revision=old_revision, other_revision=ctx.revision)
+        if not details['settle']['proven']:
+            return (f'{cause}; the previous vhost was put back, but nginx may still route to the incoming web '
+                    f'({INCOMING_WEB}, port {idle}): a reload of the switched vhost was asked for, or nginx loaded '
+                    'one since it was written, and nginx was not proven to run the previous one again '
+                    f'({details["settle"].get("problem")}), so {halfway}.', details)
+    closes, first_at = [], dt.datetime.now(dt.timezone.utc)
+    if applied:
+        closes.append(close_and_put_back(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds,
+                                         previous))
+        details.update(stages_closed=closes[0]['closed'], states_put_back=closes[0]['put_back'])
+    if touched:
         details['incoming_drain'] = drain_web(idle)
+        closes.append(close_and_put_back(image_id, env_bytes, first_at, ctx.revision, reason, kinds, previous))
+        details.update(stages_closed_after_drain=closes[-1]['closed'],
+                       states_put_back_after_drain=closes[-1]['put_back'])
     removed = remove_incoming_web()
+    hold, notes = undo_hold(closes, same=same_revision(previous, ctx.revision))
     worker_note = restore_parked_worker(parked.get('worker'), start=not hold)
     held = (' It is held - nothing can be sent - because ' + '; '.join(notes) + ': install this revision again once '
-            'its failure is fixed (its worker reads them under its own rules), or start the old worker by hand once '
-            'they are cleared (ops/INSTALL.md, Reinstalling an older revision).') if hold else (
+            'its failure is fixed (its web and worker read them under its own rules), or start the old worker by hand '
+            'once they are cleared (ops/INSTALL.md, Reinstalling an older revision).') if hold else (
         (' ' + '; '.join(notes) + '.') if notes else '')
-    return (f'{cause}; the vhost was put back, so {web} kept serving on {live}; the incoming web ({INCOMING_WEB}) '
-            f'{removed}; the old worker was {worker_note}.{held} Migrations already applied are not reversed.',
-            details)
+    vhost = ('the vhost was put back and nginx proven to run it again' if touched else
+             'the vhost was put back before nginx read it' if applied else 'the vhost was not changed')
+    return (f'{cause}; {vhost}, so {web} kept serving on {live}; the incoming web ({INCOMING_WEB}) {removed}; the old '
+            f'worker was {worker_note}.{held} Migrations already applied are not reversed.', details)
+
+
+# Refutation r2, L6-6: the SHOWN_HAZARDS only this revision's WEB writes - a member's answer, a reviewer's chosen
+# modifier (no worker makes either, and no revision before the core repair can). An undo that finds one after its new
+# web took traffic is finding what that web wrote while it served: the old web never showed it, and the old worker's
+# re-assessment would drop a chosen modifier (its carry has no such column) - so it holds the old worker and never says
+# the old web had shown it. A pair of this same revision reads them as this revision does.
+WEB_WRITTEN_HAZARDS = ('member_answer', 'modifier')
+
+
+def merge_hazards(*answers) -> dict:
+    """{encounter id: sorted reasons} of every hazards dict given (None and {} skipped)."""
+    merged = {}
+    for answer in answers:
+        for pk, reasons in (answer or {}).items():
+            merged.setdefault(pk, set()).update(reasons)
+    return {pk: sorted(reasons) for pk, reasons in sorted(merged.items())}
+
+
+def undo_hold(closes, *, same) -> tuple:
+    """(hold, notes) from an undo's closes (close_and_put_back's answers): a close that failed, or named nothing it
+    read, holds the old worker; so does a record it would act on under its own rules, and one only this revision's web
+    writes (WEB_WRITTEN_HAZARDS, unless the old pair is this same revision). The other shown states are named only:
+    the old web never stopped showing them, and no new worker ran."""
+    notes = [problem for close in closes for problem in close['problems']]
+    unread = any(close['closed'] is not None and close['acting'] is None for close in closes)
+    acting = merge_hazards(*(close['acting'] for close in closes))
+    shown = merge_hazards(*(close['shown'] for close in closes))
+    written = {pk: [r for r in reasons if r in WEB_WRITTEN_HAZARDS] for pk, reasons in shown.items()} if not same else {}
+    written = {pk: reasons for pk, reasons in written.items() if reasons}
+    others = {pk: [r for r in reasons if r not in (written.get(pk) or ())] for pk, reasons in shown.items()}
+    others = {pk: reasons for pk, reasons in others.items() if reasons}
+    if unread:
+        notes.append('the close did not say which encounters it named, which holds records the old revision would act '
+                     'on under its own rules')
+    if acting:
+        notes.append(hazard_summary(acting) + ' hold records the old revision would act on under its own rules')
+    if written:
+        notes.append(hazard_summary(written) + ' hold records only this revision\'s web writes (a member\'s answer, a '
+                     'reviewer\'s chosen modifier), which it made while it served: the old web shows them wrongly - it '
+                     'asks the answered question again, and shows the approval without its modifier - and its worker '
+                     'would drop a chosen modifier when it re-assesses')
+    hold = bool(notes)
+    if others:
+        notes.append(hazard_summary(others) + ' hold states an older revision shows wrongly; the old web never stopped '
+                     'showing them and no new worker ran, so the receipt names them only')
+    return hold, notes
+
+
+def keep_note(live, idle) -> str:
+    web, worker = SERVICES['web'], SERVICES['worker']
+    return (f'the new web keeps serving on {idle} ({INCOMING_WEB}); its worker ({worker}) is stopped and the old '
+            f'worker parked ({worker}-previous), so nothing is processed until a person decides; the old web is still '
+            f'running on {live} with no traffic. Read "left" in this receipt, then ops/INSTALL.md, Recovery notes')
+
+
+def return_to_old_web(ctx, cause, *, image_id, env_bytes, preflight, live, idle, old_revision, previous,
+                      parked_worker, kinds, reason, first, first_at) -> tuple:
+    """The switch back of an undone switch whose new web serves on ``idle`` (as INCOMING_WEB) and whose old web still
+    runs on ``live`` - the S4 undo, and rollback-app in the S4 'keep' layout - from its first close ``first`` on (it
+    named no state the old web shows wrongly): the list states put back, the upstream switched back (a graceful
+    reload, /health/ = ``old_revision``), the incoming web drained, closed again from ``first_at`` (refutation r2,
+    L6-3: the new web took every request until the reload, and finished those in flight during the drain), the states
+    put back again, the new worker and the incoming web removed, and the old worker put back - held while either close
+    names a record it would act on, or the second one a state the old web shows wrongly (the new web wrote it after
+    the first close: L6-6). A switch back whose reload was asked for and that then failed leaves both webs running
+    unless nginx is proven to run the new web's vhost again (settle_vhost, L6-1). (message, details, outcome): outcome
+    'kept' (the new web keeps serving), 'halfway' (nginx may route to either web), 'held' or 'switched'."""
+    web, worker = SERVICES['web'], SERVICES['worker']
+    keep = keep_note(live, idle)
+    details = {}
+    same = same_revision(previous, ctx.revision)
+    try:
+        details['states_put_back'] = put_back_states(first, previous.get('image'), image_id, env_bytes)
+    except BaseException as error:  # noqa: BLE001
+        return (f'{cause}; the list states the old revision labels otherwise could not be put back ({error}), so '
+                f'{keep}.', details, 'kept')
+    back = {}
+    try:
+        details['switch_back'] = switch_upstream(ctx, preflight, idle, live, revision=old_revision, progress=back,
+                                                 from_revision=ctx.revision)
+    except BaseException as failure:  # noqa: BLE001
+        error = str(failure) or type(failure).__name__
+        if nginx_may_have_read(back):
+            details['settle'] = settle_vhost(ctx, port=idle, revision=ctx.revision, other_revision=old_revision)
+            if not details['settle']['proven']:
+                return (f'{cause}; the switch back to the old web failed ({error}) after nginx was asked to reload with '
+                        'it, and nginx was not proven to run the new web\'s vhost again '
+                        f'({details["settle"].get("problem")}), so nginx may route to either web: both webs were left '
+                        f'running ({INCOMING_WEB} on {idle}, {web} on {live}), the new worker stopped ({worker}) and '
+                        f'the old worker parked ({worker}-previous). Remove neither before reading which one nginx '
+                        'serves: read "left" in this receipt, then ops/INSTALL.md, Recovery notes (a switch that '
+                        'stopped half way). The list states were put back to the old revision\'s: rerun --phase app, '
+                        'which recomputes them.', details, 'halfway')
+        return (f'{cause}; the switch back to the old web failed ({error}) and the vhost was left on the new one, so '
+                f'{keep}. The list states were put back to the old revision\'s: rerun --phase app, which recomputes '
+                'them.', details, 'kept')
+    details['incoming_drain'] = drain_web(idle)
+    second = close_and_put_back(image_id, env_bytes, first_at, ctx.revision, reason, kinds, previous)
+    details.update(stages_closed_after_drain=second['closed'], states_put_back_after_drain=second['put_back'])
+    remove_service_container(worker, 'worker')
+    removed = remove_incoming_web()
+    notes = list(second['problems'])
+    _, first_acting = hazards_by_kind(first.get('hazards'))
+    if first_acting is None:  # never read as "none" (a same-revision pair reaches here with it)
+        notes.append('the first close did not say which encounters it named')
+    if second['closed'] is not None and second['acting'] is None:
+        notes.append('the close after the drain did not say which encounters it named')
+    acting = merge_hazards(first_acting, second['acting'])
+    if acting:
+        notes.append(hazard_summary(acting) + ' hold records it would act on under its own rules')
+    if second['shown'] and not same:
+        notes.append(hazard_summary(second['shown']) + ' hold states the old web shows wrongly, which this revision\'s '
+                     'web wrote after the first close and before it stopped taking traffic (a member\'s answer, a '
+                     'reviewer\'s chosen modifier): the old web serves them wrongly now - it asks the answered '
+                     'question again, and shows the approval without its modifier - and its worker would drop a chosen '
+                     'modifier when it re-assesses; install this revision again to show them as they are')
+    hold = bool(notes)
+    worker_note = restore_parked_worker(parked_worker, start=not hold)
+    held = (f' It is held - nothing can be sent - because {"; ".join(notes)} (ops/INSTALL.md, Reinstalling an older '
+            'revision).') if hold else ''
+    return (f'{cause}; the vhost was switched back, so {web} (revision {old_revision[:12]}) serves on {live} again; '
+            f'the new worker was removed and the incoming web {removed}; the old worker was {worker_note}.{held} '
+            'Migrations already applied are not reversed.', details, 'held' if hold else 'switched')
 
 
 def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, progress, previous, kinds,
                    reason) -> tuple:
     live, idle = plan['live'], plan['idle']
-    web, worker = SERVICES['web'], SERVICES['worker']
-    old_revision = plan['web']['revision']
+    worker = SERVICES['worker']
     log_tail(ctx, worker, 'worker', 'worker-failed')
     stop_service_container(worker, 'worker')  # its current stage finishes (600 s)
-    keep = (f'the new web keeps serving on {idle} ({INCOMING_WEB}); its worker ({worker}) is stopped and the old '
-            f'worker parked ({worker}-previous), so nothing is processed until a person decides; the old web is still '
-            f'running on {live} with no traffic. Read "left" in this receipt, then ops/INSTALL.md, Recovery notes')
+    keep = keep_note(live, idle)
     details = {}
+    first_at = dt.datetime.now(dt.timezone.utc)
     try:
         closed = close_undone_stages(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds)
     except BaseException as error:  # noqa: BLE001
@@ -3231,32 +3514,15 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
     if (shown is None or shown) and not same_revision(previous, ctx.revision):
         named = hazard_summary(shown) if shown is not None else 'the close did not say which encounters'
         return (f'{cause}; {named} hold states the old revision would show wrongly whatever it is handed (a bounded '
-                'second review refused whole or not read, or a code only a harness participant proposed), and this '
-                f'revision shows them as they are: {keep}.', details)
-    try:
-        details['states_put_back'] = put_back_states(closed, previous.get('image'), image_id, env_bytes)
-    except BaseException as error:  # noqa: BLE001
-        return (f'{cause}; the list states the old revision labels otherwise could not be put back ({error}), so '
+                'second review refused whole or not read, a code only a harness participant proposed, a member\'s '
+                'answer or a chosen modifier), and this revision shows them as they are: '
                 f'{keep}.', details)
-    back = {}
-    try:
-        details['switch_back'] = switch_upstream(ctx, preflight, idle, live, revision=old_revision, progress=back)
-    except BaseException as error:  # noqa: BLE001
-        return (f'{cause}; the switch back to the old web failed ({error}) and the vhost was left on the new one, so '
-                f'{keep}. The list states were put back to the old revision\'s: rerun --phase app, which recomputes '
-                'them.', details)
-    details['incoming_drain'] = drain_web(idle)
-    remove_service_container(worker, 'worker')
-    removed = remove_incoming_web()
-    hold = acting is None or bool(acting)
-    worker_note = restore_parked_worker(parked.get('worker'), start=not hold)
-    held = (f' It is held - nothing can be sent - because '
-            f'{hazard_summary(acting) if acting is not None else "the close did not say which encounters"} hold '
-            'records it would act on under its own rules: install this revision again once its failure is fixed '
-            '(ops/INSTALL.md, Reinstalling an older revision).') if hold else ''
-    return (f'{cause}; the vhost was switched back, so {web} (revision {old_revision[:12]}) serves on {live} again; '
-            f'the new worker was removed and the incoming web {removed}; the old worker was {worker_note}.{held} '
-            'Migrations already applied are not reversed.', details)
+    message, more, _ = return_to_old_web(ctx, cause, image_id=image_id, env_bytes=env_bytes, preflight=preflight,
+                                         live=live, idle=idle, old_revision=plan['web']['revision'],
+                                         previous=previous, parked_worker=parked.get('worker'), kinds=kinds,
+                                         reason=reason, first=closed, first_at=first_at)
+    details.update(more)
+    return message, details
 
 
 # --- phases ------------------------------------------------------------------------
@@ -3410,16 +3676,71 @@ def _statements(value):
     return None
 
 
+# Refutation r2, L6-8: an index is safe for an older pair only when it can refuse none of its writes - Django's own
+# (non-unique) Index; any index on a table this migration creates; or a UNIQUE index (studio.models.UniqueIndex) that is
+# partial over rows whose column, one this migration adds as nullable with no database default, is set - an older pair
+# never writes that column, so its rows hold NULL there and stay outside the index. Every other index - a unique one on
+# an existing table otherwise, or a class this check does not read - is refused like a constraint on an existing table.
+NON_UNIQUE_INDEXES = ('django.db.models.Index', 'django.db.models.indexes.Index')
+UNIQUE_INDEXES = ('studio.models.UniqueIndex',)
+
+
+def _imports(tree) -> dict:
+    """{name: what it is bound to} by the module's top-level imports: 'models' -> 'django.db.models' for
+    `from django.db import models`, 'studio' -> 'studio' for `import studio.models`."""
+    names = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                names[alias.asname or alias.name.split('.')[0]] = alias.name if alias.asname else alias.name.split('.')[0]
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for alias in node.names:
+                names[alias.asname or alias.name] = f'{node.module}.{alias.name}'
+    return names
+
+
+def _dotted(node, imports):
+    """The dotted name a call's callee resolves to through ``imports`` (None for anything but a name or attributes)."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.insert(0, node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name) or node.id not in imports:
+        return None
+    return '.'.join([imports[node.id], *parts])
+
+
+def _not_null_condition(node, imports):
+    """The field F of an index condition that is exactly Q(F__isnull=False) or Q(('F__isnull', False)); else None."""
+    if not isinstance(node, ast.Call) or _dotted(node.func, imports) != 'django.db.models.Q':
+        return None
+    if node.args and not node.keywords and len(node.args) == 1:
+        pair = _literal(node.args[0])
+        lookup = pair[0] if isinstance(pair, tuple) and len(pair) == 2 and pair[1] is False else None
+    elif node.keywords and not node.args and len(node.keywords) == 1 and _literal(node.keywords[0].value) is False:
+        lookup = node.keywords[0].arg
+    else:
+        return None
+    if not isinstance(lookup, str) or not lookup.endswith('__isnull'):
+        return None
+    field = lookup[:-len('__isnull')]
+    return field if re.fullmatch(r'[a-z_][a-z0-9_]*', field) and '__' not in field else None
+
+
 def migration_verdict(source: str) -> dict:
     """{'safe', 'why'} of one migration file, read with ast (nothing imported or run). Safe operations: CreateModel (a
     table no older revision reads); AddField to a table this migration creates, or nullable, or with db_default, or
-    whose column this migration's SQL gives a default; AddIndex; AddConstraint on a table this migration creates; and
-    RunSQL that only sets column defaults. Anything else - a removed, renamed or altered column or table, a constraint
-    on an existing table, RunPython, other SQL, a form this reader does not read - is not."""
+    whose column this migration's SQL gives a default; AddIndex of Django's own non-unique Index, on a table this
+    migration creates, or a unique index that is partial over rows whose column - one this migration adds as nullable,
+    with no database default - is set (NON_UNIQUE_INDEXES, UNIQUE_INDEXES); AddConstraint on a table this migration
+    creates; and RunSQL that only sets column defaults. Anything else - a removed, renamed or altered column or table,
+    a constraint or another unique index on an existing table, an index of a class this check does not read,
+    RunPython, other SQL, a form this reader does not read - is not."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return {'safe': False, 'why': ['the file does not parse']}
+    imports = _imports(tree)
     operations = None
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and node.name == 'Migration':
@@ -3429,10 +3750,16 @@ def migration_verdict(source: str) -> dict:
                     operations = [_call(element) for element in item.value.elts]
     if operations is None:
         return {'safe': False, 'why': ['no operations list was read']}
-    created, defaults = set(), set()
+    created, defaults, nullable = set(), set(), {}
     for kind, keywords in operations:
         if kind == 'CreateModel' and keywords is not None and isinstance(_literal(keywords.get('name')), str):
             created.add(_literal(keywords['name']).lower())
+        if kind == 'AddField' and keywords is not None:  # (model, field) -> its column, for the unique-index rule
+            model, name = _literal(keywords.get('model_name')), _literal(keywords.get('name'))
+            field_kind, field = _call(keywords.get('field'))
+            if (isinstance(model, str) and isinstance(name, str) and field is not None and field_kind != 'ManyToManyField'
+                    and _literal(field.get('null')) is True and 'db_default' not in field and 'db_column' not in field):
+                nullable[(model.lower(), name)] = f'{name}_id' if field_kind in ('ForeignKey', 'OneToOneField') else name
         if kind == 'RunSQL' and keywords is not None:
             for statement in _statements(keywords.get('sql')) or ():
                 match = SET_DEFAULT_RE.fullmatch(statement)
@@ -3468,7 +3795,27 @@ def migration_verdict(source: str) -> dict:
             else:
                 unsafe.append(f'{label}: NOT NULL with no database default, so an older pair\'s insert is refused')
         elif kind == 'AddIndex':
-            why.append(f'{_literal(keywords.get("model_name"))}: an index (writes are not refused)')
+            model, index = _literal(keywords.get('model_name')), keywords.get('index')
+            index_class = _dotted(index.func, imports) if isinstance(index, ast.Call) else None
+            _, index_keywords = _call(index)
+            if index_class in NON_UNIQUE_INDEXES:
+                why.append(f'{model}: an index (writes are not refused)')
+            elif isinstance(model, str) and model.lower() in created and index_class is not None:
+                why.append(f'{model}: an index on a table this migration creates')
+            elif index_class in UNIQUE_INDEXES and isinstance(model, str) and index_keywords is not None:
+                fields = _literal(index_keywords.get('fields'))
+                column = _not_null_condition(index_keywords.get('condition'), imports)
+                added = nullable.get((model.lower(), column)) if column else None
+                if (added and isinstance(fields, (list, tuple)) and column in fields
+                        and (f'studio_{model.lower()}', added.lower()) not in defaults):
+                    why.append(f'{model}: a unique index only over rows whose {column} is set, a column this migration '
+                               'adds as nullable: an older pair leaves it NULL, so none of its writes is refused')
+                else:
+                    unsafe.append(f'{model}: a unique index on an existing table that is not partial over a column '
+                                  'this migration adds as nullable, which can refuse an older pair\'s rows')
+            else:
+                unsafe.append(f'{model}: an index of a class this check does not read ({index_class or "unread"}), '
+                              'which may be unique and refuse an older pair\'s rows')
         elif kind == 'AddConstraint':
             model = _literal(keywords.get('model_name'))
             if isinstance(model, str) and model.lower() in created:
@@ -3899,9 +4246,12 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
       B3  park this revision's worker (its current stage finishes)
-      B4  close every stage this revision's pair queued, ran or left resumable since it was created, and every open
-          stage of a kind the previous worker does not run (close_undone_stages, rollback-app's rule); refuse to go on
-          while the close names a record; put back the list states the previous revision labels otherwise
+      B4  read again that co-tenant routing and app.quillmd.com answer as the preflight baseline (the switch is verified
+          against it) and that this revision recorded nothing an older revision would act on, or show, wrongly - so
+          nothing is closed for a switch that cannot pass (refutation r2, L6-4) - then close every stage this
+          revision's pair queued, ran or left resumable since it was created, and every open stage of a kind the
+          previous worker does not run (close_undone_stages, rollback-app's rule); refuse to go on while the close
+          names a record; put back the list states the previous revision labels otherwise
       B5  switch the vhost's upstream to the idle port (/health/ = the previous revision through the public path)
       B6  drain this revision's web, stop it and park it; the previous web takes the canonical name
       B7  close again what this revision's web started between B4 and the end of its drain (requests it accepted
@@ -3909,13 +4259,16 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
           (ops/INSTALL.md, Known limits); put back again; hold the previous worker while the close names a record
       B8  start the previous worker
       B9  remove this revision's parked pair (its image is kept)
-    Before B5 every failure resumes this revision's pair; from B5 on the previous web serves and the receipt says what
-    is left."""
+    The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
+    the previous web serves and the receipt says what is left."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
     kinds = stage_kinds_of(prev_image, env_bytes)
     reason = f'revision {ctx.revision[:12]} was switched back to {prev_revision[:12]} (switch-back)'
+    drifted = ingress_checks(ctx, preflight)
+    if drifted:
+        raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
     steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
               'states_put_back': put_back, 'since': since.isoformat()}
@@ -3929,8 +4282,15 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         hazards = closed.get('hazards') if isinstance(closed, dict) else None
         if not isinstance(hazards, dict) or hazards:
             named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
+            written = ({pk: [r for r in reasons if r in WEB_WRITTEN_HAZARDS] for pk, reasons in hazards.items()}
+                       if isinstance(hazards, dict) else {})
+            written = {pk: reasons for pk, reasons in written.items() if reasons}
             raise InstallError(f'{when}, {named} hold records the previous revision would act on, or show, wrongly '
-                               'under its own rules', details={'hazards': hazards})
+                               'under its own rules' + (
+                                   f' ({hazard_summary(written)} only this revision\'s web writes: it wrote them '
+                                   'before it stopped taking traffic, and the previous web shows them wrongly; run '
+                                   '--phase app again to come back to this revision, whose web shows them as they '
+                                   'are)' if written else ''), details={'hazards': hazards})
     recorder = AvailabilityRecorder().start()
     try:
         step('B2')
@@ -3941,12 +4301,21 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         step('B3')
         parked['worker'] = park('worker')
         step('B4')
+        drifted = ingress_checks(ctx, preflight)
+        if drifted:
+            raise InstallError(baseline_problem(drifted, 'nothing was closed or switched'),
+                               details={'baseline': drifted})
+        hazards = undo_hazards(image_id, env_bytes, ctx.revision)
+        if hazards:
+            raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
+                               'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
         first = dt.datetime.now(dt.timezone.utc)
         closes['first'] = close_undone_stages(image_id, env_bytes, since, ctx.revision, reason, kinds)
         refuse_on_hazards(closes['first'], 'after this revision\'s worker stopped and its stages were closed')
         put_back.append(put_back_states(closes['first'], prev_image, image_id, env_bytes))
         step('B5')
-        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress)
+        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
+                                           from_revision=ctx.revision)
         step('B6')
         record['drain'] = drain_web(live)
         parked['web'] = retire_live_web(plan['web']['id'])
@@ -3965,7 +4334,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     except BaseException as failure:
         try:
             message = undo_switch_back(ctx, failure, reached[0], image_id=image_id, env_bytes=env_bytes, plan=plan,
-                                       parked=parked, progress=progress, put_back=put_back)
+                                       parked=parked, progress=progress, put_back=put_back, closes=closes,
+                                       prev_revision=prev_revision)
         except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
             message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
                        f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
@@ -3976,14 +4346,19 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     return {'started': started, 'replaced': parked, **record}
 
 
-def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked, progress, put_back) -> str:
+def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked, progress, put_back, closes=None,
+                     prev_revision=None) -> str:
     """What a failed switch-back step leaves (ops/INSTALL.md, switch-back): before the switch, this revision's pair
     resumes (its worker put back and started, its list states recomputed with its own derivation when the previous
-    ones were put back, the previous web drained when it took traffic and removed); from the switch on the previous web
-    serves and nothing is undone."""
+    ones were put back, the previous web drained when it may have taken traffic and removed - only once nginx is
+    proven to run this revision's vhost again when a reload of the switched one was asked for, whatever it answered:
+    refutation r2, L6-1; both webs are left running otherwise); from the switch on the previous web serves and nothing
+    is undone."""
     cause = str(failure) or type(failure).__name__
     live, idle = plan['live'], plan['idle']
     web, worker = SERVICES['web'], SERVICES['worker']
+    halfway = (f'so both webs were left running and this revision\'s worker parked ({worker}-previous): read "left" in '
+               'this receipt, then ops/INSTALL.md, Recovery notes (a switch that stopped half way).')
     if reached in (None, 'B2'):
         log_tail(ctx, INCOMING_WEB, 'web', 'incoming-web-failed')
         return (f'{cause}; the previous revision\'s web ({INCOMING_WEB}, port {idle}) {remove_incoming_web()}, and '
@@ -3993,14 +4368,20 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
         return (f'{cause}; this revision\'s worker is {state} and the previous revision\'s web ({INCOMING_WEB}) '
                 f'{remove_incoming_web()}; {web} kept serving on {live}.')
     if reached in ('B4', 'B5'):
-        if reached == 'B5' and (vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https']
-                                                                     .encode())
-                                or (progress.get('reloaded') and not progress.get('restore_reloaded'))):
-            return (f'{cause}; quillmd-cpt or nginx may still name the previous revision\'s web ({INCOMING_WEB}, port '
-                    f'{idle}), so both webs were left running and this revision\'s worker parked ({worker}-previous): '
-                    'read "left" in this receipt, then ops/INSTALL.md, Recovery notes.')
+        switched_file = reached == 'B5' and progress.get('applied_at') is not None
+        if switched_file and vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https']
+                                                                     .encode()):
+            return (f'{cause}; quillmd-cpt still names the previous revision\'s web ({INCOMING_WEB}, port {idle}), '
+                    + halfway)
+        touched = reached == 'B5' and nginx_may_have_read(progress)
         notes = []
-        if progress.get('reloaded'):
+        if touched:
+            settled = settle_vhost(ctx, port=live, revision=ctx.revision, other_revision=prev_revision or '')
+            if not settled['proven']:
+                return (f'{cause}; the vhost was put back, but nginx may still route to the previous revision\'s web '
+                        f'({INCOMING_WEB}, port {idle}): a reload of the switched vhost was asked for, or nginx loaded '
+                        f'one since it was written, and nginx was not proven to run this revision\'s again '
+                        f'({settled.get("problem")}), ' + halfway)
             drain_web(idle)
         removed = remove_incoming_web()
         if put_back:  # once no previous-revision container runs (I-state), before this revision's worker resumes
@@ -4014,7 +4395,8 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
         return (f'{cause}; nothing was switched: {web} kept serving on {live}, this revision\'s worker was '
                 f'{worker_note} and the previous revision\'s web ({INCOMING_WEB}) {removed}'
                 + (f'; {"; ".join(notes)}' if notes else '')
-                + '. A stage the close already closed stays closed (failed, with the installer\'s note).')
+                + ('. A stage the close already closed stays closed (failed, with the installer\'s note).'
+                   if (closes or {}).get('first') is not None else '. Nothing was closed.'))
     if reached == 'B8':
         log_tail(ctx, worker, 'worker', 'worker-failed')
         stop_service_container(worker, 'worker')
@@ -4323,6 +4705,17 @@ def operator_document(ctx, username, kind, password) -> dict:
                                                                 'membership'}
 
 
+def operator_granted_by() -> str:
+    """Who records the operator grants (grant_operator --by): this installer and the host login that ran it. Passed
+    explicitly (refutation r2, L6-2): the one-shot runs as this user's uid so it can read the 0600 reason file, and the
+    image has no passwd entry for it, where the command's own default once looked the login up and failed."""
+    try:
+        login = getpass.getuser()
+    except Exception:  # noqa: BLE001 — no passwd entry here either: the uid says who
+        login = f'uid {os.getuid()}'
+    return f'ops/install.py --phase operators ({login})'[:120]
+
+
 def operator_reason(ctx, username, kind) -> str:
     return (f'Platform-operator diagnostics access for the CPT Studio {kind} account {username} (owner directive '
             '2026-11-03, section 2: operator diagnostics stay available to authenticated platform operators and are '
@@ -4345,6 +4738,12 @@ def phase_operators(ctx) -> dict:
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    # Refutation r2, L6-2: the operator grant is this revision's table (migration 0010), so the phase refuses -
+    # creating no account and no file - until the app phase has applied this revision's migrations.
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. No account or file was created.')
     names = {'final': OPERATOR_CREDENTIALS, 'staged': f'.{OPERATOR_CREDENTIALS}.new'}
     state = root_file('state', **names)
     agent_staged = OPS_AGENT_CREDENTIALS.with_name(f'.{OPS_AGENT_CREDENTIALS.name}.new')
@@ -4394,11 +4793,11 @@ def phase_operators(ctx) -> dict:
             os.link(agent_staged, OPS_AGENT_CREDENTIALS)
             agent_staged.unlink()
         committed = True
-        grants = {}
+        grants, granted_by = {}, operator_granted_by()
         for username, (kind, _) in spec.items():
             write_private(scratch, f'{username}.reason', operator_reason(ctx, username, kind).encode())
             result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
-                                        f'/run/cpt-operators/{username}.reason'], env, user=user,
+                                        f'/run/cpt-operators/{username}.reason', '--by', granted_by], env, user=user,
                              mounts=[f'type=bind,src={scratch / (username + ".reason")},'
                                      f'dst=/run/cpt-operators/{username}.reason,readonly'])
             assert_no_secret([result.stdout, result.stderr], passwords.values())
@@ -4522,13 +4921,16 @@ def ingress_checks(ctx, preflight) -> list:
 
 def publish_vhost(ctx, apply, undo, verify, progress=None) -> dict:
     """Apply a vhost change, validate, reload, verify; restore exactly on any failure. ``progress`` (a dict, when
-    given) records 'reloaded' once nginx was reloaded with the change and 'restore_reloaded' once it was reloaded
-    again with the restored file, for a caller that must know which configuration nginx runs."""
+    given) records 'reload_attempted' right before nginx is asked to reload with the change, 'reloaded' once that call
+    returned, and 'restore_reloaded' once nginx was reloaded again with the restored file, for a caller that must know
+    which configuration nginx may run. A reload that was asked for is treated as applied whatever its call answered
+    (refutation r2, L6-1: systemd runs a reload job it took even when its client is interrupted by a Ctrl-C or gives up
+    at the 30 s timeout), so the restored file is reloaded then too."""
     progress = {} if progress is None else progress
     before = nginx_test()
     if not before['ok']:
         raise InstallError('nginx -t does not pass before the change; refusing.')
-    reloaded, log = False, None
+    log = None
     try:
         apply()
         after = nginx_test()
@@ -4536,8 +4938,9 @@ def publish_vhost(ctx, apply, undo, verify, progress=None) -> dict:
         new_warnings = sorted(set(after['warnings']) - set(before['warnings']))
         if not after['ok'] or new_warnings:
             raise InstallError(f'nginx -t after the change failed or added warnings {new_warnings}; see {log}.')
+        progress['reload_attempted'] = True
         nginx_reload()
-        reloaded = progress['reloaded'] = True
+        progress['reloaded'] = True
         result = verify()
     except BaseException as failure:
         try:
@@ -4547,7 +4950,7 @@ def publish_vhost(ctx, apply, undo, verify, progress=None) -> dict:
                                f'({restore_failure}); nginx may hold an unverified vhost. Investigate now.') from None
         restored = nginx_test()
         ctx.log('nginx-t-restored', restored['output'].encode())
-        if reloaded and restored['ok']:
+        if progress.get('reload_attempted') and restored['ok']:
             nginx_reload()
             progress['restore_reloaded'] = True
         if not restored['ok']:
@@ -4621,16 +5024,22 @@ def phase_cert(ctx) -> dict:
             'summary': f'lineage {DOMAIN} present (paths only recorded)'}
 
 
+def public_health(revision) -> tuple:
+    """(passed, observations): https://cpt.quillmd.com/health/ through the public path answers health_ok for
+    ``revision``, polled (reloads are asynchronous) - which says which web nginx routes to only when the two webs are
+    different revisions."""
+    def check():
+        result = probe('https', DOMAIN, '/health/', timeout=3)
+        return result.get('status') == 200 and health_ok(result.get('json'), revision), {
+            'status': result.get('status'), 'error': result.get('error')}
+    return poll(check, attempts=30, interval=0.25)
+
+
 def https_checks(ctx, revision=None) -> tuple:
     """Through the public path: /health/ serves ``revision`` (this phase's revision unless given: a switch-back
     expects the previous one), the four policy headers once each, and a mismatched SNI is closed."""
     expected = revision or ctx.revision
-
-    def check():
-        result = probe('https', DOMAIN, '/health/', timeout=3)
-        return result.get('status') == 200 and health_ok(result.get('json'), expected), {
-            'status': result.get('status'), 'error': result.get('error')}
-    passed, observations = poll(check, attempts=30, interval=0.25)
+    passed, observations = public_health(expected)
     final = probe('https', DOMAIN, '/health/', timeout=5)
     headers = final.get('headers', {})
     problems = [] if passed else [f'https://{DOMAIN}/health/ did not serve revision {expected[:12]}']
@@ -4763,6 +5172,125 @@ def phase_verify(ctx) -> dict:
     return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'}
 
 
+def keep_layout(ctx):
+    """The S4 undo's 'keep' layout (ops/INSTALL.md, Recovery notes: an S4 failure whose close named a state the old web
+    shows wrongly) read from the containers and the vhost - INCOMING_WEB is this revision's web, running on the port
+    the vhost (this revision's HTTPS stage for that port) names; cpt-studio-web is another revision's web running on
+    the other port; cpt-studio-worker, when there, is this revision's worker, stopped; cpt-studio-worker-previous, when
+    there, is that other revision's worker, parked; nothing else is parked - as {'incoming', 'web', 'worker',
+    'parked_worker', 'live', 'idle', 'old_revision', 'image_id'}; None when there is no INCOMING_WEB. Any other layout
+    with an INCOMING_WEB is refused, stopping nothing: which web serves cannot be told from the names (refutation r2,
+    L6-5: rollback-app read the records with the OLD web's image, where member answers and modifiers do not exist, and
+    removed the old web while the new one went on serving as -next)."""
+    incoming = inspect('container', INCOMING_WEB)
+    if incoming is None:
+        return None
+
+    def refused(why):
+        return InstallError(f'{INCOMING_WEB} is there and {why}, so rollback-app cannot tell which web serves; nothing '
+                            'was stopped or removed. Read the last app or switch-back receipt\'s "left", then '
+                            'ops/INSTALL.md, Recovery notes.')
+    if not owned(incoming, 'web'):
+        raise refused('it is not a CPT Studio web container')
+    image_id = installed_image(ctx)
+    idle = published_port(incoming)
+    if not ((incoming.get('State') or {}).get('Running') and incoming.get('Image') == image_id
+            and labels_of(incoming).get(REVISION_LABEL) == ctx.revision and idle in WEB_PORTS):
+        raise refused('it is not this revision\'s web running on a web port')
+    live = other_port(idle)
+    state, live_bytes = vhost_state(), live_vhost_bytes()
+    if (state['link_target'] != VHOST_LINK_TARGET or live_bytes is None
+            or sha256(live_bytes) != sha256(rendered_vhosts(ctx.revision, idle)['https'].encode())):
+        raise refused(f'quillmd-cpt is not this revision\'s HTTPS stage for its port {idle}')
+    web = inspect('container', SERVICES['web'])
+    if (web is None or not owned(web, 'web') or not (web.get('State') or {}).get('Running')
+            or published_port(web) != live):
+        raise refused(f'{SERVICES["web"]} is not a web running on the other port ({live})')
+    old_revision = labels_of(web).get(REVISION_LABEL)
+    if not SHA_RE.fullmatch(str(old_revision or '')) or old_revision == ctx.revision:
+        raise refused(f'{SERVICES["web"]} is not another revision\'s web')
+    worker = inspect('container', SERVICES['worker'])
+    if worker is not None and (not owned(worker, 'worker') or worker.get('Image') != image_id
+                               or (worker.get('State') or {}).get('Running')):
+        raise refused(f'{SERVICES["worker"]} is not this revision\'s worker, stopped')
+    parked_worker = inspect('container', SERVICES['worker'] + '-previous')
+    if parked_worker is not None and (not owned(parked_worker, 'worker')
+                                      or (parked_worker.get('State') or {}).get('Running')
+                                      or labels_of(parked_worker).get(REVISION_LABEL) != old_revision):
+        raise refused(f'{SERVICES["worker"]}-previous is not the other revision\'s worker, parked')
+    if inspect('container', SERVICES['web'] + '-previous') is not None:
+        raise refused(f'{SERVICES["web"]}-previous is there too')
+    return {'incoming': incoming, 'web': web, 'worker': worker, 'parked_worker': parked_worker, 'live': live,
+            'idle': idle, 'old_revision': old_revision, 'image_id': image_id}
+
+
+def rollback_from_keep(ctx, keep) -> dict:
+    """rollback-app in the S4 'keep' layout (keep_layout; refutation r2, L6-5): it acts on the right containers, with
+    this revision's image, and the site stays served. Refused, changing nothing, while this revision recorded what an
+    older revision would act on, or show, wrongly (undo_hazards, this image), or while co-tenant routing or
+    app.quillmd.com no longer answer as the preflight baseline the switch is verified against (L6-4). Otherwise it
+    finishes the switch back the S4 undo did not make: every stage this revision's pair queued, ran or left resumable
+    since its incoming web was created, and every open stage of a kind the old worker does not run, is closed (a close
+    that names a record stops there, leaving the layout as it was), then return_to_old_web switches the upstream back to
+    the old web, drains this revision's web, closes again, removes this revision's web and worker and puts the old
+    worker back - held while a close names a record."""
+    image_id, live, idle, old_revision = keep['image_id'], keep['live'], keep['idle'], keep['old_revision']
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    require_db()
+    found = undo_hazards(image_id, env, ctx.revision)
+    if found:
+        raise InstallError(f'{hazard_summary(found)} hold records an older revision would act on, or show, wrongly '
+                           'under its own rules; nothing was stopped or removed. Clear them on this revision\'s web, '
+                           f'which serves ({INCOMING_WEB}; ops/INSTALL.md, Reinstalling an older revision), then rerun '
+                           '--phase rollback-app.', details={'hazards': found})
+    preflight = require_receipt(ctx, 'preflight')
+    drifted = ingress_checks(ctx, preflight)
+    if drifted:
+        raise InstallError(baseline_problem(drifted, 'nothing was stopped or removed'), details={'baseline': drifted})
+    parked_worker = keep['parked_worker']
+    previous = {'image': (parked_worker or keep['web'])['Image'], 'revision': old_revision}
+    parked = None if parked_worker is None else {'id': parked_worker['Id'], 'image': parked_worker['Image'],
+                                                 'revision': labels_of(parked_worker).get(REVISION_LABEL)}
+    kinds = stage_kinds_of(previous['image'], env)
+    reason = f'revision {ctx.revision[:12]} was rolled back to {old_revision[:12]} (rollback-app)'
+    since = created_at(keep['incoming'])
+    cause = 'rollback-app in the S4 keep layout'
+    record = {'mode': 'keep-switch-back', 'ports': {'from': idle, 'to': live}, 'since': since.isoformat()}
+    recorder = AvailabilityRecorder().start()
+    try:
+        if keep['worker'] is not None:
+            stop_service_container(SERVICES['worker'], 'worker')
+        first_at = dt.datetime.now(dt.timezone.utc)
+        record['stages_closed'] = first = close_undone_stages(image_id, env, since, ctx.revision, reason, kinds)
+        shown, acting = hazards_by_kind(first.get('hazards'))
+        if shown is None or shown or acting:
+            named = (hazard_summary(merge_hazards(shown, acting)) if shown is not None
+                     else 'the close did not say which encounters')
+            message, outcome = (f'{cause}: after the close, {named} hold records an older revision would act on, or '
+                                f'show, wrongly under its own rules, so nothing more was done: {keep_note(live, idle)}. '
+                                'Clear them on this revision\'s web, then rerun --phase rollback-app.'), 'kept'
+        else:
+            message, details, outcome = return_to_old_web(
+                ctx, cause, image_id=image_id, env_bytes=env, preflight=preflight, live=live, idle=idle,
+                old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
+                first=first, first_at=first_at)
+            record.update(details)
+    except BaseException as failure:
+        raise InstallError(f'{cause}: {str(failure) or type(failure).__name__}; read "left" in this receipt, then '
+                           'ops/INSTALL.md, Recovery notes.',
+                           details={**record, 'availability': stop_recorder(recorder),
+                                    'left': left_summary()}) from failure
+    record['availability'] = stop_recorder(recorder)
+    if outcome != 'switched':
+        raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
+    availability = record['availability']
+    return {**record, 'outcome': outcome, 'message': message,
+            'summary': f'switched back to {old_revision[:12]} on {live} (the S4 keep layout): '
+                       f'{availability.get("samples", 0)} availability samples, '
+                       f'{availability.get("non_200_count", 0)} not 200; this revision\'s web and worker removed after '
+                       'closing their open stages; database, volumes, images and secrets kept'}
+
+
 def phase_rollback_app(ctx) -> dict:
     """Refuse, before stopping anything, while their revision recorded what an older revision would act on, or show,
     wrongly (undo_hazards: a second review's response refused whole, or one the shown assessment did not read, or a code
@@ -4774,7 +5302,13 @@ def phase_rollback_app(ctx) -> dict:
     so a parked pair renamed back or an older revision installed afterwards never runs that work under its own rules,
     nor shows a state it would misread. When the stages cannot be closed, the states cannot be put back, or the second
     read names a record (a send in flight when the worker stopped is an unknown outcome), the pair is left stopped, not
-    removed."""
+    removed. Refutation r2, L6-5: in the S4 'keep' layout (keep_layout) it acts on this revision's web and worker, with
+    this revision's image, and switches back to the old web without interrupting the site (rollback_from_keep); with a
+    cpt-studio-web-next in any other layout, or a web and a worker of different images, it refuses, stopping nothing:
+    which web serves, and whose records to read, cannot be told from the names."""
+    keep = keep_layout(ctx)
+    if keep is not None:
+        return rollback_from_keep(ctx, keep)
     pair = {}
     for role in ('worker', 'web'):
         container = inspect('container', SERVICES[role])
@@ -4782,6 +5316,11 @@ def phase_rollback_app(ctx) -> dict:
             if not owned(container, role):
                 raise InstallError(f'{SERVICES[role]} is not a CPT Studio {role} container; refusing to remove it.')
             pair[role] = container
+    if len(pair) == 2 and pair['web'].get('Image') != pair['worker'].get('Image'):
+        # refutation r2, L6-5: the two are not one pair, so whose image reads the records cannot be told
+        raise InstallError(f'{SERVICES["web"]} and {SERVICES["worker"]} run different images, so they are not one pair '
+                           'and whose records to read cannot be told; nothing was stopped or removed. Read the last '
+                           'app or switch-back receipt\'s "left", then ops/INSTALL.md, Recovery notes.')
     closed = put_back = None
     if pair:
         first = pair.get('web') or pair['worker']
