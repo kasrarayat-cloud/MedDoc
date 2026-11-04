@@ -4,16 +4,21 @@ details flow and progress, and P4's customer contract.
 - A member's "Not documented" or "Cannot confirm" (P5's MemberAnswer, read back through review._member_answers) is
   applied by the overlay everywhere a status or an action is read: the allowed actions, readiness, coding completeness,
   the customer payload, the operator payload, both report snapshots and the approved export - until it is withdrawn.
+- The approved customer export is stale exactly when its DECISION MARKER moves (the live assessment, the current
+  context, the current decisions, the standing answers), never for anything that is not a decision: a queued job, a run
+  no assessment reads, an operator report, new customer wording (critic C8).
 
 DB-backed; synthetic data only; nothing is sent (the engine's own results are persisted, as P3's suite persists them).
 """
 import json
+from unittest import mock
 
 from django.test import Client, TestCase
 
-from studio import answers, customer_api, models, progress, reports, review
+from studio import answers, customer_api, jobs, models, progress, reports, review
 from tests.support import factories as f
 from tests.support import operator as ops
+from tests.support import pipeline_factories as pf
 from tests.test_cux_review import allowed, decide, persist
 
 COLON = 'gi.colonoscopy'
@@ -136,3 +141,68 @@ class MemberAnswerEffectTests(WireCase):
         self.assertEqual((code['status'], code['sub_label']),
                          ('excluded', customer_api.UNAVAILABLE_SUB_LABELS['cannot_confirm']))
         self.assertEqual(review.readiness(s.encounter)['blockers'], ['45385 has no decision'])
+
+
+class ApprovedExportMarkerTests(WireCase):
+    """An approved export answers 409 exactly when the decisions it was made from changed (critic C8)."""
+
+    def setUp(self):
+        self.s = persist('pair')  # 45380 and 45385 on separate lesions, each with the separate-lesion modifier review
+        for code, modifiers in (('45380', ['XS']), ('45385', [])):
+            proposal = self.s.encounter.current_assessment.proposals.get(code=code)
+            response = self.post(self.s, f'/api/encounters/{self.s.encounter.pk}/decisions', {
+                'proposal_id': str(proposal.pk), 'action': 'approve', 'modifiers': modifiers,
+                'acknowledgement': review.ACKNOWLEDGEMENTS['agent']}, self.s.agent)
+            self.assertEqual(response.status_code, 201, response.content)
+        self.report = self.export(self.s)
+        self.assertEqual(self.download(self.s, self.report).status_code, 200)
+        self.marker = reports.customer_marker(self.s.encounter)
+
+    def assertCurrent(self):
+        self.assertEqual(reports.customer_marker(self.s.encounter), self.marker)
+        self.assertEqual(self.download(self.s, self.report).status_code, 200)
+        self.assertTrue(self.listed(self.s, self.report))
+
+    def assertStale(self):
+        stale = self.download(self.s, self.report)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()['error'], customer_api.STALE_EXPORT)
+        self.assertFalse(self.listed(self.s, self.report))
+
+    def test_nothing_that_is_not_a_decision_makes_it_stale(self):
+        s = self.s
+        self.assertIn('modifiers: XS', self.download(s, self.report).content.decode())
+        # a stage queued (readiness waits, so a snapshot of readiness would have moved) and then finished
+        job = pf.job(s.encounter, s.revision, models.Job.ASSESS, models.Job.QUEUED, context=s.encounter.current_context)
+        self.assertFalse(self.payload(s)['readiness']['approved'])
+        self.assertCurrent()
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.SUCCEEDED)
+        # a run no assessment reads, and an operator's own report
+        pf.provider_run(s.encounter, s.revision, state='failed')
+        operator = f.user('platform-operator')
+        ops.grant(operator)
+        reports.generate(s.encounter, reports.DRAFT, 'txt', operator, operator=True)
+        self.assertCurrent()
+        # new customer wording: the summary sentence and the limitations a release words differently
+        with mock.patch.object(customer_api, 'LIMITATIONS', customer_api.LIMITATIONS + ('A reworded limitation.',)), \
+                mock.patch.object(customer_api, 'code_summary', lambda proposal, view: 'Reworded summary.'):
+            self.assertIn('Reworded summary.', json.dumps(self.payload(s)))
+            self.assertCurrent()
+
+    def test_every_part_of_the_decision_marker_makes_it_stale(self):
+        s = self.s
+        proposal = s.encounter.current_assessment.proposals.get(code='45385')
+        revoked = self.post(s, f'/api/encounters/{s.encounter.pk}/decisions',
+                            {'proposal_id': str(proposal.pk), 'action': 'revoke'}, s.agent)
+        self.assertEqual(revoked.status_code, 201, revoked.content)
+        self.assertStale()
+        again = self.post(s, f'/api/encounters/{s.encounter.pk}/decisions', {
+            'proposal_id': str(proposal.pk), 'action': 'approve',
+            'acknowledgement': review.ACKNOWLEDGEMENTS['agent']}, s.agent)
+        self.assertEqual(again.status_code, 201, again.content)
+        self.assertStale()  # the same codes approved again: a new decision, so not the export's
+        fresh = self.export(s)
+        self.assertEqual(self.download(s, fresh).status_code, 200)
+        self.report, self.marker = fresh, reports.customer_marker(s.encounter)
+        jobs.change_context(s.encounter, s.reviewer, {'setting': 'office'})  # a member's saved detail value
+        self.assertStale()

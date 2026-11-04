@@ -834,11 +834,13 @@ def report_json(report, current=True):
 
 
 def _reports(encounter):
-    from .reports import customer_digest  # local import: reports reads this module
+    """The encounter's customer exports, newest first, each ``current`` while it still matches the saved decisions
+    (reports.customer_marker_digest: the same comparison the download answers 409 by)."""
+    from .reports import customer_marker_digest  # local import: reports reads this module
     artifacts = list(encounter.reports.filter(audience=ReportArtifact.CUSTOMER).select_related('generated_by')
                      .order_by('-generated_at', '-pk'))
-    digests = {kind: customer_digest(encounter, kind) for kind in {artifact.kind for artifact in artifacts}}
-    return [report_json(artifact, artifact.snapshot_sha256 == digests.get(artifact.kind)) for artifact in artifacts]
+    marker = customer_marker_digest(encounter) if artifacts else None
+    return [report_json(artifact, marker is not None and artifact.snapshot_sha256 == marker) for artifact in artifacts]
 
 
 # event -> (the customer's event key, summary); an event not listed is never shown to a customer

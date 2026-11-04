@@ -1824,8 +1824,10 @@ def generate(encounter, kind, fmt, user, *, operator=False):
 # with their status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations (the
 # draft), or the approved items only (the approved export), then the concise limitations, between two SYNTHETIC
 # banners. No participant, model, usage, hash, rule id, run id, engine or profile version, check id or source key
-# appears. The snapshot digest is stored with the artifact (snapshot_sha256), so a download can tell whether an
-# approved export still matches the persisted decisions (customer_artifact_current).
+# appears. A customer artifact stores the digest of its DECISION MARKER in snapshot_sha256 (customer_marker: the
+# assessment, the current decisions and the member's standing answers it was made from), so a download can tell whether
+# an approved export still matches the persisted decisions (customer_artifact_current) - and nothing that is not a
+# decision (a later run, a job, a reference check, new wording) ever makes one stale (critic C8).
 
 CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
 APPROVED = ReportArtifact.APPROVED
@@ -1890,23 +1892,34 @@ def customer_snapshot(encounter, kind):
     return snap
 
 
-def customer_snapshot_digest(snap):
-    """sha256 of the customer snapshot: equal persisted decisions and results, equal digest (generation time and who
-    generated it are not part of the snapshot)."""
-    return sha256_json(snap)
-
-
-def customer_digest(encounter, kind):
-    """The digest a customer report of ``kind`` would carry now, or None when none could be made now."""
-    try:
-        return customer_snapshot_digest(customer_snapshot(encounter, kind))
-    except ValueError:
+def customer_marker(encounter):
+    """What a customer export was made from, and nothing else: the live assessment, the encounter's current context
+    (the member's saved detail values), the current decisions on that assessment (their ids and sequences, in recording
+    order) and the member's standing answers to its revision (their ids). A decision, a revocation, an invalidation, a
+    saved or withdrawn answer or a new assessment changes it; a later run, a queued job, a reference check, a second
+    review that was not read or a change of wording never does. None while no assessment is live."""
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
         return None
+    current = review.current_decisions(assessment)
+    return {'assessment': str(assessment.pk), 'context': str(encounter.current_context_id or ''),
+            'decisions': [[str(decision.pk), decision.sequence]
+                          for decision in sorted(current.values(), key=lambda decision: decision.sequence)],
+            'answers': sorted(str(answer.pk) for answer in member_answers.standing_answers(assessment.revision_id))}
+
+
+def customer_marker_digest(encounter):
+    """sha256 of customer_marker(encounter), stored with a customer artifact as its snapshot_sha256; None while no
+    assessment is live."""
+    marker = customer_marker(encounter)
+    return None if marker is None else sha256_json(marker)
 
 
 def customer_artifact_current(report) -> bool:
-    """Whether a customer artifact still matches the persisted decisions and results it was made from."""
-    return report.snapshot_sha256 == customer_digest(report.encounter, report.kind)
+    """Whether a customer artifact still matches the persisted decisions it was made from: its stored marker digest
+    equals the encounter's now."""
+    marker = customer_marker_digest(report.encounter)
+    return marker is not None and report.snapshot_sha256 == marker
 
 
 def _customer_header(snap, generated):
@@ -1982,8 +1995,9 @@ CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
 
 
 def generate_customer(encounter, kind, fmt, user):
-    """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the snapshot
-    digest. Any active member of the workspace may make one (as before, viewers included)."""
+    """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the digest of
+    its decision marker (customer_marker), read under the same encounter lock as the snapshot. Any active member of the
+    workspace may make one (as before, viewers included)."""
     if fmt not in CUSTOMER_RENDERERS:
         raise ValueError('Choose a TXT or CSV export.')
     if kind not in CUSTOMER_KINDS:
@@ -2001,7 +2015,7 @@ def generate_customer(encounter, kind, fmt, user):
         artifact = ReportArtifact.objects.create(
             encounter=locked, assessment_id=snap['assessment'], kind=kind, fmt=fmt,
             filename=f'CPT-Studio-{kind}-r{snap["revision"]["number"]}-{stamp}.{fmt}', content=content,
-            sha256=hashlib.sha256(content).hexdigest(), snapshot_sha256=customer_snapshot_digest(snap),
+            sha256=hashlib.sha256(content).hexdigest(), snapshot_sha256=customer_marker_digest(locked),
             generated_by=user, audience=ReportArtifact.CUSTOMER)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
                      assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
