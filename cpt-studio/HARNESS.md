@@ -2009,3 +2009,18 @@ findings against what remains were not reproduced. So no concrete finding justif
   excluded and 42 held, as on the base.
 - The suite passes 5,278 tests in 220 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
   ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+The harness's provenance - each participant's runs, models, usage and estimated cost, the readings and peer reviews,
+the exchanges and tool calls, the retrieval traces, the reconciliation table and the `harness` block of the encounter
+view - is unchanged and complete, and is now served only to platform operators: `GET /ops/api/encounters/<id>` (the
+full encounter serializer, `harness` included) and `GET /ops/api/encounters/<id>/trace` (section 7's trace). The
+workspace owner no longer opens the trace (`GET /api/encounters/<id>/trace` is removed; directive of 2026-11-03,
+section 2: a tenant owner must not automatically gain platform-operator access). Customers see the harness as three
+functional checks - Document review, Independent checks, Coding validation - with a state each, and never a
+participant's name, position, phase, model or reading (`studio/customer_api.py`). The operator console
+(`/ops/`, `studio/operator/ops.js`) is the website the harness sections above describe, its API base switched to
+`/ops/api/`; its node tests are `tests/operator/ops.test.cjs`. The verification tooling that reads provider runs,
+request hashes or report sha256s (ops/verify_browser.cjs, ops/verify_downloads.py) reads them from `/ops/api/` with an
+operator session.
