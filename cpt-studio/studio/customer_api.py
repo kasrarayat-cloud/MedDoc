@@ -280,10 +280,10 @@ def customer_blockers(blockers) -> list:
 
 # --- the effective review view and the approved items (P3) ------------------------------------------------------
 
+# INTEGRATION: replaced by review.effective_view (P3; CORE-UX-DESIGN.md 4)
 def effective_view(assessment, current):
     """{proposal key: view} over the stored proposals and the current decisions: its status, the reason a view excluded
-    it ('' here), and its distinct-lesion modifier review over the effective set.
-    # INTEGRATION: replaced by review.effective_view (P3; CORE-UX-DESIGN.md 4)"""
+    it ('' here), and its distinct-lesion modifier review over the effective set."""
     proposals = list(assessment.proposals.order_by('position'))
     effective = [p for p in proposals if _in_effective_set(p, current.get(p.pk))]
     out = {}
@@ -315,10 +315,10 @@ def _claims_manual():
     return [named] if named else []
 
 
+# INTEGRATION: replaced by review.effective_view's modifier_review (P3; CORE-UX-DESIGN.md 4)
 def _modifier_review(proposal, effective):
     """The distinct-lesion modifier review of ``proposal`` (directive 4): offered only while another code of the same
-    documented service that the engine records separate lesions for is in the effective set, never assigned.
-    # INTEGRATION: replaced by review.effective_view's modifier_review (P3; CORE-UX-DESIGN.md 4)"""
+    documented service that the engine records separate lesions for is in the effective set, never assigned."""
     if proposal not in effective or not _distinct_lesion(proposal):
         return None
     service = (proposal.support or {}).get('service')
@@ -335,11 +335,11 @@ def _modifier_review(proposal, effective):
             'sources': _claims_manual()}
 
 
+# INTEGRATION: replaced by review.approved_items (P3; CORE-UX-DESIGN.md 4)
 def approved_items(assessment, current=None):
     """The approved items of ``assessment``, in stored order: approved decisions only - never an unresolved or unapproved
     item - each with its code, units, modifiers, approver, approver kind, decision time, note, exact evidence and one
-    sentence of CPT Studio's own reading.
-    # INTEGRATION: replaced by review.approved_items (P3; CORE-UX-DESIGN.md 4)"""
+    sentence of CPT Studio's own reading."""
     current = review.current_decisions(assessment) if current is None else current
     revision = assessment.revision
     acts = _act_index(assessment)
@@ -653,12 +653,12 @@ def _exact_span(span, text):
     return None
 
 
+# INTEGRATION: replaced by P5's service-date block (EncounterContext.document_date and
+# context.document_service_date_fact; CORE-UX-DESIGN.md 6) - the document's own date of a member conflict is known
+# here only where that field exists
 def service_date_block(encounter, context=None, revision=None):
     """The date of service as the customer is shown it: the value in use, where it comes from, the document's own date
-    and quote beside the date a member entered, whether they conflict and whether "Use document date" can settle it.
-    # INTEGRATION: replaced by P5's service-date block (EncounterContext.document_date and
-    # context.document_service_date_fact; CORE-UX-DESIGN.md 6) - the document's own date of a member conflict is known
-    # here only where that field exists"""
+    and quote beside the date a member entered, whether they conflict and whether "Use document date" can settle it."""
     context = encounter.current_context if context is None else context
     revision = encounter.current_revision if revision is None else revision
     text = revision.text if revision is not None else ''
@@ -725,11 +725,11 @@ def _prompt(question, code, family):
     return prompts.get(fact, f'A detail about {code or family.lower()} needs confirming.')
 
 
+# INTEGRATION: replaced by answers.details_needed (P5; CORE-UX-DESIGN.md 6) - no answer is saved in this tree
 def details_needed(encounter, assessment, membership, proposals, date_block):
     """The open questions as one compact list: one row per material question with its control - a date beside the
     document's, a listed choice, or a confirmation where only "Not documented" or "Cannot confirm" may be answered (a
-    member never supplies a clinical fact) - the codes it affects and its saved answer.
-    # INTEGRATION: replaced by answers.details_needed (P5; CORE-UX-DESIGN.md 6) - no answer is saved in this tree"""
+    member never supplies a clinical fact) - the codes it affects and its saved answer."""
     rows = []
     decidable = [p for p in proposals if review.decidable(p)]
     for question in _open_questions(assessment):
@@ -823,10 +823,10 @@ def _step_rows(jobs, busy, failed):
     return rows
 
 
+# INTEGRATION: replaced by progress.encounter_progress (P5; CORE-UX-DESIGN.md 6)
 def progress_block(encounter, membership, jobs, assessment, state, now=None):
     """The one compact progress panel, folded from the current revision's jobs: four plain steps with their real
-    states and times, the phase, a fixed message for it, and the Stop and Resume paths. Never a percentage or an ETA.
-    # INTEGRATION: replaced by progress.encounter_progress (P5; CORE-UX-DESIGN.md 6)"""
+    states and times, the phase, a fixed message for it, and the Stop and Resume paths. Never a percentage or an ETA."""
     from .jobs import busy as is_busy  # local import: jobs imports this module's peers
 
     now = now or timezone.now()
@@ -889,9 +889,9 @@ def _partial(assessment, encounter):
         encounter.current_revision.extraction_status == SourceRevision.PARTIAL
 
 
+# INTEGRATION: replaced by P5's checks fold (progress.encounter_progress; CORE-UX-DESIGN.md 6)
 def checks_block(encounter, jobs, assessment, busy):
-    """Document review, independent checks and coding validation: what each functional stage did, in four words.
-    # INTEGRATION: replaced by P5's checks fold (progress.encounter_progress; CORE-UX-DESIGN.md 6)"""
+    """Document review, independent checks and coding validation: what each functional stage did, in four words."""
     def state_of(kinds, done):
         own = [job for job in jobs if job.kind in kinds]
         if any(job.state == Job.RUNNING for job in own):
@@ -994,10 +994,10 @@ def limitations(assessment, revision):
 
 # --- readiness, reports, activity ----------------------------------------------------------------------------------
 
+# INTEGRATION: replaced by review.readiness over review.effective_view (P3; CORE-UX-DESIGN.md 4)
 def readiness(encounter, assessment=None, current=None):
     """{'draft', 'approved', 'blockers'}: a draft once an assessment exists; the approved export when the review is
-    complete and at least one code is approved; the blockers in the customer's words.
-    # INTEGRATION: replaced by review.readiness over review.effective_view (P3; CORE-UX-DESIGN.md 4)"""
+    complete and at least one code is approved; the blockers in the customer's words."""
     ready = review.readiness(encounter)
     assessment = review.live_assessment(encounter) if assessment is None else assessment
     blockers = customer_blockers(ready['blockers'])
