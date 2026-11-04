@@ -53,6 +53,7 @@ R8_TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold force
 R8_DIAG = B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
 R8_CECUM_LM = ('The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve.')
 R8_LAST = 'Last colonoscopy: 9 mm polyp removed with hot snare.'
+R8_INDICATION = 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare.'
 R8_INDEX = 'At the index colonoscopy, a 9 mm polyp was removed with a hot snare.'
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
@@ -413,6 +414,13 @@ CASES = {
         'Sigmoid colon, polypectomy: tubular adenoma.\n',
         [('45380', R8_TODAY_BX, 'done'),
          ('45385', 'PATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon', 'not_done')]),
+    # D8: an indication line inside a titled report (the indication alone is held on c9f20a148 already)
+    'R8 D8 C1 indication line in a titled report': (
+        R8_DIAG + R8_INDICATION + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX + '\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', R8_INDICATION, 'not_done')]),
+    'R8 D8 C1 indication line and the reach sentence cited': (
+        R8_DIAG + R8_INDICATION + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX + '\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', (R8_INDICATION, R8_CECUM), 'not_done')]),
     # D9: an act at another time (history, "last", index or planned)
     'R8 D9 time-1 last colonoscopy line': (_r8_earlier(R8_LAST), [('45385', R8_LAST, 'not_done')]),
     'R8 D9 time-2 last colonoscopy line, base cited': (

@@ -1067,7 +1067,10 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
     plan section inside a titled report stays that report's (its title owns its subsections, as PLAN_HEADING has it)."""
     lay = _sections.layout(text) if lay is None else lay
     timed = [(s.start, _time_end(text, s), s.kind) for s in lay.sections if s.kind in ('history', 'plan')]
-    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)), s.kind) for s in lay.sections
+    # P2 READ-HOLD, R8 D8: an indication whose heading line carries its complete statement speaks for that line inside
+    # a titled report too ('indication_line', _time_kind); any other indication only outside one, as before
+    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)),
+               'indication_line' if _statement_line_end(text, s) is not None else s.kind) for s in lay.sections
               if s.kind == 'indication']
     marks = {m for start, end, _ in timed for m in (start, end)}
     ends = {}
@@ -1143,13 +1146,21 @@ def _opens_todays_report(text: str, lines: Sequence[tuple[int, int]], index: int
 def _time_end(text: str, section) -> int:
     """Where a history or plan section of the layout stops dating what it holds: its end, or the end of its heading's
     line when that line carries a complete statement after the heading."""
+    own = _statement_line_end(text, section)
+    return section.end if own is None else own
+
+
+def _statement_line_end(text: str, section) -> Optional[int]:
+    """The end of a layout section's heading line (past its newline, within the section) when that line carries a
+    complete statement after the heading ("Indication: Surveillance after a sigmoid polyp was removed with a hot
+    snare."); None otherwise ("Indication: surveillance", a heading alone on its line)."""
     line_end = text.find('\n', section.start, section.end)
     line_end = section.end if line_end < 0 else line_end
     if section.heading is not None and section.heading.end <= line_end:
         content = text[section.heading.end:line_end].strip()
         if content and content[-1] in '.!?':
             return min(section.end, line_end + 1)
-    return section.end
+    return None
 
 
 def _paragraph_end(text: str, section) -> int:
@@ -1178,6 +1189,12 @@ def _time_kind(p: _Part, pos: int, timed_kind, own_end: Optional[int]) -> str:
         return p.kind if p.kind == 'report' else 'plan'
     if kind == 'indication' and p.kind == 'other':
         return 'indication'  # why the patient came (never inside a titled report, whose subsections are its own)
+    if kind == 'indication_line' and p.kind in ('other', 'report'):
+        # P2 READ-HOLD, R8 D8: an indication line that carries its own complete statement is why the patient came,
+        # inside a titled report too ("Indication: Surveillance after a sigmoid polyp was removed with a hot snare."):
+        # only that line, never the report's later lines (a blanket p.kind in ('other', 'report') held today's biopsy
+        # under an unterminated "Indication: surveillance")
+        return 'indication'
     if p.kind in ('history', 'plan') and own_end is not None and pos >= own_end:
         return 'report' if p.family else 'other'  # the history or plan this module's heading opened has ended
     return p.kind

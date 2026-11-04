@@ -133,6 +133,9 @@ UNMOVED = {
     ('R8 D4 F1 EGD snare line, colonoscopy normal', '45378'): HELD,
     ('R8 D5 F4B pathology specimen line', '45380'): READY,
     ('R8 D6 F4C pathology addendum heading', '45380'): READY,
+    ('R8 D8 C1 indication line in a titled report', '45380'): READY,
+    ('R8 D8 C1 indication line in a titled report', '45385'): HELD,
+    ('R8 D8 C1 indication line and the reach sentence cited', '45380'): READY,
     ('R8 D9 time-2 last colonoscopy line, base cited', '45378'): HELD,
     ('R8 D9 release-1 most recent colonoscopy', '45378'): HELD,
     ('R8 D9 release-1 last spring', '45378'): HELD,
@@ -421,3 +424,32 @@ class AnotherTimeOnTheActTests(SimpleTestCase):
         text = colon(done, history)
         item = proposal(run(text, [sel('45385', span(text, done), span(text, history))]), '45385')
         self.assertEqual(item.status, 'ready')
+
+
+INDICATION = 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare.'
+TITLED = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+          'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n{indication}\nProcedure: '
+          'Colonoscopy\n' + CECUM + '\n{body}\n')
+
+
+class IndicationInATitledReportTests(SimpleTestCase):
+    """D8 (R8 1.3): inside a titled report, an indication section is read as an indication over its own heading line
+    when that line carries a complete statement (services._time_kind with _time_parts' 'indication_line'), so the act it
+    tells of reads "stated in an indication, not as done today" - never the blanket p.kind in ('other', 'report'),
+    which newly holds today's biopsy under an unterminated "Indication: surveillance" line."""
+
+    def test_d8_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D8 ')
+
+    def test_an_indications_own_line_tells_no_act_of_today(self):
+        text = TITLED.format(indication=INDICATION, body=TODAY_BX)
+        self.assertEqual(sorted(status for _, kind, status in acts(text) if kind == 'snare'), ['uncertain'])
+        self.assertIn(('gi.colonoscopy', 'biopsy', 'performed'), acts(text))
+
+    def test_controls_todays_act_under_an_unterminated_or_short_indication(self):
+        for indication in ('Indication: surveillance', 'Indication: Screening.'):
+            with self.subTest(indication):
+                text = TITLED.format(indication=indication, body=TODAY_BX)
+                self.assertIn(('gi.colonoscopy', 'biopsy', 'performed'), acts(text))
+                item = proposal(run(text, [sel('45380', span(text, TODAY_BX))]), '45380')
+                self.assertEqual(item.status, 'ready')
