@@ -516,3 +516,57 @@ class EmQuestionGatingTests(SimpleTestCase):
         routing = SimpleNamespace(finding=lambda f: SimpleNamespace(status='uncertain', mentions=(mention,)))
         self.assertTrue(engine._em_documentation_asked(inv.services[0], (), routing))
         self.assertTrue(engine._em_documentation_asked(inv.services[0], (), None))  # no routing: as before
+
+
+# --- Mara, end to end, with the retained provider response (design section 10's acceptance) ------------------------
+
+class MaraEndToEndTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.text = (MARA / 'rev1.txt').read_text(encoding='utf-8')
+        cls.readme = json.loads((MARA / 'README.json').read_text(encoding='utf-8'))
+        starts = [i for i in range(len(cls.text)) if cls.text.startswith('SYNTHETIC TEST CASE - ALL PEOPLE', i)]
+        # the revision's pages, at its repeated letterhead, joined by the extraction's two newlines
+        cls.pages = tuple(PageSpan(n + 1, s, (starts[n + 1] - 2) if n + 1 < len(starts) else len(cls.text))
+                          for n, s in enumerate(starts))
+
+    def response(self):
+        body = (MARA / 'corti-response.json').read_bytes()
+        self.assertEqual(hashlib.sha256(body).hexdigest(), self.readme['corti_response_sha256'])
+        request = corti.build_coding_request('corti', corti.ADAPTER_VERSION, self.text, date(2026, 11, 3),
+                                             corti.DEFAULT_MAX_REQUEST_BYTES)
+        self.assertEqual(request.canonical_sha256, self.readme['corti_request_sha256'])
+        return corti.normalize_coding_response('corti', request, body)
+
+    def test_the_fixture_is_the_retained_revision(self):
+        self.assertEqual(hashlib.sha256(self.text.encode('utf-8')).hexdigest(), self.readme['revision_text_sha256'])
+        self.assertEqual(len(self.pages), 3)
+
+    def test_the_acceptance(self):
+        for label, pages in (('the revision pages', self.pages), ('one page', None), ('no pages', ())):
+            with self.subTest(label):
+                result = run(self.text, normalized=self.response(), pages=pages)
+                self.assertEqual(outcomes(result), {'43239': READY, '45380': READY, '45385': READY})
+                self.assertEqual(sum(len(p.clarifications) for p in result.proposals), 0)
+                self.assertEqual(em_questions(result), set())
+                self.assertEqual(result.services['conflicts'], [])
+                self.assertEqual(bundled(result), [('gi.colonoscopy', 'clip')])
+                for code in ('45380', '45385'):
+                    p = next(x for x in result.proposals if x.code == code and x.bucket == 'selected')
+                    self.assertTrue(any('59 or XS' in m for m in p.modifier_considerations), code)
+
+    def test_the_bindings(self):
+        inv = inventory(self.text, self.pages)
+        colon, egd = service(inv, 'gi.colonoscopy'), service(inv, 'gi.egd')
+        by_size = {les.size: les.id for les in colon.lesions}
+        self.assertEqual(sorted(by_size), ['2 mm', '8 mm'])  # the specimen table restates them: no new lesions
+        self.assertEqual({(a.kind, a.status, a.lesion) for a in colon.acts if a.lesion},
+                         {('biopsy', 'performed', by_size['2 mm']), ('snare', 'negated', by_size['2 mm']),
+                          ('snare', 'performed', by_size['8 mm']), ('biopsy', 'negated', by_size['8 mm']),
+                          ('clip', 'performed', by_size['8 mm'])})
+        self.assertEqual({a.anatomy[0] if a.anatomy else '' for a in egd.acts if a.kind == 'biopsy'},
+                         {'distal esophagus', 'gastric antrum and body', 'duodenum'})
+        self.assertNotIn('clip', [a.kind for a in egd.acts])
+        self.assertLess(egd.scope_end, self.text.index('COLONOSCOPY - PERFORMED TODAY') + 1)
+        self.assertEqual(service(inv, 'gi.office_em').status, 'negated')
