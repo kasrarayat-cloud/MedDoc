@@ -345,8 +345,6 @@ def encounter_progress(encounter, now=None) -> dict:
     ``can_resume`` say whether the action applies to the document; the caller also requires a role that may take it.
     ``started_at`` is when the current run was asked for (its first job queued), ``finished_at`` when its last job
     finished (None while busy)."""
-    from . import answers  # local import: answers reads review and jobs too
-
     now = now or timezone.now()
     revision = encounter.current_revision
     rows = list(encounter.jobs.filter(revision=revision).select_related('provider_run', 'context')
@@ -375,7 +373,7 @@ def encounter_progress(encounter, now=None) -> dict:
             error = {'text': text, 'action': action}
         elif state == 'provider_unknown':
             phase = 'being_confirmed'
-        elif any(row['saved'] is None for row in answers.details_needed(encounter, review.live_assessment(encounter))):
+        elif _open_details(encounter):
             phase = 'awaiting_detail'
         elif _partial(encounter, revision):
             phase = 'partial'
@@ -399,6 +397,15 @@ def encounter_progress(encounter, now=None) -> dict:
         'can_stop': busy, 'can_resume': (not busy) and review.can_resume(encounter), 'can_leave': True,
         'error': error,
     }
+
+
+def _open_details(encounter):
+    """Whether a detail row the customer is shown has no saved answer: the rows answers.details_needed builds, with the
+    review overlay's questions when the review layer has one (answers.effective_view)."""
+    from . import answers  # local import: answers reads review and jobs too
+
+    live = review.live_assessment(encounter)
+    return any(row['saved'] is None for row in answers.details_needed(encounter, live, answers.effective_view(live)))
 
 
 def _partial(encounter, revision):

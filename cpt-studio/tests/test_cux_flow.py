@@ -3,6 +3,7 @@ member's, the "A few details needed" rows and their one save, the member's answe
 fold, the upload key, and the re-assessment from retained answers. DB-backed; synthetic data only; nothing is sent (the
 pipeline's provider is disabled, or the in-process fakes of the harness suites).
 """
+import collections
 import dataclasses
 import hashlib
 import io
@@ -15,13 +16,14 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import Client, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from studio import answers, intake, jobs, models, progress, review
 from studio.gi import context as gi_context
-from studio.types import ExtractionResult, PageSpan, sha256_json
+from studio.types import ClarificationSpec, ExtractionResult, PageSpan, sha256_json
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
@@ -216,6 +218,24 @@ class DetailRowsTests(DetailsCase):
         # every prompt is CPT Studio's fixed wording: no stored question or reason text is passed through
         stored = set(models.Clarification.objects.values_list('question', flat=True))
         self.assertFalse(stored & {r['prompt'] for r in rows.values()})
+
+    def test_with_the_overlay_s_view_a_released_question_goes_an_added_one_comes_an_answered_one_stays(self):
+        """The review overlay (review.effective_view) holds each proposal's questions after the decisions: the rows
+        follow it - and a question a standing answer answers stays, so the member sees it and can withdraw it."""
+        assessment = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
+                                 asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'),
+                                 questions=[pf.clarification('setting', scope='service', family=OFFICE)])
+        View = collections.namedtuple('View', 'questions')
+        added = ClarificationSpec(scope='proposal', fact='base_included', question='stored wording', reason='r',
+                                  family=COLON, proposal_key='sel:1')
+        view = {'sel:0': View(questions=()), 'sel:1': View(questions=(added,))}  # both extents released
+        rows = answers.details_needed(self.s.encounter, assessment, view)
+        self.assertEqual([(r['fact'], r['affects']) for r in rows], [('setting', []), ('base_included', ['45380'])])
+        answers.save_details(self.s.encounter, self.s.reviewer, [
+            self.answer(self.row('extent', '45385'), 'not_documented')])
+        rows = answers.details_needed(self.s.encounter, assessment, view)
+        self.assertEqual([(r['fact'], r['affects'], r['saved'] is not None) for r in rows],
+                         [('setting', [], False), ('extent', ['45385'], True), ('base_included', ['45380'], False)])
 
     def test_use_document_date_only_for_a_single_documented_value_and_never_a_prefilled_unsupported_date(self):
         cases = {
@@ -656,6 +676,23 @@ class ProgressFoldTests(ProgressCase):
         out = self.progress()
         self.assertEqual((out['phase'], out['message'], out['error'], out['can_resume']),
                          ('being_confirmed', progress.MESSAGES['being_confirmed'], None, False))
+
+    def test_reading_progress_details_the_date_and_the_checks_writes_nothing(self):
+        """Polling, reloading or opening results reads rows only (directive 5: never a duplicate request)."""
+        self.chain(*CHAIN, 'assess')
+        self.final(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'))
+        self.job('assess', 'queued', 600)
+        self.enc.refresh_from_db()
+        with CaptureQueriesContext(connection) as queries:
+            progress.encounter_progress(self.enc)
+            progress.checks_summary(self.enc)
+            answers.details_needed(self.enc, self.enc.current_assessment)
+            answers.service_date_block(self.enc)
+            answers.saved_answers(self.enc.current_assessment)
+        written = [q['sql'] for q in queries.captured_queries
+                   if not q['sql'].lstrip().upper().startswith(('SELECT', 'SAVEPOINT', 'RELEASE SAVEPOINT'))]
+        self.assertEqual(written, [])
+        self.assertGreater(len(queries.captured_queries), 0)
 
     def test_slow_only_from_the_stage_s_own_bound(self):
         self.chain('extract', 'analyze')
