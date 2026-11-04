@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harbour Digestive Centre (fictional)
+Upper Endoscopy and Colonoscopy Report
+Date of service: 2026-10-29
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+COLONOSCOPY
+The colonoscope was advanced to the cecum. The colon was normal.
+UPPER ENDOSCOPY
+The gastroscope was advanced to the second part of the duodenum. A 12 mm polyp was seen in the gastric body.
+Treatment
+A hot snare was used to remove the polyp.
+Impression: one gastric polyp removed.
