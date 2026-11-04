@@ -733,6 +733,32 @@ EM_VISIT = rx(r'\b(?:(?:in-person\s+|outpatient\s+|ambulatory\s+)?(?:office|clin
               r'virtual|audio-video)\s+(?:visit|encounter|consultation)|new[- ]patient\s+(?:visit|evaluation|'
               r'consultation|consult|encounter)|established[- ]patient\s+(?:visit|encounter)|follow[- ]?up\s+'
               r'(?:office\s+|clinic\s+)?visit|progress\s+note|evaluation\s+and\s+management)\b')
+# Core repair 2026-11-03 (P1, rule 8; R2-routing-status 1.4): an explicit statement that no separate office E/M service,
+# office visit or office-visit time is documented, performed, provided, rendered or occurred today - "No separate office
+# evaluation and management encounter or office-visit time is documented on this date.", "No separately identifiable
+# E/M service was performed.", "Evaluation and management was not provided." One pattern, read by routing's E/M base
+# reading (detect._em_base_reading: a visit mention it covers reads negated) and by the documented-service reader's E/M
+# branch (services._em_service), so the two readers agree. Its forms: a negator governing the visit mention with only
+# visit qualifiers between them; the mention inside "no <noun phrase> is/was documented|provided|performed|rendered|
+# furnished|reported|billed" or "no <noun phrase> occurred / took place" (no other predicate, comma or coordination in
+# the phrase); and, after the mention, "was/is not (separately) documented|provided|performed|rendered|furnished|done".
+# Billing wordings that state a visit happened ("Office visit not billed separately.", "The office visit was not
+# separately billable.") are none of these and read as before (an owner question, R2 Q-1).
+_EM_ABSENT_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant', 'distinct',
+                              'additional', 'face-to-face', 'in-person', 'office', 'clinic', 'outpatient',
+                              'problem-oriented', 'E/M', 'same-day', 'and', 'or')
+_EM_ABSENT_NOUN = (r'(?:evaluation\s+and\s+management|E/M|(?:office|clinic|outpatient)[- ](?:visit|encounter|'
+                   r'consultation|consult))(?:[- ](?:services?|encounters?|visits?|time))?')
+_EM_ABSENT_NP = r'(?:(?!\b(?:was|were|is|are|has|have|had|and|but|which|that)\b)[^.;:!?,\n])'
+_EM_ABSENT_QUALIFIED = r'(?:[\s,]{1,3}(?:' + _EM_ABSENT_QUALIFIER + r')){0,6}[\s,]{1,3}' + _EM_ABSENT_NOUN + r'\b'
+EM_ABSENCE = rx(r'(?<![\w/-])(?:no|without|neither)' + _EM_ABSENT_QUALIFIED
+                # the visit nouns it coordinates ("no separate office visit or outpatient E/M service")
+                + r'(?:[\s,]{1,3}(?:or|and|nor)' + _EM_ABSENT_QUALIFIED + r'){0,3}'
+                r'|\bno\b' + _EM_ABSENT_NP + r'{0,40}?\b' + _EM_ABSENT_NOUN + r'\b' + _EM_ABSENT_NP + r'{0,40}?'
+                r'\b(?:(?:is|was|were|are|has\s+been|have\s+been)\s+(?:separately\s+)?(?:documented|provided|'
+                r'performed|rendered|furnished|reported|billed)|occurred|took\s+place)\b'
+                r'|\b' + _EM_ABSENT_NOUN + r"\s+(?:(?:was|is|has\s+been)\s+not|(?:was|is)n['’]t)\s+"
+                r'(?:separately\s+)?(?:documented|provided|performed|rendered|furnished|done)\b')
 EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of)\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')

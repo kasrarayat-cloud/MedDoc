@@ -432,3 +432,61 @@ class HeadingLapseShapeTests(SimpleTestCase):
                 result = run(text, [('43235', 'The gastroscope was advanced to the second part of the duodenum.'),
                                     ('45385', self.SNARE)])
                 self.assertEqual(outcomes(result)['43235'], READY)
+
+
+# --- rule 8: an explicit statement that no separate office E/M service is documented -------------------------------
+
+class EmAbsenceTests(SimpleTestCase):
+    BIOPSY = [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')]
+
+    def test_the_shared_pattern(self):
+        for line in ('No separate office evaluation and management encounter or office-visit time is documented on this '
+                     'date.', 'No separately identifiable office visit or outpatient evaluation and management service '
+                     'was provided on this date.', 'Evaluation and management was not provided.',
+                     'No record of a separate office visit is documented.', 'No separate clinic visit occurred today.'):
+            with self.subTest(line):
+                self.assertIsNotNone(cues.EM_ABSENCE.search(line))
+        for line in ('Office visit not billed separately.', 'The office visit was not separately billable.',
+                     'The office visit was not separately reported.', 'An office visit was also completed today.',
+                     'No biopsies were taken and an office visit was documented.', 'No separate cyst-management visit '
+                     'occurred today.'):
+            with self.subTest(line):
+                self.assertIsNone(cues.EM_ABSENCE.search(line))
+
+    def test_the_statement_negates_the_visit_for_both_readers(self):
+        for name in ('r8-em-absent-positive', 'r8-em-absent-post'):
+            with self.subTest(name):
+                text = document(name)
+                finding = detect.route(text, day_of(text)).finding('gi.office_em')
+                self.assertEqual(finding.status, 'negated')
+                self.assertTrue(all(detect.EM_ABSENT_CUE in m.cues for m in finding.mentions))
+                em = service(inventory(text), 'gi.office_em')
+                self.assertEqual(em.status, 'negated')
+                self.assertIn(services.EM_ABSENT_SERVICE_CUE, em.cues)
+                result = run(text, self.BIOPSY)
+                self.assertEqual(em_questions(result), set())
+                self.assertEqual(outcomes(result)['43239'], READY)
+
+    def test_twin_an_affirmative_statement_elsewhere_still_asks(self):
+        text = document('r8-twin-contradiction')
+        finding = detect.route(text, day_of(text)).finding('gi.office_em')
+        self.assertEqual(finding.status, 'uncertain')
+        self.assertTrue(any(detect.EM_ABSENT_CONTRADICTED in m.cues for m in finding.mentions))
+        self.assertEqual(service(inventory(text), 'gi.office_em').status, 'uncertain')
+        self.assertEqual(em_questions(run(text, self.BIOPSY)), {'patient_status', 'em_basis'})
+
+    def test_twin_a_billing_wording_reads_as_before(self):
+        text = document('r8-twin-billing')
+        finding = detect.route(text, day_of(text)).finding('gi.office_em')
+        self.assertEqual(finding.status, 'uncertain')
+        self.assertTrue(all(detect.EM_WITHOUT_BASIS in m.cues for m in finding.mentions))
+        self.assertEqual(service(inventory(text), 'gi.office_em').status, 'uncertain')
+        # with an E/M code to decide, the visit is held as before (never excluded, never ready)
+        result = run(text, self.BIOPSY + [('99213', 'The office visit was not billed separately.')])
+        self.assertEqual(outcomes(result)['99213'][:2], ('selected', 'needs_clarification'))
+
+    def test_another_date_in_the_sentence_reads_as_before(self):
+        text = HEAD + ('EGD report\nThe gastroscope was advanced to the second part of the duodenum.\nEvaluation and '
+                       'management was not provided on 2026-09-01.\n')
+        finding = detect.route(text, day_of(text)).finding('gi.office_em')
+        self.assertNotIn(detect.EM_ABSENT_CUE, [c for m in finding.mentions for c in m.cues])

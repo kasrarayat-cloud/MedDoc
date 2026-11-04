@@ -710,6 +710,10 @@ NOTE_STRUCTURE = re.compile(r'^[ \t]*(?:impression|assessment|plan|exam(?:inatio
                             r'HPI|chief\s+complaint|ROS|review\s+of\s+systems|medications|allergies)\b[^\n]{0,40}?[:\-]',
                             re.A | re.I | re.M)
 from studio.gi.cues import EM_VISIT  # noqa: E402  (routing's own visit-statement words)
+# Rule 8 (core repair 2026-11-03): the E/M branch's cue when the document states, in so many words, that no separate
+# office E/M service is documented (cues.EM_ABSENCE) - distinct from EM_ROUTINE's, which calls today's history and
+# examination routine procedure-related work.
+EM_ABSENT_SERVICE_CUE = 'negated: an explicit statement that no separate office E/M service is documented'
 EM_ROUTINE = _rx(r'\broutine\s+pre-?procedur(?:e|al)\s+(?:history|assessment|evaluation|H&P|update)'
                  r'|\bno\s+separate\s+(?:problem-oriented\s+)?(?:evaluation|E/M|office[- ]visit)'
                  r'|\bnot\s+a\s+separate(?:ly\s+identifiable)?\s+(?:E/M|evaluation|visit)')
@@ -3695,6 +3699,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     performed_families: list[str] = []  # families with a performed reading (a title, a statement, an instrument)
     encounter_intents: list[str] = []
     routine_em: list[Span] = []
+    em_absent: list[Span] = []  # rule 8 (core repair 2026-11-03): sentences stating no separate office E/M is documented
     placements = _Placements()  # how each statement of an act is placed, for pairing them (_conflicts)
     # A sentence (or its first SENTENCE_READ_CHARS) is cut into clauses once, and every mention read in it shares the
     # cut (refutation r1, cost-6: each named service and each instrument cut its whole sentence again - 299 names at
@@ -3754,6 +3759,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     encounter_intents.append(stated)
         if EM_ROUTINE.search(text, ss, se):
             routine_em.append(_span(text, ss, se))
+        elif _cues.EM_ABSENCE.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)):
+            em_absent.append(_span(text, ss, se))  # rule 8: an explicit statement that no separate office E/M is documented
     try:
         for family, kind, ms, me, ss, se in sorted(named, key=lambda x: x[2]):
             part = _part_at(plist, starts, ss)
@@ -4215,7 +4222,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
     services = _included([s for s in services if s is not None])
-    em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1)
+    em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1, em_absent)
     if em is not None:
         services.append(em)
     services = tuple(services)
@@ -4325,9 +4332,12 @@ def _on_procedure_line(text: str, pos: int, part: _Part) -> bool:
                     'procedure(s)', 'procedures performed today')
 
 
-def _em_service(text: str, routing, context_facts, services, routine_em, sentences, number) -> Optional[DocumentedService]:
+def _em_service(text: str, routing, context_facts, services, routine_em, sentences, number,
+                em_absent=()) -> Optional[DocumentedService]:
     """The office/outpatient E/M service the document documents for this date, from routing's E/M reading, or for a
-    note routing reads no E/M in, from the note's own evaluation wording (a sparse note still documents a visit)."""
+    note routing reads no E/M in, from the note's own evaluation wording (a sparse note still documents a visit).
+    ``em_absent``: the sentences stating that no separate office E/M service is documented (cues.EM_ABSENCE, rule 8 of
+    the core repair 2026-11-03), read where routing reads the visit negated by that same statement."""
     finding = routing.finding('gi.office_em') if routing is not None and hasattr(routing, 'finding') else None
     procedures_done = [s for s in services if s.status in POSITIVE]
     facts = {f.name: f for f in (finding.facts if finding is not None else ())}
@@ -4367,6 +4377,13 @@ def _em_service(text: str, routing, context_facts, services, routine_em, sentenc
         cues.append('negated: the document calls today\'s history and examination routine procedure-related work and '
                     'documents no separate E/M')
         evidence = list(routine_em[:2])
+    elif procedures_done and em_absent and 'separate_em' not in facts and status == 'negated' and any(
+            EM_ABSENT_SERVICE_CUE in m.cues for m in finding.mentions):
+        # rule 8: routing read the visit negated by this very statement (cues.EM_ABSENCE; its cue is this one) - never
+        # where another E/M statement made routing hold the visit (a contradictory note stays open and asks), and never
+        # where another wording had already negated it (that reading stands as it was)
+        cues.append(EM_ABSENT_SERVICE_CUE)
+        evidence = list(em_absent[:2])
     elif routine_em and not procedures_done and status == 'historical':
         pass
     if not evidence and status in POSITIVE + ('uncertain',):
