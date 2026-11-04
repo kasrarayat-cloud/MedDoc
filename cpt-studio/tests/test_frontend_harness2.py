@@ -1,6 +1,11 @@
 """harness@2's website fixtures (HARNESS.md 11-12) are the serializer's own output; moved out of tests/test_frontend.py so
 that module no longer imports tests.test_harness2_api (whose pipeline-test imports lead back to test_frontend: a cycle
-once both packages were integrated)."""
+once both packages were integrated).
+
+Since the customer interface change (CORE-UX-DESIGN.md 5) these are the OPERATOR fixtures: studio.serializers is the
+operator serializer, served at /ops/api/encounters/<id> and /ops/api/encounters/<id>/trace to platform operators, and the
+operator console (studio/operator/ops.js, tests/operator/ops.test.cjs) renders them. The customer contract served at
+/api/ has its own fixtures, tests/fixtures/customer/ (tests/test_customer_fixtures.py)."""
 import json
 import os
 import re
@@ -13,6 +18,7 @@ from django.utils import timezone
 from studio import jobs, models, review, serializers
 from tests import test_harness2_api as h2
 from tests.support import factories as f
+from tests.support import operator as operator_access
 from tests.support import pipeline_factories as pf
 from tests.test_frontend import FIXTURES, HARNESS2_SCENARIOS, HARNESS2_TRACE, _fixture, candidate_id
 
@@ -183,6 +189,12 @@ class Harness2FixtureTests(h2.Harness2Case):
 
     # --- the scenarios, serialized ------------------------------------------------------------------------------------
 
+    def client_for(self, user):
+        from django.test import Client
+        client = Client()
+        client.force_login(user)
+        return client
+
     def detail(self, user):
         self.encounter.refresh_from_db()
         membership = models.Membership.objects.get(user=user, workspace=self.ws)
@@ -204,6 +216,13 @@ class Harness2FixtureTests(h2.Harness2Case):
         self.phase2()
         out['encounter-harness2-final.json'] = (prefix, *self.detail(self.owner))
         trace = serializers.trace_json(self.encounter)
+        # what /ops/ serves an operator who is this owner is exactly these payloads (the operator serializer at /ops/)
+        client = operator_access.client(self.owner)
+        served = client.get(f'/ops/api/encounters/{self.encounter.pk}').json()
+        self.assertEqual(served, json.loads(json.dumps(out['encounter-harness2-final.json'][1])))
+        self.assertEqual(client.get(f'/ops/api/encounters/{self.encounter.pk}/trace').json(),
+                         json.loads(json.dumps(trace)))
+        self.assertEqual(self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}/trace').status_code, 404)
         with override_settings(STUDIO_OFFER_CONFIRMATIONS=True):  # the dormant confirmation path (HARNESS.md 12.10)
             prefix, title = HARNESS2_SCENARIOS['encounter-harness2-confirmed.json']
             self.phase1(title)
