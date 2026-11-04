@@ -73,11 +73,15 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 reverse, so the site is never interrupted: see **Switching back**.
 `rollback-app` removes the web and worker containers - the site is down from
 that moment until a pair is installed again; prefer `switch-back` after a
-successful `app`. (In the S4 keep layout `rollback-app` acts on the right containers
-instead, with this revision's image, and the site stays served: see **Recovery
-notes**. With a `cpt-studio-web-next` in any other layout, or a web and a worker
-of different images, it refuses and stops nothing: which web serves, and whose
-records to read, cannot be told from the names.) It keeps the database,
+successful `app`. (In an undo's layout - the S4 keep layout, or the back layout
+an S3 undo that stopped half way leaves - `rollback-app` acts on the right
+containers instead, with this revision's image, and the site stays served: see
+**Recovery notes**. With a `cpt-studio-web-next` in any other layout, or a web and
+a worker of different images, it refuses and stops nothing: which web serves, and
+whose records to read, cannot be told from the names. It removes only this
+revision's own pair: a web or worker under the canonical names that carries
+another revision - the old pair an undo put back - is refused, and nothing is
+stopped.) It keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
 the pair's own image, it reads the records their revision made that an older
 revision would act on, or show, wrongly (listed under **Reinstalling an older
@@ -153,7 +157,11 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   migrated schema, `rollback-app` hands an older pair the rows, and nothing is
   reversed. Accepted: a new table; a column that is nullable, has `db_default`,
   or whose database default the same migration's SQL sets (an older pair's
-  insert names no such column); Django's own (non-unique) index, or any index on
+  insert names no such column) - but a unique column (`unique`, a primary key or
+  a one-to-one field) added to an existing table only when it is nullable with
+  no database default: an older pair's inserts then leave it NULL, which a
+  unique constraint never refuses, where a default gives every one of them the
+  same value and refuses the second; Django's own (non-unique) index, or any index on
   a new table; a unique index (`studio.models.UniqueIndex`) only when it is
   partial over rows whose column - one the same migration adds as nullable,
   with no database default, and one the index holds - is set
@@ -342,39 +350,59 @@ this installer's) and reloads nginx; the certificate lineage is kept.
     nginx workers seen, and the public `/health/` answered by the old revision;
     the new workers alone when both webs are the same revision) before the
     incoming web is drained and removed; when that is not proven, both webs are
-    left running and the old worker parked (a switch that stopped half way:
-    **Recovery notes**). Every stage queued, run or left resumable since the file
-    was replaced, and every open stage of a kind the old worker cannot run, is
-    closed as failed (the new web may have served seconds of requests; this can
-    also close what a member started on the old web in those seconds), and
-    closed again once it has stopped taking traffic (the incoming web, drained,
-    finished the requests it had accepted), the list states the old revision
-    labels otherwise are put back after each close, the incoming web is removed,
-    and the old worker is put back and started - held, as in the swap below,
-    while either close names records it would act on under its own rules, or
-    records only this revision's web writes (a member's answer, a reviewer's
-    chosen modifier - no worker makes either, and no revision before the core
-    repair can, so the new web wrote them while it served: the old web shows
-    them wrongly, and its worker's re-assessment would drop a chosen modifier).
-    A state the old web would merely show wrongly that a worker made (a second
-    review's, a harness participant's) is named in the receipt only: the old
-    web never stopped showing it, and no new worker ran.
+    left running, the old worker parked and nothing closed (a switch that stopped
+    half way: **Recovery notes** - this revision's `rollback-app` finishes the
+    undo; the old worker is never started by hand). Every stage queued, run or
+    left resumable since the file was replaced, and every open stage of a kind
+    the old worker cannot run, is closed as failed (the new web may have served
+    seconds of requests; this can also close what a member started on the old
+    web in those seconds), and closed again once it has stopped taking traffic:
+    the incoming web is drained and stopped, and only then closed again (it
+    finished the requests it had accepted; a request an old nginx worker still
+    held after a drain that ended `bounded_out` can no longer queue a stage that
+    close does not see). The list states the old revision labels otherwise are
+    put back after each close, the incoming web is removed, and the old worker
+    is put back and started - held, as in the swap below, while either close
+    names records it would act on under its own rules, or records only a
+    revision since the core repair writes (a member's answer, a reviewer's
+    chosen modifier: no worker makes either) written since the file was
+    replaced: a revision before the core repair shows them wrongly, and its
+    worker's re-assessment would drop a chosen modifier. Which web wrote one
+    cannot be read - a revision since the core repair writes them too, and
+    reads them as this one does - so the receipt says when each was written,
+    never by whom. Such records written before the switch began are named only:
+    they were beside the old pair before this install (the close says which,
+    and one it does not place in time holds). A state the old web would merely
+    show wrongly that a worker made (a second review's, a harness
+    participant's) is named in the receipt only: the old web never stopped
+    showing it, and no new worker ran. The old worker is put back as it was: one
+    that was not running when the install parked it (an earlier undo held it,
+    or a person stopped it) is left stopped. A close or put-back that does not
+    finish (it may have closed some stages before it stopped: the receipt says
+    so), or an incoming web that cannot be stopped, stops the undo there: the
+    incoming web stays beside the old web and the old worker parked, and
+    `rollback-app` finishes it (**Recovery notes**).
   - S4 (the new worker is not ready): it is stopped and what the new pair
     started is closed. When the close names a state the old web would show
     wrongly whatever it is handed (**second_review_refused**,
-    **second_review_unread**, **participant**) and the old pair is another
-    revision, the NEW web keeps serving (it shows them correctly), its worker
-    stopped and the old worker parked: nothing is processed until a person
-    decides (**Recovery notes**). Otherwise the states are put back and the
-    upstream is switched back the same way (graceful reload, `/health/` = the
-    old revision), the incoming web is drained, what the new web started is
-    closed again once it has stopped taking traffic (it took every request until
-    the switch back's reload, and finished those in flight during the drain),
-    the states are put back again, the incoming web is removed with the new
-    worker, and the old worker is put back and started - or held, while either
-    close names records it would act on, or the second one a state the old web
-    shows wrongly (the new web wrote it after the first close: a member's
-    answer, a chosen modifier; the receipt names it). A close, put-back or
+    **second_review_unread**, **participant**, or a member's answer or chosen
+    modifier written since the switch began - one written before it was beside
+    the old pair before this install, and is named only) and the old pair is
+    another revision, the NEW web keeps serving (it shows them correctly), its
+    worker stopped and the old worker parked: nothing is processed until a
+    person decides (**Recovery notes**). Otherwise the states are put back and
+    the upstream is switched back the same way (graceful reload, `/health/` = the
+    old revision), the incoming web is drained and stopped, what the new web
+    started is closed again once it has stopped taking traffic (it took every
+    request until the switch back's reload, and finished those in flight during
+    the drain), the states are put back again, the incoming web is removed with
+    the new worker, and the old worker is put back and started, as it was - or
+    held, while either close names records it would act on, or the second one a
+    state the old web shows wrongly written since the first close (a member's
+    answer, a chosen modifier; the receipt names it and when it was written). An
+    incoming web that cannot be stopped, or a second close or put-back that does
+    not finish, leaves the old web serving, the incoming web beside it and the
+    old worker parked, for `rollback-app` (**Recovery notes**). A close, put-back or
     switch back that fails also leaves the new web serving - unless the switch
     back's reload was asked for: then the undo reloads the new web's vhost again
     and must prove nginx runs it, and when that is not proven both webs are left
@@ -627,15 +655,20 @@ is drained, stopped and parked;
 **B7** the close runs again for what this revision's web started between B4 and
 the end of its drain - which also closes what a member started on the previous
 web during that window (**Known limits**) - and the previous worker is held
-while it names a record (one only this revision's web writes - a member's
-answer, a chosen modifier - was written by it before it stopped taking traffic:
-the previous web shows it wrongly, and the receipt says so; `app` again comes
-back to this revision); **B8** the previous worker starts; **B9** this
+while it names a record (a member's answer or a chosen modifier named there
+was written since B4's own check found none standing - by this revision's web
+before it stopped taking traffic, or by the previous web after the switch when
+it is a revision since the core repair; the receipt says when, and that a
+revision before the core repair shows it wrongly; `app` again comes back to
+this revision); **B8** the previous worker starts; **B9** this
 revision's parked pair is removed (its image is kept). Before B5 any failure
 resumes this revision's pair (its worker started again, its list states
 recomputed with its own derivation, the previous web drained when it took
 traffic and removed); from B5 on the previous web serves and the receipt says
-what is left. The availability record runs from B2 to the end. To come back to
+what is left. A B4 close that was started and gave no answer (a Ctrl-C, or the
+180 s timeout while it reads every encounter after it has committed) may have
+closed this revision's open stages: the receipt says so, never that nothing
+was closed. The availability record runs from B2 to the end. To come back to
 this revision, run `app` again.
 
 ## Reinstalling an older revision
@@ -843,13 +876,32 @@ recomputes every state.
   nginx`), confirm a new set of nginx worker processes, and confirm
   `https://cpt.quillmd.com/health/` answers the revision of the web on the port
   the file names - only then is the rest of this note true. If the vhost
-  names the old web's port, nothing is routed to the incoming web: once it has
-  no connection, stop and remove it, put the old worker back if it is parked
-  (`docker rename cpt-studio-worker-previous cpt-studio-worker`, `docker
-  start` it), and rerun `app`. If the vhost names the incoming web's port, the
-  new web serves: start the new worker if none runs (`app` again does it all),
-  or stop and remove what is left of the old web only once it has no
-  connection. `app` and `preflight` refuse while a `-next` exists.
+  names the old web's port and the incoming web is this revision's (an `app`
+  undo: the back layout), nothing more is routed to it, but what it queued
+  while nginx routed to it is still open: never start the old worker by hand,
+  which would run that work under its own rules, and do not remove the
+  incoming web. Run this revision's `rollback-app`: it proves nginx runs the
+  vhost (a reload, new workers seen, `/health/` answered by the old revision -
+  otherwise it stops nothing), drains the incoming web while it runs and stops
+  it, closes every stage this revision's pair queued, ran or left resumable
+  since the incoming web was created (and every open stage of a kind the old
+  worker cannot run), puts back the list states, removes this revision's
+  worker if one is there and the incoming web, and puts the old worker back -
+  held while the close names a record it would act on, or any member's answer
+  or chosen modifier (it cannot tell whether the old worker ran beside one
+  before the install: once the receipt's reasons are cleared, or the old
+  revision is one since the core repair, which reads them, start it by hand
+  with `docker start cpt-studio-worker`). A close it cannot finish leaves the
+  same layout, for another run. If the incoming web is the previous revision's
+  (a `switch-back`), this revision's own worker runs what it queued, under this
+  revision's rules: once it has no connection, stop and remove it, put this
+  revision's worker back (`docker rename cpt-studio-worker-previous
+  cpt-studio-worker`, `docker start` it), and rerun `app`, which recomputes the
+  list states. If the vhost names the incoming web's port, the new web serves:
+  to keep this revision, start the new worker if none runs, or stop and remove
+  what is left of the old web only once it has no connection; to go back, run
+  this revision's `rollback-app` (the S4 keep layout, below). `app` and
+  `preflight` refuse while a `-next` exists.
 - An installer killed outright inside S3 writes no receipt and runs no undo.
   If it was killed after the file was replaced but before nginx reloaded, nginx
   still serves the old web on the old configuration - but the file names the
@@ -859,8 +911,9 @@ recomputes every state.
   served; recover at once: read the file's port and the containers, then either
   complete (start the new worker: rerun `app` once the leftovers are resolved)
   or put the vhost bytes back (`rollback-vhost` is not for this: restore the
-  rendering for the old port through the root helper, reload, and put the old
-  worker back).
+  rendering for the old port through the root helper and reload), then run
+  this revision's `rollback-app`, which finishes the way back in that back
+  layout as above - never start the old worker by hand.
 - An S4 failure whose close named a shown state leaves the S4 keep layout: the
   NEW web serving as `cpt-studio-web-next`, its worker stopped as
   `cpt-studio-worker`, the old worker parked and the old web running on the old
@@ -868,19 +921,27 @@ recomputes every state.
   the old web and the parked worker, rename `-next` to `cpt-studio-web`, then
   rerun `app` (a same-revision switch, which starts the worker and recomputes
   the states). To go back: clear the named records on this web first
-  (**Reinstalling an older revision**), run `preflight` again, then run this
-  revision's `rollback-app`. In the S4 keep layout `rollback-app` acts on the
-  right containers - this revision's web and worker, with this revision's
-  image - and the site stays served: it refuses, changing nothing, while this
-  revision recorded what an older revision would act on or show wrongly, or
-  while the baseline no longer holds; otherwise it closes every stage this
-  revision's pair started since its incoming web was created (and every open
-  stage of a kind the old worker cannot run), stopping there if that close
-  names a record, puts back the list states, switches the upstream back to the
-  old web (graceful, `/health/` = its revision), drains this revision's web,
-  closes again, removes this revision's web and worker, and puts the old worker
-  back - held while a close names a record. Do not remove the old web by hand:
-  it is what `rollback-app` switches back to.
+  (**Reinstalling an older revision**), then run this revision's
+  `rollback-app`. In the S4 keep layout `rollback-app` acts on the right
+  containers - this revision's web and worker, with this revision's image -
+  and the site stays served. No new `preflight` is needed, nor possible here
+  (it refuses while a `-next` exists): rollback-app reads co-tenant routing and
+  app.quillmd.com itself, right before it acts, records them in its receipt and
+  verifies the switch back against them. It refuses, changing nothing, while
+  this revision recorded what an older revision would act on or show wrongly,
+  or while app.quillmd.com does not answer 200 JSON; otherwise it closes every
+  stage this revision's pair started since its incoming web was created (and
+  every open stage of a kind the old worker cannot run), stopping there if that
+  close names a record, puts back the list states, switches the upstream back
+  to the old web (graceful, `/health/` = its revision), drains and stops this
+  revision's web, closes again, removes this revision's web and worker, and
+  puts the old worker back - held while a close names a record. It succeeds
+  only when it did all of that: an incoming web it could not remove fails the
+  phase, which says it is left (everything else was done; remove it by hand),
+  and so does a Ctrl-C. A drift in the seconds between its read and the switch
+  refuses the switch back, and the new web keeps serving: run `rollback-app`
+  again. Do not remove the old web by hand: it is what `rollback-app` switches
+  back to.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
   interrupted `provision`, or `.operator-credentials.json.new` /
   `.ops-agent-credentials.json.new` from an interrupted `operators`: delete them
@@ -1012,9 +1073,19 @@ verified inside the image under that setting.
       remove a web nginx may route to; a same-revision switch whose new workers
       are not seen fails S3. A worker that nginx respawns after a crash, inside
       the seconds of a reload it refused, would read as applied.
-  12. A record only this revision's web writes (a member's answer, a chosen
-      modifier) that it wrote after an undo's first close - in the seconds
-      before the switch back's reload, or in a request it finished during the
-      drain - is handed to the old web, which shows it wrongly until this
-      revision is installed again: the second close names it and holds the old
-      worker. `switch-back`'s B7 likewise.
+  12. A record only a revision since the core repair writes (a member's
+      answer, a chosen modifier) that was written after an undo's first close -
+      in the seconds before the switch back's reload, or in a request the
+      incoming web finished during the drain - is handed to the old web, which
+      shows it wrongly, if it is a revision before the core repair, until this
+      revision is installed again: the second close, which comes after the
+      incoming web has stopped, names it and holds the old worker.
+      `switch-back`'s B7 likewise.
+  13. Which web wrote a member's answer or a chosen modifier is not recorded.
+      An undo holds the old worker for one written in its window even when the
+      old revision is one since the core repair, which reads it as this one does
+      (and whose own web may have written it after the switch back): over-holding
+      is the safe side, and the receipt says so and how to release it.
+      `rollback-app` in the back layout holds for every one, whenever written:
+      it did not run the install, and cannot tell whether the old worker ran
+      beside one before it.
