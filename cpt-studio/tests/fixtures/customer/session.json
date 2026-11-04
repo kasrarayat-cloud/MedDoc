@@ -1,0 +1,20 @@
+{
+ "user": {
+  "id": "ca000000-0000-4000-8000-000000000001",
+  "label": "Reviewer",
+  "initials": "R",
+  "actor_kind": "human"
+ },
+ "workspace": {
+  "id": "ca000000-0000-4000-8000-000000000002",
+  "name": "Gastroenterology"
+ },
+ "role": "reviewer",
+ "can_review": true,
+ "acknowledgement": "I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.",
+ "counts": {
+  "documents": 9,
+  "queue": 7
+ },
+ "synthetic_only": true
+}

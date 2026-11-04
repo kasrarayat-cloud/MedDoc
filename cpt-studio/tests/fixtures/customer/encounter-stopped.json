@@ -1,0 +1,135 @@
+{
+ "id": "c7000000-0000-4000-8000-000000000001",
+ "title": "Pasted note 2026-11-04 01:14",
+ "created_at": "2026-11-01T09:01:23Z",
+ "updated_at": "2026-11-01T09:01:28Z",
+ "state": "stopped",
+ "state_label": "Stopped",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 618,
+  "page_count": 0,
+  "revision": 1,
+  "text": "",
+  "pages": [],
+  "reading": {
+   "status": "pending",
+   "label": "Reading your document",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": null,
+  "source": "missing",
+  "document_value": null,
+  "document_quote": null,
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "stopped",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "stopped",
+    "started_at": "2026-11-01T09:01:25Z",
+    "finished_at": "2026-11-01T09:01:26Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-11-01T09:01:25Z",
+  "finished_at": "2026-11-01T09:01:26Z",
+  "server_time": "2026-11-01T09:01:29Z",
+  "slow": false,
+  "message": "Processing was stopped. You can resume it.",
+  "can_stop": false,
+  "can_resume": true,
+  "can_leave": true,
+  "error": {
+   "text": "Processing was stopped before it finished.",
+   "action": "resume"
+  }
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "not_run"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "not_run"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
+ ],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "The latest version of the document has not been checked yet."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document_added",
+   "summary": "Document added",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:01:24Z"
+  },
+  {
+   "event": "processing_stopped",
+   "summary": "Processing stopped",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:01:27Z"
+  }
+ ]
+}

@@ -1,0 +1,234 @@
+{
+ "id": "c5000000-0000-4000-8000-000000000001",
+ "title": "Pasted note 2026-11-04 01:14",
+ "created_at": "2026-11-01T09:00:47Z",
+ "updated_at": "2026-11-01T09:01:02Z",
+ "state": "reviewed",
+ "state_label": "Reviewed",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 618,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nRiverbend Digestive Health (fictional)\nDate of service: 2026-10-20\nPlace of service: Office, in-person outpatient visit\nPatient status: Established patient, last seen 2026-03-02.\n\nChief complaint\nFollow-up visit number 5.\nFollow-up of chronic constipation.\n\nAssessment and plan\nChronic idiopathic constipation, improved. Continue polyethylene glycol daily.\nA colonoscopy is scheduled for 2026-12-01.\n\nMedical decision making\nLow: one stable chronic illness; prescription drug management.\n\nTime\nTotal time on the date of the encounter was 24 minutes.\n",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 618
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Text read",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": "2026-10-20",
+  "source": "document",
+  "document_value": "2026-10-20",
+  "document_quote": {
+   "text": "Date of service: 2026-10-20",
+   "start": 107,
+   "end": 134
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "completed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-11-01T09:00:49Z",
+    "finished_at": "2026-11-01T09:00:51Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-11-01T09:00:52Z",
+    "finished_at": "2026-11-01T09:00:53Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "done",
+    "started_at": "2026-11-01T09:00:54Z",
+    "finished_at": "2026-11-01T09:00:56Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "done",
+    "started_at": "2026-11-01T09:00:57Z",
+    "finished_at": "2026-11-01T09:00:59Z"
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-11-01T09:00:49Z",
+  "finished_at": "2026-11-01T09:00:59Z",
+  "server_time": "2026-11-01T09:01:07Z",
+  "slow": false,
+  "message": "Your results are ready.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "done"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "done"
+  }
+ ],
+ "codes": [
+  {
+   "id": "c5000000-0000-4000-8000-000000000002",
+   "number": 1,
+   "code": "99213",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "approved",
+   "status_label": "Approved",
+   "sub_label": "",
+   "summary": "Office / outpatient evaluation and management: documented as performed on the date of service.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Total time on the date of the encounter was 24 minutes.",
+      "start": 562,
+      "end": 617,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "revoke"
+   ],
+   "decision": {
+    "action": "approve",
+    "by": "Reviewer",
+    "by_kind": "human",
+    "at": "2026-11-01T09:01:00Z",
+    "note": "",
+    "modifiers": []
+   }
+  }
+ ],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document.",
+  "No CMS fee-schedule file applies to the date of service, so those reference checks were not run."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": true,
+  "blockers": []
+ },
+ "reports": [
+  {
+   "id": "c5000000-0000-4000-8000-000000000003",
+   "kind": "draft",
+   "fmt": "csv",
+   "filename": "CPT-Studio-draft-r1-20261101T090000.csv",
+   "generated_at": "2026-11-01T09:01:05Z",
+   "generated_by": "Reviewer",
+   "download_url": "/api/reports/c5000000-0000-4000-8000-000000000003/download",
+   "current": true
+  },
+  {
+   "id": "c5000000-0000-4000-8000-000000000004",
+   "kind": "approved",
+   "fmt": "txt",
+   "filename": "CPT-Studio-approved-r1-20261101T090000.txt",
+   "generated_at": "2026-11-01T09:01:03Z",
+   "generated_by": "Reviewer",
+   "download_url": "/api/reports/c5000000-0000-4000-8000-000000000004/download",
+   "current": true
+  }
+ ],
+ "activity": [
+  {
+   "event": "document_added",
+   "summary": "Document added",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:00:48Z"
+  },
+  {
+   "event": "text_read",
+   "summary": "Text read",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:50Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:55Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:58Z"
+  },
+  {
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:01:01Z"
+  },
+  {
+   "event": "report_created",
+   "summary": "Export created",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:01:04Z"
+  },
+  {
+   "event": "report_created",
+   "summary": "Export created",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:01:06Z"
+  }
+ ]
+}
