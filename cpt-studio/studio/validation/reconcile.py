@@ -187,7 +187,7 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # R1a-r5 (hold-only): every act this code could rest on is tied to its service only by a lesion's name in a
         # document of several procedures (services.NAME_ONLY_CUE): it stays documented, and the code is held for the
         # reviewer - a reason no release or exclusion path reads
-        return Match('uncertain', service, (), 'named_only',
+        return Match('uncertain', service, done, 'named_only',
                      f'The {name} is documented as {service.status}, but the {what} this code accounts for is tied to '
                      f'it only by a lesion\'s name ({quote(done[0].evidence[0])}) in a document of several procedures.',
                      question=f'The {what} ({quote(done[0].evidence[0], 120)}) is tied to the {name} only by a '

@@ -390,7 +390,9 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         # a whole service left without a proposal is accounted for only by a code the document supports as done (its
         # base code, or an act it documents) - never by a code for an act nothing documents, which would hide the
         # missing service behind a held proposal (refutation r1, sends lens)
-        supported = match is not None and match.state in ('performed', 'incomplete')
+        # R1a-r5 (hold-only): an act tied to its service only by a lesion's name is documented as done; its code is
+        # added and held (named_only), never dropped to an alternative that leaves the service silently uncoded
+        supported = match is not None and (match.state in ('performed', 'incomplete') or match.reason == 'named_only')
         covered = [label for service, family, act, label in open_items if profile is not None and (
             (family == candidate.family and ((act == '' and supported) or act in profile.covers
                                              or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}

@@ -5382,8 +5382,11 @@ def _merge_acts(acts: Sequence[Act]) -> list[Act]:
         key = (act.kind, act.status, act.lesion, act.anatomy if not act.lesion else (), act.role)
         if key in merged:
             prev = merged[key]
+            # R1a-r5 (hold-only): the merged act is tied to its service only by a lesion's name only when every
+            # statement of it is (a restatement naming its site, an addendum among them, lifts the mark)
+            cues = prev.cues if NAME_ONLY_CUE in act.cues else tuple(c for c in prev.cues if c != NAME_ONLY_CUE)
             merged[key] = replace(prev, evidence=tuple(_dedupe_spans(prev.evidence + act.evidence))[:6],
-                                  technique=prev.technique or act.technique, detail=prev.detail or act.detail)
+                                  technique=prev.technique or act.technique, detail=prev.detail or act.detail, cues=cues)
         else:
             merged[key] = act
     return list(merged.values())
