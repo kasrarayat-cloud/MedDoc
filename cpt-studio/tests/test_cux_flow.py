@@ -134,10 +134,22 @@ class DetailsCase(TestCase):
         family = (COLON if code else '') if family is None else family
         return next(r for r in self.rows(assessment) if r['id'] == answers.detail_id(fact, family, code))
 
-    def post(self, items, client=None, raw=None):
+    def post(self, items, client=None, raw=None, encounter=None):
         body = json.dumps(raw if raw is not None else {'answers': items})
-        return (client or self.client).post(f'/api/encounters/{self.s.encounter.pk}/details', data=body,
+        return (client or self.client).post(f'/api/encounters/{(encounter or self.s.encounter).pk}/details', data=body,
                                             content_type='application/json')
+
+    def context_for(self, text, entered):
+        """Another encounter of the workspace whose current context was made from ``text`` with ``entered`` as the
+        member's date - as analyze makes it: with the document's own date recorded beside it."""
+        encounter = f.encounter(self.s.workspace, self.s.reviewer)
+        revision = f.pasted_revision(encounter, self.s.reviewer, text)
+        encounter.user_values = {'service_date': entered} if entered else {}
+        encounter.save(update_fields=['user_values'])
+        context = jobs._record_context(encounter, revision, gi_context.extract_context(revision.text))
+        models.Encounter.objects.filter(pk=encounter.pk).update(current_context=context)
+        encounter.refresh_from_db()
+        return encounter
 
     def answer(self, row, value):
         return {'id': row['id'], 'fact': row['fact'], 'value': value}
@@ -204,16 +216,6 @@ class DetailRowsTests(DetailsCase):
         # every prompt is CPT Studio's fixed wording: no stored question or reason text is passed through
         stored = set(models.Clarification.objects.values_list('question', flat=True))
         self.assertFalse(stored & {r['prompt'] for r in rows.values()})
-
-    def context_for(self, text, entered):
-        encounter = f.encounter(self.s.workspace, self.s.reviewer)
-        revision = f.pasted_revision(encounter, self.s.reviewer, text)
-        encounter.user_values = {'service_date': entered} if entered else {}
-        encounter.save(update_fields=['user_values'])
-        context = jobs._record_context(encounter, revision, gi_context.extract_context(revision.text))
-        models.Encounter.objects.filter(pk=encounter.pk).update(current_context=context)
-        encounter.refresh_from_db()
-        return encounter
 
     def test_use_document_date_only_for_a_single_documented_value_and_never_a_prefilled_unsupported_date(self):
         cases = {
@@ -303,6 +305,18 @@ class DetailSaveTests(DetailsCase):
         self.assertEqual(sorted(e.data.get('kind', e.data.get('value')) for e in
                                 models.AuditEvent.objects.filter(event='detail.answered')),
                          ['context', 'context', 'not_documented'])
+
+    def test_a_value_already_in_effect_makes_nothing_while_its_detail_is_still_asked(self):
+        encounter = self.context_for(pf.GI_NOTE, '1998-01-01')  # the member's date conflicts: the date row stays
+        pf.routing(encounter.current_revision)  # routed, so a context change would run
+        (row,) = answers.details_needed(encounter, None)
+        before = self.counts()
+        with mock.patch.object(jobs, 'change_context', wraps=jobs.change_context) as change:
+            response = self.post([self.answer(row, '1998-01-01')], encounter=encounter)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual((response.json()['saved'], response.json()['unchanged'], change.call_count), (0, 1, 0))
+        self.assertEqual(self.counts(), before)  # no context, no re-assessment, nothing recorded
+        self.assertEqual(answers.details_needed(encounter, None), [row])
 
     def test_a_clinical_fact_takes_only_not_documented_or_cannot_confirm(self):
         extent, date_row = self.row('extent', '45385'), self.row('service_date')
