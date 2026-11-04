@@ -810,3 +810,31 @@ The next round's repair must read each shape no worse than installed before CPT 
 the reader to tell a dropped section or a hit limit from damage, from pypdf's warnings. The text rows need it to keep
 6.21.2's refusals for strings it cannot decode as the font says (TXT-2, n-2), and its literal glyph names where a
 decoded one would be dropped (TXT-3).
+
+## Core repair, refutation round 2 (2026-11-04): false READYs the installed revision gives too
+
+The core repair (branch `feat/cpt-studio-core-ux-20261103`) holds the register's false READYs (R8 D1 to D10, D12, D13,
+D15). Lens L1 of the round-2 refutation (base `41e03656df61`, head `372ec44b0e24`) attacked each class with new
+wordings. For the rows below, its verifier reproduced a READY code on the head that the installed revision ALSO gives:
+the same input, the same result. So these are not regressions of the change. They are new members of classes the
+register named. They are recorded here under this file's rule: wording outside every declared list is measured and
+listed, and a misreading of what the code declares it reads is fixed in code. Rows L1/R05, R06 and R12 read a declared
+form in a variant spelling or layout, so they are fixed in code in the same round, and their rows say so once they are.
+
+Each input is the lens's, a synthetic document through the assess stage's own children (`jobs._analyze_child`,
+`_assess_child`) with a synthetic Corti answer. *Ready* means approvable with the whole-document acknowledgement, never
+approved: a reviewer's or the agent's recorded decision still approves, and the result says the service status is not
+verified.
+
+| id | example input (the class) | head and installed | locus | why it is not a rule yet |
+|---|---|---|---|---|
+| L1/R01 | "Attached prior report:" / "Upper endoscopy report (fictional)" / "Date of service: 2025-03-01" / an EGD biopsy sentence, after today's colonoscopy; Corti cites the biopsy sentence for 43239 (also 43235 and 45380 variants) | 43239 ready (the attached report opens a current EGD part) | `services.parts()` at REPORT_TITLE; D10's hold reaches only a code citing the title | another occasion inside one document is read from the title alone; the register's title-cited D10 row is held |
+| L1/R02 | "We tried to remove the polyp with a hot snare, but it slipped off." / "Hot snare polypectomy proved impossible." / "Cold forceps biopsy of the antrum was impossible because of bleeding." / "... was aborted ..." | 45385 / 43239 ready | `cues.FAILED_ACT` (failed, unsuccessful, abandoned) and `UNDONE_ACT` at the own-passage release | failure verbs are open ("tried ... but", "slipped", "impossible", "aborted", "halted") |
+| L1/R03 | "The polyp was not excised." on the procedure line's colonoscopy with hot snare polypectomy | 45385 ready (the procedure line's snare stands) | `engine._denies_an_act_of`: a denial must name an act kind or a listed participle | denial verbs are open ("excised", "resected", "taken off") |
+| L1/R04 | "Hot snare polypectomy was proposed for a later session." / "... at a later date." / "Hot snare removal of the polyp is advised." | 45385 ready | `engine._own_passage_may_stand` (no plan or time gate); the inventory's act predicate | plan and advice wording is open ("proposed", "advised", "at a later date") |
+| L1/R08 | the register's D5 "PATHOLOGY ADDENDUM" heading over a specimen line with a predicate ("... removed by hot snare polypectomy") | 45385 ready (a pathology-role act bound to today's lesion) | `reconcile.match()` collects performed acts of any role | a specimen line restating the act is read as the act; D5/D6's headings without a predicate are held |
+| L1/R09 | "Pathology: hot snare polypectomy of sigmoid polyp" / "Surgical pathology - hot snare polypectomy specimen from the sigmoid colon" as a heading | 45385 ready | `services.ROLE_HEADINGS['pathology']` needs "pathology report/result/results/addendum" | heading wording is open; to be judged with R08 |
+| L1/R11 | "Examination was terminated in the gastric body." / "The duodenum was not reached." / "We were unable to pass the pylorus." in D13's named-EGD construction | 43244 ready with the duodenum as the extent | `detect._P2_UPPER_STOP` (a 'we' or 'the <exam>' subject and a listed stop verb) | stop and reach wording is open |
+
+How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
+(independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
