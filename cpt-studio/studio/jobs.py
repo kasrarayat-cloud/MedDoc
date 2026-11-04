@@ -3129,7 +3129,7 @@ def _retained_runs(revision, final):
     return out
 
 
-def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
+def reassess_retained(encounter, tag, *, user=None, dry_run=False, expected_participants=None) -> dict:
     """Queue ONE re-assessment of the current revision that re-reads the final assessment's retained answers by id -
     Corti's run and every participant run and peer run its entries name - and sends nothing (R6 6.4): an assess keyed
     '<the final's key>:c:<12 hex of sha256(tag)>', read in AGAIN mode (_assess_mode), which queues no peer stage and
@@ -3143,7 +3143,11 @@ def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
     retained Corti answer was made for another date; when the participants configured here are not the ones the final
     read (the stage would read others); when a retained answer no longer matches its recorded sha256; and with no
     finished assess stage that made the final. Writes the 'assessment.refreshed' audit row; ``dry_run`` checks the same
-    and writes nothing. Returns what was (or would be) queued and what it re-reads."""
+    and writes nothing. Returns what was (or would be) queued and what it re-reads.
+
+    ``expected_participants``: the participants the WORKER that makes the re-assessment runs (the installer passes them
+    from its app receipt: its one-shot runs with every participant disabled, so this process's own configuration is not
+    the worker's); None reads this process's configuration, as a command run in the worker's environment does."""
     if not isinstance(tag, str) or not 0 < len(tag) <= 80 or not tag.isprintable() or any(c.isspace() for c in tag):
         raise Refused(RETAINED_TAG)
     with transaction.atomic():
@@ -3170,7 +3174,7 @@ def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
             raise Refused(RETAINED_DATE)
         retained = _retained_runs(revision, final)
         recorded = sorted(name for name, _, _ in retained)
-        configured = sorted(participants.configured())
+        configured = sorted(participants.configured() if expected_participants is None else expected_participants)
         if recorded != configured:
             raise Refused(RETAINED_PARTICIPANTS.format(recorded=', '.join(recorded) or 'none',
                                                        configured=', '.join(configured) or 'none'))

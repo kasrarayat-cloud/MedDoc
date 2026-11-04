@@ -1622,6 +1622,11 @@ class ReassessPhaseTests(TemporaryDirectoryTest):
         self.queues = {ENCOUNTER: [['j2', 'assess', 'queued', 'k1:c:tag']], ENCOUNTER_2: [['j3', 'assess', 'queued',
                                                                                          'k2:c:tag']]}
         self.exit = {}
+        self.app_receipt({'astra': 'live', 'fable': 'live'})
+
+    def app_receipt(self, participants):
+        install.write_receipt(self.tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION,
+                                                'details': {'participants': participants}})
 
     def app_script(self, image_id, env, body, params, **kwargs):
         self.assertEqual(body, install.REASSESS_JOBS)
@@ -1652,8 +1657,10 @@ class ReassessPhaseTests(TemporaryDirectoryTest):
         details = self.run_phase([ENCOUNTER, ENCOUNTER_2])
         self.assertEqual([command for command, _ in self.commands], [
             ['manage', 'migrate', '--check'],
-            ['manage', 'reassess_retained', '--encounter', ENCOUNTER, '--tag', REVISION],
-            ['manage', 'reassess_retained', '--encounter', ENCOUNTER_2, '--tag', REVISION]])
+            ['manage', 'reassess_retained', '--encounter', ENCOUNTER, '--tag', REVISION, '--participants', 'astra,fable'],
+            ['manage', 'reassess_retained', '--encounter', ENCOUNTER_2, '--tag', REVISION, '--participants',
+             'astra,fable']])
+        self.assertEqual(details['participants'], ['astra', 'fable'])
         self.assertEqual(self.reads, [[ENCOUNTER, ENCOUNTER_2]] * 2)  # before and after
         self.assertEqual(details['encounters'][ENCOUNTER]['jobs_appeared'], [['j2', 'assess', 'queued', 'k1:c:tag']])
         self.assertEqual(details['encounters'][ENCOUNTER_2]['jobs_appeared'], [['j3', 'assess', 'queued', 'k2:c:tag']])
@@ -1681,6 +1688,23 @@ class ReassessPhaseTests(TemporaryDirectoryTest):
         self.app_script = script
         with self.assertRaisesRegex(install.InstallError, 'A dry run was followed by 1 new job'):
             self.run_phase([ENCOUNTER], dry=True)
+
+    def test_the_participants_are_the_app_receipt_s_and_none_without_a_receipt_runs_nothing(self):
+        # the worker's modes, from this revision's app receipt: the one-shot itself runs with every participant
+        # disabled, so the command is told whom the worker reads (a harness encounter was refused otherwise)
+        self.app_receipt({'astra': 'live', 'fable': 'disabled'})
+        self.run_phase([ENCOUNTER])
+        self.assertEqual(self.commands[1][0][-2:], ['--participants', 'astra'])
+        self.commands.clear()
+        self.app_receipt({'astra': 'disabled', 'fable': 'disabled'})
+        self.run_phase([ENCOUNTER_2])
+        self.assertEqual(self.commands[1][0][-2:], ['--participants', 'none'])
+        for receipt in self.tmp.glob('app-*'):
+            receipt.unlink()
+        self.commands.clear()
+        with self.assertRaisesRegex(install.InstallError, 'No successful --phase app receipt'):
+            self.run_phase([ENCOUNTER])
+        self.assertEqual(self.commands, [])
 
     def test_an_unknown_encounter_refuses_before_any_command_and_a_failure_says_what_ran(self):
         with self.assertRaisesRegex(install.InstallError, 'do not exist'):

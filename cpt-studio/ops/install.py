@@ -4443,6 +4443,14 @@ def phase_reassess(ctx) -> dict:
     `--dry-run` is passed through. Each encounter's jobs are read before and after (REASSESS_JOBS), so the receipt
     names the jobs that appeared as measured, not as said; a dry run after which one appeared fails the phase."""
     encounters, dry = list(ctx.args.encounter), bool(ctx.args.dry_run)
+    # The worker makes the re-assessment, so the participants it must read are the worker's: this revision's app
+    # receipt names the modes its pair runs with. The one-shot below runs with every participant disabled, and the
+    # command would otherwise compare the final's participants with that (refusing every harness encounter).
+    app = require_receipt(ctx, 'app')
+    modes = (app.get('details') or {}).get('participants')
+    if not isinstance(modes, dict) or not all(isinstance(mode, str) for mode in modes.values()):
+        raise InstallError("This revision's app receipt names no participant modes; nothing was re-assessed.")
+    running = sorted(name for name, mode in modes.items() if mode != 'disabled')
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
@@ -4458,8 +4466,8 @@ def phase_reassess(ctx) -> dict:
                            're-assessed.')
     results = {}
     for number, pk in enumerate(encounters, start=1):
-        command = ['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision] + (['--dry-run'] if dry
-                                                                                              else [])
+        command = (['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision,
+                    '--participants', ','.join(running) or 'none'] + (['--dry-run'] if dry else []))
         result = oneshot(image_id, command, env, timeout=REASSESS_SECONDS)
         log = ctx.log(f'reassess-{number:02d}', result.stdout + result.stderr)
         results[pk] = {'exit': result.returncode, 'log': log, 'receipt': access_receipt(result.stdout),
@@ -4479,7 +4487,7 @@ def phase_reassess(ctx) -> dict:
     if dry and appeared:
         raise InstallError(f'A dry run was followed by {appeared} new job(s) on the named encounters; read them in '
                            'this receipt.', details={'encounters': results})
-    return {'tag': ctx.revision, 'dry_run': dry, 'encounters': results,
+    return {'tag': ctx.revision, 'dry_run': dry, 'participants': running, 'encounters': results,
             'summary': f'reassess_retained {"(dry run) " if dry else ""}for {len(encounters)} encounter(s): '
                        f'{appeared} job(s) appeared'}
 
