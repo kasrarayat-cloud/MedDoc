@@ -9,18 +9,27 @@ customer-page.html and, with a few details needed, customer-page-details.html), 
 (cpt-studio-customer-report@1, section 5: customer-report-{approved,draft}.{txt,csv}). Nothing here is a fixture of
 the product: the product's own fixtures are its serializers' (tests/fixtures/customer/). These samples exist so the walk
 (ops/verify_browser.cjs), the download verifier (ops/verify_downloads.py) and the customer scanner
-(ops/scan_customer.py) are each tested against one agreed rendering of the contract, and the TXT and CSV grammar the
-download verifier reads is written down in one place (customer_txt / customer_csv below).
+(ops/scan_customer.py) are each tested against one agreed rendering of the contract.
 
---check: write nothing; exit 1 when a committed sample differs from what this script writes (the tests run it).
-Stdlib only. Every value is synthetic.
+The operator view is what the walk's operator account reads: ops-agent holds a grant and NO membership (CORE-UX-DESIGN.md
+9, decision (h)), so the view allows no review action of its own (studio.operator.ReadOnlyAccess) - the tools judge the
+customer's actions by what the server accepts from the customer, never by the operator's (refutation round 2, L3-5).
+
+The customer reports are never written in a grammar of this script's own (refutation round 2, L3-1: they once were, and
+every genuine export failed the checks the samples passed). This script writes the report SNAPSHOTS
+(customer-report-snapshots.json: what studio.reports.customer_snapshot builds for this encounter, and the generation
+stamp), and the four report files are studio/reports.py's own render_customer_txt / render_customer_csv bytes of them:
+
+    CPT_STUDIO_WRITE_SAMPLES=1 python manage.py test tests.test_cux_r2_reports.SampleReportTests   # writes them
+    python manage.py test tests.test_cux_r2_reports                                               # pins them
+
+--check: write nothing; exit 1 when a committed sample this script writes differs from what it writes (the tests run
+it). Stdlib only. Every value is synthetic.
 """
 from __future__ import annotations
 
-import csv
 import hashlib
 import html
-import io
 import json
 import sys
 from pathlib import Path
@@ -88,6 +97,10 @@ def quote(passage: str) -> dict:
 
 # --- the platform-operator view (today's serializers.encounter_detail; /ops/api/encounters/<id>) -------------------
 
+# The operator account reads with no membership (studio.operator.ReadOnlyAccess): the view allows it no action of its own.
+OPERATOR_PERMISSIONS = {'can_review': False, 'is_owner': False, 'can_confirm': False}
+
+
 def op_decision(pid: str, code: str, modifiers: list) -> dict:
     return {'id': D80 if pid == P80 else D85, 'proposal_id': pid, 'code': code, 'action': 'approve', 'note': NOTE,
             'reviewer': AGENT, 'reviewer_kind': 'agent', 'created_at': DECIDED[pid], 'decided_at': DECIDED[pid],
@@ -95,8 +108,7 @@ def op_decision(pid: str, code: str, modifiers: list) -> dict:
             'revision_number': 1, 'modifiers': modifiers}
 
 
-def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=None, reinstatable=False,
-                allowed=('approve', 'reject')) -> dict:
+def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=None, reinstatable=False) -> dict:
     return {'id': pid, 'key': f'{code}:{pid[-4:]}', 'bucket': bucket, 'code': code, 'code_kind': 'cpt1',
             'family': 'gi.egd' if code.startswith('43') else 'gi.colonoscopy',
             'family_label': 'Upper GI endoscopy' if code.startswith('43') else 'Colonoscopy',
@@ -115,17 +127,17 @@ def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=N
             if code in ('45380', '45385') else [],
             'support': support or {}, 'clarification_ids': [], 'decision': decision,
             'decision_state': 'approved' if decision else 'undecided', 'reinstated_by': None,
-            'allowed_actions': ['revoke'] if decision else list(allowed), 'approve_withheld_by': None,
+            'allowed_actions': [], 'approve_withheld_by': None,
             'proposed_by': ['corti', 'astra', 'fable'], 'listed_by': [], 'corti_relation': '',
             'participant_positions': [], 'reference_check': {'state': 'checked', 'detail': ''}, 'retrieval': [],
             'phases': {'astra': 'independent'}, 'confirmed': []}
 
 
 def support_for(passage: str, detail: str) -> dict:
+    # reconcile.support: a 'pass' reading's source is empty - the provider's own passage (evidence[0]) shows the act
     return {'origin': 'primary', 'service': 'colon-a', 'family': 'gi.colonoscopy', 'state': 'performed', 'reason': '',
             'detail': detail, 'acts': [{'id': 'act-1', 'kind': 'removal', 'label': detail}], 'status': 'pass',
-            'supporting': [0], 'unrelated': [], 'detail_support': '',
-            'source': [{'start': TEXT.index(passage), 'end': TEXT.index(passage) + len(passage), 'text': passage}]}
+            'supporting': [0], 'unrelated': [], 'detail_support': '', 'source': []}
 
 
 def run(name: str, provider: str, purpose: str, model: str, returned: str, usage: dict, n: int) -> dict:
@@ -142,8 +154,8 @@ def operator_encounter() -> dict:
                     support=support_for(COL1, SUMMARIES[P80])),
         op_proposal(P85, '45385', 'selected', 'ready', [span(COL2)], decision=op_decision(P85, '45385', ['XS']),
                     support=support_for(COL2, SUMMARIES[P85])),
-        op_proposal(P78, '45378', 'alternative', 'informational', [span(CECUM)], allowed=()),
-        op_proposal(P39, '43239', 'excluded', 'excluded', [span(PLAN)], allowed=()),
+        op_proposal(P78, '45378', 'alternative', 'informational', [span(CECUM)]),
+        op_proposal(P39, '43239', 'excluded', 'excluded', [span(PLAN)]),
     ]
     stages = [{'kind': kind, 'state': 'succeeded', 'error': '', 'finished_at': f'2026-11-03T22:00:{n:02d}+00:00'}
               for n, kind in enumerate(('extract', 'analyze', 'predict', 'astra', 'fable', 'assess', 'astra_peer',
@@ -184,7 +196,7 @@ def operator_encounter() -> dict:
         'service_date_conflict': False, 'service_date_asked': False, 'service_date_evidence': [span(DATE_LINE)],
         'families': ['Colonoscopy'], 'source_kind': 'paste', 'open_clarifications': 0, 'coding_state': 'complete',
         'queue_reasons': [], 'created_at': CREATED, 'created_by': AGENT,
-        'permissions': {'can_review': True, 'is_owner': False, 'can_confirm': False},
+        'permissions': dict(OPERATOR_PERMISSIONS),
         'harness': {'participants': participants, 'phase': 2,
                     'reference_validation': {'state': 'done', 'codes_checked': 2, 'passages': 4,
                                              'sources': [{'key': 'cms-pfs-rvu-2026'}]},
@@ -207,7 +219,7 @@ def operator_encounter() -> dict:
              'missing': []}]},
         'pipeline': {'busy': False, 'can_stop': False, 'can_resume': False, 'stopped_by_member': False, 'stages': stages},
         'provider_runs': runs, 'state_run': None,
-        'second_review': {'available': False, 'can_request': True, 'items': [], 'reason': ''},
+        'second_review': {'available': False, 'can_request': False, 'items': [], 'reason': ''},
         'assessment': {'id': ASM, 'profiles_version': 'gi-profiles@7', 'engine_version': 'engine-2026.11.03@1',
                        'created_at': CREATED, 'proposals': proposals,
                        'encounter_checks': [{'id': 'participants.summary', 'status': 'pass', 'label': 'Independent checks',
@@ -435,65 +447,50 @@ def details_encounter() -> dict:
 
 # --- the customer reports (cpt-studio-customer-report@1; CORE-UX-DESIGN.md section 5) ---------------------------------
 #
-# The TXT grammar ops/verify_downloads.py reads: the SYNTHETIC line first and last; a headline; "Report format: <format>";
-# the header fields "Encounter:", "Date of service:", "Generated at:", "Generated by:"; one section headed
-# "SUGGESTED CODES — NOT APPROVED" (draft) or "APPROVED CODES" (approved), whose items are numbered lines
-# "  N. CODE · units U[ · modifier M[, M]][ · <status label>]" (draft items carry the status label), each followed by
-# detail lines indented five spaces: "Approved by <label> at <ISO>" and the agent line (approved), the one-sentence
-# summary, and one "Quote: "<passage>" [page P, characters S–E]" per quoted passage (a draft may print "[page P]" only);
-# then "LIMITATIONS" with "  - " lines. A passage's line breaks continue on lines indented seven spaces.
+# The SNAPSHOTS studio.reports.customer_snapshot builds for this encounter (its draft from the customer rows, its
+# approved export from the approved items), with the generation stamp generate_customer passes the renderers.
+# tests/test_cux_r2_reports.py renders them with studio/reports.py and pins the four committed report files to those
+# bytes, and holds this shape to what customer_snapshot builds from a real encounter. No report text is written here.
 
-def customer_txt(enc: dict, kind: str) -> str:
-    approved = kind == 'approved'
-    lines = [SYNTHETIC_LINE, 'CPT STUDIO — APPROVED CODES' if approved else 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED',
-             f'Report format: {FORMAT}', f'Encounter: {enc["title"]}',
-             f'Date of service: {enc["service_date"]["value"] or "not established"}',
-             f'Generated at: {GENERATED.replace("+00:00", "Z")}', f'Generated by: {AGENT}', '',
-             'APPROVED CODES' if approved else 'SUGGESTED CODES — NOT APPROVED']
-    codes = [c for c in enc['codes'] if not approved or c['status'] == 'approved']
-    for number, code in enumerate(codes, start=1):
-        head = f'  {number}. {code["code"]} · units {code["units"]}'
-        if code['modifiers']:
-            head += f' · modifier {", ".join(code["modifiers"])}'
-        if not approved:
-            head += f' · {code["status_label"]}'
-        lines.append(head)
-        if approved:
-            decision = code['decision']
-            lines.append(f'     Approved by {decision["by"]} at {decision["at"].replace("+00:00", "Z")}')
-            if decision['by_kind'] == 'agent':
-                lines.append(f'     {AGENT_SUB}')
-        lines.append(f'     {code["summary"]}')
-        for q in code['why']['quotes']:
-            where = f'[page {q["page"]}, characters {q["start"]}–{q["end"]}]' if approved else f'[page {q["page"]}]'
-            text = q['text'].replace('\n', '\n       ')
-            lines.append(f'     Quote: "{text}" {where}')
-    lines += ['', 'LIMITATIONS'] + [f'  - {item}' for item in enc['limitations']] + ['', SYNTHETIC_LINE]
-    return '\n'.join(lines) + '\n'
+REPORT_FORMAT = FORMAT
+GENERATED_STAMP = {'at': GENERATED.replace('+00:00', 'Z'), 'by': AGENT}  # reports._ts(now), user.label()
 
 
-CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers', 'status',
-               'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text', 'evidence_page',
-               'evidence_start', 'evidence_end')
+def report_quote(q: dict) -> dict:
+    return {'text': q['text'], 'page': q['page'], 'start': q['start'], 'end': q['end']}  # reports._customer_quote
 
 
-def customer_csv(enc: dict, kind: str) -> str:
-    approved = kind == 'approved'
-    out = io.StringIO()
-    out.write(SYNTHETIC_LINE + '\r\n')
-    writer = csv.writer(out, lineterminator='\r\n')
-    writer.writerow(CSV_COLUMNS)
-    codes = [c for c in enc['codes'] if not approved or c['status'] == 'approved']
-    for number, code in enumerate(codes, start=1):
-        decision = code['decision'] if approved else None
-        for q in code['why']['quotes'] or [None]:
-            writer.writerow([FORMAT, enc['title'], enc['service_date']['value'] or '', number, code['code'], code['units'],
-                             ';'.join(code['modifiers']), code['status'], decision['by'] if decision else '',
-                             decision['by_kind'] if decision else '', decision['at'] if decision else '', code['summary'],
-                             q['text'] if q else '', q['page'] if q else '', q['start'] if q else '',
-                             q['end'] if q else ''])
-    out.write(SYNTHETIC_LINE + '\r\n')
-    return out.getvalue()
+def report_snapshot(enc: dict, kind: str) -> dict:
+    snap = {'format_version': REPORT_FORMAT, 'kind': kind, 'encounter': {'id': ENC, 'title': enc['title']},
+            'revision': {'id': REV, 'number': 1}, 'assessment': ASM, 'date_of_service': enc['service_date']['value'],
+            'limitations': list(enc['limitations'])}
+    decision_ids = {P80: D80, P85: D85}
+    if kind == 'approved':
+        codes = [c for c in enc['codes'] if c['status'] == 'approved']
+        snap['items'] = [{'number': number, 'code': c['code'], 'units': c['units'], 'modifiers': list(c['modifiers']),
+                          'status': 'approved', 'approver': c['decision']['by'], 'approver_kind': c['decision']['by_kind'],
+                          'agent': c['decision']['by_kind'] == 'agent', 'decided_at': c['decision']['at'],
+                          'decision': decision_ids[c['id']], 'summary': c['summary'],
+                          'quotes': [report_quote(q) for q in c['why']['quotes']]}
+                         for number, c in enumerate(codes, start=1)]
+    else:
+        snap['items'] = [{'number': c['number'], 'code': c['code'], 'units': c['units'], 'modifiers': list(c['modifiers']),
+                          'status': c['status'], 'status_label': c['status_label'], 'sub_label': c['sub_label'],
+                          'agent': c['status'] == 'approved' and c['sub_label'] == AGENT_SUB,
+                          'summary': c['summary'], 'decision': decision_ids.get(c['id']) if c['decision'] else None,
+                          'quotes': [report_quote(q) for q in c['why']['quotes']]}
+                         for c in enc['codes']]
+    snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    return snap
+
+
+def report_snapshots(enc: dict) -> dict:
+    return {'generated': dict(GENERATED_STAMP), 'approved': report_snapshot(enc, 'approved'),
+            'draft': report_snapshot(enc, 'draft')}
+
+
+REPORT_FILES = ('customer-report-approved.txt', 'customer-report-draft.txt', 'customer-report-approved.csv',
+                'customer-report-draft.csv')  # studio/reports.py's bytes of report_snapshots(): not written here
 
 
 # --- driver --------------------------------------------------------------------------------------------------------
@@ -510,10 +507,7 @@ def outputs() -> dict[str, str]:
         'customer-session.json': dumps(customer_session()),
         'customer-page.html': page_html(enc),
         'customer-page-details.html': page_html(details_encounter()),
-        'customer-report-approved.txt': customer_txt(enc, 'approved'),
-        'customer-report-draft.txt': customer_txt(enc, 'draft'),
-        'customer-report-approved.csv': customer_csv(enc, 'approved'),
-        'customer-report-draft.csv': customer_csv(enc, 'draft'),
+        'customer-report-snapshots.json': dumps(report_snapshots(enc)),
     }
 
 

@@ -26,7 +26,7 @@
   "created_at": "2026-11-03T22:00:00+00:00",
   "created_by": "CPT Studio review agent (automated agent)",
   "permissions": {
-    "can_review": true,
+    "can_review": false,
     "is_owner": false,
     "can_confirm": false
   },
@@ -429,7 +429,7 @@
   "state_run": null,
   "second_review": {
     "available": false,
-    "can_request": true,
+    "can_request": false,
     "items": [],
     "reason": ""
   },
@@ -509,13 +509,7 @@
           ],
           "unrelated": [],
           "detail_support": "",
-          "source": [
-            {
-              "start": 256,
-              "end": 329,
-              "text": "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps."
-            }
-          ]
+          "source": []
         },
         "clarification_ids": [],
         "decision": {
@@ -537,9 +531,7 @@
         },
         "decision_state": "approved",
         "reinstated_by": null,
-        "allowed_actions": [
-          "revoke"
-        ],
+        "allowed_actions": [],
         "approve_withheld_by": null,
         "proposed_by": [
           "corti",
@@ -629,13 +621,7 @@
           ],
           "unrelated": [],
           "detail_support": "",
-          "source": [
-            {
-              "start": 330,
-              "end": 394,
-              "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare."
-            }
-          ]
+          "source": []
         },
         "clarification_ids": [],
         "decision": {
@@ -659,9 +645,7 @@
         },
         "decision_state": "approved",
         "reinstated_by": null,
-        "allowed_actions": [
-          "revoke"
-        ],
+        "allowed_actions": [],
         "approve_withheld_by": null,
         "proposed_by": [
           "corti",
