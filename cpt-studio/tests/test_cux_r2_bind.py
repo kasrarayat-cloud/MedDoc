@@ -164,15 +164,19 @@ class ProcedureListTests(SimpleTestCase):
                 # read performed, takes it as installed)
                 self.assertIn('performed_status', outcomes(run(text, LISTED_Q))['45380'][2])
 
-    def test_the_helper_refuses_a_numbered_procedure_field(self):
+    def test_the_helper_reads_a_numbered_procedure_line_as_a_note_label(self):
+        # Reader repair, round 3 (cux-r3-reader.json L1c-r3; refutation A1): round 2's L1c had made these no note labels,
+        # which left a same-day note under "Procedure 2:", "Subsequent procedure:" or "Follow-on procedure:" to the
+        # colonoscopy's part (R8 D7 reopened). They are note labels again; the shapes the narrowing was for open no part
+        # by the rules that read them (the list rule, L1a, L1b and L1f: the tests above and
+        # tests/test_cux_r3_reader.RestoredNoteLabelTests). A bare "Procedure:" field is still no note label.
         for line in ('Procedure 2: Colonoscopy', 'Procedure 1 - EGD', 'Subsequent procedure: colonoscopy',
-                     'Follow-on procedure: colonoscopy'):
-            with self.subTest(line):
-                self.assertIsNone(services.LABELLED_NOTE.match(line))
-        for line in ('Note 2: Flexible sigmoidoscopy (fictional)', 'Separate same-day note: Flexible sigmoidoscopy',
-                     'Second procedure: Flexible sigmoidoscopy', 'Addendum - flexible sigmoidoscopy'):
+                     'Follow-on procedure: colonoscopy', 'Note 2: Flexible sigmoidoscopy (fictional)',
+                     'Separate same-day note: Flexible sigmoidoscopy', 'Second procedure: Flexible sigmoidoscopy',
+                     'Addendum - flexible sigmoidoscopy'):
             with self.subTest(line):
                 self.assertIsNotNone(services.LABELLED_NOTE.match(line))
+        self.assertIsNone(services.LABELLED_NOTE.match('Procedure: Colonoscopy'))
 
 
 class RefusedNoteLabelTests(SimpleTestCase):
