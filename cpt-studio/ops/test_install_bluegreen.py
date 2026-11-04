@@ -1778,3 +1778,61 @@ class ReassessJobsOnTheDatabaseTests(DatabaseTest):
                                                              ['assess', 'queued', 'synthetic-reassess-1']])
         self.assertEqual(found['state'], encounter.state)
         self.assertIsNone(answer['encounters'][missing])
+
+
+# --- what INSTALL.md says ---------------------------------------------------------------------------------------------------
+
+class InstallDocTests(unittest.TestCase):
+    """INSTALL.md says what the code does, with the code's own numbers (the doc-test style of test_install_r5_sends)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = (APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8')
+        cls.said = ' '.join(cls.text.split())
+
+    def between(self, start, end):
+        return self.said.split(start, 1)[1].split(end, 1)[0]
+
+    def says(self, phrase, text):
+        self.assertTrue(phrase in text, f'INSTALL.md does not say: {phrase}')
+
+    def test_the_app_paragraph_names_the_incoming_web_the_idle_port_the_switch_and_the_drain(self):
+        app = self.between('- **app** (live mode)', '- **reference**')
+        for phrase in ('`cpt-studio-web-next` starts on the idle port', "**S3** the vhost's upstream is switched",
+                       '**S5** the old web is drained', 'at least 130 s', '10 consecutive one-second samples',
+                       'never longer than 600 s', 'every 0.5 s', '`availability`', 'never stops the serving web',
+                       '`docker stop --time 600`', 'graceful, 30 s', 'the two differ in their `proxy_pass` line alone'):
+            self.says(phrase, app)
+        self.assertEqual((install.DRAIN_MIN_SECONDS, install.DRAIN_QUIET_SECONDS, install.DRAIN_MAX_SECONDS),
+                         (130, 10, 600))
+        self.assertEqual((install.AVAILABILITY_INTERVAL_SECONDS, install.STOP_SECONDS),
+                         (0.5, {'web': 30, 'worker': 600}))
+        for step in ('S1', 'S2', 'S3', 'S4', 'S5'):
+            self.says(f'- {step} (', app)  # one row of the failure matrix each
+
+    def test_the_tables_name_the_ports_and_the_new_phases(self):
+        self.says('`127.0.0.1:9150` or `127.0.0.1:9151` → 8000', self.said)
+        for row in ('| 9a | `operators` |', '| 9b | `reassess` |'):
+            self.says(row, self.said)
+        self.says('ops-agent-credentials.json` (0600, top-level `username` and `password`)', self.said)
+        self.says('`operator-credentials.json` (root 0600', self.said)
+        self.assertEqual(str(install.OPS_AGENT_CREDENTIALS), '/home/claude/.cpt-studio/ops-agent-credentials.json')
+        self.assertEqual(install.OPERATOR_CREDENTIALS, 'operator-credentials.json')
+
+    def test_switching_back_and_the_recovery_notes(self):
+        switch = self.between('## Switching back', '## Reinstalling an older revision')
+        for step in ('**B2**', '**B3**', '**B4**', '**B5**', '**B6**', '**B7**', '**B8**', '**B9**'):
+            self.says(step, switch)
+        recovery = self.between('## Recovery notes', '## Local build and tests')
+        for phrase in ('A `cpt-studio-web-next` left by an interrupted blue/green `app`',
+                       'An installer killed outright inside S3', 'the TLS renewal deploy hook'):
+            self.says(phrase, recovery)
+
+    def test_the_known_limits_state_every_residual_of_the_design(self):
+        limits = self.said.split('## Known limits', 1)[1]
+        for number, phrase in ((1, 'a large upload'), (2, 'hashed names'), (3, 'keeps running the old `app.js`'),
+                               (4, 'Processing pauses'), (5, 'host-global'), (6, 'alternates with the port'),
+                               (7, 'During the drain'), (8, 'over-closing is the safe side'),
+                               (9, 'An installer older than this one knows only port 9150'), (10, 'cannot ride the switch')):
+            self.says(f'{number}. ', limits)
+            self.says(phrase, limits)

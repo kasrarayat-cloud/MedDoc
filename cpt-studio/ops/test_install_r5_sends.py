@@ -463,7 +463,8 @@ class TheAccessCheckRequestCountTests(unittest.TestCase):
             'the opt-in access check (for each live participant: one real, paid coding request for Corti, and for '
             'Astra and for Fable one run of the tool loop, one real, paid request per exchange and at most '
             f'`PARTICIPANT_MAX_EXCHANGES` ({self.exchanges()})), or from the first live send. A check that fails '
-            'leaves the pair installed: retrying it means running `app` again, which parks and replaces the pair.'))
+            'leaves the pair installed: retrying it means running `app` again, which switches to a new pair beside '
+            'the running one.'))
 
     def test_install_md_s_app_phase_gives_the_count(self):
         """Refutation round 7, parity-2: the app phase's own paragraph, which R6-SENDS named, still said "one request
