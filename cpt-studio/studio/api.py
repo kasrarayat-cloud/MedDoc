@@ -221,11 +221,18 @@ def decisions(request, encounter_id):
         action = data.get('action')
         if not isinstance(action, str) or action not in review.ACTION_LABELS:
             raise ApiError(400, 'Unknown review action.')  # round 7 bypass:3: invalid input, never a state conflict
-        decision = review.record_decision(
-            encounter=encounter, proposal=proposal, action=action, user=request.user,
-            membership=membership, note=_text_field(data, 'note', 'The note'),
-            acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'))
-    return JsonResponse(serializers._decision_json(decision), status=201)
+        # CORE-UX-DESIGN.md 4: the reviewer's ONE chosen modifier on an approval, "modifiers": [] | ["59"] | ["XS"];
+        # a malformed choice is invalid input (400), one the code's modifier review does not offer is a conflict (409)
+        try:
+            modifiers = review._chosen_modifiers(data.get('modifiers'))
+            decision = review.record_decision(
+                encounter=encounter, proposal=proposal, action=action, user=request.user,
+                membership=membership, note=_text_field(data, 'note', 'The note'),
+                acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'), modifiers=modifiers)
+        except review.ModifierRefused as exc:
+            raise ApiError(400, ' '.join(exc.messages))
+    return JsonResponse({**serializers._decision_json(decision), 'modifiers': list(decision.modifiers or [])},
+                        status=201)
 
 
 @require_POST

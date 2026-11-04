@@ -164,19 +164,24 @@ def _decision(decision):
     if decision is None:
         return None
     carried = bool(decision.carried_from_id)
-    return {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
-            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
-            'note': decision.note, 'acknowledgement': decision.acknowledgement,
-            'carried_from': str(decision.carried_from_id) if carried else None,
-            'carried_at': _ts(decision.created_at) if carried else None}
+    out = {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
+           'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
+           'note': decision.note, 'acknowledgement': decision.acknowledgement,
+           'carried_from': str(decision.carried_from_id) if carried else None,
+           'carried_at': _ts(decision.created_at) if carried else None}
+    if getattr(decision, 'modifiers', None):  # the reviewer's chosen modifier (CORE-UX-DESIGN.md 4), only when chosen
+        out['modifiers'] = [str(m) for m in decision.modifiers]
+    return out
 
 
-def _list_for(proposal, decision, kind):
+def _list_for(proposal, decision, kind, view=None):
     if proposal.bucket == Proposal.ALTERNATIVE:
         return 'alternative'
     action = decision.action if decision else None
     if action == Decision.REJECT:
         return 'rejected'
+    if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
+        return 'excluded'  # a needed detail answered as unavailable: excluded by the review overlay, never approved
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
     if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
@@ -194,20 +199,23 @@ def _reinstated(proposal, decision):
             and decision.action != Decision.CONFIRM)
 
 
-def _item(proposal, decision, kind, text):
+def _item(proposal, decision, kind, text, view=None):
+    """``view``: the proposal's effective review view (review.effective_view): its status and checks as the current
+    decisions leave them (CORE-UX-DESIGN.md 4); with no decision and no member answer, the stored ones."""
     exact = review.exact_evidence(proposal.evidence, text)
+    status = view.status if view is not None else proposal.status
     item = {
-        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind),
+        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind, view),
         'bucket': proposal.bucket, 'code': proposal.code, 'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
-        'status': proposal.status, 'status_label': review.status_label(proposal.status),
+        'status': status, 'status_label': review.status_label(status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
         'reinstated': _reinstated(proposal, decision),
         'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
-        'checks': [_check(c) for c in proposal.checks or []],
+        'checks': [_check(c) for c in (view.checks if view is not None else proposal.checks or [])],
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
         'support': _support(proposal.support or {}, text),
@@ -217,6 +225,12 @@ def _item(proposal, decision, kind, text):
     listed = review.listed_by(proposal)
     if listed:  # a participant's alternative's listers (refutation round 5, D12); none in a Corti-only snapshot
         item['listed_by'] = listed
+    if view is not None and view.recomputed:  # checks the review overlay recomputed after the decisions
+        item['recomputed'] = list(view.recomputed)
+    if view is not None and view.stale:  # checks it could not recompute although the decisions moved what they read
+        item['stale'] = list(view.stale)
+    if view is not None and view.reason:
+        item['review_reason'] = view.reason
     return item
 
 
@@ -700,9 +714,11 @@ def snapshot(encounter, kind):
         raise ReportNotReady(ready['blockers'])
     revision = assessment.revision
     current = review.current_decisions(assessment)
-    questions = list(assessment.clarifications.filter(state=Clarification.OPEN).select_related('proposal')
-                     .order_by('created_at', 'pk'))
-    items = [_item(p, current.get(p.pk), kind, revision.text) for p in assessment.proposals.order_by('position')]
+    # the review overlay (CORE-UX-DESIGN.md 4): statuses, checks and open questions as the current decisions leave them
+    views = review.effective_view(assessment, current)
+    questions = review.open_questions_of(assessment, views)
+    items = [_item(p, current.get(p.pk), kind, revision.text, views.get(p.key))
+             for p in assessment.proposals.order_by('position')]
     if kind == REVIEWED and any(item['list'] == 'undecided' for item in items):
         raise ReportNotReady(['A proposed code has no approve or reject decision'])
     workspace = encounter.workspace
@@ -728,7 +744,8 @@ def snapshot(encounter, kind):
                                 review.reviewed_completeness(assessment, current)),
         'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
-        'clarifications': [_clarification(q) for q in questions],
+        'clarifications': [{key: question.get(key) for key in ('id', 'scope', 'family', 'fact', 'question', 'reason',
+                                                                'code')} for question in questions],
         'not_verified': _not_verified(items, assessment),
         'provider_runs': _provider_runs(encounter, assessment),
         'reference_sources': _reference_sources(assessment),
@@ -785,6 +802,9 @@ def _decision_lines(item, kind):
                  'reviewed report']
     else:
         lines = [f'{pad}Current decision: {_decision_words(decision)}']
+    if decision.get('modifiers'):
+        lines.append(f'{pad}Modifier chosen by the reviewer: {", ".join(decision["modifiers"])} (not validated against '
+                     'NCCI procedure-to-procedure edits or payer modifier policy)')
     if decision['acknowledgement']:
         lines.append(f'{pad}Acknowledgement: {_indent(decision["acknowledgement"], pad + "  ")}')
     if decision['note']:
@@ -986,6 +1006,12 @@ def _checks_section(snap):
         if item['checks']:
             lines.append(f'  {item["code"]} ({item["list"]})')
             lines += [_check_line(check) for check in item['checks']]
+            if item.get('recomputed'):
+                lines.append(f'    Recomputed over the current review decisions: {", ".join(item["recomputed"])}; the '
+                             'other checks were made when the assessment ran.')
+            if item.get('stale'):
+                lines.append(f'    Not recomputed over the current review decisions (what it reads was not recorded '
+                             f'with the assessment): {", ".join(item["stale"])}; it predates them.')
     encounter_checks = snap['assessment']['encounter_checks']
     if encounter_checks:
         lines.append('  Encounter')

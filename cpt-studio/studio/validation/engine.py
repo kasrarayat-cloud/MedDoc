@@ -2243,31 +2243,17 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
-    rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
+    rows = endoscopic_rows((s.code, s.evaluation.reference.pfs if s.evaluation else None) for s in active)
     # A reinstated procedure holds an E/M as a selected one does (review:0). On a procedure day the E/M is held
     # already; otherwise record which reinstatements would hold which E/Ms, for review to gate approval on.
     reinstatable = [s for s in selections if s.excluded and s.evaluation is not None and _procedural(s)]
     visits = [s for s in selections if s.family in checks.EM_FAMILIES and s.evaluation is not None
               and checks.separate_em_statement(s.evaluation.finding) is None]
     gate = bool(reinstatable and visits and not (labels or possible_labels))
-    bases = []
-    for s in active:
-        profile = reconcile.catalogue.code_profile(s.code)
-        match = s.evaluation.match if s.evaluation is not None else None
-        if profile is None or not profile.base or match is None:
-            continue
-        others = tuple(t.code for t in active if t is not s and t.family == s.family
-                       and (reconcile.catalogue.code_profile(t.code) or reconcile.catalogue.CodeProfile('')).covers
-                       and t.evaluation is not None and t.evaluation.match is not None
-                       and t.evaluation.match.service.id == match.service.id)
-        entry = reconcile.catalogue.entry(s.family)
-        reportable = [a for a in match.service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
-                      and entry is not None and a.kind in entry.acts and not reconcile._bundled(match.service, a)]
-        if others or reportable:
-            bases.append((s.code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
+    bases = base_included([(s.code, s.family, s.evaluation.match.service
+                            if s.evaluation is not None and s.evaluation.match is not None else None) for s in active])
     within = tuple((s.code, codes) for s in active for codes in (_base_within(s, active),) if codes is not None)
-    return _Encounter(bases_included=tuple(bases), bases_within=within, provider=provider, context=context,
-                      sources=sources,
+    return _Encounter(bases_included=bases, bases_within=within, provider=provider, context=context, sources=sources,
                       date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       possible_labels=tuple(possible_labels),
@@ -2297,6 +2283,71 @@ def _base_within(s: _Selection, active: Sequence[_Selection]) -> Optional[tuple[
         return ()
     codes = tuple(t.code for t in including if reconcile.catalogue.includes_examination(t.code, service.kind))
     return codes or None
+
+
+# --- the combination rules the review overlay re-applies over the current decisions (CORE-UX-DESIGN.md 4) -----------
+# One implementation each: the engine reads them over its own active selections (_encounter, _proposal), and the
+# read-time review overlay (studio.validation.review_view) over the effective set a reviewer's decisions leave - a
+# second copy of either would drift from this one.
+
+def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Engine @4's base rule. ``members``: (code, family, the documented service it was matched to or None) of every
+    ACTIVE code, in order. A family's base (diagnostic) code matched to a documented service is held, never excluded,
+    beside another active code of its family matched to the same service that accounts for one of its interventions
+    (its profile covers an act), or when that service documents a performed, reportable act no profile rule bundles:
+    (base code, the other codes - or, with none, the labels of those acts), in member order."""
+    bases = []
+    for index, (code, family, service) in enumerate(members):
+        profile = reconcile.catalogue.code_profile(code)
+        if profile is None or not profile.base or service is None:
+            continue
+        others = tuple(other for position, (other, other_family, other_service) in enumerate(members)
+                       if position != index and other_family == family
+                       and (reconcile.catalogue.code_profile(other) or reconcile.catalogue.CodeProfile('')).covers
+                       and other_service is not None and other_service.id == service.id)
+        entry = reconcile.catalogue.entry(family)
+        reportable = [a for a in service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
+                      and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
+        if others or reportable:
+            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
+    return tuple(bases)
+
+
+def base_hold(code: str, family: str, key: str, included: Sequence[str], service) -> tuple[Check, ClarificationSpec]:
+    """The services.base_included check and the base_included question of a base code the base rule holds beside
+    ``included`` (base_included's other codes or act labels); ``service``: the documented service it was matched to."""
+    service_name = reconcile.service_label(service) if service is not None else 'service'
+    if all(other[:1].isdigit() for other in included):
+        reason = (f'The documented {service_name} has interventions that {", ".join(included)} account for; its '
+                  'diagnostic examination is normally included in them (internal profile rule; NCCI procedure-to-'
+                  'procedure edits are not connected). Held for the reviewer, not excluded.')
+    else:
+        reason = (f'The documented {service_name} includes {", ".join(included)}, which this diagnostic code does '
+                  'not account for (internal profile rule). Held for the reviewer, not excluded.')
+    return (Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
+                  reconcile.SOURCE),
+            ClarificationSpec(scope='proposal', fact='base_included', family=family, proposal_key=key, reason=reason,
+                              question=f'Is {code} reported separately from {", ".join(included)} for this examination?'))
+
+
+def endoscopic_rows(pairs) -> dict:
+    """code -> PFS row, of every (code, PFS row or None) pair of an active code that has a row: what the CMS PFS
+    endoscopic-family check reads of the other codes (checks.endoscopic_check's ``active``)."""
+    return {code: pfs for code, pfs in pairs if pfs}
+
+
+# The acts a separate-lesion (distinct-procedure) modifier consideration can concern, beside another code's act.
+DISTINCT_LESION_KINDS = reconcile.REMOVAL_KINDS + ('biopsy', 'ablation', 'injection', 'tattoo')
+
+
+def distinct_lesions(service, acts) -> tuple[tuple[str, ...], tuple]:
+    """(the documented lesions of ``acts`` - a code's matched acts - sorted; every performed act of ``service`` on
+    another documented lesion that a separate-lesion modifier can concern, DISTINCT_LESION_KINDS) - the reading
+    _service_considerations words and the review overlay's modifier review pairs with the other codes."""
+    lesions = tuple(sorted({a.lesion for a in acts if a.lesion}))
+    others = tuple(a for a in service.acts if a.status == 'performed' and a.lesion and a.lesion not in lesions
+                   and a.kind in DISTINCT_LESION_KINDS)
+    return lesions, others
 
 
 def _procedural(s: _Selection) -> bool:
@@ -2424,20 +2475,9 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         considerations += _service_considerations(s, m)
     included = dict(enc.bases_included).get(s.code)
     if included and not s.excluded:
-        service_name = reconcile.service_label(m.service) if m else 'service'
-        if all(code[:1].isdigit() for code in included):
-            reason = (f'The documented {service_name} has interventions that {", ".join(included)} account for; its '
-                      'diagnostic examination is normally included in them (internal profile rule; NCCI procedure-to-'
-                      'procedure edits are not connected). Held for the reviewer, not excluded.')
-        else:
-            reason = (f'The documented {service_name} includes {", ".join(included)}, which this diagnostic code does '
-                      'not account for (internal profile rule). Held for the reviewer, not excluded.')
-        found.append(Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
-                           reconcile.SOURCE))
-        clarifications.append(ClarificationSpec(scope='proposal', fact='base_included', family=s.family,
-                                                proposal_key=key, reason=reason,
-                                                question=f'Is {s.code} reported separately from {", ".join(included)} '
-                                                         'for this examination?'))
+        held, question = base_hold(s.code, s.family, key, included, m.service if m else None)
+        found.append(held)
+        clarifications.append(question)
     within = dict(enc.bases_within).get(s.code)
     if within is not None and not included and not s.excluded:
         # P2 READ-HOLD, R8 D15: the base code of a service read as the endoscopic portion of another (_base_within)
@@ -2565,11 +2605,9 @@ def _service_considerations(s: _Selection, m: reconcile.Match) -> list[str]:
     connected): separate lesions within one endoscopic family, and screening that became therapeutic."""
     out = []
     service = m.service
-    lesions = {a.lesion for a in m.acts if a.lesion}
-    others = [a for a in service.acts if a.status == 'performed' and a.lesion and a.lesion not in lesions
-              and a.kind in reconcile.REMOVAL_KINDS + ('biopsy', 'ablation', 'injection', 'tattoo')]
+    lesions, others = distinct_lesions(service, m.acts)
     if lesions and others:
-        here = '; '.join(reconcile.lesion_words(service, l) for l in sorted(lesions))
+        here = '; '.join(reconcile.lesion_words(service, l) for l in lesions)
         there = '; '.join(sorted({reconcile.lesion_words(service, a.lesion) for a in others}))
         out.append(f'Separate lesions are documented: this code\'s act is on {here}, and another act is on {there}. '
                    'If an NCCI procedure-to-procedure edit pairs the two codes, a distinct-lesion modifier (59 or XS) '

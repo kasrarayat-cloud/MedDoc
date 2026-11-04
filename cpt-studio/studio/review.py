@@ -42,6 +42,11 @@ class AttestationRefused(ValidationError):
     rather than read as 'not allowed right now' (round 6 bypass:2, pipeline:6)."""
 
 
+class ModifierRefused(ValidationError):
+    """A modifier choice that is not one of the offered values, or comes with another action than an approval: invalid
+    input (the decisions endpoint answers 400), not a state conflict."""
+
+
 APPROVE, REJECT, REINSTATE, REVOKE = Decision.APPROVE, Decision.REJECT, Decision.REINSTATE, Decision.REVOKE
 CONFIRM = Decision.CONFIRM  # confirm a documentation check's exclusion (round 4: never a silent drop)
 ACTION_LABELS = dict(Decision.ACTIONS)
@@ -215,13 +220,171 @@ def _current_decision(proposal):
     return latest
 
 
-def _actions(proposal, current, text, same_day_held=False):
-    """``same_day_held``: an E/M that a reviewer's reinstatement of a same-day procedure now holds (no approve)."""
+# --- the effective review view (CORE-UX-DESIGN.md 4; studio/validation/review_view.py) ---------------------------------
+#
+# Assessment and Proposal rows are immutable, so the combination gates the engine computed once over its own selection
+# (the diagnostic-base rule, the CMS PFS endoscopic-family check) are re-applied at read time over the current decisions
+# and member answers. Every gate and reader below reads this one view: actions, decision validation, readiness, coding
+# completeness, the encounter state, the operator API, the report snapshot, the customer API and the approved export.
+
+DETAIL_UNAVAILABLE = 'detail_unavailable'  # review_view.DETAIL_UNAVAILABLE
+
+
+def _member_answers(assessment):
+    """P5 FILLS THIS (member-answer effects, CORE-UX-DESIGN.md 6): the current member answers of ``assessment``'s
+    encounter and revision - MemberAnswer rows that are not revoked - each a mapping or object with ``code``, ``family``,
+    ``fact`` and ``value`` ('not_documented' | 'cannot_confirm'), bound to the (code, family, fact) it was asked of and
+    never to a proposal key (lesson EV-1); ``code`` is '' for a documented service's question. The review overlay applies
+    them at read time (review_view.review_view: a code's answered question makes it detail_unavailable; a service's
+    closes that question only). [] in package P3: no member answer exists yet."""
+    return []
+
+
+def effective_view(assessment, current=None):
+    """{proposal key: review_view.View} of ``assessment`` as its current decisions and member answers leave it
+    (studio.validation.review_view): each proposal's status, checks, open questions, approve gate, readiness blocker,
+    modifier review and summary. With no decision and no answer every view equals its stored proposal. ``current``:
+    current_decisions(assessment), when the caller has it. {} for no assessment, or one never persisted."""
+    from .jobs import context_service_date  # local import: jobs imports this module
+    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+
+    if assessment is None or not getattr(assessment, 'pk', None):
+        return {}
+    current = current_decisions(assessment) if current is None else current
+    proposals = list(assessment.proposals.all())
+    rows = {}
+    for clarification in assessment.clarifications.all():  # every state: the open ones are the questions shown
+        if clarification.proposal_id:
+            rows.setdefault(clarification.proposal_id, []).append(clarification)
+    stored = [review_view.stored_from(proposal, rows.get(proposal.pk, [])) for proposal in proposals]
+    decided = {proposal.key: review_view.Decided(current[proposal.pk].action,
+                                                 tuple(current[proposal.pk].modifiers or ()))
+               for proposal in proposals if proposal.pk in current}
+    completeness = assessment.completeness or {}
+    # an inconsistent documented-service reading decided nothing (engine: usable is None), and nothing re-reads it here
+    services = None if completeness.get('inventory_problems') else assessment.services
+    return review_view.review_view(stored, decided, services=services, retrieval=assessment.retrieval,
+                                   reference_sources=assessment.reference_sources,
+                                   service_date=context_service_date(assessment.context),
+                                   answers=_member_answers(assessment))
+
+
+def open_questions_of(assessment, views=None):
+    """Every question of ``assessment`` the review overlay leaves open, in the order they were raised, as dicts {id,
+    scope, family, fact, question, reason, code}: the encounter's and the documented services' (one a member answered for
+    the service is closed), each proposal's as its view leaves it (a released one dropped, a recomputed one in its new
+    words), then each one the view adds (id '').  With no decision and no answer: every open Clarification row."""
+    from .validation import review_view  # local import
+
+    views = effective_view(assessment) if views is None else views
+    proposals = {proposal.pk: proposal for proposal in assessment.proposals.all()}
+    closed = review_view.service_answers(_member_answers(assessment))
+    out = []
+    for row in assessment.clarifications.filter(state=Clarification.OPEN).order_by('created_at', 'pk'):
+        entry = {'id': str(row.pk), 'scope': row.scope, 'family': row.family, 'fact': row.fact,
+                 'question': row.question, 'reason': row.reason, 'code': None}
+        proposal = proposals.get(row.proposal_id) if row.proposal_id else None
+        if proposal is None:
+            if not (row.scope != 'proposal' and (row.family, row.fact) in closed):
+                out.append(entry)
+            continue
+        view = views.get(proposal.key)
+        if view is None:
+            out.append({**entry, 'code': proposal.code})
+            continue
+        shown = next((q for q in view.questions if q.get('id') == str(row.pk)), None)
+        if shown is not None:
+            out.append({**entry, **shown, 'code': proposal.code})
+    for proposal in sorted(proposals.values(), key=lambda item: item.position):
+        view = views.get(proposal.key)
+        for question in (view.questions if view is not None else ()):
+            if not question.get('id'):
+                out.append({**question, 'code': proposal.code})
+    return out
+
+
+def _evidence_spans(proposal, view, text, pages):
+    """The exact passages an approved item rests on, re-checked against the revision text: the passages CPT Studio
+    located for its act (support.source, where the provider's passages show none of it), then the provider's passages
+    that show it (support.supporting); where the support records neither, the provider's exact passages. Each
+    {text, start, end, page, origin: 'located' | 'cited'}; never a passage the support records as not showing the act."""
+    from .validation.checks import page_for  # local import: the validation layer's own page reading
+
+    support = proposal.support or {}
+    exact = exact_evidence(proposal.evidence, text)
+    out, seen = [], set()
+
+    def add(start, end, quoted, page, origin):
+        if (start, end) not in seen and type(start) is int and type(end) is int and 0 <= start < end <= len(text) \
+                and text[start:end] == quoted:
+            seen.add((start, end))
+            out.append({'text': quoted, 'start': start, 'end': end, 'page': page, 'origin': origin})
+
+    if support.get('status') == 'warn':
+        for span in support.get('source') or []:
+            add(span.get('start'), span.get('end'), span.get('text'), page_for(span.get('start') or 0, pages),
+                'located')
+    supporting = support.get('supporting')
+    if isinstance(supporting, list):
+        evidence = list(proposal.evidence or [])
+        for index in supporting:
+            span = evidence[index] if type(index) is int and 0 <= index < len(evidence) else None
+            if span is not None and span in exact:
+                add(span['start'], span['end'], span['text'], span.get('page'), 'cited')
+    if not out and not support.get('status'):
+        for span in exact:
+            add(span['start'], span['end'], span['text'], span.get('page'), 'cited')
+    return out
+
+
+def approved_items(assessment):
+    """The approved export's items (CORE-UX-DESIGN.md 4): the APPROVED proposals of ``assessment`` only - never an
+    unresolved, undecided, rejected or excluded one, nor an approval the review overlay no longer supports (its view
+    carries a readiness blocker, a member answer excluded it, or a reinstated same-day procedure holds the E/M) - in
+    stored order. Not a readiness check: the approved export renders these only once readiness(encounter)['reviewed']. Each a dict: proposal_id, key, code,
+    units, modifiers (the reviewer's chosen modifier), approved_by (the approver's label), approver_kind ('human' |
+    'agent'), decided_at (ISO, when the approver decided; a carried approval keeps its root's time), note, evidence
+    (_evidence_spans: exact spans with page and character offsets), summary (one sentence of CPT Studio's own reading),
+    reinstated (an excluded code the reviewer reinstated before approving it)."""
+    if assessment is None:
+        return []
+    current = current_decisions(assessment)
+    views = effective_view(assessment, current)
+    revision = assessment.revision
+    pages = tuple(revision.pages or ())
+    from .types import PageSpan  # local import
+    spans = tuple(PageSpan(**page) if isinstance(page, dict) else page for page in pages)
+    items = []
+    for proposal in assessment.proposals.order_by('position'):
+        decision, view = current.get(proposal.pk), views.get(proposal.key)
+        if decision is None or decision.action != APPROVE or proposal.bucket == ALTERNATIVE:
+            continue
+        if view is not None and (view.blocker or view.reason == DETAIL_UNAVAILABLE or view.same_day_held):
+            continue  # an approval readiness blocks (the overlay's, a member answer's, the same-day E/M gate's)
+        root = decision_root(decision)
+        items.append({
+            'proposal_id': str(proposal.pk), 'key': proposal.key, 'code': proposal.code, 'units': proposal.units,
+            'modifiers': list(decision.modifiers or []), 'approved_by': decision.reviewer.label(),
+            'approver_kind': decision.reviewer_kind,
+            'decided_at': root.created_at.isoformat() if root.created_at else None, 'note': decision.note,
+            'evidence': _evidence_spans(proposal, view, revision.text, spans),
+            'summary': view.summary if view is not None else '',
+            'reinstated': proposal.bucket == EXCLUDED})
+    return items
+
+
+def _actions(proposal, current, text, same_day_held=False, view=None):
+    """``same_day_held``: an E/M that a reviewer's reinstatement of a same-day procedure now holds (no approve).
+    ``view``: the proposal's effective review view (effective_view; CORE-UX-DESIGN.md 4) - its status, its reinstatement
+    gate and a member answer's exclusion are read in place of the stored row's; None reads the stored row."""
     if current is not None and current.action in (APPROVE, REJECT, CONFIRM):
         return [REVOKE]
+    if view is not None and view.reason == DETAIL_UNAVAILABLE:
+        return [REVOKE] if current else []  # a needed detail is answered as unavailable: nothing to decide
+    status = proposal.status if view is None else view.status
     exact = bool(exact_evidence(proposal.evidence, text))
-    if proposal.bucket == SELECTED and proposal.status in BUCKET_STATUSES[SELECTED]:
-        actions = [APPROVE] if proposal.status == Proposal.READY and exact and not same_day_held else []
+    if proposal.bucket == SELECTED and status in BUCKET_STATUSES[SELECTED]:
+        actions = [APPROVE] if status == Proposal.READY and exact and not same_day_held else []
         return actions + [REJECT] + ([REVOKE] if current else [])
     if proposal.bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
         if current is None:
@@ -230,7 +393,8 @@ def _actions(proposal, current, text, same_day_held=False):
             if not proposal.reinstatable:
                 return []
             return ([REINSTATE] if exact else []) + [CONFIRM]
-        return ([APPROVE] if exact and _reinstatement_clear(proposal) and not same_day_held else []) + [REJECT, REVOKE]
+        clear = _reinstatement_clear(proposal) if view is None else view.reinstatement_clear
+        return ([APPROVE] if exact and clear and not same_day_held else []) + [REJECT, REVOKE]
     return [REVOKE] if current else []
 
 
@@ -265,11 +429,17 @@ def _same_day_held(proposal, assessment):
         _reinstated_procedures(assessment, current_decisions(assessment)))
 
 
-def approve_withheld_by(proposal, assessment, decisions):
+def approve_withheld_by(proposal, assessment, decisions, views=None):
     """The check that withholds approve from a reinstated exclusion, whoever is looking: 'review.reinstatement' while
     that check does not pass, SAME_DAY_EM_GATE while a reinstated same-day procedure holds this E/M, else None. The
     same gates as _actions, read without the member's role, so a viewer is never told a code cannot be approved when
-    a reviewer can approve it now (round 6 bypass:3)."""
+    a reviewer can approve it now (round 6 bypass:3). The review overlay's own (effective_view; CORE-UX-DESIGN.md 4):
+    'services.base_included' while the diagnostic-base rule, read over the current decisions, holds a selected or a
+    reinstated base code it did not hold when the assessment was made (D14)."""
+    views = effective_view(assessment, decisions) if views is None else views
+    view = views.get(proposal.key)
+    if view is not None:
+        return view.withheld_by or None
     current = decisions.get(proposal.pk)
     if current is None or current.action != REINSTATE:
         return None
@@ -287,25 +457,46 @@ def _same_day_blocker(visit, procedures):
     return f'{visit.code} needs a separately identifiable E/M: {listed} {done}'
 
 
-def _allowed(proposal, assessment, membership, encounter):
+def _allowed(proposal, assessment, membership, encounter, views=None):
     if not _is_reviewer(membership, encounter) or proposal.assessment_id != assessment.pk:
         return []
     if (encounter.current_assessment_id != assessment.pk
             or assessment.revision_id != encounter.current_revision_id or not is_final(assessment)):
         return []
+    view = (effective_view(assessment) if views is None else views).get(proposal.key)
     return _actions(proposal, _current_decision(proposal), assessment.revision.text,
-                    _same_day_held(proposal, assessment))
+                    view.same_day_held if view is not None else _same_day_held(proposal, assessment), view)
 
 
-def allowed_actions(proposal, assessment, membership):
-    """The actions this member may record on ``proposal`` now; the only source of truth for the UI."""
+def allowed_actions(proposal, assessment, membership, views=None):
+    """The actions this member may record on ``proposal`` now; the only source of truth for the UI. ``views``: the
+    assessment's effective_view when the caller has it."""
     encounter = Encounter.objects.only('workspace', 'current_assessment', 'current_revision').get(
         pk=assessment.encounter_id)
-    return _allowed(proposal, assessment, membership, encounter)
+    return _allowed(proposal, assessment, membership, encounter, views)
 
 
-def record_decision(*, encounter, proposal, action, user, membership, note='', acknowledgement=''):
-    """Append one decision after re-validating it under the encounter lock."""
+def _chosen_modifiers(value):
+    """The modifier a reviewer chose for an approval: () or ONE of checks.DISTINCT_LESION_OPTIONS ('59' or 'XS'),
+    never both, never another value (CORE-UX-DESIGN.md 4). A list of strings; anything else is refused."""
+    from .validation.checks import DISTINCT_LESION_OPTIONS  # local import: the validation layer's own options
+    if value is None:
+        return ()
+    if isinstance(value, str) or not isinstance(value, (list, tuple)) or any(not isinstance(m, str) for m in value):
+        raise ModifierRefused('Modifiers are a list: [] or one of 59 and XS.')
+    chosen = tuple(value)
+    if len(chosen) > 1:
+        raise ModifierRefused('Choose at most one modifier, 59 or XS - never both.')
+    if any(m not in DISTINCT_LESION_OPTIONS for m in chosen):
+        raise ModifierRefused('A modifier is 59 or XS.')
+    return chosen
+
+
+def record_decision(*, encounter, proposal, action, user, membership, note='', acknowledgement='', modifiers=()):
+    """Append one decision after re-validating it under the encounter lock, against the review overlay as the current
+    decisions leave it (effective_view). ``modifiers``: on an approval only, () or the ONE modifier the reviewer chose,
+    and only where the proposal's view offers a separate-lesion modifier review (CORE-UX-DESIGN.md 4); never prefilled."""
+    chosen = _chosen_modifiers(modifiers)
     with transaction.atomic():
         locked = _lock(encounter)
         if not (_is_reviewer(membership, locked) and membership.user_id == user.pk and user.is_active):
@@ -317,8 +508,19 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
             raise ValidationError('Unknown review action.')
         if not is_final(assessment):
             raise ValidationError(NOT_FINAL_DECISION)
-        if action not in _allowed(proposal, assessment, membership, locked):
+        views = effective_view(assessment)
+        if action not in _allowed(proposal, assessment, membership, locked, views):
             raise ValidationError(f'{ACTION_LABELS[action]} is not available for {proposal.code} right now.')
+        if chosen:
+            view = views.get(proposal.key)
+            offered = tuple((view.modifier_review or {}).get('options') or ()) if view is not None else ()
+            if action != APPROVE:
+                raise ModifierRefused('A modifier is chosen only with an approval.')
+            if not offered:
+                raise ValidationError(f'No modifier review is offered for {proposal.code}: approve it with no '
+                                      'modifier.')
+            if any(m not in offered for m in chosen):
+                raise ModifierRefused(f'The modifier review of {proposal.code} offers {" or ".join(offered)} only.')
         note, acknowledgement = (note or '').strip(), (acknowledgement or '').strip()
         if action == APPROVE and not acknowledgement:
             raise AttestationRefused('Approving requires an acknowledgement.')
@@ -328,9 +530,11 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
         decision = Decision.objects.create(
             encounter=locked, assessment=assessment, revision=assessment.revision, proposal=proposal, action=action,
             note=note, reviewer=user, reviewer_kind=user.actor_kind, acknowledgement=acknowledgement,
-            profile_version=proposal.profile_version, proposal_fingerprint=proposal.fingerprint)
+            modifiers=list(chosen), profile_version=proposal.profile_version,
+            proposal_fingerprint=proposal.fingerprint)
         audit.record(locked.workspace, 'decision.recorded', encounter=locked, actor=user, decision=str(decision.pk),
-                     proposal=str(proposal.pk), assessment=str(assessment.pk), action=action, code=proposal.code)
+                     proposal=str(proposal.pk), assessment=str(assessment.pk), action=action, code=proposal.code,
+                     **({'modifiers': list(chosen)} if chosen else {}))
         encounter.state = refresh_state(locked)
     return decision
 
@@ -609,7 +813,8 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
             encounter=assessment.encounter, assessment=assessment, revision=revision, proposal=target,
             action=decision.action, note=decision.note, reviewer_id=decision.reviewer_id,
             reviewer_kind=decision.reviewer_kind, acknowledgement=decision.acknowledgement,
-            profile_version=target.profile_version, proposal_fingerprint=target.fingerprint, carried_from=decision)
+            modifiers=list(decision.modifiers or []), profile_version=target.profile_version,
+            proposal_fingerprint=target.fingerprint, carried_from=decision)
         carried += 1
     return carried, len(ordered) - carried
 
@@ -737,26 +942,36 @@ def _assessment_blockers(encounter, assessment):
             blockers.append(f'Open clarification: {_human(clarification.fact)}')
     asked = {item.proposal_id for item in open_clarifications if item.proposal_id}
     current = current_decisions(assessment)
-    reinstated = _reinstated_procedures(assessment, current)
+    # The review overlay (CORE-UX-DESIGN.md 4): each proposal's status and open questions as the current decisions and
+    # member answers leave them, and the blocker of a decision the view no longer supports (D14: an approval of a base
+    # code a reinstatement holds again waits until it is revoked).
+    views = effective_view(assessment, current)
+    reinstated = [p for p in _reinstated_procedures(assessment, current)
+                  if views.get(p.key) is None or views[p.key].active]
     reviewable = 0
     for proposal in assessment.proposals.all():
         decision = current.get(proposal.pk)
         if not _reviewable(proposal, decision):
             continue
         reviewable += 1
+        view = views.get(proposal.key)
         if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision):
             # Also when this E/M was approved before the procedure was brought back.
             blockers.append(_same_day_blocker(proposal, reinstated))
+        if view is not None and view.blocker:
+            blockers.append(view.blocker)
         if decision is not None and decision.action in (APPROVE, REJECT, CONFIRM):
             continue
+        if view is not None and view.reason == DETAIL_UNAVAILABLE:
+            continue  # a needed detail answered as unavailable: excluded, nothing to decide (P5's answers)
         if decision is not None:
             blockers.append(f'{proposal.code} was reinstated and has no decision')
         elif proposal.bucket == EXCLUDED:
             blockers.append(f'{proposal.code} was excluded by a documentation check: confirm the exclusion '
                             'or reinstate it')
-        elif proposal.pk in asked:
+        elif (bool(view.questions) if view is not None else proposal.pk in asked):
             blockers.append(f'{proposal.code} has an open clarification')
-        elif proposal.status == Proposal.NEEDS_CLARIFICATION:
+        elif (view.status if view is not None else proposal.status) == Proposal.NEEDS_CLARIFICATION:
             blockers.append(f'{proposal.code} needs clarification')
         else:
             blockers.append(f'{proposal.code} has no decision')
@@ -840,12 +1055,17 @@ def _decisions_waiting(assessment):
     """(waiting, reviewable): the proposals a reviewer decides, and those of them with no decision that stands - counted
     as readiness counts them (_assessment_blockers)."""
     current = current_decisions(assessment)
+    views = effective_view(assessment, current)
     waiting = reviewable = 0
     for proposal in assessment.proposals.all():
         decision = current.get(proposal.pk)
         if not _reviewable(proposal, decision):
             continue
         reviewable += 1
+        view = views.get(proposal.key)
+        if view is not None and view.reason == DETAIL_UNAVAILABLE and (decision is None
+                                                                        or decision.action != APPROVE):
+            continue  # excluded by a member's answer: it needs no decision
         if decision is None or decision.action not in (APPROVE, REJECT, CONFIRM):
             waiting += 1
     return waiting, reviewable
@@ -901,9 +1121,15 @@ def coding_completeness(encounter):
                 'statement': 'This assessment was made before the documented-service reconciliation existed, so its '
                              'completeness is not established.'}
     reasons = [r for r in base.get('reasons', []) if 'open question' not in r]
-    open_questions = assessment.clarifications.filter(state=Clarification.OPEN).count()
+    # the questions the review overlay leaves open: a released one is not counted, an added one is (CORE-UX-DESIGN.md 4)
+    views = effective_view(assessment)
+    open_questions = len(open_questions_of(assessment, views))
     if open_questions:
         reasons.append(f'{open_questions} open question{"s" if open_questions != 1 else ""}')
+    unavailable = [view.code for view in views.values() if view.reason == DETAIL_UNAVAILABLE]
+    if unavailable:
+        reasons.append(f'{", ".join(dict.fromkeys(unavailable))} excluded: a needed detail was answered as not '
+                       'documented or not confirmable')
     standing = ('Code-set membership and NCCI edits are not verified (no licensed source is connected), and the '
                 'documented-service reading can miss wording it does not recognise.')
     if reasons:
@@ -992,12 +1218,18 @@ def _review_state(encounter, assessment):
     if readiness(encounter)['reviewed']:
         return 'reviewed'
     current = current_decisions(assessment)
+    views = effective_view(assessment, current)
     reviewable = [item for item in assessment.proposals.all() if _reviewable(item, current.get(item.pk))]
     encounter_question = assessment.clarifications.filter(
         state=Clarification.OPEN, scope='encounter', proposal__isnull=True).exists()
     if not reviewable:
         return 'needs_clarification' if encounter_question else 'no_codes'
-    if encounter_question or any(item.status == Proposal.NEEDS_CLARIFICATION and item.pk not in current
+
+    def status(item):
+        view = views.get(item.key)
+        return item.status if view is None else view.status
+
+    if encounter_question or any(status(item) == Proposal.NEEDS_CLARIFICATION and item.pk not in current
                                  for item in reviewable):
         return 'needs_clarification'
     return 'ready_for_review'

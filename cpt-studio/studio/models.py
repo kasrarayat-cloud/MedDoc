@@ -377,6 +377,10 @@ class Decision(ImmutableModel):
     reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     reviewer_kind = models.CharField(max_length=8)
     acknowledgement = models.TextField(blank=True)
+    # CORE-UX-DESIGN.md 4 (P3): the reviewer's ONE chosen modifier on an approval ('59' or 'XS'), only where the review
+    # overlay offers a separate-lesion modifier review (review.record_decision); [] otherwise. Never prefilled, never
+    # both, never a free list. Carried with the decision (review._carry_decisions).
+    modifiers = models.JSONField(default=list)
     profile_version = models.CharField(max_length=40)
     proposal_fingerprint = models.CharField(max_length=64)
     carried_from = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='carries')

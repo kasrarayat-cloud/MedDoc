@@ -842,3 +842,25 @@ carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10
 ## GET /api/encounters/{id}/original
 
 The original upload's bytes, as an attachment (404 for pasted text).
+
+## Core repair and customer interface (2026-11-03): P3 REVIEW
+
+**`POST /api/encounters/{id}/decisions` takes `"modifiers"`**: `[]` (or absent, or `null`), `["59"]` or `["XS"]` - the
+reviewer's ONE chosen modifier, on an `approve` only, where the proposal's separate-lesion modifier review offers it
+(`review.effective_view`, below). 400 for any other shape or value (`["59", "XS"]`, `"XS"`, `["xs"]`, a modifier with
+another action); 409 "No modifier review is offered for <code>: approve it with no modifier." where none is offered.
+Approving with no modifier is always allowed. → `201 {decision, "modifiers": [...]}`. Nothing is prefilled.
+
+**Statuses, checks and actions are the review overlay's** (`studio/validation/review_view.py`, ARCHITECTURE.md's section
+of the same name): in `assessment.proposals[]`, `status`, `status_label`, `checks`, `allowed_actions` and
+`approve_withheld_by` are what the current decisions (and member answers) leave. After a reinstatement of 45385 beside a
+selected 45378, 45378 reads `needs_clarification`, its checks carry `services.base_included`, `allowed_actions` is
+`["reject"]` and `approve_withheld_by` is `"services.base_included"`. With no decision they are exactly the stored ones;
+the key set is unchanged. `readiness.blockers` can list "<base> was approved, but <code> was reinstated: its diagnostic
+examination is normally included in that intervention; revoke one of the decisions" and "<code> was approved with
+modifier XS, but the separate-lesion modifier review no longer applies to it; revoke the approval and decide it again".
+Reports: an approval's chosen modifier is printed under its decision ("Modifier chosen by the reviewer: XS (not
+validated against NCCI procedure-to-procedure edits or payer modifier policy)"), and CHECKS notes the checks recomputed
+over the current review decisions. The structured modifier review, the chosen modifier and the approved items are served
+to the customer by the customer API (package P4), from `review.effective_view(assessment)` and
+`review.approved_items(assessment)`.

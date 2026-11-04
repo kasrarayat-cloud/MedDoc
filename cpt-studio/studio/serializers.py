@@ -271,25 +271,31 @@ def _reinstated_by(proposal, decision):
 def _proposal_json(proposal, current, assessment, membership, clarification_ids):
     family = profile(proposal.family) if proposal.family in PROFILES else None
     decision = current.get(proposal.pk)
+    # the review overlay (CORE-UX-DESIGN.md 4): status, checks and actions as the current decisions leave them; with no
+    # decision and no member answer, exactly the stored proposal
+    views = review.effective_view(assessment, current)
+    view = views.get(proposal.key)
+    status = view.status if view is not None else proposal.status
     return {
         'id': str(proposal.pk), 'key': proposal.key, 'bucket': proposal.bucket, 'code': proposal.code,
         'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': family.label if family else proposal.family,
         'eyebrow': family.eyebrow if family else 'CPT', 'supported': family.supported if family else False,
-        'profile_version': proposal.profile_version, 'status': proposal.status,
-        'status_label': review.status_label(proposal.status), 'exclusion_reason': proposal.exclusion_reason,
+        'profile_version': proposal.profile_version, 'status': status,
+        'status_label': review.status_label(status), 'exclusion_reason': proposal.exclusion_reason,
         'reinstatable': proposal.reinstatable,
         'descriptor': {'status': 'withheld',
                        'label': 'Description withheld — no licensed CPT descriptor is connected.'},
         'evidence': proposal.evidence, 'rationale': proposal.rationale, 'units': proposal.units,
-        'checks': proposal.checks, 'modifier_considerations': proposal.modifier_considerations,
+        'checks': list(view.checks) if view is not None else proposal.checks,
+        'modifier_considerations': proposal.modifier_considerations,
         'support': proposal.support or {},
         'clarification_ids': clarification_ids.get(proposal.pk, []),
         'decision': _decision_json(decision) if decision else None,
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
         'reinstated_by': _reinstated_by(proposal, decision),
-        'allowed_actions': review.allowed_actions(proposal, assessment, membership),
-        'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current),
+        'allowed_actions': review.allowed_actions(proposal, assessment, membership, views),
+        'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current, views),
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
