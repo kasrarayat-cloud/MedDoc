@@ -133,7 +133,9 @@ class RestoredNoteLabelTests(SimpleTestCase):
                 self.assertEqual(outcomes(run(text, [('43239', biopsy)]))['43239'], READY)
         shared = ('Findings:\nBiopsies were taken with cold forceps. A clip was placed at the biopsy site.\nThe colonoscope '
                   'was advanced to the cecum. The colon was normal.\n')
-        for line in ('Procedure 2: Colonoscopy', 'Subsequent procedure: Colonoscopy', 'Follow-on procedure: Colonoscopy'):
+        for line in ('Procedure 2: Colonoscopy', 'Subsequent procedure: Colonoscopy', 'Follow-on procedure: Colonoscopy',
+                     # dated today too: in a combined report's head it interrupts no report of one service
+                     'Procedure 2: Colonoscopy (fictional), 2026-11-03'):
             with self.subTest(line):
                 text = HEAD + 'Upper endoscopy and colonoscopy report\n' + line + '\n' + shared
                 self.assertEqual(acts(inventory(text), 'gi.colonoscopy', 'biopsy'), [])

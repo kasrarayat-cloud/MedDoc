@@ -1021,6 +1021,10 @@ CASES.update({
         R2_HEAD + 'Upper endoscopy and colonoscopy report\nProcedure 2: Colonoscopy\nFindings:\n' + R3_SITELESS_BX
         + ' A clip was placed at the biopsy site.\nThe colonoscope was advanced to the cecum. The colon was normal.\n',
         [('43239', R3_SITELESS_BX, 'MAY'), ('45380', R3_SITELESS_BX, 'MAY')]),
+    "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings": (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nProcedure 2: Colonoscopy (fictional), 2026-11-03\nFindings:\n'
+        + R3_SITELESS_BX + ' A clip was placed at the biopsy site.\nThe colonoscope was advanced to the cecum. The colon '
+        'was normal.\n', [('43239', R3_SITELESS_BX, 'MAY'), ('45380', R3_SITELESS_BX, 'MAY')]),
     "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence": (
         _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + R3_XREF + '\n').replace(
             R8_CECUM, 'The colonoscope was advanced to the cecum and no polyps were seen in the rectum.'),

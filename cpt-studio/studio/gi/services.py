@@ -1088,11 +1088,13 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             continue
         note_named = _note_families(text, lines, index, cuts[-1][4], lay)
         if note_named and DATED_NOTE_LABEL.match(line) \
-                and not _names_service_date(dates, date_starts, ls, le, service_date):
+                and not (cuts[-1][1] and _names_service_date(dates, date_starts, ls, le, service_date)):
             # L1c-r3, after code (reader repair, round 3): a numbered "Procedure 2:" line or a "Subsequent" or
-            # "Follow-on procedure:" line that does not name the service date is a field of today's report or a later
-            # procedure (round 2's L1c), as on e020145e1: no note label. Dated today ("Procedure 2: Flexible
-            # sigmoidoscopy (fictional), 2026-10-14"), it is the same-day note R8 D7 reads (refutation A1)
+            # "Follow-on procedure:" line is a field of today's report or a later procedure (round 2's L1c), as on
+            # e020145e1 - no note label - unless it names the service date and interrupts a report of one service:
+            # then it is the same-day note R8 D7 reads ("Procedure 2: Flexible sigmoidoscopy (fictional), 2026-10-14"
+            # after the colonoscopy's report; refutation A1). In a combined report's head it lists today's procedures
+            # (F03)
             note_named = frozenset()
         labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
                                             date_starts=date_starts, documented=documented) if note_named else None
