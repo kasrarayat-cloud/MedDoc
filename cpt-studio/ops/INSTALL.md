@@ -634,6 +634,16 @@ before the harness, 80df1831d168 included, on the last two:
   proposer, and its re-assessment reads Corti's answer alone, so the code
   leaves the decision set without a reviewer's decision. No list state can be
   put back for it, so it is named, never handed over.
+- **member_answer** (core repair 2026-11-03): a member's answer that stands
+  ("Not documented" or "Cannot confirm") on the current assessment. No revision
+  before the core repair reads one: its page asks that question again and shows
+  the code held, where this revision shows it Excluded with the answer and who
+  gave it. Named, never handed over; the answer row stays.
+- **modifier** (core repair 2026-11-03): a current decision of the current
+  assessment carries the reviewer's chosen modifier (59 or XS). No revision
+  before the core repair reads one: its page and both reports show that
+  approval without the modifier. Named, never handed over; the decision row
+  stays.
 - a stage of a kind it has no stage for (the second review; the harness
   participants' `astra` and `fable`, which no revision before the harness
   runs; harness@2's peer reviews `astra_peer` and `fable_peer`, which no
@@ -641,7 +651,7 @@ before the harness, 80df1831d168 included, on the last two:
   its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
-while any of the first seven exists. They are cleared on this revision's web:
+while any of the first nine exists. They are cleared on this revision's web:
 reconcile each unknown outcome; Resume the stopped stage, or answer the date
 question (correct or clear the metadata date), after which this revision makes
 the request for the agreed date (re-assessing with, or re-using, a recorded
@@ -657,7 +667,11 @@ by an assessment made with no participant configured, which holds none: install
 this revision again with `--astra-mode disabled --fable-mode disabled`, then
 re-assess each named encounter on its web (a saved change to its context
 re-checks the answer in use; an addendum makes a new request), or this revision
-stays installed. So,
+stays installed. A member's answer is cleared with "Change this answer" on
+the encounter's "A few details needed" panel (its withdrawal is recorded; the
+question is open again), and a chosen modifier with "Undo decision" on that
+approval (the decision row stays, revoked), then approving again without a
+modifier - or this revision stays installed. So,
 before reinstalling an older revision over this one:
 
 1. Clear those records on this revision's web.

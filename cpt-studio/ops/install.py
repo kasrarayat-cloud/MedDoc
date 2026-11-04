@@ -1888,6 +1888,13 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              fable_peer (HARNESS.md 11.1) - are closed like a second review's whenever the next worker has no stage
 #              for them: no worker before the harness has any of the four, and none before harness@2 a peer review
 #              (CLOSE_STAGES, given the next worker's own kinds).
+#   member_answer - the current assessment has a member's answer that stands (MemberAnswer, not revoked: "Not
+#              documented" or "Cannot confirm", core repair 2026-11-03). No revision before it reads one: its page asks
+#              that question again and shows the code held, where this revision shows it Excluded with the answer and
+#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS).
+#   modifier - a current decision of the current assessment carries the reviewer's chosen modifier (Decision.modifiers,
+#              core repair 2026-11-03). No revision before it reads one: its page and both reports show that approval
+#              without the modifier. The decision row stays; no state can be put back for it (SHOWN_HAZARDS).
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1977,6 +1984,16 @@ def undo_hazards():
                 if not any(review._reviewable(proposal, decisions.get(proposal.pk))
                            for proposal in assessment.proposals.all()):
                     found.setdefault(str(encounter.pk), set()).add('second_review_unread')
+        # core repair 2026-11-03: a member's answer that stands, or a chosen modifier on a current decision - no older
+        # revision reads either, so its page asks the answered question again, or shows the approval without the
+        # modifier (read only where this image has them)
+        if (encounter.current_assessment_id is not None and hasattr(models, 'MemberAnswer')
+                and models.MemberAnswer.objects.filter(assessment_id=encounter.current_assessment_id,
+                                                       revocation__isnull=True).exists()):
+            found.setdefault(str(encounter.pk), set()).add('member_answer')
+        if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
+                decision.modifiers for decision in review.current_decisions(assessment).values()):
+            found.setdefault(str(encounter.pk), set()).add('modifier')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
@@ -2396,7 +2413,9 @@ def hazard_summary(hazards) -> str:
 # handed - and a worker left stopped does not keep its web from saying it. Refutation P2RA, ROLLBACK lens 0: a second
 # review the shown assessment did not read is one too (it says that no code was proposed of a response nobody read).
 # The harness: a code only a participant proposed is one too (the older web shows it as the provider's proposal).
-SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant')
+# The core repair (2026-11-03): a member's answer that stands, and a chosen modifier, are two more (the older web reads
+# neither: it asks the answered question again, and shows the approval without its modifier).
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier')
 
 
 def hazards_by_kind(hazards):
