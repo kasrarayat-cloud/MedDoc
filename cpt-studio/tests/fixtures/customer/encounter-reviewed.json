@@ -1,0 +1,335 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000005",
+ "title": "Colonoscopy, two lesions",
+ "created_at": "2026-10-27T08:10:00Z",
+ "updated_at": "2026-10-27T08:31:44Z",
+ "state": "reviewed",
+ "state_label": "Reviewed",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "upload",
+  "name": "synthetic-colonoscopy-two-lesions.pdf",
+  "media_type": "application/pdf",
+  "size": 47002,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nHarbor Point GI - Colonoscopy report\nPatient: Ana Ruiz (fictional) | Date of service: 2026-10-27\nIndication: Evaluation of rectal bleeding.\n\nProcedure: The colonoscope was advanced to the cecum and the terminal ileum was entered.\nFindings: Lesion 1, ascending colon: a 3 mm polyp was removed with cold biopsy forceps. Lesion 2, rectum: a 10 mm polyp was removed with a cold snare. The two lesions are separate.\nImpression: Two polyps removed by different techniques.",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 510
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "PDF text layer",
+   "messages": []
+  },
+  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000005/original"
+ },
+ "service_date": {
+  "value": "2026-10-27",
+  "source": "document",
+  "document_value": "2026-10-27",
+  "document_quote": {
+   "text": "Date of service: 2026-10-27",
+   "start": 113,
+   "end": 140
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "completed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-10-27T08:10:04Z",
+    "finished_at": "2026-10-27T08:10:09Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-10-27T08:10:09Z",
+    "finished_at": "2026-10-27T08:10:11Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "done",
+    "started_at": "2026-10-27T08:10:11Z",
+    "finished_at": "2026-10-27T08:12:40Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "done",
+    "started_at": "2026-10-27T08:12:40Z",
+    "finished_at": "2026-10-27T08:12:52Z"
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-10-27T08:10:04Z",
+  "finished_at": "2026-10-27T08:12:52Z",
+  "server_time": "2026-10-27T08:40:00Z",
+  "slow": false,
+  "message": "Results are ready.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "done"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "done"
+  }
+ ],
+ "codes": [
+  {
+   "id": "c1a00000-0000-4000-8000-000000000006",
+   "number": 1,
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": {
+    "options": [
+     "59",
+     "XS"
+    ],
+    "text": "Lesion 1 (ascending colon) and lesion 2 (rectum) are documented as separate lesions. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+    "sources": [
+     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+    ]
+   },
+   "status": "approved",
+   "status_label": "Approved",
+   "sub_label": "Agent-executed synthetic review — not clinical approval",
+   "summary": "The colonoscopy reached the cecum and lesion 2, a 10 mm rectal polyp, was removed with a cold snare.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Lesion 2, rectum: a 10 mm polyp was removed with a cold snare.",
+      "start": 362,
+      "end": 424,
+      "page": 1,
+      "exact": true
+     },
+     {
+      "text": "The colonoscope was advanced to the cecum",
+      "start": 196,
+      "end": 237,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "revoke"
+   ],
+   "decision": {
+    "action": "approve",
+    "by": "CPT Studio review agent (automated agent)",
+    "by_kind": "agent",
+    "at": "2026-10-27T08:29:10Z",
+    "note": "Agent-executed synthetic review: the snare removal of lesion 2 is documented.",
+    "modifiers": []
+   }
+  },
+  {
+   "id": "c1a00000-0000-4000-8000-000000000007",
+   "number": 2,
+   "code": "45380",
+   "units": 1,
+   "modifiers": [
+    "XS"
+   ],
+   "modifier_review": {
+    "options": [
+     "59",
+     "XS"
+    ],
+    "text": "Lesion 1 (ascending colon) and lesion 2 (rectum) are documented as separate lesions. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+    "sources": [
+     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+    ]
+   },
+   "status": "approved",
+   "status_label": "Approved",
+   "sub_label": "Agent-executed synthetic review — not clinical approval",
+   "summary": "Lesion 1, a 3 mm polyp in the ascending colon, was removed with cold biopsy forceps.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Lesion 1, ascending colon: a 3 mm polyp was removed with cold biopsy forceps.",
+      "start": 284,
+      "end": 361,
+      "page": 1,
+      "exact": true
+     },
+     {
+      "text": "The two lesions are separate.",
+      "start": 425,
+      "end": 454,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": [
+     "Lesion 1 and lesion 2 are documented as separate lesions treated by different techniques."
+    ]
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "revoke"
+   ],
+   "decision": {
+    "action": "approve",
+    "by": "CPT Studio review agent (automated agent)",
+    "by_kind": "agent",
+    "at": "2026-10-27T08:30:02Z",
+    "note": "Agent-executed synthetic review: separate lesion, modifier XS chosen.",
+    "modifiers": [
+     "XS"
+    ]
+   }
+  },
+  {
+   "id": "c1a00000-0000-4000-8000-000000000008",
+   "number": 3,
+   "code": "45378",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "excluded",
+   "status_label": "Excluded",
+   "sub_label": "Exclusion confirmed in review.",
+   "summary": "A diagnostic colonoscopy is part of the removals already suggested, so it is not suggested on its own.",
+   "why": {
+    "quotes": [
+     {
+      "text": "The colonoscope was advanced to the cecum and the terminal ileum was entered.",
+      "start": 196,
+      "end": 273,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "revoke"
+   ],
+   "decision": {
+    "action": "confirm",
+    "by": "CPT Studio review agent (automated agent)",
+    "by_kind": "agent",
+    "at": "2026-10-27T08:30:40Z",
+    "note": "Agent-executed synthetic review: the exclusion is right.",
+    "modifiers": []
+   }
+  }
+ ],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": true,
+  "blockers": []
+ },
+ "reports": [
+  {
+   "id": "c1e00000-0000-4000-8000-000000000001",
+   "kind": "approved",
+   "fmt": "txt",
+   "filename": "cpt-studio-approved-colonoscopy-two-lesions.txt",
+   "generated_at": "2026-10-27T08:31:40Z",
+   "generated_by": "CPT Studio review agent (automated agent)",
+   "download_url": "/api/reports/c1e00000-0000-4000-8000-000000000001/download",
+   "current": true
+  },
+  {
+   "id": "c1e00000-0000-4000-8000-000000000002",
+   "kind": "draft",
+   "fmt": "csv",
+   "filename": "cpt-studio-draft-colonoscopy-two-lesions.csv",
+   "generated_at": "2026-10-27T08:20:11Z",
+   "generated_by": "CPT Studio review agent (automated agent)",
+   "download_url": "/api/reports/c1e00000-0000-4000-8000-000000000002/download",
+   "current": false
+  }
+ ],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:10:00Z"
+  },
+  {
+   "event": "report.generated",
+   "summary": "Draft download created",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:20:11Z"
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Decision recorded for 45385",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:29:10Z"
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Decision recorded for 45380",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:30:02Z"
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Decision recorded for 45378",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:30:40Z"
+  },
+  {
+   "event": "report.generated",
+   "summary": "Approved download created",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-10-27T08:31:40Z"
+  }
+ ]
+}

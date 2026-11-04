@@ -985,3 +985,63 @@ review, Independent checks and Coding validation. None of them writes anything.
 one re-assessment from the retained answers (the final assessment's runs re-read by id), nothing sent, one job per tag;
 refused, with the reason, while busy or stopped or when the final assessment is not current. Audit
 `assessment.refreshed` ("Results were refreshed with updated software").
+
+## Core repair and customer interface (2026-11-03): P6 UI
+
+What the customer page (`studio/static/studio/app.js`) sends and relies on. It reads only the customer encounter
+contract (build design section 7) and the customer session and list; it reads no other endpoint and has no
+diagnostics route. Fixtures: `tests/fixtures/customer/`.
+
+**Every request** carries `X-CPT-Studio-Client: customer-2026-11-03`. A server that no longer serves this build of the
+page answers HTTP 409 with `{"error": "<sentence>", "error_code": "client_outdated"}`; the page shows "CPT Studio was
+updated — reload the page to continue." with a Reload button and stops polling. This is a client contract; the server
+side belongs to the integration. A page loaded before this release sends no header and does not know `error_code`; it
+shows the body's `error` sentence, so that sentence should itself say the page must be reloaded.
+
+**Errors.** The page shows the body's `error` sentence when it is a non-empty string, else a fixed sentence per status
+(400, 403, 404, 409, 413, 429, other), never a status code. A refused download appends `details.blockers` (plain
+sentences).
+
+**`POST /api/encounters`** (multipart): `file` or `text`, optional `service_date`, `synthetic_attestation=yes`, and
+`client_key` — a version-4 UUID per upload attempt, kept when the same attempt is retried and replaced when its file,
+text or date changes. On 201 `{"id"}` the page shows the upload acknowledgement before its first read of the document.
+
+**`POST /api/encounters/{id}/details`**: `{"answers": [{"id": "<details_needed[].id>", "fact": "<details_needed[].fact>",
+"value": "<value>"}]}` — one request for every row the member answered. `value` is one of the row's choice values,
+`not_documented` or `cannot_confirm` (only where the row's `allow` lists it), `use_document` (a date row whose
+`document_value` is set), or `YYYY-MM-DD` (a date row). **`POST /api/encounters/{id}/details/{answer_id}/revoke`** with
+`{}` withdraws a saved answer (`details_needed[].saved.answer_id`).
+
+**`POST /api/encounters/{id}/decisions`**: as before, plus `"modifiers": []`, `["59"]` or `["XS"]` on an approval of a code
+with a `modifier_review` whose `options` offer it (one at most, never prefilled; not sent for any other action or code).
+
+**`POST /api/encounters/{id}/reports`**: `{"kind": "draft" | "approved", "fmt": "txt" | "csv"}`; the page downloads the
+answer's `download_url`, which must match `/api/reports/<uuid>/download`. The approved options are disabled, with
+`readiness.blockers` listed, while `readiness.approved` is not `true`. A `reports[]` entry whose `current` is not `true`
+is listed without a link ("No longer matches the saved decisions").
+
+**`POST /api/encounters/{id}/addenda`**: `{"text", "clarification_id": "<details_needed[].id>", "synthetic_attestation":
+"yes"}`, offered only on a row with `addendum_allowed: true` ("Add to the documentation (physician)"); the server must
+accept a details row id there. **`/stop`** and **`/resume`**: `{}`, offered when `progress.can_stop` (while busy) or
+`progress.can_resume`, and `permissions.can_review`.
+
+**Polling.** `GET /api/encounters/{id}` while `progress.busy` is true or `progress.phase` is `queued`, `processing` or
+`being_confirmed`: 2.5 s backing off to 15 s, and to 30 s after failed reads. A failed read shows "Reconnecting…";
+coming back to the tab or back online reads at once. Elapsed time is `server_time` − `started_at`, advanced by the
+browser's clock between reads; no percentage or forecast is shown. No step is animated unless the phase is `queued` or
+`processing` and `busy` is true.
+
+**Labels the page fixes itself** (a served label is used only for a value it does not know): the code statuses (Ready
+for review, Needs a detail, Approved, Excluded), the states, the four stages and the three checks. An approved code whose
+`decision.by_kind` is `agent` always reads "Agent-executed synthetic review — not clinical approval", whatever
+`sub_label` says.
+
+**DOM hooks beyond design section 8.** `li.result-row` also carries `data-units` and `data-modifiers` (space-separated);
+`.result-foot` holds `details.why-code` and `.result-actions`; a `.why-quote` button's text is the exact quote (the
+typographic quotes and "page N" are drawn by CSS from `data-page`), and a quote not found at its offsets is
+`span.why-quote.unlocated` with no `data-evidence`; source marks are `.evidence-mark[data-keys]` with keys
+`<code id>:q<n>` and `date:document`; `#reviewModifierField` is hidden unless approving a code with a modifier review;
+`#updateNotice`, `#uploadStatus`; `section.progress-panel.progress-done[data-phase]` for `completed`, `partial` and
+`awaiting_detail`; `[data-elapsed][data-since]` ticks while busy and carries `data-until` once finished. The edit-context
+dialog is gone (`#contextDialog`, `#contextServiceDate`, `#contextSetting`, `#contextBilling`, `#saveContext`,
+`button[data-action="edit-context"]`): context answers go through the details panel.

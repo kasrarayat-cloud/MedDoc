@@ -1,0 +1,166 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000006",
+ "title": "Upper endoscopy with duodenal biopsies",
+ "created_at": "2026-10-26T11:00:00Z",
+ "updated_at": "2026-10-26T11:03:20Z",
+ "state": "ready",
+ "state_label": "Ready for review",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "upload",
+  "name": "synthetic-duodenal-biopsies.docx",
+  "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "size": 18733,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nWillow Creek Endoscopy - Upper endoscopy report\nPatient: Ruth Ames (fictional) | Date of service: 2026-10-26\nIndication: Iron-deficiency anemia.\n\nProcedure: The endoscope was passed to the second part of the duodenum. Cold-forceps biopsies were taken from the duodenal bulb and the second portion.\nImpression: Normal-appearing duodenum. Biopsies taken.",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 396
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Word document",
+   "messages": []
+  },
+  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000006/original"
+ },
+ "service_date": {
+  "value": "2026-10-26",
+  "source": "document",
+  "document_value": "2026-10-26",
+  "document_quote": {
+   "text": "Date of service: 2026-10-26",
+   "start": 125,
+   "end": 152
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "partial",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-10-26T11:00:04Z",
+    "finished_at": "2026-10-26T11:00:09Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-10-26T11:00:09Z",
+    "finished_at": "2026-10-26T11:00:11Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "done",
+    "started_at": "2026-10-26T11:00:11Z",
+    "finished_at": "2026-10-26T11:02:40Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "done",
+    "started_at": "2026-10-26T11:02:40Z",
+    "finished_at": "2026-10-26T11:02:52Z"
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-10-26T11:00:04Z",
+  "finished_at": "2026-10-26T11:03:20Z",
+  "server_time": "2026-10-26T11:10:00Z",
+  "slow": false,
+  "message": "Results are ready, but one of the independent checks could not finish. The suggestions below were checked without it.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "unavailable"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "done"
+  }
+ ],
+ "codes": [
+  {
+   "id": "c1a00000-0000-4000-8000-000000000009",
+   "number": 1,
+   "code": "43239",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "ready",
+   "status_label": "Ready for review",
+   "sub_label": "",
+   "summary": "The upper endoscopy is documented with cold-forceps biopsies of the duodenal bulb and second portion.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Cold-forceps biopsies were taken from the duodenal bulb and the second portion.",
+      "start": 262,
+      "end": 341,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ],
+   "decision": null
+  }
+ ],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document.",
+  "One independent check could not finish for this document, so the suggestion was checked without it."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "43239 is waiting for a review decision."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-26T11:00:00Z"
+  }
+ ]
+}

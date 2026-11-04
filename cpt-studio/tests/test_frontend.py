@@ -209,7 +209,10 @@ class ShellTemplateTests(SimpleTestCase):
             looked_up.update(re.findall(r'#([A-Za-z][\w-]*)', selector))
         missing = sorted(looked_up - index_ids - rendered_ids)
         self.assertEqual(missing, [])
-        self.assertTrue({'uploadDialog', 'reviewDialog', 'contextDialog', 'addendumDialog', 'exportDialog', 'aboutDialog', 'toast'} <= index_ids)
+        # moved by the customer interface (2026-11-03): the context dialog gave way to the details panel on the page; the
+        # review dialog's modifier choice and the update notice are part of the customer page's contract
+        self.assertTrue({'uploadDialog', 'reviewDialog', 'reviewModifier', 'addendumDialog', 'exportDialog', 'aboutDialog',
+                         'updateNotice', 'toast'} <= index_ids)
 
     def test_login_renders_the_error_escaped_with_csrf_and_the_next_target(self):
         html = render_to_string('studio/login.html', {'error': '<b>Wrong</b> password', 'next': '/#doc/x"y'},
@@ -530,8 +533,10 @@ class BrowserLogicTests(SimpleTestCase):
         self.assertEqual(total('fail')[-1:], [0], result.stdout[-2000:])
         self.assertEqual((total('skipped')[-1:], total('todo')[-1:]), ([0], [0]), result.stdout[-2000:])
         self.assertTrue(total('pass') and total('pass')[-1] >= declared, (total('pass'), declared))
-        self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent reinstatement behind a human decision labels the '
-                                        r'reviewed export as agent review$')
+        # moved by the customer interface (2026-11-03): the customer contract carries one current decision per code, so
+        # the guard is now the agent approval's own label, on its row and in the approved download's wording
+        self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent approval labels the row and the approved download as '
+                                        r'agent-executed synthetic review$')
 
     def test_scripts_parse(self):
         for path in (STATIC / 'app.js', ROOT / 'ops' / 'dev_preview_server.cjs'):
