@@ -254,6 +254,9 @@ def _decision_json(decision):
         'invalidated': {'reason': invalidation.reason, 'created_at': _iso(invalidation.created_at)}
         if invalidation else None,
         'revision_number': decision.revision.number,
+        # the modifier the reviewer chose on an approval (Decision.modifiers: [] or one of 59 and XS), the record the
+        # download check and the walk compare a chosen modifier against (refutation round 2, L3-3)
+        'modifiers': list(decision.modifiers or []),
     }
 
 

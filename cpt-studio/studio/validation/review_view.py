@@ -14,6 +14,19 @@ snapshot, the customer API (review.effective_view) and the approved export (revi
 Positive control (I1 at read time): with no decision and no answer the effective set is the engine's own active set,
 and every view reproduces its proposal's stored status, checks and open questions byte for byte (tests/test_cux_review).
 
+Two sets, because a member's answer and a reviewer's decision are not the same act (session decision (e) of 2026-11-03:
+member answers never release a code). The COUNTED set is the codes as the current decisions leave them - selected and not
+rejected, or reinstated - whatever a member answered: every rule by which one code's presence holds another reads it (the
+diagnostic-base rule, which also holds two E/M levels beside each other, and the same-day E/M gate of a reinstated
+procedure). The EFFECTIVE set is the counted set without the codes a member's answer left without a needed detail: the
+codes still in review, which the combination readings that hold nothing read (the endoscopic-family check, the modifier
+review). So a member's "Not documented" or "Cannot confirm" excludes the code it answers and nothing else - it never
+lifts a hold, drops another code's question or makes another code approvable; only a recorded decision does.
+
+A reinstated exclusion is held to the gates a selected code meets (checks.reinstatement_check): while its stored
+review.reinstatement check names what approval waits for, the view asks exactly that of it - the questions a selected
+code of its family is asked - and reads it as needing clarification, never as ready (refutation round 2, L3-8).
+
 What it never does: release a hold by any rule but the engine's own (a rejection releases a base only when nothing the
 base rule reads still holds it), choose a modifier, or read a participant.
 """
@@ -23,6 +36,7 @@ import functools
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence
 
+from studio.gi.profiles import PROFILES
 from studio.reference.store import PFS
 from studio.types import CodeReference, ReferenceSourceInfo, from_jsonable, to_jsonable
 from studio.validation import checks, engine, reconcile
@@ -47,6 +61,14 @@ ANSWER_WORDS = {'not_documented': 'not documented', 'cannot_confirm': 'cannot be
 _AFTER_BASE = ('facts.required', 'em.same_day_coverage', SAME_DAY_EM_GATE, 'em.same_day_procedure', DATE_CHECK,
                PRESENCE_CHECK, 'mue.units', ENDOSCOPIC_CHECK, 'cpt.membership', 'cpt.descriptor', 'ncci.ptp')
 MODIFIER_REVIEW = 'distinct_lesion'
+# checks.reinstatement_check's wording of a date of service that is not established: the encounter's own date question
+# asks it of every code, so a reinstated code is not asked it again.
+DATE_WAIT = 'the date of service is not established for this encounter.'
+# What a reinstated code is asked when its stored check withholds approval but names no wait this release words (a check
+# recorded by an earlier release, or none at all): the documentation it needs, which only "Not documented", "Cannot
+# confirm" or the physician's addendum answers - so it is held and asked, never shown as ready (fail-closed).
+DOCUMENTATION_FACT = 'documentation'
+DOCUMENTATION_QUESTION = 'Complete the documentation this reinstated code needs before it can be approved.'
 
 
 @dataclass(frozen=True)
@@ -80,7 +102,9 @@ class View:
     code: str
     bucket: str
     decision: str  # the current decision's action, '' when none
-    active: bool  # in the effective set: selected and not rejected, or excluded and reinstated; never detail_unavailable
+    # counted: selected and not rejected, or excluded and reinstated - a code a member's answer left detail_unavailable
+    # included, since its presence still holds every code it held (session decision (e)); its reason says it is excluded
+    active: bool
     status: str  # ready | needs_clarification | excluded | informational, after the overlay
     reason: str  # 'detail_unavailable' when a member answer leaves a material detail unavailable, else ''
     checks: tuple  # the stored checks with the recomputed ones in their place (dicts)
@@ -218,18 +242,55 @@ def _question(spec, *, ident='') -> dict:
             'reason': spec.reason}
 
 
-def _open_facts(p: Stored, held, readable: bool) -> list:
-    """The facts of ``p``'s open proposal-scoped questions once the base rule is read over the effective set
-    (``held``: what it holds ``p`` beside there, None when it does not), in order."""
+def _reinstatement_clear(p: Stored) -> bool:
+    """Its stored review.reinstatement check passes (review._reinstatement_clear: fail-closed, no check is no pass)."""
+    return any(c.get('id') == REINSTATEMENT_CHECK and c.get('status') == 'pass' for c in p.checks)
+
+
+def _reinstatement_waits(p: Stored) -> tuple:
+    """The questions an excluded code's approval waits for once it is reinstated, as its stored review.reinstatement
+    check names them (checks.reinstatement_check: the required facts its profile asks - checks.fact_clarifications'
+    wording - and the separately identifiable E/M on a procedure day), each as a dict {id: '', scope, family, fact,
+    question, reason}; () when the check passes. Each is recognised by the check's own wording of it, rebuilt here
+    from its family's profile; a date of service that is not established is the encounter's own question. A check that
+    withholds approval but names nothing this release words - or a missing check - asks for the documentation itself
+    (DOCUMENTATION_FACT): fail-closed, the code is asked and held, never shown as ready."""
+    if _reinstatement_clear(p):
+        return ()
+    check = next((c for c in p.checks if c.get('id') == REINSTATEMENT_CHECK), None)
+    detail = str((check or {}).get('detail') or '')
+    reason = detail or 'Approval after reinstatement is not established for this code.'
+    profile = PROFILES.get(p.family)
+    asked = []
+    for name in (profile.required_facts if profile is not None else ()):
+        template = checks.FACT_QUESTIONS.get(name)
+        question = (template.format(label=profile.label) if template
+                    else f'{profile.label}: confirm the documented {checks.fact_label(name)}.')
+        if question in detail:
+            asked.append((name, question))
+    if checks.SEPARATE_EM_QUESTION in detail:
+        asked.append(('separate_em', checks.SEPARATE_EM_QUESTION))
+    if not asked and DATE_WAIT not in detail:
+        asked.append((DOCUMENTATION_FACT, DOCUMENTATION_QUESTION))
+    return tuple({'id': '', 'scope': 'proposal', 'family': p.family, 'fact': fact, 'question': question,
+                  'reason': reason} for fact, question in asked)
+
+
+def _open_facts(p: Stored, held, readable: bool, counted: bool = False) -> list:
+    """The facts of ``p``'s open proposal-scoped questions once the base rule is read over the counted set (``held``:
+    what it holds ``p`` beside there, None when it does not), in order; for a reinstated exclusion (``counted``), also
+    what its approval waits for (_reinstatement_waits)."""
     facts = [q.get('fact') for q in p.questions if q.get('scope') == 'proposal']
     if readable:
         facts = [fact for fact in facts if fact != BASE_FACT] + ([BASE_FACT] if held else [])
+    if counted and p.bucket == EXCLUDED:
+        facts += [q['fact'] for q in _reinstatement_waits(p)]
     return facts
 
 
-def _unavailable_by(p: Stored, held, readable: bool, answered: Mapping) -> tuple[str, str]:
+def _unavailable_by(p: Stored, held, readable: bool, answered: Mapping, counted: bool = False) -> tuple[str, str]:
     """(fact, value) of the first open question of ``p`` a member answered as unavailable, ('', '') when none."""
-    for fact in _open_facts(p, held, readable):
+    for fact in _open_facts(p, held, readable, counted):
         value = answered.get((p.code, p.family, fact))
         if value:
             return fact, value
@@ -268,7 +329,7 @@ def _passage_sources() -> dict:
     for path in passages.bundled_files():
         try:
             source = passages.read_data_file(path).source
-        except Exception:  # noqa: BLE001 - a file this release cannot read names no title; the citation keeps its key
+        except Exception:  # noqa: BLE001 - a file this release cannot read names no title, and its citation shows none
             continue
         sources[(source['key'], source['release'])] = (source['title'], str(source.get('effective_start') or ''))
     return sources
@@ -317,7 +378,9 @@ def _modifier_review(p: Stored, effective: Sequence[Stored], service: Mapping[st
     sources = []
     if cited is not None:
         key, release = str(cited.get('source_key') or ''), str(cited.get('release') or '')
-        title, effective = _passage_sources().get((key, release), (key, ''))
+        # the title of a source this release bundles; a source it does not bundle has none here - its key is never a
+        # title (refutation round 2, L4-4: the key reached the customer's modifier review)
+        title, effective = _passage_sources().get((key, release), ('', ''))
         sources.append({'key': key, 'title': title, 'release': release, 'effective_start': effective,
                         'section': str(cited.get('section') or ''), 'page': str(cited.get('page') or ''),
                         'passage_key': str(cited.get('passage_key') or '')})
@@ -367,15 +430,16 @@ def summary(p: Stored, inventory) -> str:
     return ''
 
 
-def _held_blocker(p: Stored, held, effective: Sequence[Stored], service) -> str:
-    """The readiness blocker of an approval a base rule now holds (D14); ``held``: _bases's (rule, codes)."""
+def _held_blocker(p: Stored, held, counted: Sequence[Stored], service) -> str:
+    """The readiness blocker of an approval a base rule now holds (D14); ``held``: _bases's (rule, codes) over the
+    ``counted`` set, which names the codes that hold it."""
     rule, held = held if held else ('included', ())
     held = tuple(held or ())
     if rule == 'within':
         return (f'{p.code} was approved, but its examination is the endoscopic portion of the endoscopic ultrasound '
                 'documented with it and is normally included in it; revoke the approval')
     if held and all(other[:1].isdigit() for other in held):
-        by_code = {other.code: other for other in effective}
+        by_code = {other.code: other for other in counted}
         reinstated = all(by_code.get(code) is not None and by_code[code].bucket == EXCLUDED for code in held)
         one = len(held) == 1
         verb = ('was reinstated' if one else 'were reinstated') if reinstated else ('is selected' if one else
@@ -405,30 +469,33 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
     readable = inventory is not None
     answered, closed = proposal_answers(answers), service_answers(answers)
     service = {p.key: _service(p, inventory, decided.get(p.key)) for p in rows}
+    # The COUNTED set: the codes as the current decisions leave them - selected and not rejected, or reinstated - whatever
+    # a member answered. Every hold reads it, so the base rule is read once, here, over it: a member's answer never lifts
+    # a hold another code's presence makes (session decision (e); refutation round 2, L7-01: "Cannot confirm" on 45385's
+    # snare had released 45378's base question, and "Not documented" on one E/M level had made the other approvable).
     candidates = [p for p in rows if counts(p, decided.get(p.key))]
-    # Member answers: a code whose open question (as the base rule reads it over the effective set) a member answered as
-    # not documented or not confirmable leaves the effective set. Removal only, never re-admission, until nothing more is
-    # removed: deterministic, it terminates, and every removal is in the safe direction.
-    effective, unavailable = list(candidates), {}
-    while answered:
-        bases = _bases(effective, service, readable)
-        dropped = {p.key: by for p in effective
-                   for by in [_unavailable_by(p, bases.get(p.code), readable, answered)] if by[0]}
-        if not dropped:
-            break
-        unavailable.update(dropped)
-        effective = [p for p in effective if p.key not in unavailable]
-    candidate_keys = {p.key for p in candidates}
-    for p in rows:  # a code no decision leaves billed: an answered open question still closes it
-        if p.key not in candidate_keys:
+    counted = {p.key for p in candidates}
+    bases = _bases(candidates, service, readable)
+    # Member answers: a code whose open question (as that reading leaves it; for a reinstated exclusion, also what its
+    # approval waits for) a member answered as not documented or not confirmable is detail_unavailable - that code, and
+    # nothing else. One pass: no answer moves a hold, so no answer moves another code's questions. A code no decision
+    # leaves billed is closed by an answered open question too.
+    unavailable = {}
+    for p in rows:
+        if p.key in counted:
+            by = _unavailable_by(p, bases.get(p.code), readable, answered, counted=True)
+        else:
             by = _unavailable_by(p, None, False, answered)
-            if by[0]:
-                unavailable[p.key] = by
-    bases = _bases(effective, service, readable)
+        if by[0]:
+            unavailable[p.key] = by
+    # The EFFECTIVE set: the counted codes still in review. The combination readings that hold nothing read it (the
+    # endoscopic-family check, the modifier review): a code a member answered away is no longer billed beside the others.
+    effective = [p for p in candidates if p.key not in unavailable]
     keys = {p.key for p in effective}
-    # Whether the effective set is the engine's own (the selected codes, none rejected, none reinstated, none answered
-    # away): when it is not, a check that could not be recomputed is marked stale rather than shown as current.
-    moved = keys != {p.key for p in rows if p.bucket == SELECTED}
+    # Whether a set is the engine's own (the selected codes, none rejected, none reinstated, none answered away): when it
+    # is not, a check that could not be recomputed over it is marked stale rather than shown as current.
+    selected = {p.key for p in rows if p.bucket == SELECTED}
+    moved, counted_moved = keys != selected, counted != selected
     pfs = _pfs_rows(retrieval)
     sources = _sources(reference_sources)
     pfs_keys = {s.key for s in sources if s.kind == PFS}
@@ -438,7 +505,8 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
                        if decidable(p) and any(c.get('id') == PRESENCE_CHECK and c.get('status') == 'pass'
                                                for c in p.checks))
     active_rows = engine.endoscopic_rows((p.code, pfs.get(p.code)) for p in effective)
-    reinstated_procedures = any(p.key in keys and p.bucket == EXCLUDED
+    # a reinstated same-day procedure holds the gated E/M (a hold: the counted set, whatever a member answered of it)
+    reinstated_procedures = any(p.key in counted and p.bucket == EXCLUDED
                                 and any(c.get('id') == SAME_DAY_PROCEDURE for c in p.checks) for p in rows)
     views = {}
     for p in rows:
@@ -450,7 +518,8 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
             fact, value = unavailable[p.key]
             words = ANSWER_WORDS.get(value, 'unavailable')
             views[p.key] = View(
-                key=p.key, code=p.code, bucket=p.bucket, decision=action, active=False, status=STATUS_EXCLUDED,
+                key=p.key, code=p.code, bucket=p.bucket, decision=action, active=p.key in counted,
+                status=STATUS_EXCLUDED,
                 reason=DETAIL_UNAVAILABLE, checks=tuple(dict(c) for c in p.checks), questions=(), added=(),
                 released=(), withheld_by='', reinstatement_clear=False, same_day_held=same_day,
                 blocker=(f'{p.code} was approved, but a detail it needs was answered as {words}: revoke the approval'
@@ -464,7 +533,7 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
         holds = list(p.holds)
         added, released, recomputed, stale = [], [], [], []
         active = p.key in keys
-        stored_clear = any(c.get('id') == REINSTATEMENT_CHECK and c.get('status') == 'pass' for c in p.checks)
+        stored_clear = _reinstatement_clear(p)
         held = bases.get(p.code) if active else None
         if active and readable:
             at = _find(items, BASE_CHECK)
@@ -500,8 +569,14 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
                 released.append(BASE_FACT)
                 holds = [fact for fact in holds if fact != BASE_FACT]
                 questions = [q for q in questions if q.get('fact') != BASE_FACT]
-        elif active and moved and _find(items, BASE_CHECK) is not None:
-            stale.append(BASE_CHECK)
+        elif active and counted_moved and _find(items, BASE_CHECK) is not None:
+            stale.append(BASE_CHECK)  # the base rule reads the counted set
+        base_added = bool(added)
+        # a reinstated exclusion is asked what its stored gate says its approval waits for (refutation round 2, L3-8)
+        waits = _reinstatement_waits(p) if p.bucket == EXCLUDED and active else ()
+        for wait in waits:
+            questions.append(dict(wait))
+            added.append(wait['fact'])
         if decidable(p):
             at = _find(items, ENDOSCOPIC_CHECK)
             if at is not None and items[at].get('status') != 'not_verified':
@@ -516,20 +591,25 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
                     stale.append(ENDOSCOPIC_CHECK)
         if p.bucket == SELECTED and active and (added or released):
             status = NEEDS_CLARIFICATION if holds or _find(items, DATE_CHECK) is not None else READY
+        elif p.bucket == EXCLUDED and active and (base_added or not stored_clear):
+            # a reinstated exclusion whose approval waits on a question - its stored gate's, the encounter's date, or the
+            # base rule's - needs clarification, as a selected code held on the same question does: never ready
+            status = NEEDS_CLARIFICATION
         else:
             status = p.status
         withheld = ''
-        if p.bucket == SELECTED and active and not action and added and status == NEEDS_CLARIFICATION:
+        if p.bucket == SELECTED and active and not action and base_added and status == NEEDS_CLARIFICATION:
             withheld = BASE_CHECK
         elif p.bucket == EXCLUDED and action == REINSTATE:
-            withheld = (REINSTATEMENT_CHECK if not stored_clear else BASE_CHECK if added
+            withheld = (REINSTATEMENT_CHECK if not stored_clear else BASE_CHECK if base_added
                         else SAME_DAY_EM_GATE if same_day else '')
         review = _modifier_review(p, effective, service, retrieval) if active else None
         blocker = ''
         if action == APPROVE:
-            if (p.bucket == SELECTED and status == NEEDS_CLARIFICATION and held) or (p.bucket == EXCLUDED and added):
-                blocker = _held_blocker(p, held, effective, service.get(p.key))
-            elif p.bucket == SELECTED and status == NEEDS_CLARIFICATION:
+            if (p.bucket == SELECTED and status == NEEDS_CLARIFICATION and held) or (p.bucket == EXCLUDED
+                                                                                    and base_added):
+                blocker = _held_blocker(p, held, candidates, service.get(p.key))
+            elif status == NEEDS_CLARIFICATION:
                 blocker = f'{p.code} was approved, but it now needs clarification; revoke the approval'
             elif chosen and (review is None or any(m not in review['options'] for m in chosen)):
                 blocker = (f'{p.code} was approved with modifier {", ".join(chosen)}, but the separate-lesion '
@@ -537,7 +617,7 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
         views[p.key] = View(
             key=p.key, code=p.code, bucket=p.bucket, decision=action, active=active, status=status, reason='',
             checks=tuple(items), questions=tuple(questions), added=tuple(added), released=tuple(released),
-            withheld_by=withheld, reinstatement_clear=stored_clear and not added, same_day_held=same_day,
+            withheld_by=withheld, reinstatement_clear=stored_clear and not base_added, same_day_held=same_day,
             blocker=blocker, recomputed=tuple(dict.fromkeys(recomputed)), stale=tuple(dict.fromkeys(stale)),
             modifier_review=review, modifiers=chosen, summary=summary(p, inventory), answer='')
     return views
