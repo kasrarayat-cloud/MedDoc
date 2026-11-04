@@ -760,14 +760,15 @@ def _not_separately_coded(completeness, services):
 
 
 def _unresolved(completeness, services):
+    """What the reconciliation leaves unresolved, in fixed sentences. An unresolved item is a documented service (or
+    act) performed today that no supported code accounts for (reconcile.Unresolved: no_proposal, not_covered,
+    unsupported, coverage_unknown) - an office visit included, which is then documented, never "not documented"; only a
+    visit the reading leaves uncertain is one that is mentioned but not established."""
     out = []
     for item in completeness.get('unresolved_items') or []:
         if not isinstance(item, dict):
             continue
         family = item.get('family')
-        if family == 'gi.office_em':
-            out.append('An office visit is mentioned but is not documented as a separate service.')
-            continue
         act = item.get('act')
         what = _family_label(family) + (f': {_act_label(act)}' if isinstance(act, str) and act else '')
         reason = item.get('reason')

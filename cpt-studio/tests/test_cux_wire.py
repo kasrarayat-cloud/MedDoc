@@ -19,7 +19,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.conf import settings
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 
 from studio import answers, customer_api, jobs, models, progress, reports, review
 from tests.support import factories as f
@@ -278,3 +278,16 @@ class SlowWordingTests(ProgressCase):
                               r'timed out|expire|cut off|\bstopped\b')
         for message in [*progress.SLOW_MESSAGES.values(), progress.OVERDUE, progress.QUEUE_SLOW, progress.TAKING_TURN]:
             self.assertIsNone(promised.search(message), message)
+
+
+class UnresolvedWordingTests(SimpleTestCase):
+    def test_an_office_visit_without_a_code_is_documented_not_merely_mentioned(self):
+        """reconcile.Unresolved names a service performed today with no supported code: an office visit among them is
+        documented (its time or decision making are in the note), so it is never said to be "not documented"."""
+        completeness = {'unresolved_items': [{'service': 'S1', 'family': 'gi.office_em', 'act': '',
+                                              'reason': 'no_proposal'}]}
+        self.assertEqual(customer_api._unresolved(completeness, [{'id': 'S1', 'family': 'gi.office_em',
+                                                                  'status': 'performed'}]),
+                         ['Office / outpatient evaluation and management: no supported code was found for it.'])
+        self.assertEqual(customer_api._unresolved({}, [{'id': 'S1', 'family': 'gi.office_em', 'status': 'uncertain'}]),
+                         ['An office visit is mentioned but is not documented as a separate service.'])
