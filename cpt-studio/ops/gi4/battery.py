@@ -6,8 +6,11 @@ In-process and offline: nothing is sent and no database is read.
 Permanent rows: the minimal design's 28 cases (its battery.py, verbatim), the judge's J1-J8, K1-K3, E1-E4 and S1-S3
 (judge_battery.py, verbatim), the h4-05 counterfactual (the judge's F1: 43259 citing the narrative is EXCLUDED as
 installed, the agreement gate's excluding side; package PA declares it moving to held), and package PA's PA1-PA3 (the
-gate's second reader: two that disagree, held; one that agrees under its section's own heading, excluded). Each code
-carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
+gate's second reader: two that disagree, held; one that agrees under its section's own heading, excluded), and the
+R8 register rows (prefix 'R8 ', package P2 READ-HOLD of 2026-11-03: the previously reported false READYs of R8 section
+1.2, each with its controls; tests/fixtures/gi4/declarations/cux-hold.json declares their movements). A row may cite
+several passages for one code (a tuple of quotes) and be read with a member's answer (R8_USER: the regression walk's
+date). Each code carries a PROVISIONAL truth (no qualified GI coder has reviewed it):
   done             performed today: an exclusion is a violation
   done_incomplete  performed today, incompletely: an exclusion is a violation, and READY needs an incompleteness signal
                    (a modifier consideration or a non-pass check)
@@ -34,6 +37,72 @@ B = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 H405 = (boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-05.txt').read_text(encoding='utf-8')
 FILL = ''.join(f'Line {i} of the outside summary lists medications and allergies in detail.\n' for i in range(8))
 SNARE = 'A 10 mm polyp was removed with a hot snare.'
+# package P2 READ-HOLD's register rows (R8 section 1.2, probes/R8-history-defects/r8_cases.py): their shared texts
+R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery '
+            'center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was '
+            'completed.\n')
+R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
+R8_SNARE_HEAD = R8_COLON.replace('Procedure: Colonoscopy', 'Procedure: Colonoscopy with hot snare polypectomy')
+R8_TOP = B + 'Procedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+R8_COLON7N = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
+              'normal. No biopsies were taken.')
+R8_COLON1 = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
+             'normal. No polyps were seen.')
+R8_TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
+R8_DIAG = B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+R8_CECUM_LM = ('The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve.')
+R8_LAST = 'Last colonoscopy: 9 mm polyp removed with hot snare.'
+R8_INDICATION = 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare.'
+R8_INDEX = 'At the index colonoscopy, a 9 mm polyp was removed with a hot snare.'
+R8_L39 = ('Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the '
+          'outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, '
+          'the orders, and documentation.')
+R8_L40 = ('Complexity of decision making: moderate. One new problem with an uncertain diagnosis; outside results and an '
+          'outside note reviewed; tests ordered.')
+R8_TWIN = R8_L39.replace(' the orders,', '', 1)  # h4-01's time statement, orders-free (R8 D12's chassis)
+R8_CC = 'Loose stools, bloating and tiredness for about four months.'
+R8_PROC = B + 'Procedure report (fictional)\nDate of service: 2026-11-03\nPlace of service: Ambulatory surgery center\n'
+R8_SNARED = 'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+R8_HISTORY = 'History: a hot snare polypectomy of a rectal polyp was performed at an outside colonoscopy in 2023.'
+R8_COMBINED = (R8_PROC + 'Procedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to '
+               'the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\n'
+               'COLONOSCOPY: The colonoscope was advanced to the cecum.\n' + R8_SNARED + '\n')
+R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+          'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
+R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+           'Procedure: ERCP\nThe duodenoscope was advanced to the major papilla.\nDeep biliary cannulation was '
+           'achieved.\n')
+
+
+def _r8(head, *lines):
+    return head + ''.join(line + '\n' for line in lines)
+
+
+def _r8_edit(text, *pairs):
+    for old, new in pairs:
+        assert text.count(old) == 1, old[:60]
+        text = text.replace(old, new, 1)
+    return text
+
+
+R8_EM = _r8_edit((boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-01.txt').read_text(
+    encoding='utf-8'), ('\n' + R8_L40, ''), (R8_L39, R8_TWIN))
+
+
+R8_NAMED_EGD = _r8_edit((boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-03.txt').read_text(
+    encoding='utf-8'), ('Variceal Banding Session', 'EGD with Variceal Band Ligation'))
+R8_STOPPED = _r8_edit(R8_NAMED_EGD, ('Retroflexion showed no gastric varices.',
+                                     'Retroflexion showed no gastric varices. We stopped in the stomach.'))
+R8_BANDS_PASSED = 'The gastroscope was withdrawn, fitted with a multiband ligation device and passed again.'
+R8_BANDS = 'Large esophageal varices with red wale marks; six bands placed for primary prophylaxis.'
+
+
+def _r8_earlier(line):
+    """R8 time-1's document: an earlier colonoscopy's polypectomy on its own line, then today's diagnostic one."""
+    return (R8_DIAG + line + '\nProcedure: Colonoscopy\n' + R8_CECUM_LM + '\nA 15 mm sessile polyp was seen in the '
+            'transverse colon and was not removed today.\n')
+
 
 # (text, [(code, quote, truth)]); a truth 'X|MAY' is the author's X disputed by the second review (judged as MAY)
 CASES = {
@@ -300,7 +369,162 @@ CASES = {
         'Procedures\nThe biliary stent was exchanged.\n\nProcedure\nThe duodenoscope was advanced to the second part of the '
         'duodenum. The bile duct was cannulated and a biliary sphincterotomy was performed.\n',
         [('43276', 'The biliary stent was exchanged.', 'not_done')]),
+    # --- package P2 READ-HOLD (2026-11-03): the register's inputs (R8 section 1.2), READY on c9f20a148 where the truth
+    # says not done; tests/fixtures/gi4/declarations/cux-hold.json declares each movement ---
+    # D1: a failed or attempted act released by the own-passage path
+    'R8 D1 N1 hot snare polypectomy failed': (
+        _r8(R8_COLON, R8_SEEN, 'Hot snare polypectomy failed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Hot snare polypectomy failed.', 'not_done')]),
+    'R8 D1 N2 attempted, could not be removed': (
+        _r8(R8_COLON, R8_SEEN, 'Hot snare polypectomy was attempted but the polyp could not be removed.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'Hot snare polypectomy was attempted but the polyp could not be removed.', 'not_done')]),
+    'R8 D1 N3 biopsy attempted, no tissue': (
+        _r8(R8_COLON, R8_SEEN, 'Cold forceps biopsy was attempted but no tissue was obtained.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45380', 'Cold forceps biopsy was attempted but no tissue was obtained.', 'not_done')]),
+    'R8 D1 N4 ERCP stent placement failed': (
+        _r8(R8_ERCP, 'Biliary stent placement failed.'),
+        [('43260', 'Deep biliary cannulation was achieved.', 'done'),
+         ('43274', 'Biliary stent placement failed.', 'not_done')]),
+    # D2: a failed act read as performed by the clause reader
+    'R8 D2 N10 antral biopsy failed': (
+        _r8(R8_EGD, 'A small nodule was seen in the gastric antrum.', 'Cold forceps biopsy of the antrum failed.'),
+        [('43235', 'The endoscope was advanced to the second part of the duodenum.', 'done'),
+         ('43239', 'Cold forceps biopsy of the antrum failed.', 'not_done')]),
+    # D3: a denial read as done, or not tied to its act
+    'R8 D3 N15 no polyps removed, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'No polyps were removed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'No polyps were removed.', 'no_ready')]),
+    'R8 D3 N17 polyp was not removed, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'The polyp was not removed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'The polyp was not removed.', 'no_ready')]),
+    'R8 D3 N16 we did not remove it, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'We did not remove the polyp.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'We did not remove the polyp.', 'no_ready')]),
+    'R8 D3 release-0 none was snared': (
+        _r8(R8_COLON, 'Three polyps were seen in the sigmoid colon.', 'Of the three polyps, none was snared.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Of the three polyps, none was snared.', 'not_done')]),
+    'R8 D3 release-0 at no point': (
+        _r8(R8_COLON, R8_SEEN, 'At no point was the polyp snared.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'At no point was the polyp snared.', 'not_done')]),
+    'R8 D3 release-0 without resection': (
+        _r8(R8_COLON, 'The examination was completed without endoscopic resection of the 25 mm sigmoid polyp by hot '
+                      'snare.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'The examination was completed without endoscopic resection of the 25 mm sigmoid polyp by hot snare.',
+          'not_done')]),
+    'R8 D3 negtime-0 biopsies not obtained (whether)': (
+        _r8(R8_EGD, 'A 1 cm ulcer was seen in the gastric antrum.', 'Biopsies to determine whether this represents '
+            'malignancy were not obtained because of anticoagulation.'),
+        [('43235', 'The endoscope was advanced to the second part of the duodenum.', 'done'),
+         ('43239', 'A 1 cm ulcer was seen in the gastric antrum.', 'not_done')]),
+    'R8 D3 declared:1 period-ended row, No checked': (
+        _r8(R8_COLON, 'Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612'),
+        [('45378', R8_CECUM, 'done'), ('45380', 'Biopsy of the sigmoid colon.', 'no_ready')]),
+    # D4: another procedure's sentence in a combined report (the correct code on it is held too: fail-closed)
+    'R8 D4 F7N EGD biopsy line, colonoscopy denies': (
+        R8_TOP + 'Procedures: EGD and colonoscopy\nEGD: The gastroscope was advanced to the second portion of the '
+        'duodenum. Erythema was seen in the gastric antrum.\nBiopsies were taken with cold forceps.\n' + R8_COLON7N + '\n',
+        [('43239', 'Biopsies were taken with cold forceps.', 'done'), ('45378', R8_COLON7N, 'done'),
+         ('45380', 'Biopsies were taken with cold forceps.', 'not_done')]),
+    'R8 D4 F1 EGD snare line, colonoscopy normal': (
+        R8_TOP + 'Procedures: EGD and colonoscopy\nEGD: The gastroscope was advanced to the second portion of the '
+        'duodenum. A 6 mm sessile polyp was seen in the gastric body.\nThe polyp was removed with a hot snare.\n'
+        + R8_COLON1 + '\n',
+        [('43251', 'The polyp was removed with a hot snare.', 'done'), ('45378', R8_COLON1, 'done'),
+         ('45385', 'The polyp was removed with a hot snare.', 'not_done')]),
+    # D5: a pathology addendum's specimen line
+    'R8 D5 F4B pathology specimen line': (
+        R8_COLON + R8_TODAY_BX + '\n\nPATHOLOGY ADDENDUM (specimens from the colonoscopy of 2026-09-02)\nSigmoid colon '
+        'polyp, hot snare polypectomy: tubular adenoma.\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', 'Sigmoid colon polyp, hot snare polypectomy: tubular adenoma.',
+                                         'not_done')]),
+    # D6: a pathology addendum heading (dated before the service date)
+    'R8 D6 F4C pathology addendum heading': (
+        R8_COLON + R8_TODAY_BX + '\n\nPATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon\n'
+        'Sigmoid colon, polypectomy: tubular adenoma.\n',
+        [('45380', R8_TODAY_BX, 'done'),
+         ('45385', 'PATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon', 'not_done')]),
+    # D8: an indication line inside a titled report (the indication alone is held on c9f20a148 already)
+    'R8 D8 C1 indication line in a titled report': (
+        R8_DIAG + R8_INDICATION + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX + '\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', R8_INDICATION, 'not_done')]),
+    'R8 D8 C1 indication line and the reach sentence cited': (
+        R8_DIAG + R8_INDICATION + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX + '\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', (R8_INDICATION, R8_CECUM), 'not_done')]),
+    # D9: an act at another time (history, "last", index or planned)
+    'R8 D9 time-1 last colonoscopy line': (_r8_earlier(R8_LAST), [('45385', R8_LAST, 'not_done')]),
+    'R8 D9 time-2 last colonoscopy line, base cited': (
+        _r8_earlier(R8_LAST), [('45378', R8_CECUM_LM, 'done'), ('45385', R8_LAST, 'not_done')]),
+    'R8 D9 index colonoscopy prose': (_r8_earlier(R8_INDEX), [('45385', R8_INDEX, 'not_done')]),
+    'R8 D9 release-1 most recent colonoscopy': (
+        _r8(R8_COLON, 'At her most recent colonoscopy the polyp was removed by cold snare.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'At her most recent colonoscopy the polyp was removed by cold snare.', 'not_done')]),
+    'R8 D9 release-1 last spring': (
+        _r8(R8_COLON, 'A sigmoid polyp was removed by cold snare last spring.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'A sigmoid polyp was removed by cold snare last spring.', 'not_done')]),
+    'R8 D9 release-1 to be removed tomorrow': (
+        _r8(R8_COLON, R8_SEEN, 'The polyp is to be removed by hot snare tomorrow.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'The polyp is to be removed by hot snare tomorrow.', 'not_done')]),
+    'R8 D9 release-1 ordered by the referrer': (
+        _r8(R8_COLON, R8_SEEN, 'Cold snare removal of the polyp was ordered by the referring physician.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'Cold snare removal of the polyp was ordered by the referring physician.', 'not_done')]),
+    # D12: an E/M visit that is not an in-person visit of this date (h4-01's time-only, orders-free twin; the walk's date)
+    'R8 D12 E/M control, h4-01 time-only twin': (R8_EM, [('99204', R8_TWIN, 'done')]),
+    'R8 D12 E/M not seen in person, history, plain': (
+        _r8_edit(R8_EM, (R8_CC, R8_CC + ' Patient not seen in person today.')), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, history, NBSP': (
+        _r8_edit(R8_EM, (R8_CC, R8_CC + ' Patient not\u00a0seen\u00a0in\u00a0person today.')),
+        [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, exam, plain': (
+        _r8_edit(R8_EM, ('Vital Signs and Exam\n', 'Vital Signs and Exam\nPatient not seen in person today.\n')),
+        [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, exam, NBSP': (
+        _r8_edit(R8_EM, ('Vital Signs and Exam\n',
+                         'Vital Signs and Exam\nPatient not\u00a0seen\u00a0in\u00a0person today.\n')),
+        [('99204', R8_TWIN, 'no_ready')]),
+    # D13: a named EGD whose extent a statement of its own contradicts (h4-03 with the EGD named; the walk's date)
+    'R8 D13 named EGD control, h4-03 as written': (R8_NAMED_EGD, [('43244', R8_BANDS_PASSED, 'done')]),
+    'R8 D13 named EGD, we stopped in the stomach': (R8_STOPPED, [('43244', R8_BANDS_PASSED, 'no_ready')]),
+    'R8 D13 named EGD, stopped in the stomach, two passages': (
+        R8_STOPPED, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'no_ready')]),
+    'R8 D13 named EGD control, two passages': (R8_NAMED_EGD, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'done')]),
+    # D15: a base code beside the service that includes it (an EGD inside an EUS)
+    'R8 D15 EGD with EUS, base EGD coded': (
+        _r8(B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+                'Procedure: EGD with EUS', 'The echoendoscope was advanced to the second part of the duodenum.',
+            'Endosonographic examination of the pancreas showed a 2 cm hypoechoic mass in the pancreatic head.',
+            'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.'),
+        [('43242', 'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.', 'done'),
+         ('43235', 'The echoendoscope was advanced to the second part of the duodenum.', 'no_ready')]),
+    # R3 7.5.1, the narrow evidence hold: every cited passage another service's, another time's or a denial
+    'R8 D3 N9 considered but not performed': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'Snare removal was considered but not performed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Snare removal was considered but not performed.', 'no_ready')]),
+    'R8 E1 history sentence cited, snare also done today': (
+        R8_PROC + 'Procedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_SNARED + '\n' + R8_HISTORY + '\n',
+        [('45385', R8_HISTORY, 'unsupported')]),
+    'R8 E2 EGD biopsy sentence cited for a colon snare': (
+        R8_COMBINED, [('45385', 'Cold forceps biopsies were obtained from the gastric antrum.', 'unsupported')]),
+    'R8 E3 colon snare sentence cited for an EGD biopsy': (
+        R8_COMBINED, [('43239', R8_SNARED, 'unsupported')]),
+    # D10: an attached prior report's title
+    'R8 D10 attached prior EGD report title': (
+        R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
+        'Procedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. The duodenum was normal.\n',
+        [('45378', R8_CECUM, 'done'), ('43235', 'Upper endoscopy report (fictional)', 'not_done')]),
 }
+# The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
+R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
+    'R8 D12 E/M control, h4-01 time-only twin', 'R8 D12 E/M not seen in person, history, plain',
+    'R8 D12 E/M not seen in person, history, NBSP', 'R8 D12 E/M not seen in person, exam, plain',
+    'R8 D12 E/M not seen in person, exam, NBSP')}
+R8_USER.update({name: {'service_date': '2026-10-06'} for name in (
+    'R8 D13 named EGD control, h4-03 as written', 'R8 D13 named EGD, we stopped in the stomach',
+    'R8 D13 named EGD, stopped in the stomach, two passages', 'R8 D13 named EGD control, two passages')})
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')
@@ -315,11 +539,16 @@ def modules():
 
 
 def response(m, text, codes):
+    """The synthetic answer: one selected code per entry, its quote (or each quote of a tuple: several passages of one
+    code, as a provider cites them) located exactly in the text."""
     found = []
     for i, (code, quote, _) in enumerate(codes):
-        start = text.index(quote)
+        spans = []
+        for one in (quote if isinstance(quote, tuple) else (quote,)):
+            start = text.index(one)
+            spans.append(m.EvidenceSpan(0, start, start + len(one), one, True, 1))
         found.append(m.ProviderCode(role='selected', system='cpt', code=code, display='SYNTHETIC', index=i,
-                                    evidence=(m.EvidenceSpan(0, start, start + len(quote), quote, True, 1),)))
+                                    evidence=tuple(spans)))
     return m.NormalizedResponse(provider='corti', adapter_version='corti-coding-v2@cptstudio-1', codes=tuple(found))
 
 
@@ -370,7 +599,8 @@ def run_row(m, name, text, codes, user_values=None) -> dict:
 
 def run(only='', m=None) -> dict:
     m = m or modules()
-    return {name: run_row(m, name, text, codes) for name, (text, codes) in CASES.items() if only in name}
+    return {name: run_row(m, name, text, codes, R8_USER.get(name)) for name, (text, codes) in CASES.items()
+            if only in name}
 
 
 def movements(base: dict, head: dict) -> list:

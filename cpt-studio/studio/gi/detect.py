@@ -6003,6 +6003,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if _p2_stopped_short(an, sentences, depth):
+        return None  # P2 READ-HOLD, R8 D13: "We stopped in the stomach." beside a reach to the duodenum: withheld (asked)
     if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
                                                                                  labelled):
         return None  # "introduced into the esophagus": where the examination starts, never how far it went
@@ -6019,6 +6021,38 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
+
+
+# P2 READ-HOLD, R8 D13 (reader-repair DESIGN item 4): a statement that the upper examination itself stopped, halted,
+# ended or was terminated or aborted - its subject the examination, the procedure, the scope or "we" - and the landmark
+# it stopped at or in; never a pause on withdrawal or a stop to do something there ("On withdrawal we stopped in the
+# stomach to take biopsies."), and never another thing stopping ("Carvedilol was stopped", "Oozing ... stopped").
+_P2_UPPER_STOP = re.compile(
+    r'\b(?:we|the\s+(?:examination|exam|procedure|study|endoscopy|upper\s+endoscopy|EGD|scope|endoscope|gastroscope|'
+    r'instrument))\s+(?:was\s+|were\s+|had\s+been\s+|had\s+)?(?:stopped|halted|ended|terminated|aborted|turned\s+back'
+    r'|went\s+no\s+further|could\s+go\s+no\s+further|did\s+not\s+(?:go|proceed|advance)\s+(?:any\s+)?further)\b',
+    re.A | re.I)
+_P2_UPPER_PAUSE = re.compile(
+    r'\b(?:on|during|after|before|while)\s+(?:the\s+)?(?:withdrawal|withdrawing|exit|removal\s+of\s+the\s+scope)\b'
+    r'|\bon\s+the\s+way\s+(?:out|in|back)\b|\bbriefly\b|\bto\s+(?:take|obtain|place|band|ligate|biopsy|inspect|examine|'
+    r'photograph|retroflex|apply|treat|inject|clip|suction|irrigate|wash|lavage|look|assess|evaluate|document)\b',
+    re.A | re.I)
+
+
+def _p2_stopped_short(an: Analysis, sentences, depth: int) -> bool:
+    """Whether a clause of the upper service's sentences states that the examination stopped at or in a landmark
+    shallower than ``depth``, the deepest reached (_P2_UPPER_STOP, then an UPPER_LANDMARKS name after it in the clause):
+    the document then contradicts its own extent, so the extent is withheld (held [extent], as the unnamed twin is;
+    hold-only). Bounded: a search per clause, the landmark table only in a clause that states a stop."""
+    text = an.text
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            stop = _P2_UPPER_STOP.search(text, cs, ce)
+            if stop is None or _P2_UPPER_PAUSE.search(text, cs, ce):
+                continue
+            if any(d < depth and pattern.search(text, stop.end(), ce) for _, d, pattern in cues.UPPER_LANDMARKS):
+                return True
+    return False
 
 
 def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
@@ -6812,7 +6846,10 @@ _PV1_SPAN = re.compile(r'\b(?:for|in|over|within)\s+(?:the\s+)?(?:past\s+|last\s
 # The visit stated as in person ("seen in person today", "is seen today", "converted to an in-person visit")
 _PV1_IN_PERSON = re.compile(
     r"(?<!not )(?<!never )(?<!n't )\b(?:seen|evaluated|examined|interviewed)\s+(?:today\s+)?in[- ]person\b"
-    r'|(?<!no )(?<!not )\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
+    # (P2 READ-HOLD, R8 D12: never after a verb of its own - "not seen in person today" - which the verb's own
+    # alternative above reads with its negation)
+    r'|(?<!no )(?<!not )(?<!seen )(?<!evaluated )(?<!examined )(?<!interviewed )'
+    r'\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
     r'|\bconverted\s+to\s+(?:an?\s+)?(?:in[- ]person|office|clinic|face[- ]to[- ]face)\b|\bface[- ]to[- ]face\b'
     r"|(?<!not )(?<!never )(?<!n't )\b(?:is|was)\s+seen\s+(?:in\s+(?:the\s+)?(?:office|clinic)\s+)?today\b",
     re.A | re.I)
@@ -7018,7 +7055,42 @@ def _pv1_not_in_person_words(an: Analysis) -> tuple[Optional[str], tuple[tuple[i
                 if after is None or not _PV1_PHONE_NUMBER.search(after.group(0)):
                     words = title.group(0).strip()
                     break
+        if words is None:
+            # P2 READ-HOLD, R8 D12: the same reading of a folded copy - no-break and other Unicode spaces as a space,
+            # soft hyphens and zero-width characters removed - where the text holds any ("Patient not<NBSP>seen<NBSP>in
+            # <NBSP>person today." reads as the plain sentence does). Hold-only: it can only add the document's hold.
+            folded = _p2_folded_analysis(an)
+            if folded is not None:
+                words = _pv1_not_in_person_words(folded)[0]
         an.memo[key] = (words, spans, tuple(s for s, _ in spans))
+    return an.memo[key]
+
+
+# P2 READ-HOLD, R8 D12: what a fold turns into a space and what it removes (cues are ASCII, cues.FLAGS: "\s" never
+# matches a no-break space, and a soft hyphen or a zero-width character splits a word)
+_P2_FOLD_SPACE = re.compile('[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]')
+_P2_FOLD_DROP = re.compile('[\u00ad\u180e\u200b\u200c\u200d\u2060\ufeff]')
+
+
+def _p2_fold(text: str) -> str:
+    return _P2_FOLD_DROP.sub('', _P2_FOLD_SPACE.sub(' ', text))
+
+
+def _p2_folded_analysis(an: Analysis) -> Optional['Analysis']:
+    """The analysis of the folded copy of ``an``'s text (_p2_fold), for C4's hold only, or None when the fold changes
+    nothing (so a text with no foldable character costs one pass of two searches). Built as _analysis builds one, for
+    the same effective service date, without routing it: only the C4 reading reads it, once per document (memo)."""
+    key = ('p2-folded',)
+    if key not in an.memo:
+        folded = _p2_fold(an.text) if (_P2_FOLD_SPACE.search(an.text) or _P2_FOLD_DROP.search(an.text)) else an.text
+        if folded == an.text:
+            an.memo[key] = None
+        else:
+            lay = layout(folded)
+            interventions = tuple(Intervention(label, families, m.start(), m.end())
+                                  for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(folded))
+            an.memo[key] = Analysis(folded, lay, _service_mentions(folded), _em_mentions(folded, lay),
+                                    _clause_cues(folded), ctx.find_dates(folded), an.service_date, interventions)
     return an.memo[key]
 
 

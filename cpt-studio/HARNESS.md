@@ -2009,3 +2009,33 @@ findings against what remains were not reproduced. So no concrete finding justif
   excluded and 42 held, as on the base.
 - The suite passes 5,278 tests in 220 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
   ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+## Core repair and customer interface (2026-11-03): P2 READ-HOLD
+
+The hold-only repairs of the previously reported false READYs on the Corti-only path (R8's register, D1-D10, D12, D13,
+D15) and R3 7.5.1's narrow evidence hold, declared before the code in `tests/fixtures/gi4/declarations/cux-hold.json`.
+Every rule can only move a code from READY to held (`selected/needs_clarification`); none excludes and none releases.
+
+- **The own-passage release** (`engine._second_opinion`, `_own_passage_may_stand`) stands only for a `performed`
+  routing-era reading of a passage that names no failure or yield of nothing (`cues.UNDONE_ACT`, D1), lies in no other
+  role's entry (D5), and whose act the inventory's own placement rule gives to the matched family alone (D4,
+  fail-closed: the correct code on an unplaceable sentence of a combined report is held too).
+- **The clause reader** (`services.read_clause`) reads a failure word on the act's own predicate as a doubt (D2), the
+  denials "none (of ...) was", "at no point was", "without" over the act's noun phrase and a purpose phrase before the
+  act's own negated predicate (D3), and a boxed row whose own options check a denial, by the row's own convention (D3).
+  An indication line inside a titled report is an indication over its own line only (D8).
+- **The second opinion's hold arms**: a routing-era denial of the code's own act is a status signal (D3); a planned or
+  historical reading by any cue - never a clause cue in a passage that says today - holds on the matched act's evidence
+  or, for a match with no act, on the service's own statement (D9, D6, D10).
+- **C4** reads its not-in-person words on a folded copy too (no-break and Unicode spaces, soft hyphens, zero-width
+  characters), and "in person today" no longer matches inside "not seen in person today" (D12). A named EGD whose report
+  says the examination stopped short of its reach has its extent withheld (D13). A base code whose service is the
+  endoscopic portion of another documented service is held (D15, `engine._base_within`).
+- **The narrow evidence hold** (`engine._passages_elsewhere`): a procedure code with warn or fail support whose every
+  cited passage is another service's, or another time's or a denial by a cue of its own, is held.
+
+Not coded, recorded in the declaration: the D9 base companion (it releases the base beside a hedged therapeutic code,
+a must-stay-held twin); the D7 heading helper's wiring (`services.labelled_service_heading` is P1's `parts()` to call);
+D6's title-branch line in `_on_procedure_line` (P1's). I1: the 41 register rows are permanent battery rows with 39
+declared movements; H1 replay is EQUAL; H2 holds with no movement; H3 has no movement; one parity case moves
+(`two-codes-a-plan-code-and-hcpcs`, its 45378 adds a performed_status hold), to be re-pinned at integration.

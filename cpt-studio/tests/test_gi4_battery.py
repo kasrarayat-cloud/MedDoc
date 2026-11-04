@@ -30,12 +30,15 @@ class AssessBatteryTests(SimpleTestCase):
         cls.result = battery.run()
 
     def test_the_permanent_rows(self):
-        self.assertEqual(len(battery.CASES), 50)
         names = list(battery.CASES)
+        # package P2 READ-HOLD's register rows (prefix 'R8 '; tests/test_cux_hold.py reads them against cux-hold.json)
+        register = [n for n in names if n.startswith('R8 ')]
+        self.assertEqual(len(battery.CASES) - len(register), 50)
+        self.assertEqual(sorted(set(battery.R8_USER) - set(register)), [])  # a member answer only for a register row
         for label in ('J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7', 'J8', 'K1', 'K2', 'K3', 'E1', 'E2', 'E3', 'E4', 'S1', 'S2',
                       'S3', 'PA1', 'PA2', 'PA3'):
             self.assertEqual(sum(n.startswith(label + ' ') for n in names), 1, label)
-        minimal = [n for n in names if re.match(r'(?:[JKES][1-8]|S3h|PA[1-3]) ', n) is None]
+        minimal = [n for n in names if re.match(r'(?:[JKES][1-8]|S3h|PA[1-3]|R8) ', n) is None]
         self.assertEqual(len(minimal), 28)  # the minimal design's
         self.assertEqual(sum(n.startswith('S3h ') for n in names), 1)  # the h4-05 counterfactual
         self.assertEqual(sum(n.startswith('PA') for n in names), 3)  # package PA: the agreement gate's second reader

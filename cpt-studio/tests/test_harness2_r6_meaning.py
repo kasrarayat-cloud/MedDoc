@@ -689,6 +689,14 @@ COL_BX = 'Random biopsies were taken with cold forceps.'
 TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
 MATCHED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery '
            'center\nProcedure: Colonoscopy\n' + CECUM + '\n' + TODAY_BX + '\n')
+# P2 READ-HOLD (2026-11-03, R8 D4; tests/fixtures/gi4/declarations/cux-hold.json): an own-passage release now stands only
+# where the act's placement rule gives it to the matched family alone, so C6's "Random biopsies were taken with cold
+# forceps." and F7N's "Biopsies were taken with cold forceps." (no anatomy, two services) are held - the declared
+# fail-closed cost. The label tests below read an own-passage release in the same combined reports through a passage
+# whose anatomy places its act ("Cecal biopsies x2.", "Antral biopsies x2."), which still stands.
+PLACED_COL_BX, PLACED_EGD_BX = 'Cecal biopsies x2.', 'Antral biopsies x2.'
+C6_PLACED = C6.replace(COL_BX, PLACED_COL_BX, 1)
+F7N_PLACED = F7N.replace(EGD7_BX, PLACED_EGD_BX, 1)
 ACT_LABEL = 'Source passages that show the coded act'
 SERVICE_LABEL = 'Source passages of the documented service'
 NOT_THE_ACT = '— cited by the provider; does not show the coded act'
@@ -704,17 +712,18 @@ class EvidenceChipLabelTests(MeaningCase):
         return item, browser(f'visible(cardOf(page(), {json.dumps(item["id"])}))', detail)
 
     def test_e1_corti_s_own_passage_release(self):
-        detail = self.corti_alone(C6, [('45380', COL_BX), ('43251', 'A sessile polyp was removed with a hot snare.')])
+        detail = self.corti_alone(C6_PLACED, [('45380', PLACED_COL_BX),
+                                              ('43251', 'A sessile polyp was removed with a hot snare.')])
         item, card = self.card(detail, '45380')
         self.assertEqual((item['support']['reason'], item['support']['acts'], item['support']['status']),
                          ('own_passage', [], 'warn'))
         self.assertNotIn(ACT_LABEL, card)
         self.assertIn(SERVICE_LABEL, card)
         self.assertNotIn(NOT_THE_ACT, card)
-        self.assertIn(f'“{COL_BX}” — cited by the provider', card)
+        self.assertIn(f'“{PLACED_COL_BX}” — cited by the provider', card)
 
     def test_f7n_the_egd_code_read_from_its_own_passage(self):
-        detail = self.corti_alone(F7N, [('43239', EGD7_BX), ('45378', COLON7N)])
+        detail = self.corti_alone(F7N_PLACED, [('43239', PLACED_EGD_BX), ('45378', COLON7N)])
         item, card = self.card(detail, '43239')
         self.assertEqual((item['support']['reason'], item['support']['acts']), ('own_passage', []))
         self.assertNotIn(ACT_LABEL, card)
@@ -837,8 +846,9 @@ class SourceHighlightTitleTests(MeaningCase):
         return source, cited
 
     def test_e1_and_f7n_the_service_s_passages(self):
-        for text, corti, value in ((C6, [('45380', COL_BX), ('43251', 'A sessile polyp was removed with a hot snare.')],
-                                    '45380'), (F7N, [('43239', EGD7_BX), ('45378', COLON7N)], '43239')):
+        for text, corti, value in ((C6_PLACED, [('45380', PLACED_COL_BX),
+                                                ('43251', 'A sessile polyp was removed with a hot snare.')], '45380'),
+                                   (F7N_PLACED, [('43239', PLACED_EGD_BX), ('45378', COLON7N)], '43239')):
             with self.subTest(value):
                 detail = self.corti_alone(text, corti)
                 item, _ = self.card(detail, value)

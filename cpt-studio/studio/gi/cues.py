@@ -1086,3 +1086,32 @@ UPPER_LOCATIONS = (
 # a deliberate choice (pancreatitis precaution), not a failed ERCP.
 PANCREATIC_SUBJECT = rx(r'\b(?:pancreatic\s+duct|main\s+pancreatic|PD|pancreatic)\b')
 BILIARY_SUBJECT = rx(r'\b(?:common\s+bile\s+duct|bile\s+duct|biliary|CBD|choledoch\w*)\b')
+
+# --- package P2 READ-HOLD (2026-11-03, R8 section 1.3): an act stated as not done, read only to HOLD ------------------
+# A passage that states its act failed, was unsuccessful, abandoned or only attempted, or yielded nothing ("could not be
+# removed", "no tissue was obtained"): it never stands for that act where the documented-service reader reads none
+# (engine._second_opinion's own-passage release, R8 D1 candidate_rb). Hold-only; HEDGE_WORDS (shared with other
+# readers) is not widened.
+UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|ing)?|attempt(?:s|ed|ing)?|"
+                r"could\s+not|couldn['\u2019]t|cannot|can\s+not|unable|without\s+success|no\s+tissue|yield(?:s|ed)?\s+no|"
+                r"not\s+(?:be\s+|been\s+)?(?:obtained|removed|retrieved|placed|achieved|successful|deployed|completed))\b")
+# A failure word of the act's own predicate (services.read_clause, R8 D2): after the mention in its clause ("Cold forceps
+# biopsy of the antrum failed.") or right before it as its attribute ("an unsuccessful polypectomy"). It reads the act
+# uncertain - held, as "attempted" already is - never performed and never denied.
+FAILED_ACT = rx(r'\b(?:failed|unsuccessful(?:ly)?|abandoned)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>failed|unsuccessful|abandoned)[ \t]+(?:[\w-]+[ \t]+){0,3}$')
+# Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
+# mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
+# removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose
+# phrase between an act and its own negated predicate ("Biopsies to determine whether this represents malignancy were
+# not obtained").
+NONE_WAS_BEFORE = rx(r'\bnone\b(?:[ \t]+of\b[^,;:.()\n]{0,60}?)?[ \t,]*\b(?:was|were)[ \t]+(?:[\w-]+ly[ \t]+)?'
+                     r'(?:(?:[a-z]+ed|taken|done)[ \t]+(?:with|by|using)[ \t]+(?:(?:an?|the)[ \t]+)?)?$')
+AT_NO_POINT = rx(r'\b(?:at[ \t]+no[ \t]+(?:point|time|stage)|on[ \t]+no[ \t]+occasion)[ \t]+(?:was|were|did|had)\b')
+PURPOSE_WHETHER = rx(r'[ \t]+to[ \t]+(?:determine|assess|evaluate|establish|exclude|rule[ \t]+out|confirm|check|see|test)'
+                     r'[ \t]+(?:whether|if)\b[^,;:()\n]{0,120}$')
+# An act's own verb denied before it, with no act kind named ("We did not remove the polyp."): the routing-era reader's
+# doubt of such a passage is a status of its own (engine._status_signal, R8 D3), as a denied participle is.
+DENIED_ACT_VERB = rx(r"\b(?:did|do|does|could|would|was|were)(?:\s+not|n['\u2019]t|\s+never)\s+(?:\w+\s+)?"
+                     r"(?:remove|resect|snare|biopsy|take|obtain|sample|perform|excise|retrieve|treat|cauterize|ligate|band|"
+                     r"dilate|inject|ablate|clip|tattoo|place|cannulate|extract)\b")

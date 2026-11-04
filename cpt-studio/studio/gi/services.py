@@ -1046,6 +1046,55 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     return _time_parts(text, out, lay)
 
 
+# P2 READ-HOLD, R8 D7: a note, procedure or addendum label before a heading of its own ("Separate note: Flexible
+# sigmoidoscopy (fictional), 2026-10-14", "Second procedure: ...", "Note 2: ...", "Addendum - ..."). Never a bare field
+# label: "Procedure: Colonoscopy" is a field of today's report (TITLE_FIELD stays as it is).
+LABELLED_NOTE = _rx(r'^[ \t\-*#]*(?:(?:separate|second|another|additional|same[- ]day|subsequent|follow-?on)[ \t]+'
+                    r'(?:note|procedure|report|examination|exam|study|service)|(?:note|procedure|report|part)[ \t]+\d{1,2}'
+                    r'|addend(?:um|a))[ \t]*(?::|[-\u2013\u2014](?=[ \t]))[ \t]*(?=\S)')
+
+
+def labelled_service_heading(text: str, ls: int, le: int, *, service_date: Optional[date], dates, date_starts,
+                             documented: frozenset) -> Optional[tuple[str, Span]]:
+    """(family, the line's span) when the line [ls, le) is a 'Label: <service>' heading that opens a report part of
+    one service (package P2 READ-HOLD, R8 D7: "Separate note: Flexible sigmoidoscopy (fictional), 2026-10-14" had
+    opened no part, so the colonoscopy's titled part ran on over the next note and its biopsy went to the colonoscopy):
+    a note, procedure or addendum label (LABELLED_NOTE), then a heading naming exactly one family that carries nothing
+    but that service's name, its acts, heading vocabulary, its attributes and today's date (_bare_service_heading on
+    the heading after the label, with _heading_time's other-time and doubt checks), on a line with no plan, history or
+    earlier-span word and no history or plan heading. None otherwise. Bounded: at most 100 characters of the line.
+
+    NOT called on this branch: parts() is package P1's. The one wiring line, in parts() right after the role-heading
+    check (before ``numbered = PART_NUMBER.match(line)``), is:
+
+        labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
+                                            date_starts=date_starts, documented=documented)
+        if labelled is not None:
+            family = labelled[0]
+            cuts.append((ls, family, 'physician', labelled[1], 'report'))
+            kind_now = 'report'
+            continue
+    """
+    line = text[ls:le]
+    stripped = line.strip()
+    if not stripped or len(stripped) > 100:
+        return None
+    label = LABELLED_NOTE.match(line)
+    if label is None or PLAN_WORDS.search(line) or HISTORY_WORDS.search(line) or EARLIER_SPAN.search(line) \
+            or HISTORY_HEADING.match(line) or PLAN_HEADING.match(line):
+        return None
+    rest = ls + label.end()
+    families = {f for f, _, pattern in SERVICES if pattern.search(text, rest, le)}
+    if len(families) != 1:
+        return None
+    family = next(iter(families))
+    if not _bare_service_heading(text, rest, le, family, service_date=service_date, dates=dates,
+                                 date_starts=date_starts, documented=documented):
+        return None
+    s = ls + line.index(stripped)
+    return family, Span(s, s + len(stripped), stripped)
+
+
 def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
     """Whether routing's layout reads the line [ls, le) inside a section a heading opened above it (an
     "Indication:" paragraph) that goes on across the line, with no section of its own opening on it (one bisection)."""
@@ -1067,7 +1116,10 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
     plan section inside a titled report stays that report's (its title owns its subsections, as PLAN_HEADING has it)."""
     lay = _sections.layout(text) if lay is None else lay
     timed = [(s.start, _time_end(text, s), s.kind) for s in lay.sections if s.kind in ('history', 'plan')]
-    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)), s.kind) for s in lay.sections
+    # P2 READ-HOLD, R8 D8: an indication whose heading line carries its complete statement speaks for that line inside
+    # a titled report too ('indication_line', _time_kind); any other indication only outside one, as before
+    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)),
+               'indication_line' if _statement_line_end(text, s) is not None else s.kind) for s in lay.sections
               if s.kind == 'indication']
     marks = {m for start, end, _ in timed for m in (start, end)}
     ends = {}
@@ -1143,13 +1195,21 @@ def _opens_todays_report(text: str, lines: Sequence[tuple[int, int]], index: int
 def _time_end(text: str, section) -> int:
     """Where a history or plan section of the layout stops dating what it holds: its end, or the end of its heading's
     line when that line carries a complete statement after the heading."""
+    own = _statement_line_end(text, section)
+    return section.end if own is None else own
+
+
+def _statement_line_end(text: str, section) -> Optional[int]:
+    """The end of a layout section's heading line (past its newline, within the section) when that line carries a
+    complete statement after the heading ("Indication: Surveillance after a sigmoid polyp was removed with a hot
+    snare."); None otherwise ("Indication: surveillance", a heading alone on its line)."""
     line_end = text.find('\n', section.start, section.end)
     line_end = section.end if line_end < 0 else line_end
     if section.heading is not None and section.heading.end <= line_end:
         content = text[section.heading.end:line_end].strip()
         if content and content[-1] in '.!?':
             return min(section.end, line_end + 1)
-    return section.end
+    return None
 
 
 def _paragraph_end(text: str, section) -> int:
@@ -1178,6 +1238,12 @@ def _time_kind(p: _Part, pos: int, timed_kind, own_end: Optional[int]) -> str:
         return p.kind if p.kind == 'report' else 'plan'
     if kind == 'indication' and p.kind == 'other':
         return 'indication'  # why the patient came (never inside a titled report, whose subsections are its own)
+    if kind == 'indication_line' and p.kind in ('other', 'report'):
+        # P2 READ-HOLD, R8 D8: an indication line that carries its own complete statement is why the patient came,
+        # inside a titled report too ("Indication: Surveillance after a sigmoid polyp was removed with a hot snare."):
+        # only that line, never the report's later lines (a blanket p.kind in ('other', 'report') held today's biopsy
+        # under an unterminated "Indication: surveillance")
+        return 'indication'
     if p.kind in ('history', 'plan') and own_end is not None and pos >= own_end:
         return 'report' if p.family else 'other'  # the history or plan this module's heading opened has ended
     return p.kind
@@ -1821,6 +1887,12 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             # done only by its section's default, on a row whose own label lists something else ("Risks discussed -
             # \u2612 Biopsy"): strict boxes (2026-10-25) hold it, never read it as done
             return Reading('uncertain', (f'box: the row\u2019s label \u201c{label}\u201d does not list what was done',))
+        if status in ('performed', 'incomplete') and box_cues and all(cue.startswith('section:') for cue in box_cues) \
+                and _row_marks_a_denial(text, line_start, line_end):
+            # P2 READ-HOLD, R8 D3 (round 7 declared:1): done only by its section's default, on a row whose own line
+            # marks a denying option ("Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612") that the box reader did
+            # not tie to the item: held, never read as done
+            return Reading('uncertain', (ROW_DENIAL_CUE,))
         return Reading(BOX_STATUS.get(status, 'uncertain'), ('box: ' + (box_cues[0] if box_cues else status),)
                        + tuple(box_cues[1:3]))
     # Check boxes on the row, never another line's: "[X] Performed [ ] Not performed".
@@ -1863,8 +1935,14 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                 and not _outside_negation(tail, after):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
+    denied = _denied_before(text, cs, pos, before, after)
+    if denied:
+        return Reading('negated', (denied,))
     for not_verb in NOT_VERB.finditer(whole):
-        if _not_on_another_predicate(text, cs + not_verb.start(), end):
+        if _not_on_another_predicate(text, cs + not_verb.start(), end) \
+                and not _cues.PURPOSE_WHETHER.match(text, end, cs + not_verb.start()):
+            # (P2 READ-HOLD, R8 D3: a purpose phrase between the act and its own negated predicate - "Biopsies to
+            # determine whether this represents malignancy were not obtained" - leaves the negation the act's)
             continue
         # "was complete and was not discontinued": the negated word is the completion word, not this act.
         neg_target = text[cs + not_verb.end(): min(ce, cs + not_verb.end() + 40)]
@@ -1940,6 +2018,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
         return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    failed = _failed_act(text, cs, ce, pos, end)
+    if failed:
+        return Reading('uncertain', ('uncertain: ' + failed,))
     hypothetical = _hypothetical(text, cs, ce, pos, end, report=in_today_report or part.kind in ('report', 'section'))
     if hypothetical:
         return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
@@ -1965,6 +2046,87 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+# P2 READ-HOLD, R8 D3: the box row tie. A row's options are written label-first ("| Yes \u2610 | No \u2612") or box-first
+# ("\u2610 Not done \u2610 Not performed \u2612 Completed"), read from its first box: an option word right before it makes
+# the row label-first. A checked box's option is then the word before it, or after it; the row is tied to a denial
+# when that option is one ("No", "None", "Not done", "Not performed", "Not taken", "Not obtained").
+_DENIAL_OPTION = r'(?:no|none|not[ \t]+(?:done|performed|taken|obtained))'
+_ROW_OPTION_WORD = re.compile(r'(?:yes|no|none|n/?a|done|performed|completed?|taken|obtained)[ \t]*[:\-]?[ \t]*$', FLAGS)
+_ROW_BOX = re.compile('(?P<on>' + _box_symbols.BOX_ON_PATTERN + ')|(?:' + _box_symbols.BOX_OFF_PATTERN + ')')
+_DENIAL_BEFORE_BOX = re.compile(r'\b' + _DENIAL_OPTION + r'[ \t]*[:\-]?[ \t]*$', FLAGS)
+_DENIAL_AFTER_BOX = re.compile(r'[ \t]*' + _DENIAL_OPTION + r'\b', FLAGS)
+ROW_DENIAL_CUE = 'box: its row marks a denying option the box reader does not tie to it, so it is not read as done'
+
+
+def _row_marks_a_denial(text: str, ls: int, le: int) -> bool:
+    """Whether the row on [ls, le) checks a denying option, read by the row's own convention (label-first or
+    box-first, from its first box): "| Yes \u2610 | No \u2612" checks "No"; "\u2610 Not done \u2610 Not performed \u2612
+    Completed" checks "Completed", no denial (tests/test_repairs_r4d_boxes3). Bounded: the marks of one row."""
+    boxes = list(_ROW_BOX.finditer(text, ls, le))
+    if not boxes:
+        return False
+    label_first = _ROW_OPTION_WORD.search(text, ls, boxes[0].start()) is not None
+    for box in boxes:
+        if box.group('on') is None:
+            continue
+        if label_first and _DENIAL_BEFORE_BOX.search(text, ls, box.start()):
+            return True
+        if not label_first and _DENIAL_AFTER_BOX.match(text, box.end(), le):
+            return True
+    return False
+DENIAL_BEFORE_REACH = 160  # characters before a mention read for a negation that governs its noun phrase
+
+
+def _denied_before(text: str, cs: int, pos: int, before: str, after: str) -> str:
+    """The cue of a denial right before the mention at ``pos`` in its clause starting at ``cs``, or '' (package P2
+    READ-HOLD, R8 D3, ACCURACY-RESIDUALS r1 release-0): "none (of ...) was/were" (cues.NONE_WAS_BEFORE: "Of the three
+    polyps, none was snared."); "at no point was/were" over the act's noun phrase (cues.AT_NO_POINT: "At no point was
+    the polyp snared.") with no other predicate or clause opener between; and "without" over the act's own noun phrase
+    beyond the 40 characters read before ("completed without endoscopic resection of the 25 mm sigmoid polyp by hot
+    snare"), with no predicate, mark or clause opener between and never a complication ("without complication"). A
+    negation of another clause (_outside_negation) leaves the act to its own predicate. Bounded: DENIAL_BEFORE_REACH
+    characters."""
+    lo = max(cs, pos - DENIAL_BEFORE_REACH)
+    if _cues.NONE_WAS_BEFORE.search(text, lo, pos):
+        return 'negated: "none" on its predicate'
+    point = None
+    for point in _cues.AT_NO_POINT.finditer(text, lo, pos):
+        pass
+    if point is not None:
+        between = text[point.end():pos]
+        if not re.search(r'\b(?:was|were|is|are|been|has|have|had)\b|[,;:]', between, FLAGS) \
+                and not NEGATION_SCOPE_END.search(between) and not _outside_negation(between, after):
+            return 'negated: "at no point" before it'
+    last = None
+    for last in WITHOUT.finditer(text, lo, pos):
+        pass
+    if last is not None and not WITHOUT_COMPLICATION.match(text, last.start()):
+        between = text[last.end():pos]
+        if not re.search(r'\b(?:was|were|is|are|been|has|have|had|and|or|but)\b|[,;:()]', between, FLAGS) \
+                and not NEGATION_SCOPE_END.search(between) and not ACT_VERB.search(between):
+            return 'negated: "without" over its noun phrase'
+    return ''
+
+
+def _failed_act(text: str, cs: int, ce: int, pos: int, end: int) -> str:
+    """The failure word of the act at [pos, end) in its clause [cs, ce), or '' (package P2 READ-HOLD, R8 D2): a failure
+    word (cues.FAILED_ACT: "failed", "unsuccessful", "abandoned") after the mention on its own predicate ("Hot snare
+    polypectomy: unsuccessful." too) - neither the act's own stated predicate ("were taken after brushing had failed"),
+    nor another clause's opener ("because the cold snare had failed"), nor a predicate the word lies inside
+    (_not_on_another_predicate) between them - or right
+    before the mention as its attribute ("an unsuccessful polypectomy": cues.FAILED_ACT_BEFORE, at most three words
+    between, no mark). Read only to hold (the act reads uncertain); HEDGE_WORDS, shared with other readers, is not
+    widened. Bounded: the matches of one clause."""
+    for m in _cues.FAILED_ACT.finditer(text, end, ce):
+        between = text[end:m.start()]
+        if ACT_VERB.search(between) or NEGATION_SCOPE_END.search(between) \
+                or _not_on_another_predicate(text, m.start(), end):
+            continue
+        return m.group(0).lower()
+    before = _cues.FAILED_ACT_BEFORE.search(text, max(cs, pos - 60), pos)
+    return before.group('w').lower() if before else ''
 
 
 # Routing's reading of an item no status wording speaks for (detect.SILENT; validation's checks.SILENT_CUE_PREFIX).
