@@ -35,6 +35,7 @@ const STATE_TONES = { ready: 'green', reviewed: 'green', action_needed: 'amber',
 // lists the rows the server marks in_queue - these and what the review queue's rule holds waiting - and the badge counts
 // the same rows (customer_api.in_queue).
 const QUEUE_STATES = new Set(['action_needed', 'awaiting_detail', 'ready']);
+const QUEUED_AFTER_DONE_TITLE = 'Waiting for the next step';
 const RECHECK_LABEL = 'Check what is still open again';
 const RECHECK_NOTE = 'The document review is asked once more about what is still open. This can be asked for once for this result.';
 // status -> [label, badge tone, badge icon]
@@ -698,10 +699,12 @@ function progressPanel(doc, ui = {}) {
   const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
   const slow = progress.slow === true && busy;
   const headIcon = phase === 'action_needed' || phase === 'paused' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
+  // a step that waits its turn after a finished one is not "Waiting to start" (the server's message says the same)
+  const title = phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
   // the error says its own sentence below; the head does not repeat it
   const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
-    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(PHASE_TITLES[phase])}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
+    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(title)}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
     + (showAck ? uploadAck(ui.ack, '', ['waiting', 'active', 'not_started'].includes(steps[0].state)) : '')
     + `<ol class="progress-steps">${steps.map((step, index) => progressStep(step, index === activeIndex, animate, detail)).join('')}</ol>`
     + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
@@ -2005,7 +2008,7 @@ if (typeof module === 'object' && module.exports) {
     documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
     documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, detailAnswers, answerable, resultRow, resultList,
     resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
-    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE,
+    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
     STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,
   };
 }

@@ -182,6 +182,10 @@ def _lock(encounter):
 NOT_FINAL_DECISION = ('The peer reviews of this document have not finished: a decision is recorded on its final '
                       'assessment.')
 NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment'
+# refutation round 2, L7-02: an upload date that chose between the dates the document states is asked back as a
+# confirmation (answers.date_confirmation_open); the approved export waits for it
+DATE_CONFIRMATION_BLOCKER = ('The date of service entered at upload chooses between the dates the document states and '
+                             'has not been confirmed')
 
 
 def decision_holder(encounter, *, exclude=None):
@@ -983,9 +987,12 @@ def _could_bill(proposal, decision):
 
 
 def _assessment_blockers(encounter, assessment):
+    from . import answers  # local import: the details flow reads this module
     blockers = []
     if not is_final(assessment):
         blockers.append(NOT_FINAL_BLOCKER)
+    if answers.date_confirmation_open(encounter):
+        blockers.append(DATE_CONFIRMATION_BLOCKER)
     if assessment.context_id != encounter.current_context_id:
         blockers.append('The encounter context changed; re-assessment has not finished')
     run = assessment.provider_run

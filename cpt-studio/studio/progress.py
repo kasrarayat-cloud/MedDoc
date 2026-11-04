@@ -60,6 +60,9 @@ MESSAGES = {
     'processing': 'Working on your document. This page updates by itself.',
     'action_needed': ('Action needed: the date of service entered for this document differs from the date in the '
                       'document, so nothing has been sent for checking. Choose which date is right to continue.'),
+    # refutation round 2 (L7-03's class): the document states no date of service of its own to differ from
+    'action_needed_undated': ('Action needed: the date of service for this document is not settled, so nothing has been '
+                              'sent for checking. Enter or choose the date under "A few details needed" to continue.'),
     'awaiting_detail': 'A few details are needed. Codes that do not depend on them can be reviewed now.',
     'completed': 'Your results are ready.',
     'partial': 'Your results are ready, but some checks could not be completed. Each code shows what was checked.',
@@ -501,6 +504,8 @@ def encounter_progress(encounter, now=None) -> dict:
         message = error['text']
     elif limited:
         message = limited
+    elif phase == 'action_needed' and not _document_states_a_date(encounter):
+        message = MESSAGES['action_needed_undated']
     else:
         message = MESSAGES[phase]
     finished = [_end(job) for job in current if job.state not in ACTIVE]
@@ -513,6 +518,12 @@ def encounter_progress(encounter, now=None) -> dict:
         'can_stop': busy, 'can_resume': (not busy) and review.can_resume(encounter), 'can_leave': True,
         'error': error,
     }
+
+
+def _document_states_a_date(encounter):
+    """Whether the document states a date of service of its own (answers.service_date_block's document value)."""
+    from . import answers  # local import: the details flow reads the jobs this module reads
+    return bool(answers.service_date_block(encounter).get('document_value'))
 
 
 def _open_details(encounter):

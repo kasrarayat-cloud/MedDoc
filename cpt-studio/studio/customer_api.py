@@ -243,6 +243,7 @@ BLOCKER_EXACT = {
     'Processing has not finished': 'Processing has not finished.',
     'No text was extracted': 'The text of the document could not be read.',
     review.NOT_FINAL_BLOCKER: 'The independent checks have not finished.',
+    review.DATE_CONFIRMATION_BLOCKER: 'Confirm the date of service under "A few details needed".',
     'The encounter context changed; re-assessment has not finished': 'The details changed; the results are being updated.',
     'The provider was not run': 'The coding service did not run for this document.',
     'The provider outcome is unknown': 'We are confirming whether an earlier check completed.',
@@ -815,6 +816,7 @@ def _reports(encounter):
     return [report_json(artifact, marker is not None and artifact.snapshot_sha256 == marker) for artifact in artifacts]
 
 
+RECHECK_NOT_COMPLETED = ('check_not_completed', 'The check of what is still open could not be completed')
 # event -> (the customer's event key, summary); an event not listed is never shown to a customer
 ACTIVITY = {
     'encounter.created': ('document_added', 'Document added'),
@@ -839,10 +841,13 @@ ACTIVITY = {
 def activity(encounter):
     out = []
     for event in encounter.audit_events.select_related('actor').order_by('created_at', 'pk'):
+        data = event.data if isinstance(event.data, dict) else {}
         entry = ACTIVITY.get(event.event)
+        if (event.event == 'provider.finished' and data.get('purpose') == 'second_review'
+                and data.get('state') != 'succeeded'):
+            entry = RECHECK_NOT_COMPLETED  # the re-check's own outcome, said once it is known (refutation round 2, L5-5)
         if entry is None:
             continue
-        data = event.data if isinstance(event.data, dict) else {}
         if event.event == 'report.generated' and data.get('audience', ReportArtifact.CUSTOMER) != ReportArtifact.CUSTOMER:
             continue  # an operator's report is the operator's record, never the practice's activity
         actor = event.actor
