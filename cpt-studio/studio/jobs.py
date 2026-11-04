@@ -2677,6 +2677,57 @@ def remove_stale_ingest_dirs():
             shutil.rmtree(path, ignore_errors=True)
 
 
+# Decision (j) (2026-11-03): a dead worker never animates. The worker process beats every HEARTBEAT_SECONDS from a thread
+# of its own (so a long stage never reads as a dead worker); the progress panel reads a beat older than
+# WORKER_SILENT_SECONDS, while a document waits on processing, as processing paused.
+HEARTBEAT_SECONDS = 30
+WORKER_SILENT_SECONDS = 120
+WORKER_NAME = 'worker'
+
+
+def beat(*, name=WORKER_NAME, now=None):
+    """Record one heartbeat of this worker process (models.WorkerBeat). Never raises: a failed beat is logged, and a
+    worker whose beats keep failing reads as not responding, which is what it is to a member."""
+    import os
+
+    try:
+        models.WorkerBeat.objects.update_or_create(name=name, defaults={
+            'beat_at': now or timezone.now(), 'revision': str(settings.RELEASE_SHA)[:64], 'pid': os.getpid()})
+    except Exception:  # noqa: BLE001 - logged; the next beat tries again
+        log.exception('the worker heartbeat could not be recorded')
+
+
+def start_heartbeat(should_stop, *, interval=HEARTBEAT_SECONDS):
+    """A daemon thread that beats every ``interval`` seconds until ``should_stop()``; its database connection is
+    closed when it ends. Returns the thread."""
+    import threading
+
+    from django.db import connection as thread_connection
+
+    def loop():
+        try:
+            while not should_stop():
+                beat()
+                for _ in range(int(interval * 10)):
+                    if should_stop():
+                        break
+                    time.sleep(0.1)
+        finally:
+            thread_connection.close()
+    thread = threading.Thread(target=loop, name='cpt-studio-heartbeat', daemon=True)
+    thread.start()
+    return thread
+
+
+def worker_responding(*, now=None, name=WORKER_NAME):
+    """True when the worker beat within WORKER_SILENT_SECONDS, False when its newest beat is older, None when no beat
+    was ever recorded (nothing is known, and nothing is claimed)."""
+    row = models.WorkerBeat.objects.filter(name=name).first()
+    if row is None:
+        return None
+    return (now or timezone.now()) - row.beat_at <= timedelta(seconds=WORKER_SILENT_SECONDS)
+
+
 def work(should_stop, *, poll_seconds=1.0, clock=time.monotonic):
     remove_stale_ingest_dirs()
     mark_stale()

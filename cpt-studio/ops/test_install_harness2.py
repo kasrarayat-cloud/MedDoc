@@ -438,7 +438,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # audience, member answers and the upload key), each read safe by the same gate (the last assertion)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
-                                                                '0009_cux_review', '0010_cux_operator', '0011_cux_flow'])
+                                                                '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
+                                                                '0012_cux_worker_beat'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
