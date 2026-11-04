@@ -2505,6 +2505,48 @@ test('mergeSamples keeps the first failure of any sample; checkBundle wants one 
   assert.deepEqual(failed(vb.checkBundle({ ...bundle, hits })), ['scan.bundle']);
 });
 
+test('scanDocument: every body, header, page string, toast and file is scanned, and a scan over nothing fails rather than passes', () => {
+  const op = OP();
+  const sc = vb.scanContext({ documentText: op.revision.text, denyValues: vb.denyValuesFrom(op, TRACE()) });
+  const record = { downloads: [] };
+  const empty = { bodies: [], domStrings: new Map(), toasts: new Set() };
+  assert.deepEqual(failed(vb.scanDocument(empty, sc, record, '/nowhere')).sort(), ['scan.dom', 'scan.header', 'scan.json']);
+  const ctx = { bodies: [{ method: 'GET', path: '/api/encounters/x', status: 200, headers: { 'content-type': 'application/json' }, body: sample('customer-encounter.json') }],
+    domStrings: new Map([['Ready for review', 'text span.status']]), toasts: new Set(['Saved.']) };
+  assert.deepEqual(failed(vb.scanDocument(ctx, sc, record, '/nowhere')), []);
+  ctx.toasts.add('Fable request failed (HTTP 529)');
+  ctx.bodies.push({ method: 'POST', path: '/api/encounters/x/reports', status: 409, headers: { 'x-content-sha256': 'ab'.repeat(32) }, body: '{"error": "Astra is busy"}' });
+  assert.deepEqual(failed(vb.scanDocument(ctx, sc, record, '/nowhere')).sort(), ['scan.dom', 'scan.header', 'scan.json']);
+  assert.deepEqual(record.scans.hits.dom > 0 && record.scans.hits.json > 0 && record.scans.hits.header > 0, true);
+});
+
+test('sampleProgress compares the panel with what the PAGE was served, reads a mismatch twice, and fails when it saw no served read', async () => {
+  const busy = busyCustomer();
+  let html = panelHtml(busy);
+  let reads = 0;
+  const page = {
+    evaluate: async fn => {
+      if (fn === vb.readCustomerDom) { reads += 1; return vb.readCustomerDom(fakeDocument(html)); }
+      if (fn.name === 'collectDomStrings' || fn.name === 'readAnimations') return [];
+      return [];
+    },
+    waitForTimeout: async () => { html = panelHtml(busy); },
+  };
+  const ctx = { lastServed: new Map([['enc', { json: busy }]]), domStrings: new Map(), toasts: new Set() };
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), []);
+  // the page drew an older phase on the first read and caught up 900 ms later: no failure, two reads
+  reads = 0;
+  html = panelHtml(busy).replace('data-phase="processing"', 'data-phase="queued"');
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), []);
+  assert.equal(reads, 2);
+  // the page never caught up: the mismatch stands
+  page.waitForTimeout = async () => {};
+  html = panelHtml(busy).replace('data-phase="processing"', 'data-phase="queued"');
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), ['progress.dom.phase']);
+  // nothing the page was served was seen: no comparison is no pass
+  assert.deepEqual(failed((await vb.sampleProgress(page, { ...ctx, lastServed: new Map() }, 'enc')).results), ['progress.dom.served']);
+});
+
 test('loadOperatorCredentials: a private JSON file with a top-level username and password, its content never quoted', () => {
   const dir = privateDir();
   try {

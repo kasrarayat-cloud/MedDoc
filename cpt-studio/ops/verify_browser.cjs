@@ -3000,12 +3000,14 @@ async function waitForResults(page) {
 // be newer than what the page drew); a mismatch is read once more, 900 ms later, before it counts.
 async function sampleProgress(page, ctx, id) {
   const take = async () => ({ served: ctx.lastServed.get(id)?.json || null, dom: await readPage(page, ctx), animating: await page.evaluate(readAnimations) });
+  const judge = item => (item.served ? checkProgressDom(item.served, item.dom, item.animating)
+    : [check('progress.dom.served', 'hard', false, 'the page\'s own read of the encounter was not seen, so its panel could not be compared with it')]);
   let sample = await take();
-  let results = sample.served ? checkProgressDom(sample.served, sample.dom, sample.animating) : [];
+  let results = judge(sample);
   if (results.some(r => r.status === 'fail')) {
     await page.waitForTimeout(900);
     sample = await take();
-    results = sample.served ? checkProgressDom(sample.served, sample.dom, sample.animating) : [];
+    results = judge(sample);
   }
   return { at: isoNow(), phase: sample.served?.progress?.phase ?? null, dom_phase: sample.dom.progress?.phase ?? null, served: Boolean(sample.served), results };
 }
@@ -3432,10 +3434,12 @@ function scanDocument(ctx, sc, record, outDir) {
   }
   record.scans = { responses: ctx.bodies.length, dom_strings: ctx.domStrings.size, toasts: [...ctx.toasts].length, files: record.downloads.filter(item => item.path).length,
     hits: { json: json.length, header: headers.length, dom: dom.length, file: files.length } };
+  const bodies = ctx.bodies.filter(entry => entry.body).length;
+  const nothing = (id, what) => check(id, 'hard', false, `nothing to scan: no ${what} was read, so the scan proves nothing`);
   return [
-    ...checkScan('scan.json', json, `${ctx.bodies.filter(entry => entry.body).length} customer API body(ies)`),
-    ...checkScan('scan.header', headers, `${ctx.bodies.length} customer response(s)' headers`),
-    ...checkScan('scan.dom', dom, `${ctx.domStrings.size} page string(s) and ${ctx.toasts.size} toast(s)`),
+    ...(bodies ? checkScan('scan.json', json, `${bodies} customer API body(ies)`) : [nothing('scan.json', 'customer API body')]),
+    ...(ctx.bodies.length ? checkScan('scan.header', headers, `${ctx.bodies.length} customer response(s)' headers`) : [nothing('scan.header', 'customer response')]),
+    ...(ctx.domStrings.size ? checkScan('scan.dom', dom, `${ctx.domStrings.size} page string(s) and ${ctx.toasts.size} toast(s)`) : [nothing('scan.dom', 'page string')]),
     ...checkScan('scan.file', files, `${record.downloads.filter(item => item.path).length} downloaded file(s)`),
   ];
 }
@@ -3917,7 +3921,7 @@ module.exports = {
   checkProgressFold, checkUploadAck, duplicateSends, checkNoDuplicateSends, jobsKept, checkReloadIdentity, checkStopResume, checkProvenance,
   checkAuthorization, checkArtifactsHidden, checkViewport, checkDecisionRows, checkCustomerDecisions, checkModifierDialogs,
   expectedCustomerDownloads, checkCustomerDownloads, checkCustomerListing, detailsPlan, detailRowFor, checkDetailsSave, modifierFor,
-  mergeSamples, checkBundle, customerSummary, isBusy, saved, OPS_GET_PATHS, OPS_POST_PATHS, REMOVED_PATHS,
+  mergeSamples, sampleProgress, scanDocument, checkBundle, customerSummary, isBusy, saved, OPS_GET_PATHS, OPS_POST_PATHS, REMOVED_PATHS,
 };
 
 if (require.main === module) {
