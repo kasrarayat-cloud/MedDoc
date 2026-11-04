@@ -1,7 +1,9 @@
 """The verification samples (ops/verification/samples) are what make_samples.py writes, and hold to the contracts the tools
-verify: the customer samples to customer-contract.json, every quoted offset to the document text, the reports to the
-grammar ops/verify_downloads.py reads. The walk's node tests and the download and scanner tests all read these files, so
-a stale or self-contradictory sample would make every one of them prove the wrong thing.
+verify: the customer samples to customer-contract.json, every quoted offset to the document text. The four customer
+report samples are studio/reports.py's own bytes of make_samples' report snapshots, written and pinned by the Django
+suite (tests/test_cux_r2_reports.py SampleReportTests; refutation round 2, L3-1), never by a grammar of the generator's
+own. The walk's node tests and the download and scanner tests all read these files, so a stale or self-contradictory
+sample would make every one of them prove the wrong thing.
 
     cd cpt-studio && python3 -B -m unittest discover -s ops/verification -p 'test_samples.py' -v
 """
@@ -36,6 +38,13 @@ class SampleTests(unittest.TestCase):
         stale = [name for name, content in make.outputs().items() if (SAMPLES / name).read_bytes() != content.encode('utf-8')]
         self.assertEqual(stale, [], 'run python3 -B ops/verification/samples/make_samples.py and commit what it writes')
         self.assertEqual(make.main(['--check']), 0)
+        # the report samples are the server renderer's (tests/test_cux_r2_reports.py), never this generator's text
+        self.assertEqual(set(make.REPORT_FILES) & set(make.outputs()), set())
+        for name in make.REPORT_FILES:
+            self.assertTrue((SAMPLES / name).is_file(), name)
+        snapshots = sample_json('customer-report-snapshots.json')
+        self.assertEqual(sorted(snapshots), ['approved', 'draft', 'generated'])
+        self.assertTrue(sample_json('customer-report-snapshots.json')['approved']['agent_review'])
 
     def test_the_customer_samples_hold_to_the_customer_contract(self):
         for name, schema in (('customer-encounter.json', 'encounter'), ('customer-encounter-details.json', 'encounter'),

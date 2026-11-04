@@ -167,6 +167,14 @@ const DATE_ONLY = new RegExp(CONTRACT.date_pattern);
 const AGENT_SUB_LABEL = VOCAB.agent_sub_label;
 const REJECTED_SUB_LABEL = VOCAB.rejected_sub_label;
 const DETAILS_HEADING = VOCAB.details_heading;
+const NONE_APPROVED_BLOCKER = VOCAB.none_approved_blocker;  // customer_api.NONE_APPROVED (session decision (f))
+// The server's own words and check ids the review rule reads (tests/test_cux_r2_reports.py pins each to studio.review):
+// the operator view's readiness names NOT_FINAL_BLOCKER while the assessment is not its chain's final one, on which no
+// decision is recorded; an E/M carrying SAME_DAY_EM_GATE is held while a procedure carrying SAME_DAY_PROCEDURE is
+// reinstated (review._allowed, review._actions, review_view.same_day_held).
+const NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment';
+const SAME_DAY_EM_GATE = 'em.same_day_if_reinstated';
+const SAME_DAY_PROCEDURE = 'review.same_day_em';
 // The customer states and progress phases in which processing has finished and the result can be read.
 const CUSTOMER_DONE_STATES = new Set(['awaiting_detail', 'ready', 'reviewed', 'no_codes', 'action_needed']);
 const SETTLED_PHASES = new Set(['failed', 'stopped']);
@@ -564,10 +572,13 @@ function checkIncomplete(list, enc) {
 // Round 4: a documentation check's exclusion (reinstatable) needs a reviewer decision. The walk confirms one only
 // where the document's independent author expectations say the family must not be coded; any other is left
 // undecided, so the reviewed report stays blocked and the run records it.
-function planConfirmations(enc, mustNotCode, notes) {
+// canReview: the walking member's own permissions (the customer view's permissions.can_review): the actions planned are
+// the ones the server accepts from that member (serverActions), never the operator view's own allowed_actions - the
+// operator account reads with no membership and is allowed none (refutation round 2, L3-5).
+function planConfirmations(enc, mustNotCode, notes, canReview = true) {
   const families = new Set((mustNotCode || []).map(item => item.family));
   return proposalsOf(enc).filter(p => p.bucket === 'excluded' && p.reinstatable && p.decision_state === 'undecided'
-    && (p.allowed_actions || []).includes('confirm') && families.has(p.family))
+    && serverActions(p, enc, canReview).includes('confirm') && families.has(p.family))
     .map(p => ({ proposal_id: p.id, code: p.code, family: p.family, action: 'confirm', designated: false,
                  note: notes.confirm || 'Agent-executed synthetic verification review - confirms an exclusion the document author marked as not coded; not a clinical judgement' }));
 }
@@ -583,21 +594,24 @@ function fromSecondReview(p) {
 // limits approvals to the codes it names (not_in_approve_codes, approve_codes_unmatched); the designated rejection never
 // takes a code the list names. options.acceptanceReviewer: approvals only, of the codes review_plan.approve_codes names
 // (implying the explicit list); no designated rejection, and no code a second review added is decided (second_review_held),
-// whatever review_plan.second_review.approve_codes says.
+// whatever review_plan.second_review.approve_codes says. options.canReview: the walking member's own permissions; the
+// actions planned are the ones the server accepts from that member (serverActions), never the operator view's own.
 function planDecisions(enc, reviewPlan, notes, options = {}) {
   const acceptance = Boolean(options.acceptanceReviewer);
+  const canReview = options.canReview !== false;
+  const accepted = p => serverActions(p, enc, canReview);
   const approveSecond = new Set(acceptance ? [] : (reviewPlan?.second_review?.approve_codes || []).map(String));
   const listed = Array.isArray(reviewPlan?.approve_codes) ? reviewPlan.approve_codes.map(String) : null;
   const explicit = acceptance || Boolean(options.noAutoApprove) || listed !== null;
   const named = new Set(listed || []);
   const mustNot = new Set((options.mustNotCode || []).map(item => item.family));
   const ready = proposalsOf(enc).filter(p => p.bucket === 'selected' && p.status === 'ready' && p.decision_state === 'undecided'
-    && (p.allowed_actions || []).includes('approve') && (!fromSecondReview(p) || approveSecond.has(p.code)));
+    && accepted(p).includes('approve') && (!fromSecondReview(p) || approveSecond.has(p.code)));
   const namedPrimary = p => explicit && !fromSecondReview(p) && named.has(p.code);
   const rule = acceptance ? null : reviewPlan?.reject;
   let designated = null;
   if (rule) {
-    const family = ready.filter(p => p.family === rule.family && (p.allowed_actions || []).includes('reject') && !namedPrimary(p));
+    const family = ready.filter(p => p.family === rule.family && accepted(p).includes('reject') && !namedPrimary(p));
     designated = family.find(p => (rule.prefer_codes || []).includes(p.code)) || family[family.length - 1] || null;
   }
   const wanted = p => fromSecondReview(p) || !explicit || named.has(p.code);
@@ -1571,13 +1585,24 @@ function expectedCodeRows(op) {
   return [...first, ...then];
 }
 
+// Whether agent review took part in the code's current approval, by the rule the customer page and both customer
+// reports label it by (customer_api._status and approved_export_items; fidelity:8 of the report repairs): the approver
+// is an agent, or an agent's reinstatement stands behind the approval (the operator view's reinstated_by,
+// serializers._reinstated_by - review.reinstatement_for, as the page reads it). Refutation round 2, L3-6: the walk
+// judged by the approver alone and failed the server's label on a human's approval of an agent's reinstatement.
+function agentReviewed(p) {
+  const decision = p?.decision || null;
+  return decision?.action === 'approve' && (decision.reviewer_kind === 'agent' || p?.reinstated_by?.reviewer_kind === 'agent');
+}
+
 // The customer status of an operator proposal (CORE-UX-DESIGN 7's status mapping) and the sub label it must carry
 // (null: any).
 function expectedCustomerStatus(p) {
   const decision = p?.decision || null;
   const action = decision?.action;
   if (action === 'approve') {
-    return { status: 'approved', sub: decision.reviewer_kind === 'agent' ? AGENT_SUB_LABEL : null, human: decision.reviewer_kind !== 'agent' };
+    const agent = agentReviewed(p);
+    return { status: 'approved', sub: agent ? AGENT_SUB_LABEL : null, human: !agent };
   }
   if (action === 'reject') return { status: 'excluded', sub: REJECTED_SUB_LABEL };
   if (action === 'reinstate') return { status: p.status === 'needs_clarification' ? 'needs_detail' : 'ready', sub: null };
@@ -1608,31 +1633,84 @@ function actIndex(op) {
   return out;
 }
 
-// The passages a quotation of the code may be: CPT Studio's own located passages for the matched act (support.source),
-// the evidence CPT Studio's reading recorded for each act the support record names - only while that act is stored
-// 'performed' or 'incomplete' (customer_api._quotes shows these first; CORE-UX-DESIGN.md 7) - and the provider's exact
-// passages its support reading found supporting (support.supporting); never one it found unrelated. A proposal with no
-// support reading may quote any of its exact passages.
-function allowedPassages(p, points, acts = new Map()) {
-  const exact = (p?.evidence || []).map((span, index) => ({ span, index }))
-    .filter(({ span }) => span && (span.context_index ?? 0) === 0 && cpSlice(points, span.start, span.end) === span.text);
-  const support = p?.support || {};
-  const source = (Array.isArray(support.source) ? support.source : []).filter(span => span && cpSlice(points, span.start, span.end) === span.text);
+// The passages a quotation of the code may be, by the one rule the server quotes a code by - the page's "Why this code?"
+// (customer_api._quotes) and the approved export's evidence alike (CORE-UX-DESIGN.md 7: CPT Studio's own located
+// passages for the matched act first, then the provider's exact passages only when they support; never a passage that
+// does not support, and none for an excluded code); ops/verify_downloads.py allowed_passages is the same rule:
+// - support.source only where the support reading recorded it as showing the act (status 'warn': none of the provider's
+//   passages does). A 'not_applicable' reading's source passages are the service's own and show no act (refutation
+//   round 2, L3-7);
+// - the evidence CPT Studio's reading recorded for each act the support record names, while that act is stored
+//   'performed' or 'incomplete';
+// - the provider's exact passages (context 0, exact) the support reading found supporting, never one it found unrelated.
+// Nothing where no support reading was recorded (L3-10: every exact provider passage was accepted). status: the code's
+// customer status; an excluded code quotes nothing.
+function allowedPassages(p, points, acts = new Map(), status = null) {
+  const sliced = span => Boolean(span) && cpSlice(points, span.start, span.end) === span.text;
+  const exact = new Map();
+  (Array.isArray(p?.evidence) ? p.evidence : []).forEach((span, index) => {
+    if (span && span.context_index === 0 && span.exact === true && sliced(span)) exact.set(index, span);
+  });
+  const support = p?.support && typeof p.support === 'object' ? p.support : {};
+  const unrelatedIds = new Set(Array.isArray(support.unrelated) ? support.unrelated.filter(Number.isInteger) : []);
+  const unrelated = [...unrelatedIds].sort((a, b) => a - b).filter(index => exact.has(index)).map(index => exact.get(index));
+  const reading = typeof support.status === 'string' ? support.status : null;
+  if (reading === null || status === 'excluded') return { allowed: [], unrelated };
+  const source = reading === 'warn' ? (Array.isArray(support.source) ? support.source : []).filter(sliced) : [];
   const own = [];
   for (const act of Array.isArray(support.acts) ? support.acts : []) {
     const stored = act && typeof act === 'object' ? acts.get(act.id) : undefined;
     if (!stored || !['performed', 'incomplete'].includes(stored.status)) continue;
-    for (const span of Array.isArray(stored.evidence) ? stored.evidence : []) {
-      if (span && cpSlice(points, span.start, span.end) === span.text) own.push(span);
-    }
+    for (const span of Array.isArray(stored.evidence) ? stored.evidence : []) if (sliced(span)) own.push(span);
   }
-  const unrelated = new Set(Array.isArray(support.unrelated) ? support.unrelated : []);
-  const read = typeof support.status === 'string' && Array.isArray(support.supporting);
-  const supporting = new Set(read ? support.supporting : exact.map(({ index }) => index));
-  return {
-    allowed: [...source, ...own, ...exact.filter(({ index }) => supporting.has(index) && !unrelated.has(index)).map(({ span }) => span)],
-    unrelated: exact.filter(({ index }) => unrelated.has(index)).map(({ span }) => span),
-  };
+  const cited = (Array.isArray(support.supporting) ? support.supporting : [])
+    .filter(index => Number.isInteger(index) && exact.has(index) && !unrelatedIds.has(index)).map(index => exact.get(index));
+  return { allowed: [...source, ...own, ...cited], unrelated };
+}
+
+// The modifiers the operator view's decision records (none where none was chosen), or null where it does not say - a
+// decision with no "modifiers" list (serializers._decision_json served none): never read as none, which passed a
+// customer that dropped the reviewer's modifier and failed one that kept it (refutation round 2, L3-3).
+function decidedModifiers(decision) {
+  if (!decision) return [];
+  return Array.isArray(decision.modifiers) ? decision.modifiers : null;
+}
+
+// An E/M the server holds from approval while a reviewer's reinstatement of a same-day procedure stands (review_view
+// same_day_held, read from the operator view's checks and decisions).
+function sameDayHeld(p, op) {
+  const has = (item, id) => (Array.isArray(item?.checks) ? item.checks : []).some(c => c && c.id === id);
+  return has(p, SAME_DAY_EM_GATE) && proposalsOf(op).some(q => q.bucket === 'excluded' && q.reinstatable === true
+    && ['reinstate', 'approve'].includes(q.decision?.action) && has(q, SAME_DAY_PROCEDURE));
+}
+
+// The actions the server accepts from a member on proposal p, read from the operator view's facts by the rule the server
+// applies (review._allowed and review._actions over the review overlay: the bucket, the overlay's status, the current
+// decision, reinstatable, exact evidence, approve_withheld_by and the same-day hold) - never the operator view's own
+// allowed_actions, which are the operator's: an operator with no membership (ops-agent) is allowed none
+// (studio.operator.ReadOnlyAccess; refutation round 2, L3-5). canReview: the member's own permissions.can_review.
+// A recorded limit: the operator view does not say that a member answer left a REINSTATED code's detail unavailable
+// (the server then accepts only revoke), so there this is the larger set the reinstatement alone would allow.
+function serverActions(p, op, canReview = true) {
+  if (!canReview || !p) return [];
+  const readiness = op?.readiness || {};
+  if (readiness.draft !== true) return [];  // no assessment of the current revision: nothing is decided on it
+  if ((readiness.blockers || []).includes(NOT_FINAL_BLOCKER)) return [];  // decisions are recorded on the final assessment
+  const action = p.decision?.action || null;
+  if (['approve', 'reject', 'confirm'].includes(action)) return ['revoke'];
+  const points = Array.from(typeof op?.revision?.text === 'string' ? op.revision.text : '');
+  const exact = (Array.isArray(p.evidence) ? p.evidence : []).some(span => span && span.context_index === 0 && span.exact === true
+    && cpSlice(points, span.start, span.end) === span.text);
+  if (p.bucket === 'selected') {
+    // a selected code the overlay excludes (a needed detail answered unavailable) has nothing to decide
+    if (!['ready', 'needs_clarification'].includes(p.status)) return action ? ['revoke'] : [];
+    return [...(p.status === 'ready' && exact && !sameDayHeld(p, op) ? ['approve'] : []), 'reject', ...(action ? ['revoke'] : [])];
+  }
+  if (p.bucket === 'excluded' && p.status === 'excluded') {
+    if (!action) return p.reinstatable === true ? [...(exact ? ['reinstate'] : []), 'confirm'] : [];
+    return [...(exact && !p.approve_withheld_by ? ['approve'] : []), 'reject', 'revoke'];
+  }
+  return action ? ['revoke'] : [];
 }
 
 function pageOf(pages, start, end) {
@@ -1661,10 +1739,12 @@ function checkCustomerVsOperator(cust, op) {
       + (codes.some(code => !byId.has(code?.id)) ? ' (a code the operator view does not hold)' : '')));
   const statusWrong = [];
   const unitsWrong = [];
+  const unverifiable = [];
   const decisionWrong = [];
   const actionsWrong = [];
   const quotesInexact = [];
   const quotesUnsupported = [];
+  const canReview = cust?.permissions?.can_review === true;
   for (const code of codes) {
     const p = byId.get(code?.id);
     if (!p) continue;
@@ -1674,20 +1754,21 @@ function checkCustomerVsOperator(cust, op) {
     else if (want.human && /agent/i.test(code.sub_label || '')) statusWrong.push(`${p.code} a human approval labelled as an agent's`);
     if (code.units !== p.units) unitsWrong.push(`${p.code} ${code.units} (operator ${p.units})`);
     const d = p.decision || null;
-    const modifiers = d ? (Array.isArray(d.modifiers) ? d.modifiers : []) : [];
-    if (!sameList(code.modifiers, modifiers)) unitsWrong.push(`${p.code} modifiers ${JSON.stringify(code.modifiers)} (operator ${JSON.stringify(modifiers)})`);
+    const modifiers = decidedModifiers(d);
+    if (modifiers === null) unverifiable.push(`${p.code} (the customer shows ${JSON.stringify(code.modifiers)})`);
+    else if (!sameList(code.modifiers, modifiers)) unitsWrong.push(`${p.code} modifiers ${JSON.stringify(code.modifiers)} (operator ${JSON.stringify(modifiers)})`);
     if (!d) {
       if (code.decision !== null) decisionWrong.push(`${p.code} shows a decision the operator view does not hold`);
     } else {
       const shown = code.decision || {};
       const fine = shown.action === d.action && shown.by === d.reviewer && shown.by_kind === d.reviewer_kind && shown.note === d.note
-        && sameList(shown.modifiers, modifiers) && (sameInstant(shown.at, d.decided_at) || sameInstant(shown.at, d.created_at));
-      if (!fine) decisionWrong.push(`${p.code} ${JSON.stringify({ action: shown.action, by: shown.by, by_kind: shown.by_kind, at: shown.at })} (operator ${d.action} by ${d.reviewer} (${d.reviewer_kind}) at ${d.decided_at || d.created_at})`);
+        && (modifiers === null || sameList(shown.modifiers, modifiers)) && (sameInstant(shown.at, d.decided_at) || sameInstant(shown.at, d.created_at));
+      if (!fine) decisionWrong.push(`${p.code} ${JSON.stringify({ action: shown.action, by: shown.by, by_kind: shown.by_kind, at: shown.at, modifiers: shown.modifiers })} (operator ${d.action} by ${d.reviewer} (${d.reviewer_kind}) at ${d.decided_at || d.created_at}${modifiers === null ? '' : `, modifiers ${JSON.stringify(modifiers)}`})`);
     }
-    const allowedActions = new Set(p.allowed_actions || []);
-    const extra = (code.allowed_actions || []).filter(action => !allowedActions.has(action));
-    if (extra.length) actionsWrong.push(`${p.code} offers ${extra.join(', ')} (the operator view allows ${[...allowedActions].join(', ') || 'none'})`);
-    const { allowed, unrelated } = allowedPassages(p, points, acts);
+    const accepted = new Set(serverActions(p, op, canReview));
+    const extra = (code.allowed_actions || []).filter(action => !accepted.has(action));
+    if (extra.length) actionsWrong.push(`${p.code} offers ${extra.join(', ')} (the server accepts ${[...accepted].join(', ') || 'none'} from this member)`);
+    const { allowed, unrelated } = allowedPassages(p, points, acts, want.status);
     for (const q of code.why?.quotes || []) {
       const slice = cpSlice(points, q?.start, q?.end);
       if (q?.exact !== false && slice !== q?.text) quotesInexact.push(`${p.code}[${q?.start}:${q?.end}]`);
@@ -1700,7 +1781,9 @@ function checkCustomerVsOperator(cust, op) {
     }
   }
   out.push(check('customer.codes.status', 'hard', statusWrong.length === 0, statusWrong.join('; ') || `${codes.length} code(s) with the status the operator view implies`));
-  out.push(check('customer.codes.units_modifiers', 'hard', unitsWrong.length === 0, unitsWrong.join('; ') || 'units and decided modifiers as persisted'));
+  out.push(check('customer.codes.units_modifiers', 'hard', unitsWrong.length === 0 && unverifiable.length === 0,
+    [...unitsWrong, ...(unverifiable.length ? [`cannot verify: the operator view's decision carries no "modifiers" list for ${unverifiable.join(', ')}`] : [])].join('; ')
+      || 'units and decided modifiers as persisted'));
   out.push(check('customer.codes.decision', 'hard', decisionWrong.length === 0, decisionWrong.join('; ') || 'each decision as persisted (action, reviewer, kind, time, note, modifiers)'));
   out.push(check('customer.codes.actions', 'hard', actionsWrong.length === 0, actionsWrong.join('; ') || 'no action the server would not accept is offered'));
   out.push(check('customer.why.exact', 'hard', quotesInexact.length === 0, quotesInexact.length ? `quotations not exact at their offsets: ${quotesInexact.join(', ')}`
@@ -1718,9 +1801,16 @@ function checkCustomerVsOperator(cust, op) {
     && (date.entered_value ?? null) === (member || null);
   out.push(check('customer.service_date', 'hard', dateOk,
     `customer value ${JSON.stringify(date.value ?? null)}, conflict ${date.conflict}, entered ${JSON.stringify(date.entered_value ?? null)}; operator ${JSON.stringify(fact.value ?? null)} (${fact.origin}), member conflict ${fact.member_conflict === true}, member value ${JSON.stringify(member)}`));
+  // The approved export is the reviewed one, except where nothing is approved: it lists approved codes only, so with
+  // none to list it is withheld although the review is complete, and the customer is told why (session decision (f),
+  // customer_api.readiness). That difference, and only it, is accepted (refutation round 2, L3-9).
   const readiness = cust?.readiness || {};
-  out.push(check('customer.readiness', 'hard', readiness.draft === (op?.readiness?.draft === true) && readiness.approved === (op?.readiness?.reviewed === true),
-    `customer draft ${readiness.draft}, approved ${readiness.approved}; operator draft ${op?.readiness?.draft}, reviewed ${op?.readiness?.reviewed}`));
+  const reviewed = op?.readiness?.reviewed === true;
+  const noneApproved = reviewed && !expectedCodeRows(op).some(p => p.decision?.action === 'approve');
+  const toldWhy = !noneApproved || (Array.isArray(readiness.blockers) && readiness.blockers.includes(NONE_APPROVED_BLOCKER));
+  out.push(check('customer.readiness', 'hard', readiness.draft === (op?.readiness?.draft === true) && readiness.approved === (reviewed && !noneApproved) && toldWhy,
+    `customer draft ${readiness.draft}, approved ${readiness.approved}; operator draft ${op?.readiness?.draft}, reviewed ${op?.readiness?.reviewed}`
+      + (noneApproved ? `; nothing is approved, so the approved export is withheld${toldWhy ? ' and the customer is told so' : ` but the customer's blockers do not say "${NONE_APPROVED_BLOCKER}"`}` : '')));
   const expectedState = CUSTOMER_STATE_OF[op?.state];
   out.push(check('customer.state_vs_operator', 'soft', !expectedState || cust?.state === expectedState || cust?.state === 'action_needed',
     `customer ${cust?.state}; operator ${op?.state}${expectedState ? ` (read as ${expectedState})` : ''}`));
@@ -3653,7 +3743,8 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
 
     const secondPlan = secondReviewPlan(doc);
     if (secondPlan) add([skip('second_review.asked', 'not asked: the customer contract offers no second review (CORE-UX-DESIGN 7)')]);
-    const decisionPlan = planDecisions(opView, doc.review_plan, manifest.review_notes, { mustNotCode: doc.must_not_code, noAutoApprove: opts.noAutoApprove, acceptanceReviewer: acceptance });
+    const canReview = cust?.permissions?.can_review === true;  // the walking member's own, never the operator's
+    const decisionPlan = planDecisions(opView, doc.review_plan, manifest.review_notes, { mustNotCode: doc.must_not_code, noAutoApprove: opts.noAutoApprove, acceptanceReviewer: acceptance, canReview });
     if (decisionPlan.second_review_held.length) add([check('decisions.second_review_held', 'soft', false, `left undecided (${acceptance ? 'the acceptance reviewer decides no code a second review added' : 'not in review_plan.second_review.approve_codes'}): ${decisionPlan.second_review_held.join(', ')}`)]);
     if (decisionPlan.must_not_code_held.length) add([check('decisions.must_not_code_held', 'soft', false, `left undecided, never approved (the manifest's must_not_code lists their family): ${decisionPlan.must_not_code_held.join(', ')}`)]);
     if (decisionPlan.plan_conflicts.length) add([check('decisions.plan_conflict', 'hard', false, `approve_codes names a code of a family must_not_code lists; not approved: ${decisionPlan.plan_conflicts.join(', ')}`)]);
@@ -3661,7 +3752,7 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
     if (decisionPlan.approve_codes_unmatched.length) add([check('decisions.approve_codes_unmatched', 'soft', false, `named in review_plan.approve_codes but not a ready selected code: ${decisionPlan.approve_codes_unmatched.join(', ')}`)]);
     record.designated_rejection = decisionPlan.decisions.find(d => d.designated)?.code || null;
     if (decisionPlan.designated_missing) add([check('decisions.designated_rejection', 'soft', false, `no ready selected proposal in ${plan.reject.family} to reject`)]);
-    const confirmable = planConfirmations(opView, doc.must_not_code, manifest.review_notes);
+    const confirmable = planConfirmations(opView, doc.must_not_code, manifest.review_notes, canReview);
     const confirmations = acceptance ? [] : confirmable;
     const deciding = [...decisionPlan.decisions, ...confirmations];
     if (acceptance) {  // what an agent walk would also do is recorded as not done; nothing but an approval is ever sent
@@ -3946,6 +4037,7 @@ module.exports = {
   // the customer surface (CORE-UX-DESIGN 5-8)
   CONTRACT, DENYLIST, shapeProblems, checkCustomerContract, checkCustomerVocabulary, harvest, denyValuesFrom, scanContext, scanText,
   scanJson, scanFile, scanHeaders, csvRows, checkScan, expectedCodeRows, expectedCustomerStatus, allowedPassages, actIndex, checkCustomerVsOperator,
+  agentReviewed, decidedModifiers, serverActions, sameDayHeld, NOT_FINAL_BLOCKER, NONE_APPROVED_BLOCKER, SAME_DAY_EM_GATE, SAME_DAY_PROCEDURE,
   checkDetailRows, checkNoEmQuestions, readCustomerDom, checkResultList, checkChecksPanel, checkDetailsPanel, checkProgressDom, foldedSteps,
   checkProgressFold, checkUploadAck, duplicateSends, checkNoDuplicateSends, jobsKept, checkReloadIdentity, checkStopResume, checkProvenance,
   checkAuthorization, checkArtifactsHidden, checkViewport, checkDecisionRows, checkCustomerDecisions, checkModifierDialogs,

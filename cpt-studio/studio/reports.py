@@ -1834,9 +1834,13 @@ APPROVED = ReportArtifact.APPROVED
 CUSTOMER_KINDS = (DRAFT, APPROVED)
 CUSTOMER_HEADLINES = {DRAFT: 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
 CUSTOMER_TITLES = {DRAFT: 'Suggested codes — not approved', APPROVED: 'Approved codes'}
+# CORE-UX-DESIGN.md 5's columns, and review_label last (refutation round 2, L3-6): the agent-executed synthetic review
+# label on every row of an approval agent review took part in - the approver an agent, or an agent's reinstatement
+# behind it (fidelity:8, as the page labels it: customer_api) - in the draft as in the approved export, so a row read
+# alone in a spreadsheet still says it (truth rule 7; session decisions (h) and (i) of 2026-11-03: "everywhere").
 CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers',
                         'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text',
-                        'evidence_page', 'evidence_start', 'evidence_end')
+                        'evidence_page', 'evidence_start', 'evidence_end', 'review_label')
 
 
 class CustomerExportNotReady(ValueError):
@@ -1883,12 +1887,16 @@ def customer_snapshot(encounter, kind):
         snap['agent_review'] = any(item['agent'] for item in snap['items'])
     else:
         rows, _ = customer_api.code_rows(assessment, current, views)
+        # a draft's agent flag is the page's own label (customer_api._status: an approval agent review took part in),
+        # so the draft says it wherever the page does, by the one rule the page applies
         snap['items'] = [{'number': row['number'], 'code': row['code'], 'units': row['units'],
                           'modifiers': list(row['modifiers']), 'status': row['status'],
-                          'status_label': row['status_label'], 'sub_label': row['sub_label'], 'summary': row['summary'],
-                          'decision': row['_decision'], 'quotes': [_customer_quote(q) for q in row['why']['quotes']]}
+                          'status_label': row['status_label'], 'sub_label': row['sub_label'],
+                          'agent': row['status'] == 'approved' and row['sub_label'] == customer_api.AGENT_SUB_LABEL,
+                          'summary': row['summary'], 'decision': row['_decision'],
+                          'quotes': [_customer_quote(q) for q in row['why']['quotes']]}
                          for row in rows]
-        snap['agent_review'] = False
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
     return snap
 
 
@@ -1923,7 +1931,9 @@ def customer_artifact_current(report) -> bool:
 
 
 def _customer_header(snap, generated):
-    lines = [CUSTOMER_HEADLINES[snap['kind']], SYNTHETIC_LINE]
+    # the SYNTHETIC banner opens the file as it closes it (CORE-UX-DESIGN.md 5: "SYNTHETIC banner at both ends";
+    # refutation round 2, L3-1), then the headline; the agent line wherever agent review took part in an approval listed
+    lines = [SYNTHETIC_LINE, CUSTOMER_HEADLINES[snap['kind']]]
     if snap.get('agent_review'):
         lines.append(AGENT_LINE)
     return lines + [f'Report format: {snap["format_version"]}', f'Encounter: {snap["encounter"]["title"]}',
@@ -1964,7 +1974,10 @@ def render_customer_txt(snap, generated) -> bytes:
 def render_customer_csv(snap, generated) -> bytes:
     """RFC 4180 as the operator CSV: every field quoted, formula-leading cells neutralised, CRLF, UTF-8. A banner row
     (``report_format`` = the SYNTHETIC line) follows the header and closes the file; every other row is one quotation
-    of one code (a code with none has one row with empty evidence cells), its number repeated."""
+    of one code (a code with none has one row with empty evidence cells), its number repeated. The approval cells
+    (approved_by, approver_kind - the approver's own kind - and approved_at) are the approved export's; review_label
+    carries the agent-executed synthetic review label on each row of an approval agent review took part in, in both
+    kinds."""
     approved = snap['kind'] == APPROVED
     base = {'report_format': snap['format_version'], 'encounter_title': snap['encounter']['title'],
             'date_of_service': snap['date_of_service'] or ''}
@@ -1976,7 +1989,8 @@ def render_customer_csv(snap, generated) -> bytes:
                  'modifiers': ';'.join(item['modifiers']), 'status': item['status'],
                  'approved_by': item['approver'] if approved else '',
                  'approver_kind': item['approver_kind'] if approved else '',
-                 'approved_at': item['decided_at'] if approved else '', 'summary': item['summary']}
+                 'approved_at': item['decided_at'] if approved else '', 'summary': item['summary'],
+                 'review_label': AGENT_LINE if item.get('agent') else ''}
         for quote in item['quotes'] or [None]:
             rows.append({**cells, 'evidence_text': quote['text'] if quote else '',
                          'evidence_page': (quote.get('page') or '') if quote else '',

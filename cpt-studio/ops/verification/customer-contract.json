@@ -16,7 +16,8 @@
     "check_states": ["done", "running", "waiting", "unavailable", "not_run"],
     "agent_sub_label": "Agent-executed synthetic review — not clinical approval",
     "rejected_sub_label": "Rejected in review",
-    "details_heading": "A few details needed"
+    "details_heading": "A few details needed",
+    "none_approved_blocker": "No code has been approved."
   },
   "types": {
     "state": {"enum": ["processing", "action_needed", "awaiting_detail", "ready", "reviewed", "no_codes", "stopped", "failed", "being_confirmed"]},

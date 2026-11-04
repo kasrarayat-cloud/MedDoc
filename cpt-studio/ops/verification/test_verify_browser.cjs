@@ -396,10 +396,17 @@ test('planConfirmations confirms only the families must_not_code names', () => {
   assert.deepEqual(plan.map(d => [d.code, d.action, d.note]), [['45378', 'confirm', 'Synthetic confirmation.']]);
   assert.deepEqual(vb.planConfirmations(enc, [], {}), []);
   assert.deepEqual(vb.planConfirmations(enc, undefined, {}), []);
-  for (const extra of [{ reinstatable: false }, { decision_state: 'reinstated' }, { allowed_actions: ['reinstate'] }]) {
+  for (const extra of [{ reinstatable: false }, { decision_state: 'reinstated', decision: { action: 'reinstate' } }]) {
     const other = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', extra);
     assert.deepEqual(vb.planConfirmations(other, [{ family: 'gi.colonoscopy' }], {}), [], JSON.stringify(extra));
   }
+  // refutation round 2, L3-5: the operator's own allowed_actions decide nothing - ops-agent reads with no membership and
+  // is allowed none - while the walking member's permissions and the server's own gates do
+  const opsAgent = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', { allowed_actions: [] });
+  assert.deepEqual(vb.planConfirmations(opsAgent, [{ family: 'gi.colonoscopy' }], {}).map(d => d.code), ['45378']);
+  assert.deepEqual(vb.planConfirmations(opsAgent, [{ family: 'gi.colonoscopy' }], {}, false), []);
+  const notFinal = withExcluded(encounter({ readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } }), 'p-plan', '45378', 'gi.colonoscopy');
+  assert.deepEqual(vb.planConfirmations(notFinal, [{ family: 'gi.colonoscopy' }], {}), []);
 });
 
 test('a STOP file in the evidence directory stops the batch before the next upload', () => {
@@ -1916,9 +1923,13 @@ test('scanFile and scanHeaders: a customer report quoting the document is clean;
   for (const [name, fmt] of [['customer-report-approved.txt', 'txt'], ['customer-report-draft.txt', 'txt'], ['customer-report-approved.csv', 'csv'], ['customer-report-draft.csv', 'csv']]) {
     assert.deepEqual(vb.scanFile(sample(name), ctx, name, fmt), [], name);
   }
-  const txt = sample('customer-report-approved.txt').replace('LIMITATIONS', `PROVIDER USAGE\n  corti · ${op.provider_runs[0].request_sha256}\n\nLIMITATIONS`);
+  const report = sample('customer-report-approved.txt');
+  assert.equal(report.split('\nLimitations').length, 2);
+  const txt = report.replace('\nLimitations', `\nPROVIDER USAGE\n  corti · ${op.provider_runs[0].request_sha256}\n\nLimitations`);
   assert.deepEqual(hitIds(vb.scanFile(txt, ctx, 'approved.txt', 'txt')), ['deny_value', 'long_hex', 'provider_machinery', 'provider_name', 'provider_word']);
-  const csv = sample('customer-report-approved.csv').replace('approved,CPT Studio', 'approved (gpt-6-astra),CPT Studio');
+  const approvedCsv = sample('customer-report-approved.csv');
+  assert.equal(approvedCsv.split('"approved","CPT Studio').length, 3);  // studio/reports.py's bytes: every cell quoted
+  const csv = approvedCsv.replace('"approved","CPT Studio', '"approved (gpt-6-astra)","CPT Studio');
   assert.deepEqual(hitIds(vb.scanFile(csv, ctx, 'approved.csv', 'csv')), ['deny_value', 'model_id', 'provider_name']);
   assert.deepEqual(vb.csvRows('a,"b ""c"", d"\r\n1,2\n'), [['a', 'b "c", d'], ['1', '2']]);
   assert.deepEqual(vb.scanHeaders({ 'content-type': 'text/plain', 'content-security-policy': "script-src 'sha256-abc'", 'set-cookie': 'x=1' }, ctx, 'GET /'), []);
@@ -2031,6 +2042,178 @@ test('checkCustomerVsOperator: the evidence CPT Studio recorded for the matched 
   assert.equal(supports(inexact).status, 'fail');
   assert.deepEqual([...vb.actIndex(op).keys()], ['act-1']);
   assert.deepEqual([...vb.actIndex({ assessment: { services: { services: 'x' } } }).keys()], []);
+});
+
+// --- refutation round 2 (2026-11-04): the walk judges the real site (L3-3, L3-5, L3-6, L3-7, L3-9, L3-10) ---------------
+
+const checkOf = (results, id) => results.find(r => r.id === id);
+
+// The operator view the walk reads is ops-agent's: a grant and no membership, so its own allowed_actions are always [].
+test('the operator sample is what ops-agent reads: no membership, no action of its own', () => {
+  const op = OP();
+  assert.deepEqual(op.permissions, { can_review: false, is_owner: false, can_confirm: false });
+  assert.deepEqual(op.assessment.proposals.map(p => p.allowed_actions), [[], [], [], []]);
+});
+
+test('serverActions: what the server accepts from the member, from the operator view\'s facts, never the operator\'s own actions (L3-5)', () => {
+  const op = OP();
+  const [p80, p85, p78, p39] = op.assessment.proposals;
+  assert.deepEqual([vb.serverActions(p80, op), vb.serverActions(p85, op)], [['revoke'], ['revoke']]);  // approved
+  assert.deepEqual([vb.serverActions(p78, op), vb.serverActions(p39, op)], [[], []]);  // an alternative; an exclusion nobody may decide
+  const undecided = OP();
+  for (const p of undecided.assessment.proposals) if (p.bucket === 'selected') Object.assign(p, { decision: null, decision_state: 'undecided' });
+  const [u80] = undecided.assessment.proposals;
+  assert.deepEqual(vb.serverActions(u80, undecided), ['approve', 'reject']);
+  assert.deepEqual(vb.serverActions({ ...u80, status: 'needs_clarification' }, undecided), ['reject']);
+  assert.deepEqual(vb.serverActions({ ...u80, evidence: [{ ...u80.evidence[0], exact: false }] }, undecided), ['reject']);  // no exact evidence: no approve
+  assert.deepEqual(vb.serverActions({ ...u80, status: 'excluded' }, undecided), []);  // a detail answered unavailable: nothing to decide
+  assert.deepEqual(vb.serverActions(u80, undecided, false), []);  // a member who may not review
+  assert.deepEqual(vb.serverActions(u80, { ...undecided, readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } }), []);
+  assert.deepEqual(vb.serverActions(u80, { ...undecided, readiness: { draft: false, reviewed: false, blockers: [] } }), []);
+  // an excluded, reinstatable code: reinstate (with exact evidence) and confirm; once reinstated, approve only where
+  // nothing withholds it; a confirmation is undone only
+  const excluded = { ...p39, reinstatable: true, decision: null };
+  assert.deepEqual(vb.serverActions(excluded, undecided), ['reinstate', 'confirm']);
+  const reinstated = { ...excluded, decision: { action: 'reinstate' } };
+  assert.deepEqual(vb.serverActions(reinstated, undecided), ['approve', 'reject', 'revoke']);
+  assert.deepEqual(vb.serverActions({ ...reinstated, approve_withheld_by: 'services.base_included' }, undecided), ['reject', 'revoke']);
+  assert.deepEqual(vb.serverActions({ ...excluded, decision: { action: 'confirm' } }, undecided), ['revoke']);
+  // the same-day E/M gate: held while a reinstated same-day procedure stands
+  const visit = { ...u80, code: '99213', checks: [{ id: vb.SAME_DAY_EM_GATE, status: 'warn' }] };
+  const procedure = { ...excluded, checks: [{ id: vb.SAME_DAY_PROCEDURE, status: 'warn' }], decision: { action: 'reinstate' } };
+  const sameDay = { ...undecided, assessment: { ...undecided.assessment, proposals: [visit, procedure] } };
+  assert.deepEqual(vb.serverActions(visit, sameDay), ['reject']);
+  assert.equal(vb.sameDayHeld(visit, { ...sameDay, assessment: { proposals: [visit, { ...procedure, decision: null }] } }), false);
+  // the operator's own allowed_actions are never read: the same facts, the same answer, whatever they say
+  assert.deepEqual(vb.serverActions({ ...u80, allowed_actions: ['revoke'] }, undecided), ['approve', 'reject']);
+});
+
+test('checkCustomerVsOperator judges the offered actions by what the server accepts from the customer (L3-5)', () => {
+  // the samples: ops-agent's view allows nothing of its own; the customer is offered revoke on each approval
+  assert.equal(checkOf(vb.checkCustomerVsOperator(CUST(), OP()), 'customer.codes.actions').status, 'pass');
+  const cases = [
+    [enc => { enc.codes[0].allowed_actions = ['revoke', 'approve']; }, 'fail'],  // an approval offered approve again
+    [enc => { enc.codes[1].allowed_actions = ['reject']; }, 'fail'],
+    [enc => { enc.permissions.can_review = false; }, 'fail'],  // a member who may not review offered revoke
+    [enc => { enc.permissions.can_review = false; enc.codes.forEach(code => { code.allowed_actions = []; }); }, 'pass'],
+    [enc => { enc.codes.forEach(code => { code.allowed_actions = []; }); }, 'pass'],  // offering less is no wrong offer
+  ];
+  for (const [mutate, want] of cases) {
+    const enc = CUST();
+    mutate(enc);
+    assert.equal(checkOf(vb.checkCustomerVsOperator(enc, OP()), 'customer.codes.actions').status, want, mutate.toString());
+  }
+  // before any decision: approve and reject are what the server accepts; reinstate never is on a selected code
+  const op = OP();
+  const enc = CUST();
+  for (const p of op.assessment.proposals) if (p.bucket === 'selected') Object.assign(p, { decision: null, decision_state: 'undecided' });
+  op.decisions.history = [];
+  op.readiness = { draft: true, reviewed: false, blockers: ['45380 has no decision'] };
+  enc.codes.forEach(code => Object.assign(code, { status: 'ready', status_label: 'Ready for review', sub_label: '', modifiers: [], decision: null,
+    allowed_actions: ['approve', 'reject'] }));
+  enc.readiness = { draft: true, approved: false, blockers: ['45380 has no decision.'] };
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), []);
+  enc.codes[0].allowed_actions = ['approve', 'reject', 'reinstate'];
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), ['customer.codes.actions']);
+  assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.actions').reason, /45380 offers reinstate \(the server accepts approve, reject from this member\)/);
+});
+
+test('checkCustomerVsOperator never reads a missing modifier as none: the comparison could not run (L3-3)', () => {
+  const bare = OP();
+  for (const p of bare.assessment.proposals) if (p.decision) delete p.decision.modifiers;
+  const dropped = CUST();
+  dropped.codes[1].modifiers = [];
+  dropped.codes[1].decision.modifiers = [];
+  for (const enc of [CUST(), dropped]) {  // neither the right page nor the wrong one passes against a view that does not say
+    const results = vb.checkCustomerVsOperator(enc, bare);
+    assert.deepEqual(failed(results), ['customer.codes.units_modifiers']);
+    assert.match(checkOf(results, 'customer.codes.units_modifiers').reason, /cannot verify: the operator view's decision carries no "modifiers" list/);
+  }
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(dropped, OP())), ['customer.codes.units_modifiers', 'customer.codes.decision']);
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(CUST(), OP())), []);
+  assert.deepEqual([vb.decidedModifiers(null), vb.decidedModifiers({ action: 'approve' }), vb.decidedModifiers({ modifiers: ['XS'] })], [[], null, ['XS']]);
+});
+
+test('checkCustomerVsOperator accepts the one documented readiness difference: nothing approved, approved export withheld (L3-9)', () => {
+  // every code rejected: the review is complete, and the approved export - approved codes only - has nothing to list
+  const op = OP();
+  for (const p of op.assessment.proposals) if (p.decision) Object.assign(p.decision, { action: 'reject', modifiers: [] });
+  op.readiness = { draft: true, reviewed: true, blockers: [] };
+  const enc = CUST();
+  enc.codes.forEach(code => Object.assign(code, { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review', modifiers: [],
+    why: { ...code.why, quotes: [] } }));
+  enc.codes.forEach(code => Object.assign(code.decision, { action: 'reject', modifiers: [] }));
+  enc.readiness = { draft: true, approved: false, blockers: [vb.NONE_APPROVED_BLOCKER] };
+  assert.equal(vb.NONE_APPROVED_BLOCKER, 'No code has been approved.');
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), []);
+  for (const [mutate, why] of [[r => { r.blockers = []; }, 'withheld without saying why'], [r => { r.approved = true; }, 'offered with nothing to list'],
+    [r => { r.blockers = ['The review is not complete yet.']; }, 'withheld for another reason']]) {
+    const other = JSON.parse(JSON.stringify(enc));
+    mutate(other.readiness);
+    assert.deepEqual(failed(vb.checkCustomerVsOperator(other, op)), ['customer.readiness'], why);
+  }
+  // with an approval to list, the approved export is the reviewed one: withheld is still wrong
+  const withheld = CUST();
+  withheld.readiness = { draft: true, approved: false, blockers: [vb.NONE_APPROVED_BLOCKER] };
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(withheld, OP())), ['customer.readiness']);
+});
+
+test('checkCustomerVsOperator accepts exactly the passages the server\'s one rule shows (L3-7, L3-10)', () => {
+  const op = OP();
+  const text = op.revision.text;
+  const cecum = 'The colonoscope was advanced to the cecum.';
+  const start = text.indexOf(cecum);
+  const located = { start, end: start + cecum.length, text: cecum };
+  const supports = (enc, o) => checkOf(vb.checkCustomerVsOperator(enc, o), 'customer.why.supports').status;
+  // no support reading: no passage was shown to support the code, so none may be quoted
+  const unread = OP();
+  unread.assessment.proposals[0].support = {};
+  assert.equal(supports(CUST(), unread), 'fail');
+  const quoteless = CUST();
+  quoteless.codes[0].why.quotes = [];
+  assert.equal(supports(quoteless, unread), 'pass');
+  // CPT Studio's located passages only where the reading says they show the act ('warn'), never a 'not_applicable' one's
+  const located80 = CUST();
+  located80.codes[0].why.quotes = [{ ...located, page: 1, exact: true }];
+  for (const [reading, want] of [['warn', 'pass'], ['not_applicable', 'fail'], ['fail', 'fail'], ['pass', 'fail']]) {
+    const o = OP();
+    Object.assign(o.assessment.proposals[0].support, { status: reading, supporting: [], unrelated: [0], source: [located] });
+    assert.equal(supports(located80, o), want, reading);
+  }
+  // an excluded code quotes nothing, whatever its reading holds
+  const p = vb.allowedPassages(op.assessment.proposals[0], Array.from(text), new Map(), 'excluded');
+  assert.deepEqual(p, { allowed: [], unrelated: [] });
+  assert.deepEqual(vb.allowedPassages(op.assessment.proposals[0], Array.from(text)).allowed.map(span => span.start), [256]);
+});
+
+test('expectedCustomerStatus labels agent review where the page does: an agent approver, or an agent\'s reinstatement behind a human\'s approval (L3-6)', () => {
+  const at = { created_at: '2026-11-03T22:05:00+00:00' };
+  const human = { action: 'approve', reviewer: 'Reviewer Four', reviewer_kind: 'human', ...at };
+  const reinstated = { bucket: 'excluded', status: 'excluded', decision: human, reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent' } };
+  assert.deepEqual(vb.expectedCustomerStatus(reinstated), { status: 'approved', sub: SUB, human: false });
+  assert.equal(vb.agentReviewed(reinstated), true);
+  const own = { ...reinstated, reinstated_by: { reviewer: 'Reviewer Four', reviewer_kind: 'human' } };
+  assert.deepEqual(vb.expectedCustomerStatus(own), { status: 'approved', sub: null, human: true });
+  assert.equal(vb.agentReviewed({ bucket: 'selected', decision: { ...human, action: 'reject' } }), false);
+  // the page's label beside the true kind passes; a human's own approval labelled an agent's fails
+  const op = OP();
+  Object.assign(op.assessment.proposals[1], { reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent', decided_at: '2026-11-03T22:04:00+00:00' } });
+  Object.assign(op.assessment.proposals[1].decision, { reviewer: 'Reviewer Four', reviewer_kind: 'human' });
+  const enc = CUST();
+  Object.assign(enc.codes[1].decision, { by: 'Reviewer Four', by_kind: 'human' });
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), []);
+  op.assessment.proposals[1].reinstated_by = null;
+  assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.status').reason, /45385 sub label|a human approval labelled as an agent's/);
+});
+
+test('planDecisions plans from the actions the server accepts from the walking member, not the operator\'s own (L3-5)', () => {
+  const enc = encounter();
+  for (const p of enc.assessment.proposals) p.allowed_actions = [];  // the operator view of an operator with no membership
+  const plan = vb.planDecisions(enc, { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES);
+  assert.deepEqual(plan.decisions.map(d => [d.code, d.action]), [['45331', 'approve'], ['45380', 'reject']]);
+  assert.deepEqual(vb.planDecisions(enc, { reject: null }, NOTES, { canReview: false }).decisions, []);
+  const notFinal = encounter({ readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } });
+  assert.deepEqual(vb.planDecisions(notFinal, { reject: null }, NOTES).decisions, []);
 });
 
 test('readCustomerDom reads the DOM contract\'s hooks, and checkResultList holds each row to the API', () => {
@@ -2646,13 +2829,16 @@ function pendingCustomer() {
   return enc;
 }
 
+// The operator view as ops-agent reads it: a grant and no membership, so the view allows it no action of its own
+// (studio.operator.ReadOnlyAccess) - the walk must take the actions the server accepts from the customer from the facts
 function pendingOperator() {
   const op = OP();
   op.state = 'ready_for_review';
   op.state_label = 'Ready for review';
+  assert.equal(op.permissions.can_review, false);
   for (const p of op.assessment.proposals) {
     if (p.bucket !== 'selected') continue;
-    Object.assign(p, { decision: null, decision_state: 'undecided', allowed_actions: ['approve', 'reject'] });
+    Object.assign(p, { decision: null, decision_state: 'undecided', allowed_actions: [] });
   }
   op.decisions.history = [];
   op.readiness = { draft: true, reviewed: false, blockers: ['45380 has no decision.'] };
@@ -2728,7 +2914,7 @@ function fakeSite({ leak = {} } = {}) {
     p.decision = { id: `d-${p.id}`, proposal_id: p.id, code: p.code, action: body.action, note: body.note, reviewer: by, reviewer_kind: 'agent',
       created_at: at, decided_at: at, carried_at: null, acknowledgement: body.acknowledgement, carried_from: null, invalidated: null, revision_number: 1, modifiers };
     p.decision_state = body.action === 'approve' ? 'approved' : 'rejected';
-    p.allowed_actions = ['revoke'];
+    p.allowed_actions = [];  // ops-agent's own: none
     state.operator.decisions.history.push(clone(p.decision));
     Object.assign(code, body.action === 'approve'
       ? { status: 'approved', status_label: 'Approved', sub_label: SUB } : { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review' });
@@ -2740,7 +2926,8 @@ function fakeSite({ leak = {} } = {}) {
     const n = state.listing.length + 1;
     const rid = `b0b0b0b0-00${String(n).padStart(2, '0')}-4c4c-8d8d-9e9e9e9e9e${String(n).padStart(2, '0')}`;
     const text = sample(`customer-report-${body.kind}.${body.fmt}`);
-    const data = leak.reportLine ? text.replace('LIMITATIONS', `${leak.reportLine}\n\nLIMITATIONS`) : text;
+    const data = leak.reportLine ? text.replace('\nLimitations', `\n${leak.reportLine}\n\nLimitations`) : text;
+    if (leak.reportLine && body.fmt === 'txt') assert.notEqual(data, text, 'the report leak did not apply');
     state.files.set(rid, data);
     const hash = crypto.createHash('sha256').update(data).digest('hex');
     state.listing.push({ id: rid, audience: leak.operatorAudience || 'customer', kind: body.kind === 'approved' ? 'reviewed' : 'draft', fmt: body.fmt, sha256: hash });

@@ -90,7 +90,9 @@ class SharedReaderTests(unittest.TestCase):
         ctx = sc.scan_context(op['revision']['text'], sc.deny_values_from(op, sample_json('operator-trace.json')))
         for name in ('customer-report-approved.txt', 'customer-report-draft.txt', 'customer-report-approved.csv', 'customer-report-draft.csv'):
             self.assertEqual(sc.scan_file(sample(name), ctx, name, name.rsplit('.', 1)[1]), [], name)
-        leaked = sample('customer-report-approved.csv').replace(',approved,', ',approved (gpt-6-astra),', 1)
+        csv_text = sample('customer-report-approved.csv')
+        self.assertEqual(csv_text.count(',"approved",'), 2)  # the samples are studio/reports.py's bytes: every cell quoted
+        leaked = csv_text.replace(',"approved",', ',"approved (gpt-6-astra)",', 1)
         self.assertEqual(sorted({h['id'] for h in sc.scan_file(leaked, ctx, 'x.csv', 'csv')}), ['deny_value', 'model_id', 'provider_name'])
         self.assertEqual(sc.csv_rows('a,"b ""c"", d"\r\n1,2\n'), [['a', 'b "c", d'], ['1', '2']])
         self.assertEqual(sc.scan_headers([('Content-Security-Policy', "script-src 'sha256-x'")], ctx, 'GET /'), [])
@@ -203,7 +205,9 @@ class StubSite:
             if text is None:
                 return self.send(request, 404, {'error': 'Not found.'})
             headers = [('X-Content-SHA256', 'ab' * 32)] if self.leak.get('hash_header') else []
-            return self.send(request, 200, text.replace('LIMITATIONS', 'PROVIDER USAGE\n  corti\n\nLIMITATIONS') if self.leak.get('report_leak') else text,
+            # the TXT reports leak (the CSVs have no Limitations line); the leak case expects scan.file to fail on them
+            leaked = text.replace('\nLimitations', '\nPROVIDER USAGE\n  corti\n\nLimitations', 1) if self.leak.get('report_leak') else text
+            return self.send(request, 200, leaked,
                              'text/plain', headers)
         if request.command == 'GET' and request.path.startswith('/ops/'):
             if self.leak.get('ops_open'):
