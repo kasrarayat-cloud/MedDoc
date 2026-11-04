@@ -871,3 +871,107 @@ repaired:
 | R1c-r3 | a clause naming a site of another tract than the labelled lesion's | unbinds the label as round 2 did; the denial is read at its site and at the lesion | one statement read both ways keeps both conflicts |
 | R8b-r3 | a post-modified same-day evaluation outside the closed list (opener, article, up to three adjectives, five prepositions, "of" with a possessive) | the absence statement negates the visit | a closed list; wider wording is for the accuracy evaluation |
 
+## Core repair, round 5 (2026-11-04): the binding rule R1a-r5, and what it leaves
+
+Round 5 lands one reader rule, the lead's R1a-r5, verbatim (`tests/fixtures/gi4/declarations/cux-r5-binding.json`,
+declared before code). Where more than one procedure is read performed (the office visit not counted), a lesion's name
+alone never gives a performed act its service. The rule reaches an act that a label or specimen binds, that is not
+denied, whose own clause names no site, whose part names no service, and that is not a clip or a cannulation. Such an
+act is unbound, and it takes no site from another clause of its sentence. The rule detects no telling and lists no
+word.
+
+It holds the four shapes main `20a64b860` read worse than installed `41e03656d`. In R1, R1b and R3 dash, 45380 was READY
+on the upper endoscopy's biopsy, because the biopsy was bound to the colon polyp's label. In R2 dash combined, 45382 was
+READY on a prophylactic clip. Round 3's recorded limit "an examination told only by its name ... does not unbind the
+label (hold direction)" was in fact a false READY (round 4's R-1, the R1b dash shape), and R1a-r5 holds it.
+
+The rows below are what the rule costs and what it leaves. Each input is a synthetic battery row (`ops/gi4/battery.py`,
+prefix `R8 R5 `) or a case of the refutation rounds. Each is read through the assess stage's children with a synthetic
+Corti answer. *Main* is `20a64b860`, *installed* is `41e03656d` and *head* is this branch.
+
+### The declared hold class: a cost of R1a-r5
+
+This is the class. The note is combined: its title or header names more than one procedure, or its narrative tells
+more than one. No section heading names a service over the act. A lesion is defined in one sentence and acted on by its
+name alone in another. The act is then no service's act, and the code it alone supports is held
+[performed_status] (truth: done).
+
+| input | main | installed | head |
+|---|---|---|---|
+| "Procedure(s) performed: EGD and colonoscopy" / the gastroscope and its antral biopsies / "The gastroscope was withdrawn and the colonoscope was advanced to the cecum." / "Polyp A - sigmoid colon: an 8 mm sessile polyp was seen." / "Polyp A was removed with a cold snare." (45385 cites the last; refutation 4b's case `V pp ctrl`, row `R8 R5 hold 1146`) | ready | ready | held |
+| the same with the polyp defined under "Findings:" (row `R8 R5 hold 1277`); an upper lesion, "Lesion 1 - gastric body: ..." then "Lesion 1 was removed with a hot snare." (43251, `R8 R5 hold 1383`); the colonoscope "reinserted to the identified polyp" before the act (`R8 R5 hold 1406`) | ready | ready | held |
+| the R8 R3 A3 control: "COL-1 - sigmoid colon: an 8 mm polyp was seen.", the gastroscope, "The colonoscope was then reinserted.", "COL-1 was removed with a cold snare." | ready | held | held: the colonoscope told again restores nothing |
+| the base probe B2 dash: the label-only snare before the gastroscope in a "Colonoscopy and EGD report" | ready | held | held |
+| "Colonoscopy and EGD report" ... "The EGD was not performed today." (`R8 R5 hold, a combined title whose second service the note denies`) | ready | held | held |
+
+**How often.** The lead measured this on the prototype, and this branch reproduced it exactly. One of 5,980 corpus,
+battery and fixture texts changes its inventory: the A3 control, which is a battery row. No corpus text and no fixture
+changes, Mara and the eight regression documents among them. In the 1,445 adversarial cases of refutation rounds 4 and
+4b (2,861 cells read), 130 cells are held where main and installed read READY with truth done. They come from 130
+cases: 77 from round 4b's H2 passing-mention cases, 31 from its lens H cases, 14 from H3's non-service words and 8
+from H5's restore history word. Those cases were all built around this binding.
+
+**"Read performed" is pass 1's reading.** A family that a combined title names counts as performed even where a later
+sentence denies it. That is why the last row is in the class. Installed holds that row too.
+
+**Why it is left.** The rule holds wherever only a lesion's name would place the act. Deciding which examination a
+name-only act belongs to is the telling and word-list reading that rounds 4 and 4b tried, and that leaked (below). The
+reviewer answers the performed-status question.
+
+### The first fresh walk document's two gaps (recorded since round 4, not repaired)
+
+| gap | input | main, installed and head | locus |
+|---|---|---|---|
+| a | numbered "PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY" / "PROCEDURE 2: COLONOSCOPY" headings under the document's indication line, "Indications: Iron-deficiency anemia with intermittent epigastric pain; positive fecal immunochemical test." (row `R8 R5 gap a`); 43239 cites the antral biopsies and 45385 a descending-colon snare | 43239 and 45385 held [extent, performed_status] on all three. Without the indication line (`R8 R5 gap a control`), both are READY on all three. The fresh document itself: 43239 [extent, performed_status], 45380 [extent] and 45385 [conflict:snare, extent] on main and head; installed gives 45385 [extent, performed_status] | `sections.layout` reads the indication line as a section that runs to the end of the note. The numbered headings open no section, so today's acts are read inside the indication. The layout is frozen by the H2 gate (gi-context@4) |
+| b | "Polyp A (transverse colon): a 3 mm sessile polyp was completely removed with cold biopsy forceps and sent as jar 3." / "Polyp B (descending colon): a 12 mm pedunculated polyp ... sent as jar 4." / "Polyp A was not snared, and forceps were not used on Polyp B." (`R8 R5 gap b`) | 45380 READY; 45385 held [conflict:snare] on all three. No label is read, so "Polyp A was not snared" denies a snare at no lesion. Written "Polyp A - transverse colon:" (`R8 R5 gap b control`), both codes are READY on main and head (installed: 45385 [conflict:snare]). Refutation 4b's G1 shape with its label written "Polyp A (sigmoid colon):" (residual `R8 R5 residual gap b, ...`) reads 43239 READY on all three, though no upper biopsy was taken (truth: not done). R1a-r5 unbinds only a bound act, so it never engages, and "the antrum" in the sentence places the impression's restatement | rule 1's label reader reads "Label - site:" only. Round 4's R4b read the parenthesis form and was refuted (below) |
+
+### Two classes R1a-r5 does not touch (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| a prophylactic hemostatic clip read as control of bleeding in a colonoscopy-only note | "Polyp B - descending colon: a 12 mm pedunculated polyp was removed en bloc with a hot snare." / "A hemostatic clip was placed prophylactically at the Polyp B stalk site."; 45382 cites the clip sentence (residuals `R8 R5 residual R2 dash colonoscopy only`, and the paren and unlabelled forms) | ready | ready | ready | only one procedure is performed, so R1a-r5 does not engage. Reading "prophylactically" as no bleeding control is a word list: round 4b's R4c, refuted by G5, H1 and H4. In a combined note, the clip's act is held (`R8 R5 R2 dash combined`) |
+| rule 1's same-lesion pairing by act kind | "Polyp A - ascending colon: a 15 mm pedunculated polyp was removed en bloc with a hot snare ..." / "Polyp B - sigmoid colon: a 3 mm sessile polyp ... cold biopsy forceps ..." / "Polyp A could not be snared on the first attempt because of its position behind a fold." (`R8 R5 H1 dash first snare attempt`); "Polyp A could not be removed with forceps in one bite; a second bite completed the removal." (`R8 R5 H3 dash one bite`) | H1 dash 45385 held [conflict:snare]; H3 dash 45380 held [conflict:biopsy]; the paren forms READY (no label is read) | ready | as main | rule 1 pairs a lesion's failed attempt with its own act by act kind. A repair would have to read that a later act completed the attempt, and every such word list can release a code (round 4b's item ii) |
+
+### Why the round-4 and 4b repairs were not taken
+
+Both rounds repaired these shapes with lists: a label form, tellings, service names and prophylaxis words. Their
+refutations showed the lists leak both ways. They gave false READYs (round 4: R-1, R-2, R-3; round 4b: G1 to G5) and
+false holds (round 4: H1 to H4; round 4b: H1 to H5). Every finding below was reproduced by its verifier
+(`refute-r4/results.json`, `refute-r4b-results.json`).
+
+**Round 4, R4b** (head `8be50c9a`) read the "Label (site):" form wherever rule 1 reads "Label - site:".
+- **R-1** (blocking): the paren R1 shape and its R1b telling read 45380 READY on the upper biopsy.
+- **R-2** (blocking): in a combined note, the label gave the prophylactic clip a family, so 45382 was READY.
+- **R-3** (blocking): the gastroscope passed "after withdrawal of the colonoscope" read 45380 READY.
+- **R-4** (minor): a label reused after a denial that names it resolved by order of appearance.
+- **H1 to H4** (each graded blocking by its verifier): READY codes moved to held against installed. A first snare
+  attempt, a tattoo beside the resection's denial, one-bite forceps removal, and a snare retrieval each held a supported
+  code through rule 1's act-kind pairing.
+
+**Round 4b, R1a-r4 and R4c** (head `0eb5ac60`). R1a-r4 unbound a label after any telling of another examination: an
+instrument, a bare endoscope or scope its sentence's anatomy places, or a service name. R4c read a prophylaxis
+qualifier as no bleeding control.
+- **G1** (blocking, new in the fix): the unbinding re-placed the act in the other examination, by a site in another
+  clause of its sentence. "Impression: Polyp A was biopsied with cold forceps; the antrum was normal." read 43239
+  READY. R1a-r5 takes no such site: its G1-type rows are held, and the form told by the gastroscope, READY on main, is
+  held too.
+- **G2, G3, G4 and G6** (blocking per their verifiers): variants the telling list did not close. A bare scope was placed
+  only by its own sentence's anatomy. Any plain colonoscope sentence restored the binding. Common tellings fell outside
+  the inclusion list. There was no lower-tract counterpart for a bare scope.
+- **G5** (blocking), and **H1** and **H4** (major, new in the fix): R4c's closed prophylaxis list. A reworded qualifier
+  read as bleeding control again, and purpose words, or a qualifier of another noun, removed genuine bleeding control.
+- **H2, H3 and H5** (major, new in the fix): name-only acts were held where main and installed read READY. The causes
+  were a "Procedures: EGD, colonoscopy" header, "PEG" and "arm" read as tellings, and a restore defeated by a history
+  word. **R1a-r5 holds these shapes too, as its declared cost.** 99 of its 130 adversarial hold cells are H2's, H3's and
+  H5's cases. The difference is that R1a-r5 releases nothing (no cell moves toward READY against main or installed), and
+  its holds are one named, measured class rather than the edge of a list.
+- **H6**: by design (declared).
+
+R1a-r5 has one condition the corpus does not exercise: several procedures read performed. Forcing it true moves none
+of the 5,980 texts. In a titled single-service report, the part already names its service. The condition decides only
+where a part has no family and a second service is documented but not performed. A row pins that case: `R8 R5 control,
+one procedure performed and one planned, acts by label`, where each act keeps its own lesion and the distinct-lesion
+consideration stands.
+
+How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
+(independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
