@@ -256,7 +256,12 @@ def effective_view(assessment):
 def _questions(encounter, assessment, view, answers):
     """(scope, fact, family, code, position) of every open question of ``assessment`` - the stored ones, or with the
     overlay's ``view`` the proposals' questions it holds (plus any stored one a standing answer answers, so the member
-    can see and withdraw it) - when ``assessment`` is the live one on the current context; none otherwise."""
+    can see and withdraw it) - when ``assessment`` is the live one on the current context; none otherwise.
+
+    ``view``: review.effective_view's {proposal key: review_view.View}, whose ``questions`` are the dicts the overlay
+    builds ({id, scope, family, fact, question, reason}; review_view._question). Only a view in the effective set asks
+    (``active``): a rejected code's stored question decides nothing, as readiness reads it (review._assessment_blockers),
+    and it is asked again once a revocation brings the code back."""
     if assessment is None or assessment.pk != getattr(review.live_assessment(encounter), 'pk', None) \
             or assessment.context_id != encounter.current_context_id:
         return []
@@ -276,8 +281,11 @@ def _questions(encounter, assessment, view, answers):
     held += [entry for entry in out if entry[0] == 'proposal' and entry[1:4] in standing]
     for key, item in view.items():
         proposal = proposals.get(key)
-        for spec in (getattr(item, 'questions', ()) or ()) if proposal is not None else ():
-            held.append(('proposal', spec.fact, spec.family or proposal.family, proposal.code, (2, proposal.position)))
+        if proposal is None or not getattr(item, 'active', True):
+            continue
+        for spec in getattr(item, 'questions', ()) or ():
+            fact, family = spec.get('fact') or '', spec.get('family') or ''
+            held.append(('proposal', fact, family or proposal.family, proposal.code, (2, proposal.position)))
     return held
 
 

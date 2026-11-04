@@ -22,7 +22,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
-from . import models, review
+from . import answers, models, review
 from .gi.context import charge_date_problem
 from .gi.profiles import PROFILES
 from .models import Decision, Job, Proposal, ProviderRun, ReportArtifact, SourceRevision
@@ -183,6 +183,10 @@ KNOWN_ERRORS = {
     'Choose a TXT or CSV export.': None,
     'Choose a draft or an approved export.': None,
     'The approved export is not available yet.': None,
+    # the details flow's own refusals (answers.py), already in the member's words
+    answers.BUSY: None,
+    answers.STALE: None,
+    answers.ALREADY_WITHDRAWN: None,
 }
 KNOWN_TEMPLATES = (
     re.compile(r'(?:Approve|Reject|Reinstate for review|Revoke decision|Confirm exclusion) is not available for '

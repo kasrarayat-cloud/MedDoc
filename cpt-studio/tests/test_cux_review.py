@@ -803,7 +803,9 @@ class OverlayHooksTests(TestCase):
                 self.assertEqual(reply.status_code, status, reply.content)
         reply = self.client.post(url, data=json.dumps({**body, 'modifiers': ['XS']}), content_type='application/json')
         self.assertEqual(reply.status_code, 201, reply.content)
-        self.assertEqual(reply.json()['modifiers'], ['XS'])
+        # the customer decision shape (customer_api.decision_response, CORE-UX-DESIGN.md 7): the chosen modifier is on
+        # the decision the code row shows
+        self.assertEqual(reply.json()['decision']['modifiers'], ['XS'])
         other = persist('denied')
         self.client.force_login(other.reviewer)
         reply = self.client.post(f'/api/encounters/{other.encounter.pk}/decisions', data=json.dumps({

@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from studio import answers, intake, jobs, models, progress, review
 from studio.gi import context as gi_context
-from studio.types import ClarificationSpec, ExtractionResult, PageSpan, sha256_json
+from studio.types import ExtractionResult, PageSpan, sha256_json
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
@@ -226,8 +226,9 @@ class DetailRowsTests(DetailsCase):
                                  asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'),
                                  questions=[pf.clarification('setting', scope='service', family=OFFICE)])
         View = collections.namedtuple('View', 'questions')
-        added = ClarificationSpec(scope='proposal', fact='base_included', question='stored wording', reason='r',
-                                  family=COLON, proposal_key='sel:1')
+        # the overlay's own question shape (review_view._question): a dict, as review.effective_view's View holds it
+        added = {'id': '', 'scope': 'proposal', 'family': COLON, 'fact': 'base_included', 'question': 'stored wording',
+                 'reason': 'r'}
         view = {'sel:0': View(questions=()), 'sel:1': View(questions=(added,))}  # both extents released
         rows = answers.details_needed(self.s.encounter, assessment, view)
         self.assertEqual([(r['fact'], r['affects']) for r in rows], [('setting', []), ('base_included', ['45380'])])
