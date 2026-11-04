@@ -44,8 +44,8 @@ DETAIL_UNAVAILABLE = 'detail_unavailable'
 UNAVAILABLE_ANSWERS = ('not_documented', 'cannot_confirm')
 ANSWER_WORDS = {'not_documented': 'not documented', 'cannot_confirm': 'cannot be confirmed'}
 # The checks the engine records after a base hold (engine._proposal): an added base check goes before the first of them.
-_AFTER_BASE = ('facts.required', 'em.same_day_procedure', SAME_DAY_EM_GATE, DATE_CHECK, PRESENCE_CHECK, 'mue.units',
-               ENDOSCOPIC_CHECK, 'cpt.membership', 'cpt.descriptor', 'ncci.ptp')
+_AFTER_BASE = ('facts.required', 'em.same_day_coverage', SAME_DAY_EM_GATE, 'em.same_day_procedure', DATE_CHECK,
+               PRESENCE_CHECK, 'mue.units', ENDOSCOPIC_CHECK, 'cpt.membership', 'cpt.descriptor', 'ncci.ptp')
 MODIFIER_REVIEW = 'distinct_lesion'
 
 

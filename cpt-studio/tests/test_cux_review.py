@@ -260,6 +260,7 @@ class OverlayIsTheEngineRuleTests(SimpleTestCase):
             self.assertEqual(after[code].status, engine_row.status, code)
             for check_id in ('services.base_included', 'pfs.endoscopic_base'):
                 self.assertEqual(check(after[code], check_id), check(engine_row, check_id), (code, check_id))
+            self.assertEqual(list(after[code].checks), list(engine_row.checks), code)  # every check, in order
         self.assertEqual([q['question'] for q in after['45378'].questions],
                          ['Is 45378 reported separately from 45380 for this examination?'])
         self.assertEqual(after['45378'].recomputed, ('services.base_included', 'pfs.endoscopic_base'))
@@ -291,6 +292,8 @@ class OverlayIsTheEngineRuleTests(SimpleTestCase):
                              to_jsonable(next(c for c in base.checks if c.id == check_id)), check_id)
         self.assertEqual(after['45378'].status, base.status)
         self.assertEqual([q['question'] for q in after['45378'].questions], [c.question for c in base.clarifications])
+        # every check, in the engine's order: the added base check stands where engine._proposal puts it
+        self.assertEqual(list(after['45378'].checks), to_jsonable(list(base.checks)))
 
 
 class D14Tests(SimpleTestCase):
