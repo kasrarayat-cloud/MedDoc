@@ -28,6 +28,7 @@ from studio import jobs, models, review
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support import operator as ops
 from tests.test_customer_surface import GI_TWO_LESIONS, LESION_A, SurfaceCase, assert_contract, assert_rows, assert_session
 from tests.test_frontend_harness2 import StableIds, shape
 from tests.test_harness2_pipeline import MUE_KEY, MUE_ROW, PFS_KEY, install_reference_store
@@ -181,10 +182,12 @@ class CustomerFixtureTests(SurfaceCase):
         out = {}
         # ready: the snare code citing both of its removals beside a biopsy of another lesion, every check done
         out['encounter-ready.json'] = self.read(self.sent_gi(READY, [('45380', (ASCENDING_BIOPSY,)),
-                                                                    ('45385', (SIGMOID_SNARE, TRANSVERSE_SNARE))]))
+                                                                    ('45385', (SIGMOID_SNARE, TRANSVERSE_SNARE))],
+                                                             title='Synthetic colonoscopy, three polyps'))
         # reviewed: separate lesions, both approved by the review agent (one with the distinct-lesion modifier XS); an
         # approved export made before one approval was revoked and given again (stale) and one made after (current)
-        reviewed = self.sent_gi(REVIEWED, [('45380', (ASCENDING_BIOPSY,)), ('45385', (SIGMOID_SNARE,))])
+        reviewed = self.sent_gi(REVIEWED, [('45380', (ASCENDING_BIOPSY,)), ('45385', (SIGMOID_SNARE,))],
+                                title='Synthetic colonoscopy, two lesions')
         self.decide(reviewed, '45380', 'approve', self.agent, ['XS'])
         self.decide(reviewed, '45385', 'approve', self.agent)
         self.export(reviewed, 'approved', 'txt', self.agent)
@@ -205,7 +208,8 @@ class CustomerFixtureTests(SurfaceCase):
         self.assertEqual(self.encounter(mara).current_revision.text, self.mara)
         out['encounter-mara.json'] = self.read(mara)
         # awaiting detail: one code reviewable while another waits on a detail, a visit's questions, one answered
-        awaiting = self.sent_gi(AWAITING, [('45378', (CECUM,)), ('45385', (SIGMOID_SNARE,))])
+        awaiting = self.sent_gi(AWAITING, [('45378', (CECUM,)), ('45385', (SIGMOID_SNARE,))],
+                                title='Synthetic colonoscopy and office visit')
         doc = self.read(awaiting)
         (basis,) = [row for row in doc['details_needed'] if row['fact'] == 'em_basis']
         saved = self.signed_in(self.reviewer).post(
@@ -216,44 +220,44 @@ class CustomerFixtureTests(SurfaceCase):
         # partial: an independent check failed, the results stand
         self.adapters['astra'] = FakeParticipant('astra', codes=self.astra_codes, outcome='failed')
         self.adapters['fable'] = FakeParticipant('fable', codes=self.fable_codes)
-        partial = self.create(text=note(9))
+        partial = self.create(text=note(9), title='Synthetic office follow-up 9')
         drain()
         out['encounter-partial.json'] = self.read(partial)
         self.adapters['astra'] = FakeParticipant('astra', codes=self.astra_codes)
-        detail = self.create(text=note(3, NO_PATIENT_STATUS))
+        detail = self.create(text=note(3, NO_PATIENT_STATUS), title='Synthetic office follow-up 3')
         drain()
         out['encounter-needs-detail.json'] = self.read(detail)
-        held = self.create(text=note(4), service_date='2026-10-01')
+        held = self.create(text=note(4), service_date='2026-10-01', title='Synthetic office follow-up 4')
         drain()
         out['encounter-action-needed.json'] = self.read(held)
-        approved = self.create(text=note(5))
+        approved = self.create(text=note(5), title='Synthetic office follow-up 5')
         drain()
         self.decide_all(approved)
         for kind, fmt in (('approved', 'txt'), ('draft', 'csv')):
             self.export(approved, kind, fmt)
         out['encounter-approved.json'] = self.read(approved)
         self.corti.outcomes = ['failed']
-        failed = self.create(text=note(6))
+        failed = self.create(text=note(6), title='Synthetic office follow-up 6')
         drain()
         out['encounter-failed.json'] = self.read(failed)
-        stopped = self.create(text=note(7))
+        stopped = self.create(text=note(7), title='Synthetic office follow-up 7')
         self.post(f'/api/encounters/{stopped}/stop', {})
         out['encounter-stopped.json'] = self.read(stopped)
         self.corti.outcome = 'unknown'
-        unknown = self.create(text=note(8))
+        unknown = self.create(text=note(8), title='Synthetic office follow-up 8')
         drain()
         self.corti.outcome = 'succeeded'
         out['encounter-being-confirmed.json'] = self.read(unknown)
         out['encounter-gi.json'] = self.read(self.gi_encounter())
         # processing: read and analysed, its document review running (claimed, as a worker claims it); queued: just
         # uploaded. Made last, so nothing else is drained past them.
-        processing = self.create(text=note(1))
+        processing = self.create(text=note(1), title='Synthetic office follow-up 1')
         for _ in range(2):
             jobs.run_job(jobs.claim_next())
         running = jobs.claim_next()
         self.assertEqual(running.state, models.Job.RUNNING)
         out['encounter-processing.json'] = self.read(processing)
-        out['encounter-queued.json'] = self.read(self.create(text=note(10)))
+        out['encounter-queued.json'] = self.read(self.create(text=note(10), title='Synthetic office follow-up 10'))
         return out
 
     def assertScenarios(self, details, session, agent_session, rows):
@@ -327,11 +331,16 @@ class CustomerFixtureTests(SurfaceCase):
         self.assertTrue(details['encounter-approved.json']['readiness']['approved'])
         self.assertEqual({report['kind'] for report in details['encounter-approved.json']['reports']},
                          {'approved', 'draft'})
-        # the list is every encounter of the workspace; its queue is exactly the session's count of it
+        # the list is every encounter of the workspace; the session counts what the page's queue lists and every
+        # encounter the review queue's rule holds waiting on a member (the operator view's queue_reasons)
         self.assertEqual(sorted(row['id'] for row in rows), sorted(doc['id'] for doc in details.values()))
-        queue = [row for row in rows if row['state'] in ('action_needed', 'awaiting_detail', 'ready')]
-        self.assertEqual({row['state'] for row in queue}, {'action_needed', 'awaiting_detail', 'ready'})
-        self.assertEqual((session['counts']['queue'], agent_session['counts']['queue']), (len(queue), len(queue)))
+        queue = {row['id'] for row in rows if row['state'] in ('action_needed', 'awaiting_detail', 'ready')}
+        self.assertEqual({row['state'] for row in rows if row['id'] in queue}, {'action_needed', 'awaiting_detail', 'ready'})
+        waiting = {row['id'] for row in ops.client(f.user('platform-operator')).get('/ops/api/encounters').json()
+                   ['encounters'] if row['queue_reasons']}
+        self.assertGreater(len(waiting - queue), 0, 'a scenario the review queue holds that the page does not list')
+        self.assertEqual((session['counts']['queue'], agent_session['counts']['queue']),
+                         (len(queue | waiting), len(queue | waiting)))
         self.assertEqual((session['user']['actor_kind'], agent_session['user']['actor_kind']), ('human', 'agent'))
 
     def test_the_customer_fixtures_are_what_the_customer_serializer_emits(self):

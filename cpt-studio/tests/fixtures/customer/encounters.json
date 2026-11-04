@@ -2,7 +2,7 @@
  "encounters": [
   {
    "id": "c0000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 10",
    "state": "processing",
    "state_label": "Processing",
    "service_date": null,
@@ -13,7 +13,7 @@
   },
   {
    "id": "c1000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 1",
    "state": "processing",
    "state_label": "Processing",
    "service_date": "2026-10-20",
@@ -35,7 +35,7 @@
   },
   {
    "id": "c8000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 8",
    "state": "being_confirmed",
    "state_label": "Being confirmed",
    "service_date": "2026-10-20",
@@ -46,7 +46,7 @@
   },
   {
    "id": "c7000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 7",
    "state": "stopped",
    "state_label": "Stopped",
    "service_date": null,
@@ -57,7 +57,7 @@
   },
   {
    "id": "c6000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 6",
    "state": "failed",
    "state_label": "Could not finish",
    "service_date": "2026-10-20",
@@ -68,7 +68,7 @@
   },
   {
    "id": "c5000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 5",
    "state": "reviewed",
    "state_label": "Reviewed",
    "service_date": "2026-10-20",
@@ -79,7 +79,7 @@
   },
   {
    "id": "c4000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 4",
    "state": "action_needed",
    "state_label": "Action needed",
    "service_date": null,
@@ -90,7 +90,7 @@
   },
   {
    "id": "c3000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 3",
    "state": "awaiting_detail",
    "state_label": "A few details needed",
    "service_date": "2026-10-20",
@@ -101,7 +101,7 @@
   },
   {
    "id": "cf000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic office follow-up 9",
    "state": "ready",
    "state_label": "Ready for review",
    "service_date": "2026-10-20",
@@ -112,7 +112,7 @@
   },
   {
    "id": "ce000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic colonoscopy and office visit",
    "state": "awaiting_detail",
    "state_label": "A few details needed",
    "service_date": "2026-11-04",
@@ -134,7 +134,7 @@
   },
   {
    "id": "cc000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic colonoscopy, two lesions",
    "state": "reviewed",
    "state_label": "Reviewed",
    "service_date": "2026-11-03",
@@ -145,7 +145,7 @@
   },
   {
    "id": "c2000000-0000-4000-8000-000000000001",
-   "title": "Pasted note 2026-11-04 03:03",
+   "title": "Synthetic colonoscopy, three polyps",
    "state": "ready",
    "state_label": "Ready for review",
    "service_date": "2026-11-02",

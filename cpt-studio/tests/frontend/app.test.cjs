@@ -1087,5 +1087,9 @@ test('list rows show the plain state, the kind, the details needed and the date;
   assert.equal(count(app.listBody('workspace', rows), 'class="document-row"'), Math.min(5, rows.length));
   assert.match(app.listBody('queue', []), /Nothing is waiting for you\./);
   assert.equal(app.listDescription('documents', rows), `${rows.length} synthetic documents in this workspace.`);
-  assert.equal(fixture('session.json').counts.queue, queued.length);
+  // the badge is the server's count of what waits on a member (the review queue's rule: an open question or decision,
+  // an unknown outcome, incomplete coding, a second review that can be asked); the page's queue lists the three
+  // states it reads from the list rows, which carry no queue reasons (design section 7) - never more than the count
+  const counted = fixture('session.json').counts.queue;
+  assert.ok(Number.isInteger(counted) && counted >= queued.length, `${counted} counted, ${queued.length} listed`);
 });

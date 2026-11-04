@@ -50,8 +50,8 @@ UNAVAILABLE_SUB_LABEL = 'A needed detail is not documented'
 # the member's answer that left a code's needed detail unavailable (review_view.View.answer)
 UNAVAILABLE_SUB_LABELS = {'not_documented': UNAVAILABLE_SUB_LABEL,
                           'cannot_confirm': 'A needed detail could not be confirmed'}
-# What waits on a member (the review queue, and the session's count of it): a date to choose, details to answer, codes to
-# review - exactly the states the customer page lists in its queue (app.js QUEUE_STATES)
+# The states the customer page lists in its review queue (app.js QUEUE_STATES): a date to choose, details to answer,
+# codes to review. The session's count is wider (session_json).
 QUEUE_STATES = ('action_needed', 'awaiting_detail', 'ready')
 GENERIC_ERROR = 'This action is not available right now.'
 STALE_EXPORT = 'This export no longer matches the saved decisions; create a new one.'
@@ -907,11 +907,17 @@ def customer_state(encounter, assessment=None):
 
 
 def session_json(user, membership):
-    from .serializers import _initials  # local import: the operator serializer's own initials rule
+    """GET /api/session. ``counts.queue`` counts what waits on a workspace member by the review queue's own rule
+    (serializers.queue_reasons, refutation gi2 RC6 and ec5: an open question or a decision, an unknown outcome, coding
+    left incomplete, a second review that can be asked, a state that always waited) and every encounter the customer
+    page lists in its queue (QUEUE_STATES, read from the customer state), so it never counts fewer than the page
+    lists."""
+    from .serializers import QUEUE_STATES as WAITING_STATES, _initials, queue_reasons  # the review queue's own rule
     workspace = membership.workspace
     encounters = list(workspace.encounters.select_related('current_revision', 'current_context',
                                                           'current_assessment'))
-    queued = sum(1 for encounter in encounters if customer_state(encounter) in QUEUE_STATES)
+    queued = sum(1 for encounter in encounters if customer_state(encounter) in QUEUE_STATES
+                 or encounter.state in WAITING_STATES or queue_reasons(encounter))
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': _initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name},
