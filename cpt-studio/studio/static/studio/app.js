@@ -699,7 +699,9 @@ function progressPanel(doc, ui = {}) {
   const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
   const slow = progress.slow === true && busy;
   const headIcon = phase === 'action_needed' || phase === 'paused' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
-  // a step that waits its turn after a finished one is not "Waiting to start" (the server's message says the same)
+  // a step that waits its turn after one the panel shows done - this run's, or one kept from an earlier run - is not
+  // "Waiting to start": the server's own rule over the same served steps (progress.next_step_queued), by which its
+  // message says the same (progress.NEXT_STEP_QUEUED)
   const title = phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
   // the error says its own sentence below; the head does not repeat it
   const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
