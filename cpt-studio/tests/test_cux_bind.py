@@ -490,3 +490,29 @@ class EmAbsenceTests(SimpleTestCase):
                        'management was not provided on 2026-09-01.\n')
         finding = detect.route(text, day_of(text)).finding('gi.office_em')
         self.assertNotIn(detect.EM_ABSENT_CUE, [c for m in finding.mentions for c in m.cues])
+
+
+# --- R3 7.5.3: office E/M documentation questions are asked only where they decide something -------------------------
+
+class EmQuestionGatingTests(SimpleTestCase):
+    BIOPSY = [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')]
+
+    def test_a_procedure_day_visit_with_no_basis_and_no_code_asks_nothing(self):
+        result = run(document('v7-em-without-basis'), self.BIOPSY)
+        self.assertEqual(em_questions(result), set())
+        self.assertIn('1 documented service not established as performed and read by no proposal',
+                      result.completeness['reasons'])  # still named as not established
+
+    def test_twin_with_an_em_code_to_decide_the_questions_stay(self):
+        result = run(document('v7-em-without-basis'), self.BIOPSY + [('99213', 'An office visit was also completed '
+                                                                                'today.')])
+        p = outcomes(result)['99213']
+        self.assertEqual(p[:2], ('selected', 'needs_clarification'))
+        self.assertTrue((set(p[2]) | em_questions(result)) & EM_QUESTIONS)
+
+    def test_twin_a_visit_read_uncertain_for_another_reason_still_asks(self):
+        inv = SimpleNamespace(services=(SimpleNamespace(family='gi.office_em', status='uncertain'),))
+        mention = SimpleNamespace(status='uncertain', cues=('uncertain: the note may document no in-person visit',))
+        routing = SimpleNamespace(finding=lambda f: SimpleNamespace(status='uncertain', mentions=(mention,)))
+        self.assertTrue(engine._em_documentation_asked(inv.services[0], (), routing))
+        self.assertTrue(engine._em_documentation_asked(inv.services[0], (), None))  # no routing: as before
