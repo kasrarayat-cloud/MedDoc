@@ -10,9 +10,12 @@
 
 Synthetic data only; the provider is an in-process fake (no network).
 """
-from django.test import Client
+from unittest import mock
 
-from studio import customer_api, models
+from django.test import Client, TestCase, override_settings
+
+from studio import customer_api, models, serializers
+from tests.test_cux_flow import LIVE as FLOW_LIVE, MARA, pasted, run_stages
 from tests.support import factories as f
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import COLONOSCOPY
@@ -94,3 +97,27 @@ class QueueTests(Harness):
         for key, row in rows.items():
             self.assertEqual(row['in_queue'], row['state'] in customer_api.QUEUE_STATES
                              or bool(operator_rows[key]['queue_reasons']), key)
+
+
+@override_settings(**FLOW_LIVE)
+class DateHoldQueueTests(TestCase):
+    """The directive's "Action needed" at once: right after the read and the analyze stage, a member's date held against
+    the document waits on the member while its stored state still reads processing (the assess stage queued) - the one
+    case the review queue's rule cannot see, which the customer state answers for both the list and the badge."""
+
+    def setUp(self):
+        self.provider = FakeProvider()
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_date_held_right_after_analyze_is_listed_and_counted_at_once(self):
+        encounter = pasted(MARA, service_date='1998-01-01', title='Mara (synthetic)')
+        run_stages(2)  # extract, analyze: the hold is recorded and only its assess is queued
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.state, customer_api.customer_state(encounter)), ('processing', 'action_needed'))
+        self.assertEqual(serializers.queue_reasons(encounter), [])  # processing: the review queue's rule says nothing
+        membership = models.Membership.objects.get(workspace=encounter.workspace)
+        self.assertTrue(customer_api.list_row(encounter)['in_queue'])
+        self.assertEqual(customer_api.session_json(membership.user, membership)['counts']['queue'], 1)
+        self.assertEqual(self.provider.sent, [])

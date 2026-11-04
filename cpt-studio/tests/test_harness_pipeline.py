@@ -1395,6 +1395,21 @@ HOT_SNARE = 'was removed with a hot snare'
 # source install_endoscopy_pfs installs: the lens's and the verifier's measurement, which no step outside Corti may
 # change (I1).
 ROUND_4_SUPERSCRIPT_SHA256 = 'b8bdc979057dabb198705218517faa79612f9ed5bd43108a8f6946aa55f099be'
+# The core repair (2026-11-03) moved the routing, inventory and engine labels by one (feace7606), and an assessment
+# records them, so its digest moves with the labels alone: this head makes ROUND_4_SUPERSCRIPT_SHA256 exactly with the
+# four labels put back to installed 41e03656df61's (installed_reader_labels), and this at its own labels.
+CORE_REPAIR_SUPERSCRIPT_SHA256 = 'fd0b37c42efda94479a3130cd164c998298b9d997dad9bcf31f864f38bc398ff'
+
+
+def installed_reader_labels():
+    """The four reader labels as installed 41e03656df61 records them (tests.test_gi4_state's map), for the I1 pins
+    that prove the core repair's head reads their inputs exactly as the round-4 head did, the labels apart."""
+    from contextlib import ExitStack
+    from tests.test_gi4_state import CORE_REPAIR_INSTALLED_LABELS
+    stack = ExitStack()
+    for (module, name), value in CORE_REPAIR_INSTALLED_LABELS.items():
+        stack.enter_context(mock.patch.object(module, name, value))
+    return stack
 
 
 def install_endoscopy_pfs():
@@ -1437,6 +1452,13 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
             extraction_messages=tuple(revision.messages), second=None, second_scope=None))
 
     def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
+        self.superscript(CORE_REPAIR_SUPERSCRIPT_SHA256)
+
+    def test_at_the_installed_labels_the_superscript_code_is_the_round_4_heads_digest_exactly(self):
+        with installed_reader_labels():
+            self.superscript(ROUND_4_SUPERSCRIPT_SHA256)
+
+    def superscript(self, digest):
         self.corti.selections = [('45378', REACHED), ('4538²', HOT_SNARE)]
         install_endoscopy_pfs()
         encounter_id = self.create(COLON)
@@ -1449,7 +1471,7 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
         self.assertEqual(encounter.state, 'needs_clarification')
         self.assertEqual(sorted((p.code, p.bucket, p.status) for p in assessment.proposals.all()),
                          [('45378', 'selected', 'needs_clarification'), ('4538²', 'excluded', 'excluded')])
-        self.assertEqual(assessment.sha256, ROUND_4_SUPERSCRIPT_SHA256)
+        self.assertEqual(assessment.sha256, digest)
         self.assertEqual(assessment.sha256, self.engine_sha256(encounter_id))
         # retrieval ran for the one code a reviewer can decide. Moved by refutation round 9 (retrieval-1; declared in
         # HARNESS.md 12.17, the trace being a record outside what I1 pins - the two sha256 pins above are unchanged): the

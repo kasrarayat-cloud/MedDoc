@@ -407,6 +407,12 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
     re-persist rule on the paths above, with no participant configured and with participants configured. The inputs I1
     compares are Corti's answers as they arrive within the send deadline: a read the deadline cuts is `unknown` (section
     8, HTTP-TRICKLE), where the round-4 adapter kept reading.
+  Since the core repair (2026-11-03) moved the routing, inventory and engine labels by one (gi-routing@6,
+  gi-services@3, cpt-studio-validation@6), which an assessment records, both digests move with the labels alone: at the
+  head's labels they are `a71679b8af53` (the importer's note) and `ab443cf12017` (the round-4 note), and with the four
+  labels put back to installed 41e03656df61's the head makes `c961e7e69c35` and `07315c45fbda` exactly
+  (`ImportedReferenceParityTests`); the superscript pin of `RetrievalFailureTests` likewise (`fd0b37c42efd` at the head's
+  labels, `b8bdc979057d` at the installed ones).
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with

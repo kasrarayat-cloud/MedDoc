@@ -914,8 +914,11 @@ def in_queue(encounter, state=None):
     to decide, an unknown outcome being confirmed, coding left incomplete, a re-check that can be asked for, a state that
     always waited). ``state``: the customer state already read for this encounter."""
     from .serializers import QUEUE_STATES as WAITING_STATES, queue_reasons  # the review queue's own rule
-    state = customer_state(encounter) if state is None else state
-    return state in QUEUE_STATES or encounter.state in WAITING_STATES or bool(queue_reasons(encounter))
+    # the same three-way OR, cheapest first: the customer state is read last, and only when no state was given (the
+    # session's count read it first for every encounter, and took 2.4 times the installed count's time on the live data)
+    if (state is not None and state in QUEUE_STATES) or encounter.state in WAITING_STATES or queue_reasons(encounter):
+        return True
+    return state is None and customer_state(encounter) in QUEUE_STATES
 
 
 def session_json(user, membership):
