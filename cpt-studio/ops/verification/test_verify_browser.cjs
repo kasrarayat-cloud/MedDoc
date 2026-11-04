@@ -1997,6 +1997,42 @@ test('checkCustomerVsOperator: the samples agree; each disagreement with the ope
   assert.match(unrelated.reason, /a passage CPT Studio found unrelated/);
 });
 
+// the wiring report's item 1 (2026-11-04): the customer page quotes CPT Studio's own evidence for the matched act first
+// (customer_api._quotes), so the walk holds it as support - only for an act the code's support names, stored performed or
+// incomplete, and exact at its offsets
+test('checkCustomerVsOperator: the evidence CPT Studio recorded for the matched act is support while that act is performed or incomplete', () => {
+  const op = OP();
+  const text = op.revision.text;
+  const passage = 'Procedure: Colonoscopy with polyp removal.';
+  const start = text.indexOf(passage);
+  assert.ok(start > 0);
+  const span = { text: passage, start, end: start + passage.length };
+  op.assessment.services = { services: [{ id: 'S1', family: 'colonoscopy', acts: [{ id: 'act-1', kind: 'removal', status: 'performed', evidence: [span] }] }] };
+  const cust = CUST();
+  cust.codes[0].why.quotes.unshift({ ...span, page: 1, exact: true });
+  const supports = o => vb.checkCustomerVsOperator(cust, o).find(r => r.id === 'customer.why.supports');
+  assert.equal(supports(op).status, 'pass', supports(op).reason);
+  for (const status of ['incomplete']) {
+    const other = JSON.parse(JSON.stringify(op));
+    other.assessment.services.services[0].acts[0].status = status;
+    assert.equal(supports(other).status, 'pass', status);
+  }
+  for (const status of ['not_performed', 'planned', 'historical', undefined]) {
+    const other = JSON.parse(JSON.stringify(op));
+    other.assessment.services.services[0].acts[0].status = status;
+    assert.equal(supports(other).status, 'fail', String(status));
+  }
+  assert.equal(supports(OP()).status, 'fail');  // no recorded reading: none CPT Studio holds as support
+  const otherAct = JSON.parse(JSON.stringify(op));
+  otherAct.assessment.services.services[0].acts[0].id = 'act-2';  // an act the code's support does not name
+  assert.equal(supports(otherAct).status, 'fail');
+  const inexact = JSON.parse(JSON.stringify(op));
+  inexact.assessment.services.services[0].acts[0].evidence[0].text = 'Procedure: colonoscopy with polyp removal.';
+  assert.equal(supports(inexact).status, 'fail');
+  assert.deepEqual([...vb.actIndex(op).keys()], ['act-1']);
+  assert.deepEqual([...vb.actIndex({ assessment: { services: { services: 'x' } } }).keys()], []);
+});
+
 test('readCustomerDom reads the DOM contract\'s hooks, and checkResultList holds each row to the API', () => {
   const html = sample('customer-page.html');
   const dom = domOf(html);

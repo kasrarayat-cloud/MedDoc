@@ -1248,17 +1248,36 @@ def customer_status(p: dict) -> str:
     return 'needs_detail' if p.get('status') == 'needs_clarification' else 'ready'
 
 
-def allowed_passages(p: dict, revision_text: str) -> tuple[list, list]:
-    """(the passages a quotation of the code may be, the passages CPT Studio found unrelated): support.source and the
-    exact passages its support reading found supporting; every exact passage where no support reading was recorded."""
+def act_index(api: dict) -> dict:
+    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services)."""
+    out = {}
+    services = ((api.get('assessment') or {}).get('services') or {}).get('services')
+    for service in services if isinstance(services, list) else []:
+        for act in (service.get('acts') or []) if isinstance(service, dict) else []:
+            if isinstance(act, dict) and isinstance(act.get('id'), str):
+                out[act['id']] = act
+    return out
+
+
+def allowed_passages(p: dict, revision_text: str, acts: dict | None = None) -> tuple[list, list]:
+    """(the passages a quotation of the code may be, the passages CPT Studio found unrelated): support.source, the
+    evidence CPT Studio's reading recorded for each act the support record names while that act is stored 'performed'
+    or 'incomplete' (customer_api._quotes quotes these first; CORE-UX-DESIGN.md 7), and the exact passages its support
+    reading found supporting; every exact passage where no support reading was recorded."""
     exact = [(i, s) for i, s in enumerate(p.get('evidence') or []) if isinstance(s, dict) and s.get('context_index', 0) in (0, None)
              and cp_slice(revision_text, s.get('start'), s.get('end')) == s.get('text')]
     support = p.get('support') or {}
     source = [s for s in support.get('source') or [] if isinstance(s, dict) and cp_slice(revision_text, s.get('start'), s.get('end')) == s.get('text')]
+    own = []
+    for act in support.get('acts') or []:
+        stored = (acts or {}).get(act.get('id')) if isinstance(act, dict) else None
+        if isinstance(stored, dict) and stored.get('status') in ('performed', 'incomplete'):
+            own += [s for s in stored.get('evidence') or [] if isinstance(s, dict)
+                    and cp_slice(revision_text, s.get('start'), s.get('end')) == s.get('text')]
     unrelated = set(support.get('unrelated') or [])
     read = isinstance(support.get('status'), str) and isinstance(support.get('supporting'), list)
     supporting = set(support.get('supporting') or []) if read else {i for i, _ in exact}
-    return source + [s for i, s in exact if i in supporting and i not in unrelated], [s for i, s in exact if i in unrelated]
+    return source + own + [s for i, s in exact if i in supporting and i not in unrelated], [s for i, s in exact if i in unrelated]
 
 
 def page_of(pages, start: int, end: int):
@@ -1309,12 +1328,13 @@ def customer_truth(api: dict, kind: str) -> list[dict]:
     modifiers, status, approver and the passages it may quote."""
     revision_text = (api.get('revision') or {}).get('text') or ''
     rows = customer_code_rows(api)
+    acts = act_index(api)
     if kind == 'approved':
         rows = [p for p in rows if (p.get('decision') or {}).get('action') == 'approve']
     out = []
     for number, p in enumerate(rows, start=1):
         decision = p.get('decision') or {}
-        allowed, unrelated = allowed_passages(p, revision_text)
+        allowed, unrelated = allowed_passages(p, revision_text, acts)
         out.append({'number': number, 'id': p.get('id'), 'code': str(p.get('code', '')), 'units': str(p.get('units', '')),
                     'modifiers': tuple(decision.get('modifiers') or ()) if decision else (),
                     'status': customer_status(p), 'approved_by': decision.get('reviewer', '') if decision.get('action') == 'approve' else '',

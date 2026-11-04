@@ -1595,19 +1595,41 @@ function sameList(a, b) {
   return JSON.stringify(Array.isArray(a) ? a : []) === JSON.stringify(Array.isArray(b) ? b : []);
 }
 
-// The passages a quotation of the code may be: CPT Studio's own located passages for the matched act (support.source)
-// and the provider's exact passages its support reading found supporting (support.supporting); never one it found
-// unrelated. A proposal with no support reading may quote any of its exact passages.
-function allowedPassages(p, points) {
+// CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services).
+function actIndex(op) {
+  const out = new Map();
+  const services = op?.assessment?.services?.services;
+  for (const service of Array.isArray(services) ? services : []) {
+    for (const act of service && Array.isArray(service.acts) ? service.acts : []) {
+      if (act && typeof act.id === 'string') out.set(act.id, act);
+    }
+  }
+  return out;
+}
+
+// The passages a quotation of the code may be: CPT Studio's own located passages for the matched act (support.source),
+// the evidence CPT Studio's reading recorded for each act the support record names - only while that act is stored
+// 'performed' or 'incomplete' (customer_api._quotes shows these first; CORE-UX-DESIGN.md 7) - and the provider's exact
+// passages its support reading found supporting (support.supporting); never one it found unrelated. A proposal with no
+// support reading may quote any of its exact passages.
+function allowedPassages(p, points, acts = new Map()) {
   const exact = (p?.evidence || []).map((span, index) => ({ span, index }))
     .filter(({ span }) => span && (span.context_index ?? 0) === 0 && cpSlice(points, span.start, span.end) === span.text);
   const support = p?.support || {};
   const source = (Array.isArray(support.source) ? support.source : []).filter(span => span && cpSlice(points, span.start, span.end) === span.text);
+  const own = [];
+  for (const act of Array.isArray(support.acts) ? support.acts : []) {
+    const stored = act && typeof act === 'object' ? acts.get(act.id) : undefined;
+    if (!stored || !['performed', 'incomplete'].includes(stored.status)) continue;
+    for (const span of Array.isArray(stored.evidence) ? stored.evidence : []) {
+      if (span && cpSlice(points, span.start, span.end) === span.text) own.push(span);
+    }
+  }
   const unrelated = new Set(Array.isArray(support.unrelated) ? support.unrelated : []);
   const read = typeof support.status === 'string' && Array.isArray(support.supporting);
   const supporting = new Set(read ? support.supporting : exact.map(({ index }) => index));
   return {
-    allowed: [...source, ...exact.filter(({ index }) => supporting.has(index) && !unrelated.has(index)).map(({ span }) => span)],
+    allowed: [...source, ...own, ...exact.filter(({ index }) => supporting.has(index) && !unrelated.has(index)).map(({ span }) => span)],
     unrelated: exact.filter(({ index }) => unrelated.has(index)).map(({ span }) => span),
   };
 }
@@ -1629,6 +1651,7 @@ function checkCustomerVsOperator(cust, op) {
   const codes = Array.isArray(cust?.codes) ? cust.codes : [];
   const wanted = expectedCodeRows(op);
   const byId = new Map(proposalsOf(op).map(p => [p.id, p]));
+  const acts = actIndex(op);
   const ids = codes.map(code => code?.id);
   const numbers = codes.map(code => code?.number);
   out.push(check('customer.codes.listed', 'hard', sameList(ids, wanted.map(p => p.id)) && sameList(numbers, codes.map((_, i) => i + 1)),
@@ -1663,7 +1686,7 @@ function checkCustomerVsOperator(cust, op) {
     const allowedActions = new Set(p.allowed_actions || []);
     const extra = (code.allowed_actions || []).filter(action => !allowedActions.has(action));
     if (extra.length) actionsWrong.push(`${p.code} offers ${extra.join(', ')} (the operator view allows ${[...allowedActions].join(', ') || 'none'})`);
-    const { allowed, unrelated } = allowedPassages(p, points);
+    const { allowed, unrelated } = allowedPassages(p, points, acts);
     for (const q of code.why?.quotes || []) {
       const slice = cpSlice(points, q?.start, q?.end);
       if (q?.exact !== false && slice !== q?.text) quotesInexact.push(`${p.code}[${q?.start}:${q?.end}]`);
@@ -3921,7 +3944,7 @@ module.exports = {
   secretForms, scrubSecret, writeEvidence, reviewerAccount, main,
   // the customer surface (CORE-UX-DESIGN 5-8)
   CONTRACT, DENYLIST, shapeProblems, checkCustomerContract, checkCustomerVocabulary, harvest, denyValuesFrom, scanContext, scanText,
-  scanJson, scanFile, scanHeaders, csvRows, checkScan, expectedCodeRows, expectedCustomerStatus, allowedPassages, checkCustomerVsOperator,
+  scanJson, scanFile, scanHeaders, csvRows, checkScan, expectedCodeRows, expectedCustomerStatus, allowedPassages, actIndex, checkCustomerVsOperator,
   checkDetailRows, checkNoEmQuestions, readCustomerDom, checkResultList, checkChecksPanel, checkDetailsPanel, checkProgressDom, foldedSteps,
   checkProgressFold, checkUploadAck, duplicateSends, checkNoDuplicateSends, jobsKept, checkReloadIdentity, checkStopResume, checkProvenance,
   checkAuthorization, checkArtifactsHidden, checkViewport, checkDecisionRows, checkCustomerDecisions, checkModifierDialogs,

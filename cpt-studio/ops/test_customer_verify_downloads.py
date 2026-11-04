@@ -117,6 +117,34 @@ class ApprovedTxtTests(unittest.TestCase):
                                 ['items.quoted'])
         self.assertNotIn('items.evidence.exact', got)
 
+    def test_the_evidence_cpt_studio_recorded_for_the_matched_act_is_support_while_it_is_performed_or_incomplete(self):
+        # the wiring report's item 1 (2026-11-04): customer reports quote CPT Studio's own evidence for the matched act
+        # first (customer_api._quotes); only for an act the code's support names, stored performed or incomplete
+        api = operator()
+        text = api['revision']['text']
+        passage = 'Procedure: Colonoscopy with polyp removal.'
+        start = text.index(passage)
+        span = {'text': passage, 'start': start, 'end': start + len(passage)}
+        api['assessment']['services'] = {'services': [{'id': 'S1', 'family': 'colonoscopy', 'acts': [
+            {'id': 'act-1', 'kind': 'removal', 'status': 'performed', 'evidence': [span]}]}]}
+        line = '     Quote: "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps." [page 1, characters 256–329]\n'
+        report = sample('customer-report-approved.txt')
+        self.assertEqual(report.count(line), 1)
+        report = report.replace(line, f'     Quote: "{passage}" [page 1, characters {span["start"]}–{span["end"]}]\n' + line)
+        self.assertEqual(failed(txt('approved', report, api=api)), [])
+        self.assertEqual([s['start'] for s in vd.allowed_passages(api['assessment']['proposals'][0], text, vd.act_index(api))[0]],
+                         [256, start, 256])  # support.source, the act's own evidence, the supporting passage
+        for status, outcome in (('incomplete', []), ('not_performed', ['items.evidence.support']),
+                                ('planned', ['items.evidence.support']), (None, ['items.evidence.support'])):
+            with self.subTest(status=status):
+                other = json.loads(json.dumps(api))
+                other['assessment']['services']['services'][0]['acts'][0]['status'] = status
+                self.assertEqual(failed(txt('approved', report, api=other)), outcome)
+        self.assertEqual(failed(txt('approved', report)), ['items.evidence.support'])  # no recorded reading
+        other = json.loads(json.dumps(api))
+        other['assessment']['services']['services'][0]['acts'][0]['id'] = 'act-2'  # an act the support does not name
+        self.assertEqual(failed(txt('approved', report, api=other)), ['items.evidence.support'])
+
     def test_a_quotation_found_unrelated_is_never_one(self):
         api = operator()
         support = api['assessment']['proposals'][0]['support']
