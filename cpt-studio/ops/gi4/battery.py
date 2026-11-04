@@ -540,6 +540,130 @@ CASES = {
             'Cold forceps biopsies were taken from the distal esophagus.'),
         [('43239', 'Cold forceps biopsies were taken from the distal esophagus.', 'done')]),
 }
+# --- reader-bind round 2 (2026-11-04; tests/fixtures/gi4/declarations/cux-r2-bind.json): the refutation round's
+# reproduced inputs against the reader rules L1 (the 'Label: <service>' part), P1 rule 1 (lesion labels), rule 2
+# (attributive compounds) and rule 4 (a combined report's denials), each with its controls. Prefix 'R8 R2 ' (a register
+# row: the round-4 counts leave it out; tests/test_cux_hold.RegisterOfferTests reads its offers from cux-r2-bind.json).
+R2_HEAD = B + 'Date of service: 2026-11-03\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+R2_CECAL = 'A 5 mm polyp in the cecum was removed with a cold snare.'
+R2_SIGMOID = 'A 5 mm polyp in the sigmoid colon was removed with a cold snare.'
+R2_NOTE = ('Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+           'Procedure: Colonoscopy\n' + R8_CECUM + '\n\nSeparate note: Flexible sigmoidoscopy (fictional), 2026-10-14\n'
+           'The flexible sigmoidoscope was advanced to 60 cm in the descending colon.\nThe rectum was normal.\n')
+R2_COLON_FS = (R8_COLON + R8_CO_SNARE + '\n\n{heading}\nThe flexible sigmoidoscope was advanced to 60 cm in the descending '
+               'colon.\n' + R8_FS_BIOPSY + '\n')
+R2_LEFT = (R2_HEAD + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum. A 12 mm sessile polyp was seen in '
+           'the sigmoid colon and was left in place because the patient takes clopidogrel.\n')
+R2_LEFT_Q = 'A 12 mm sessile polyp was seen in the sigmoid colon'
+R2_COMBINED = (R2_HEAD + 'EGD and colonoscopy report\nThe gastroscope was advanced to the second part of the duodenum. Cold '
+               'forceps biopsies were taken from the gastric antrum. The colonoscope was advanced to the cecum. A 6 mm '
+               'polyp in the transverse colon was removed with a cold snare.\n')
+R2_ANTRUM = 'Cold forceps biopsies were taken from the gastric antrum.'
+R2_LISTED = ('Findings:\nThe gastroscope was advanced to the second part of the duodenum. Biopsies were taken with cold '
+             'forceps. A clip was placed at the biopsy site.\nThe colonoscope was advanced to the cecum. The colon was '
+             'normal.\n')
+R2_COL_EGD = R2_HEAD + 'Colonoscopy and EGD report\nCOLONOSCOPY\nThe colonoscope was advanced to the cecum.\n'
+R2_UPPER = 'UPPER ENDOSCOPY\nThe gastroscope was advanced to the second part of the duodenum. '
+R2_PASSING = 'Biopsies were then taken with the same cold forceps used to retrieve COL-1.'
+R2_SPECIMEN = 'Biopsies were obtained with cold forceps (specimen 1).'
+R2_REUSED = 'P1 was removed with a hot snare.'
+R2_SNARED = (R2_HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum. A 7 mm polyp in the sigmoid colon was '
+             'removed with a cold snare.\n')
+R2_SNARED_Q = 'A 7 mm polyp in the sigmoid colon was removed with a cold snare.'
+R2_LABELS = (R2_HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\nCOL-1 - ascending colon: a 2 mm polyp '
+             'was removed with cold forceps.\nCOL-2 - sigmoid colon: an 8 mm polyp was removed with a cold snare.\n')
+R2_LABELS_Q = 'an 8 mm polyp was removed with a cold snare.'
+CASES.update({
+    # L1 (R07): the separate note's part runs on over an act at a site its sigmoidoscope cannot reach (the cecum)
+    'R8 R2 R07a cecal snare after a separate note': (
+        _r8(B + R2_NOTE, '', R2_CECAL),
+        [('45378', R8_CECUM, 'done'), ('45385', R2_CECAL, 'done'), ('45338', R2_CECAL, 'not_done')]),
+    'R8 R2 R07b cecal snare after a separate note, 45338 only': (
+        _r8(B + R2_NOTE, '', R2_CECAL), [('45378', R8_CECUM, 'done'), ('45338', R2_CECAL, 'not_done')]),
+    'R8 R2 R07v4 cecal snare inside the separate note': (
+        _r8(B + R2_NOTE, R2_CECAL),
+        [('45378', R8_CECUM, 'done'), ('45385', R2_CECAL, 'done'), ('45338', R2_CECAL, 'not_done')]),
+    'R8 R2 R07v3 control, sigmoid snare inside the separate note': (
+        _r8(B + R2_NOTE, R2_SIGMOID),
+        [('45378', R8_CECUM, 'done'), ('45385', R2_SIGMOID, 'not_done'), ('45338', R2_SIGMOID, 'done')]),
+    # L1 (R10): a separate-note line the labelled-heading reader does not accept; its biopsy is not the colonoscopy's
+    'R8 R2 R10a separate note on the service date': (
+        R2_COLON_FS.format(heading='Separate note: Flexible sigmoidoscopy (fictional) on 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    'R8 R2 R10b separate same-day note': (
+        R2_COLON_FS.format(heading='Separate same-day note: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    'R8 R2 R10c separate note for rectal bleeding': (
+        R2_COLON_FS.format(heading='Separate note: Flexible sigmoidoscopy for rectal bleeding (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    'R8 R2 R10h7 addendum by another physician': (
+        R2_COLON_FS.format(heading='Addendum - flexible sigmoidoscopy performed the same day by Dr. Vale'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    # L1 (F01): a labelled line in a plan, or naming a later procedure, is no report of today's
+    'R8 R2 F01A plan, second procedure': (
+        R2_LEFT + 'Plan:\nSecond procedure: Colonoscopy with cold snare polypectomy\n',
+        [('45385', R2_LEFT_Q, 'not_done')]),
+    'R8 R2 F01B recommendations, follow-on procedure': (
+        R2_LEFT + 'Recommendations:\nFollow-on procedure: colonoscopy with cold snare polypectomy\n',
+        [('45385', R2_LEFT_Q, 'not_done')]),
+    'R8 R2 F01C subsequent procedure line': (
+        R2_LEFT + 'Subsequent procedure: colonoscopy with cold snare polypectomy\n', [('45385', R2_LEFT_Q, 'not_done')]),
+    'R8 R2 F01D impression and recommendations, second procedure': (
+        R2_LEFT + 'Impression and Recommendations:\nSecond procedure: Colonoscopy with cold snare polypectomy\n',
+        [('45385', R2_LEFT_Q, 'not_done')]),
+    'R8 R2 F01X cancelled separate note': (
+        R2_HEAD + 'EGD report\nThe gastroscope was advanced to the second part of the duodenum. ' + R2_ANTRUM
+        + '\nSeparate note: Colonoscopy\nThe colonoscopy was cancelled because of inadequate preparation.\n',
+        [('45378', 'Separate note: Colonoscopy', 'not_done')]),
+    # P1 rule 4 (F02): a combined report's site-less denial that carries the service date or a history word
+    'R8 R2 F02 combined denial on the service date': (
+        R2_COMBINED + 'No biopsies were taken on 2026-11-03.\n', [('43239', R2_ANTRUM, 'no_ready')]),
+    'R8 R2 F02 combined denial, as previously documented': (
+        R2_COMBINED + 'No biopsies were taken, as previously documented.\n', [('43239', R2_ANTRUM, 'no_ready')]),
+    'R8 R2 F02 control, undated combined denial': (
+        R2_COMBINED + 'No biopsies were taken.\n', [('43239', R2_ANTRUM, 'no_ready')]),
+    # L1 (F03): numbered procedure lines listing today's procedures open no part
+    'R8 R2 F03a numbered procedure lines': (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nProcedure 1: EGD\nProcedure 2: Colonoscopy\n' + R2_LISTED,
+        [('43239', 'Biopsies were taken with cold forceps.', 'done'),
+         ('45380', 'Biopsies were taken with cold forceps.', 'not_done')]),
+    'R8 R2 F03b numbered procedure lines, dashes': (
+        R2_HEAD + 'EGD and colonoscopy report\nProcedure 1 - EGD\nProcedure 2 - Colonoscopy\n' + R2_LISTED,
+        [('43239', 'Biopsies were taken with cold forceps.', 'done'),
+         ('45380', 'Biopsies were taken with cold forceps.', 'not_done')]),
+    # P1 rule 1 (F04): a label or specimen named in an act's clause never moves the act to another service's lesion
+    'R8 R2 F04a colon label named in an upper endoscopy clause': (
+        R2_COL_EGD + 'COL-1 - sigmoid colon: an 8 mm polyp was removed with a cold snare.\n' + R2_UPPER
+        + 'The antrum showed patchy erythema. ' + R2_PASSING + '\n',
+        [('43239', R2_PASSING, 'done'), ('45380', R2_PASSING, 'not_done')]),
+    'R8 R2 F04b specimen number restarted for the upper endoscopy': (
+        R2_COL_EGD + 'A 6 mm polyp in the sigmoid colon was removed with a cold snare and sent as specimen 1.\n' + R2_UPPER
+        + 'The stomach showed patchy erythema. ' + R2_SPECIMEN + '\n',
+        [('43239', R2_SPECIMEN, 'done'), ('45380', R2_SPECIMEN, 'not_done')]),
+    'R8 R2 F04c label reused under the upper endoscopy': (
+        R2_COL_EGD + 'P1 - sigmoid colon: a 4 mm polyp was removed with cold forceps.\n' + R2_UPPER
+        + '\nStomach:\nP1: a 9 mm sessile polyp. ' + R2_REUSED + '\n',
+        [('43251', R2_REUSED, 'MAY'), ('45385', R2_REUSED, 'not_done')]),
+    # P1 rule 2 (F05): a field label or a negated predicate compound denies the act (a genuine same-lesion conflict)
+    'R8 R2 F05a snare-resected field answered No': (
+        R2_SNARED + 'Polyp 1 - sigmoid colon, 7 mm\nSnare-resected: No\nForceps-removed: Yes\n',
+        [('45385', R2_SNARED_Q, 'no_ready')]),
+    'R8 R2 F05b hot snare-resected field, not done': (
+        R2_SNARED + 'Hot snare-resected: Not done\n', [('45385', R2_SNARED_Q, 'no_ready')]),
+    'R8 R2 F05b2 cold snare-resected field answered No': (
+        R2_SNARED + 'Cold snare-resected: No\n', [('45385', R2_SNARED_Q, 'no_ready')]),
+    'R8 R2 F05c neither snare-resected nor retrieved': (
+        R2_SNARED + 'The sigmoid polyp was neither snare-resected nor retrieved.\n', [('45385', R2_SNARED_Q, 'no_ready')]),
+    'R8 R2 F05 control, an attributive compound': (
+        R2_SNARED + 'The snare-resected sigmoid polyp was not retrieved.\n', [('45385', R2_SNARED_Q, 'done')]),
+    # P1 rule 1 (F06): a label never binds a denial whose own clause names another site
+    'R8 R2 F06a denial on a label, in another segment': (
+        R2_LABELS + 'No snare was used on COL-1 in the sigmoid colon.\n', [('45385', R2_LABELS_Q, 'no_ready')]),
+    'R8 R2 F06b denial in another segment, as for a label': (
+        R2_LABELS + 'In the sigmoid colon no snare was used, as for COL-1.\n', [('45385', R2_LABELS_Q, 'no_ready')]),
+    'R8 R2 F06 control, a denial on a label alone': (
+        R2_LABELS + 'No snare was used on COL-1.\n', [('45385', R2_LABELS_Q, 'done')]),
+})
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
     'R8 D12 E/M control, h4-01 time-only twin', 'R8 D12 E/M not seen in person, history, plain',
