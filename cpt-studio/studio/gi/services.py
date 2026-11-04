@@ -1087,6 +1087,13 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                                                 stripped), 'role'))
             continue
         note_named = _note_families(text, lines, index, cuts[-1][4], lay)
+        if note_named and DATED_NOTE_LABEL.match(line) \
+                and not _names_service_date(dates, date_starts, ls, le, service_date):
+            # L1c-r3, after code (reader repair, round 3): a numbered "Procedure 2:" line or a "Subsequent" or
+            # "Follow-on procedure:" line that does not name the service date is a field of today's report or a later
+            # procedure (round 2's L1c), as on e020145e1: no note label. Dated today ("Procedure 2: Flexible
+            # sigmoidoscopy (fictional), 2026-10-14"), it is the same-day note R8 D7 reads (refutation A1)
+            note_named = frozenset()
         labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
                                             date_starts=date_starts, documented=documented) if note_named else None
         if labelled is not None:
@@ -1202,6 +1209,26 @@ LABELLED_NOTE = _rx(r'^[ \t\-*#]*(?:(?:separate|second|another|additional|same[-
                     r'(?:same[- ]day[ \t]+)?(?:note|procedure|report|examination|exam|study|service)'
                     r'|(?:note|procedure|report|part)[ \t]+\d{1,2}|addend(?:um|a))[ \t]*(?::|[-\u2013\u2014](?=[ \t]))'
                     r'[ \t]*(?=\S)')
+
+
+# L1c-r3, after code: the note label spellings round 2's L1c had dropped, which name a note only on a line that also
+# names the service date (parts(); _names_service_date)
+DATED_NOTE_LABEL = _rx(r'^[ \t\-*#]*(?:(?:subsequent|follow-?on)[ \t]+(?:same[- ]day[ \t]+)?'
+                       r'(?:note|procedure|report|examination|exam|study|service)|procedure[ \t]+\d{1,2})[ \t]*'
+                       r'(?::|[-\u2013\u2014](?=[ \t]))')
+
+
+def _names_service_date(dates, date_starts: Sequence[int], ls: int, le: int, service_date: Optional[date]) -> bool:
+    """Whether the line [ls, le) names the service date itself: a day-precise date mention on it equal to it (L1c-r3).
+    Bounded: one bisection and the line's own date mentions."""
+    if service_date is None or not dates:
+        return False
+    for d in dates[bisect.bisect_left(date_starts, ls):]:
+        if d.start >= le:
+            return False
+        if d.precision == 'day' and gi_context.compare_to_service(d, service_date) == 0:
+            return True
+    return False
 
 
 def _note_families(text: str, lines: Sequence[tuple[int, int]], index: int, running_kind: str, lay) -> frozenset:

@@ -992,8 +992,9 @@ CASES.update({
         [('43251', 'P1 was removed with a hot snare.', 'MAY'), ('45385', 'P1 was removed with a hot snare.', 'not_done')]),
 })
 # Added after code (cux-r3-reader.json, its after-code amendment): A4's class without a back-reference (a polypectomy
-# naming no site, lesion or service after the cecal polyp) and A6's running instrument in a clause of its own, each with
-# its controls; their 'from' cells measured on e020145e1's code with the rows added.
+# naming no site, lesion or service after the cecal polyp), A6's running instrument in a clause of its own, and two
+# controls of L1c-r3's date condition (an undated restored label reads as round 2 read it), each with its controls;
+# their 'from' cells measured on e020145e1's code with the rows added.
 R3_POLYPECTOMY = 'A cold snare polypectomy was performed.'
 CASES.update({
     'R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence': (
@@ -1013,6 +1014,13 @@ CASES.update({
         _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + R3_XREF + '\n').replace(
             R8_CECUM, 'The colonoscope was advanced without difficulty to the cecum.'), R3_SIGMOID_POLYP, R3_IT),
         [('45385', R3_IT, 'done')]),
+    'R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report': (
+        _r8(R8_EGD_DX, 'Subsequent procedure: colonoscopy with cold snare polypectomy', R3_SITELESS_BX),
+        [('43239', R3_SITELESS_BX, 'MAY'), ('45380', R3_SITELESS_BX, 'MAY')]),
+    "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings": (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nProcedure 2: Colonoscopy\nFindings:\n' + R3_SITELESS_BX
+        + ' A clip was placed at the biopsy site.\nThe colonoscope was advanced to the cecum. The colon was normal.\n',
+        [('43239', R3_SITELESS_BX, 'MAY'), ('45380', R3_SITELESS_BX, 'MAY')]),
     "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence": (
         _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + R3_XREF + '\n').replace(
             R8_CECUM, 'The colonoscope was advanced to the cecum and no polyps were seen in the rectum.'),

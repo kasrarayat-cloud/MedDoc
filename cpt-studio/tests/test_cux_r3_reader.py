@@ -36,7 +36,7 @@ DECLARATION = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' /
                          .read_text(encoding='utf-8'))
 # the rows declared before code, and those its after-code amendment adds (dated, measured: never a key above it changed)
 AFTER_CODE = DECLARATION.get('after_code_20261104', {})
-ROWS = DECLARATION['battery_rows_added'] + AFTER_CODE.get('battery_rows_added', [])
+DECLARED_ROWS = DECLARATION['battery_rows_added'] + AFTER_CODE.get('battery_rows_added', [])
 DECLARED = {(name, code): (before, after)
             for name, code, before, after in DECLARATION['battery'] + AFTER_CODE.get('battery', [])}
 UNMOVED = {tuple(key.split(' | ')): cell
@@ -56,7 +56,7 @@ class R3RowsTests(SimpleTestCase):
     recorded (measured, not repaired)."""
 
     def test_the_rows(self):
-        names = ROWS
+        names = DECLARED_ROWS
         self.assertEqual(sorted(names), sorted(n for n in battery.CASES if n.startswith('R8 R3 ')))
         for name in names:
             result = row(name)
@@ -115,6 +115,29 @@ class RestoredNoteLabelTests(SimpleTestCase):
         for line in ('Procedure: Colonoscopy', 'Follow-up procedure: colonoscopy', 'Procedures: EGD'):
             with self.subTest(line):
                 self.assertIsNone(services.LABELLED_NOTE.match(line))
+
+    def test_an_undated_restored_label_reads_as_on_this_base(self):
+        # after code: 'Procedure N', 'subsequent' and 'follow-on' are note labels only on a line naming the service date;
+        # undated they read as round 2 read them - a field of today's report or a later procedure - so an upper
+        # endoscopy's own biopsy after one stays its own, and one such line in a combined report's head opens no
+        # colonoscopy part over the shared findings
+        egd = (B + 'Upper endoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery '
+               'center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum.\n')
+        biopsy = 'Biopsies were taken with cold forceps.'
+        for line in ('Subsequent procedure: colonoscopy with cold snare polypectomy',
+                     'Follow-on procedure: colonoscopy with cold snare polypectomy',
+                     'Procedure 2: Colonoscopy performed today'):
+            with self.subTest(line):
+                text = egd + line + '\n' + biopsy + '\n'
+                self.assertEqual(acts(inventory(text), 'gi.colonoscopy', 'biopsy'), [])
+                self.assertEqual(outcomes(run(text, [('43239', biopsy)]))['43239'], READY)
+        shared = ('Findings:\nBiopsies were taken with cold forceps. A clip was placed at the biopsy site.\nThe colonoscope '
+                  'was advanced to the cecum. The colon was normal.\n')
+        for line in ('Procedure 2: Colonoscopy', 'Subsequent procedure: Colonoscopy', 'Follow-on procedure: Colonoscopy'):
+            with self.subTest(line):
+                text = HEAD + 'Upper endoscopy and colonoscopy report\n' + line + '\n' + shared
+                self.assertEqual(acts(inventory(text), 'gi.colonoscopy', 'biopsy'), [])
+                self.assertEqual(outcomes(run(text, [('45380', biopsy)]))['45380'][:2], ('selected', 'needs_clarification'))
 
     def test_controls_f01_and_f03_stay_held(self):
         left = (HEAD + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum. A 12 mm sessile polyp was seen '
@@ -304,6 +327,9 @@ class AnaphoraBeyondTheNoteTests(SimpleTestCase):
         for body in ('A 5 mm polyp was seen in the cecum.\nThe flexible sigmoidoscope was then withdrawn to the rectum.\n'
                      'A cold snare polypectomy was performed.\n',
                      'A 5 mm polyp in the cecum was removed at a prior colonoscopy in 2023.\nA cold snare polypectomy was '
+                     'performed.\n',
+                     # unsized: the lesion's own time is read where the part's last lesion is recorded (L1e-r3)
+                     'A polyp in the cecum was removed at a prior colonoscopy in 2023.\nA cold snare polypectomy was '
                      'performed.\n'):
             with self.subTest(body):
                 text = R07 + body
