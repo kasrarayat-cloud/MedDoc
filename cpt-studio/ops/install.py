@@ -127,6 +127,16 @@ PASSAGE_DATA = f'{APP}/studio/reference/data'
 PASSAGE_DATA_IN_IMAGE = '/app/studio/reference/data'
 INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
+# The operators phase's two platform-operator accounts (ops/INSTALL.md, operators): no workspace membership, a grant
+# from `manage grant_operator`. The agent's login is a user file like AGENT_CREDENTIALS; the human's is root-only.
+OPERATOR_ACCOUNTS_SPEC = (('ops-agent', 'agent', 'CPT Studio operations agent'),
+                          ('platform-operator', 'human', 'CPT Studio platform operator'))
+OPERATOR_CREDENTIALS = 'operator-credentials.json'
+OPS_AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
+REASSESS_LIMIT = 20  # encounters per reassess phase
+REASSESS_SECONDS = 300
+UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+
 NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
 VHOST_NAME = 'quillmd-cpt'
@@ -342,7 +352,9 @@ PHASE_ARGUMENTS = {
     'provider_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
     'astra_mode': {'app', 'switch-back'}, 'fable_mode': {'app', 'switch-back'}, 'access_check': {'app'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
-    'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'reset_passwords': {'provision'},
+    'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
+    'reset_passwords': {'provision', 'operators'},
+    'encounter': {'reassess'}, 'dry_run': {'reassess'},
 }
 
 
@@ -369,6 +381,10 @@ def parse_args(argv=None):
     parser.add_argument('--agent-display-name')
     parser.add_argument('--workspace-name')
     parser.add_argument('--reset-passwords', action='store_true', default=None)
+    parser.add_argument('--encounter', action='append',
+                        help='reassess: an encounter id to re-assess from its retained responses (repeatable)')
+    parser.add_argument('--dry-run', action='store_true', default=None,
+                        help='reassess: pass --dry-run to reassess_retained (nothing is queued)')
     args = parser.parse_args(argv)
     problem = argument_problem(args)
     if problem:
@@ -395,6 +411,17 @@ def argument_problem(args) -> str:
             problem = retrieved_at_problem(value)
             if problem:
                 return problem
+    if args.phase == 'reassess':
+        encounters = args.encounter or []
+        if not encounters:
+            return '--phase reassess needs at least one --encounter <id>.'
+        if len(encounters) > REASSESS_LIMIT:
+            return f'--phase reassess takes at most {REASSESS_LIMIT} --encounter ids per run.'
+        if len(set(encounters)) != len(encounters):
+            return '--encounter ids must not repeat.'
+        for value in encounters:
+            if not UUID_RE.fullmatch(value):
+                return f'--encounter {value!r} is not a lowercase encounter id (UUID).'
     if args.phase in ('app', 'switch-back'):
         if args.provider_mode is None:
             return f'--phase {args.phase} needs an explicit --provider-mode (disabled or live).'
@@ -2161,11 +2188,15 @@ print(ANSWER + json.dumps(answer))
 '''
 
 
-def app_script(image_id, env_bytes, body, params, *, what, timeout=180) -> dict:
-    """Run ``body`` in a one-shot container of ``image_id`` (provider disabled) and return its ANSWER line's JSON."""
+def app_script(image_id, env_bytes, body, params, *, what, timeout=180, mounts=(), user=None) -> dict:
+    """Run ``body`` in a one-shot container of ``image_id`` (provider disabled) and return its ANSWER line's JSON.
+    ``mounts`` and ``user`` are the one-shot's (the operators phase mounts RAM-only password files it owns)."""
     payload = base64.b64encode(json.dumps(params).encode()).decode()
     source = APP_SCRIPT_PRELUDE.format(payload=payload, answer=APP_SCRIPT_ANSWER) + body
-    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout)
+    extra = {'mounts': list(mounts)} if mounts else {}
+    if user:
+        extra['user'] = user
+    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout, **extra)
     answers = [line for line in result.stdout.decode('utf-8', 'replace').splitlines()
                if line.startswith(APP_SCRIPT_ANSWER)]
     if result.returncode or len(answers) != 1:
@@ -4091,8 +4122,10 @@ def credentials_document(ctx, accounts) -> dict:
             'accounts': accounts}
 
 
-def root_file(op, **params) -> dict:
-    params.update(op=op, final=INITIAL_CREDENTIALS, staged=f'.{INITIAL_CREDENTIALS}.new')
+def root_file(op, *, final=INITIAL_CREDENTIALS, staged=None, **params) -> dict:
+    """H_ROOT_FILE on /etc/cpt-studio/``final`` (staged as '.<final>.new'): the initial credentials, or the operators
+    phase's operator-credentials.json."""
+    params.update(op=op, final=final, staged=staged or f'.{final}.new')
     params.setdefault('replace', False)
     return run_helper(H_ROOT_FILE, params, mounts=[f'type=bind,src={ETC_DIR},dst=/target'], sensitive=True)
 
@@ -4175,6 +4208,236 @@ def phase_provision(ctx) -> dict:
     return {'accounts': outcome, 'root_credentials': f'{ETC_DIR}/{INITIAL_CREDENTIALS}',
             'agent_credentials': str(AGENT_CREDENTIALS), 'log': log, 'reset_passwords': reset,
             'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())}
+
+
+# The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
+# OPERATOR_ACCOUNTS creates each platform-operator account with NO workspace membership - an operator's access is the
+# grant alone (studio.operator), never a workspace role - or keeps it; it refuses, changing nothing, an account that
+# exists with another actor kind or holds any membership (a member account is never made an operator by the installer).
+# A password is set from its mounted RAM-only file when the account is created, or for every account with reset; no
+# value is printed. One transaction: a refusal leaves every account as it was.
+OPERATOR_ACCOUNTS = '''
+from pathlib import Path
+from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
+from studio import models
+done = {}
+with transaction.atomic():
+    for spec in P['accounts']:
+        user = models.User.objects.select_for_update().filter(username=spec['username']).first()
+        created = user is None
+        if created:
+            user = models.User(username=spec['username'], actor_kind=spec['kind'], display_name=spec['display_name'])
+        elif user.actor_kind != spec['kind']:
+            raise SystemExit('account ' + spec['username'] + ' exists with another actor kind; nothing was changed')
+        elif user.memberships.exists():
+            raise SystemExit('account ' + spec['username'] + ' holds a workspace membership, so the installer does '
+                             'not make it an operator; nothing was changed')
+        if created or P['reset']:
+            password = Path(spec['password_file']).read_text(encoding='utf-8').strip()
+            if not password:
+                raise SystemExit('a password file is empty; nothing was changed')
+            validate_password(password, user)
+            user.set_password(password)
+            user.save()
+        done[spec['username']] = 'created' if created else ('reset' if P['reset'] else 'kept')
+print(ANSWER + json.dumps({'accounts': done}))
+'''
+# Read back after the grants: each account an operator by studio.operator.is_operator (the grant, never a membership),
+# with no membership, of its actor kind.
+OPERATOR_CHECK = '''
+from studio import models
+from studio.operator import is_operator
+found = {}
+for username in P['usernames']:
+    user = models.User.objects.get(username=username)
+    found[username] = {'operator': bool(is_operator(user)), 'memberships': user.memberships.count(),
+                       'actor_kind': user.actor_kind, 'active': user.is_active}
+print(ANSWER + json.dumps({'accounts': found}))
+'''
+# The reassess phase's read of each named encounter's jobs, before and after `manage reassess_retained`.
+REASSESS_JOBS = '''
+from studio import models
+found = {}
+for pk in P['encounters']:
+    encounter = models.Encounter.objects.filter(pk=pk).first()
+    if encounter is None:
+        found[pk] = None
+        continue
+    found[pk] = {'state': encounter.state,
+                 'jobs': [[str(job.pk), job.kind, job.state, job.idempotency_key]
+                          for job in models.Job.objects.filter(encounter_id=pk).order_by('created_at', 'pk')]}
+print(ANSWER + json.dumps({'encounters': found}))
+'''
+
+
+def operator_document(ctx, username, kind, password) -> dict:
+    """One operator account's login: top-level username and password (what the verification tools read)."""
+    return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'operator_url': f'https://{DOMAIN}/ops/',
+            'synthetic_only': True, 'revision': ctx.revision, 'created_at': utc_now(), 'username': username,
+            'password': password, 'actor_kind': kind, 'access': 'platform operator: an operator grant, no workspace '
+                                                                'membership'}
+
+
+def operator_reason(ctx, username, kind) -> str:
+    return (f'Platform-operator diagnostics access for the CPT Studio {kind} account {username} (owner directive '
+            '2026-11-03, section 2: operator diagnostics stay available to authenticated platform operators and are '
+            'never conferred by a workspace role). Granted by ops/install.py --phase operators for revision '
+            f'{ctx.revision} under the ruled-mutation declaration '
+            f'{os.environ.get("RULED_MUTATION_DECLARATION", "")} ({os.environ.get("RULED_MUTATION_DECL_COMMIT", "")}).'
+            '\n')
+
+
+def phase_operators(ctx) -> dict:
+    """The two platform-operator accounts (ops/INSTALL.md, operators): ops-agent, an automated agent (the verification
+    tools' operator session), and platform-operator, a human - each with no workspace membership and an operator grant.
+    Passwords are made and kept as the initial credentials are (phase_provision): generated here, travelling only as
+    RAM-only files under /dev/shm into one-shots of this revision's image, never in argv, output or receipts. The agent's
+    login is this user's 0600 OPS_AGENT_CREDENTIALS (top-level username and password); the human's is the root-only 0600
+    /etc/cpt-studio/operator-credentials.json, written through the root helper. Both files are committed once the
+    accounts hold their passwords; each account is then granted by the application's own command, `manage
+    grant_operator --username U --reason-file F`, and read back (OPERATOR_CHECK): an operator, with no membership."""
+    reset = bool(ctx.args.reset_passwords)
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    names = {'final': OPERATOR_CREDENTIALS, 'staged': f'.{OPERATOR_CREDENTIALS}.new'}
+    state = root_file('state', **names)
+    agent_staged = OPS_AGENT_CREDENTIALS.with_name(f'.{OPS_AGENT_CREDENTIALS.name}.new')
+    if state['staged_exists'] or agent_staged.exists():
+        raise InstallError('Staged operator credentials from an interrupted run exist; resolve them by hand first.')
+    if not reset and (state['final_exists'] or OPS_AGENT_CREDENTIALS.exists()):
+        raise InstallError('Operator credentials files already exist; use --reset-passwords to rotate them.')
+    spec = {username: (kind, display) for username, kind, display in OPERATOR_ACCOUNTS_SPEC}
+    passwords = {username: secrets.token_urlsafe(24) for username in spec}
+    documents = {username: json.dumps(operator_document(ctx, username, kind, passwords[username]), indent=2).encode()
+                 for username, (kind, _) in spec.items()}
+    agent = next(username for username, (kind, _) in spec.items() if kind == 'agent')
+    human = next(username for username, (kind, _) in spec.items() if kind == 'human')
+    OPS_AGENT_CREDENTIALS.parent.mkdir(mode=0o700, exist_ok=True)
+    folder = OPS_AGENT_CREDENTIALS.parent.lstat()
+    if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
+        raise InstallError(f'{OPS_AGENT_CREDENTIALS.parent} must be a directory owned by this user with mode 0700.')
+    user = f'{os.getuid()}:{os.getgid()}'
+    committed = False
+    # Password and reason files live in RAM only (/dev/shm) and are wiped whatever happens.
+    scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-operators-', dir='/dev/shm'))
+    try:
+        root_file('stage', content=base64.b64encode(documents[human]).decode(), **names)
+        write_private(agent_staged.parent, agent_staged.name, documents[agent])
+        mounts, accounts = [], []
+        for username, (kind, display) in spec.items():
+            write_private(scratch, f'{username}.pw', passwords[username].encode())
+            mounts.append(f'type=bind,src={scratch / (username + ".pw")},dst=/run/cpt-operators/{username}.pw,readonly')
+            accounts.append({'username': username, 'kind': kind, 'display_name': display,
+                             'password_file': f'/run/cpt-operators/{username}.pw'})
+        try:
+            answer = app_script(image_id, env, OPERATOR_ACCOUNTS, {'accounts': accounts, 'reset': reset},
+                                what='Creating the operator accounts', mounts=mounts, user=user)
+        except InstallError as error:
+            assert_no_secret([error.output, str(error).encode()], passwords.values())
+            raise
+        outcome = answer.get('accounts') if isinstance(answer, dict) else None
+        if not isinstance(outcome, dict) or sorted(outcome) != sorted(spec):
+            raise InstallError('The operator accounts script did not name both accounts; nothing was saved.')
+        if not reset and set(outcome.values()) != {'created'}:
+            raise InstallError('An operator account already existed, so its password was not set; nothing was saved. '
+                               'Rerun with --reset-passwords to rotate.', details={'accounts': outcome})
+        root_file('commit', replace=reset, **names)
+        if reset:
+            os.replace(agent_staged, OPS_AGENT_CREDENTIALS)
+        else:
+            os.link(agent_staged, OPS_AGENT_CREDENTIALS)
+            agent_staged.unlink()
+        committed = True
+        grants = {}
+        for username, (kind, _) in spec.items():
+            write_private(scratch, f'{username}.reason', operator_reason(ctx, username, kind).encode())
+            result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
+                                        f'/run/cpt-operators/{username}.reason'], env, user=user,
+                             mounts=[f'type=bind,src={scratch / (username + ".reason")},'
+                                     f'dst=/run/cpt-operators/{username}.reason,readonly'])
+            assert_no_secret([result.stdout, result.stderr], passwords.values())
+            grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}',
+                                                                          result.stdout + result.stderr)}
+        failed = [username for username, grant in grants.items() if grant['exit']]
+        if failed:
+            raise InstallError(f'manage grant_operator failed for {", ".join(failed)} (see the logs); the accounts and '
+                               'their credentials files are in place, so rerun --phase operators --reset-passwords '
+                               'once it is fixed.', details={'accounts': outcome, 'grants': grants})
+        check = app_script(image_id, env, OPERATOR_CHECK, {'usernames': sorted(spec)},
+                           what='Reading the operator accounts back')
+        found = check.get('accounts') if isinstance(check, dict) else None
+        problems = [username for username, (kind, _) in spec.items()
+                    if not isinstance(found, dict) or not isinstance(found.get(username), dict)
+                    or found[username].get('operator') is not True or found[username].get('memberships') != 0
+                    or found[username].get('actor_kind') != kind or found[username].get('active') is not True]
+        if problems:
+            raise InstallError(f'{", ".join(problems)} did not read back as an active operator with no membership; '
+                               'the accounts and their credentials files are in place.',
+                               details={'accounts': outcome, 'grants': grants, 'check': found})
+    except BaseException:
+        if not committed:
+            root_file('discard', sha256=sha256(documents[human]), **names)
+            agent_staged.unlink(missing_ok=True)
+        raise
+    finally:
+        for path in scratch.iterdir():
+            path.write_bytes(b'\0' * 64)
+            path.unlink()
+        scratch.rmdir()
+    return {'accounts': outcome, 'grants': grants, 'check': found, 'reset_passwords': reset,
+            'operator_credentials': f'{ETC_DIR}/{OPERATOR_CREDENTIALS}', 'agent_credentials': str(OPS_AGENT_CREDENTIALS),
+            'summary': 'operator accounts ' + ', '.join(f'{username} {state}' for username, state in outcome.items())
+                       + '; granted and read back as operators with no membership'}
+
+
+def phase_reassess(ctx) -> dict:
+    """Re-assess the named encounters from what is already recorded (ops/INSTALL.md, reassess): for each, in its own
+    one-shot of this revision's image (provider disabled), the application's command `manage reassess_retained
+    --encounter <id> --tag <revision>`, which queues the re-assessment of the retained responses and never sends;
+    `--dry-run` is passed through. Each encounter's jobs are read before and after (REASSESS_JOBS), so the receipt
+    names the jobs that appeared as measured, not as said; a dry run after which one appeared fails the phase."""
+    encounters, dry = list(ctx.args.encounter), bool(ctx.args.dry_run)
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. Nothing was re-assessed.')
+    before = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
+                        what='Reading the named encounters\' jobs')['encounters']
+    missing = [pk for pk in encounters if before.get(pk) is None]
+    if missing:
+        raise InstallError(f'{len(missing)} named encounter(s) do not exist ({", ".join(missing)}); nothing was '
+                           're-assessed.')
+    results = {}
+    for number, pk in enumerate(encounters, start=1):
+        command = ['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision] + (['--dry-run'] if dry
+                                                                                              else [])
+        result = oneshot(image_id, command, env, timeout=REASSESS_SECONDS)
+        log = ctx.log(f'reassess-{number:02d}', result.stdout + result.stderr)
+        results[pk] = {'exit': result.returncode, 'log': log, 'receipt': access_receipt(result.stdout),
+                       'output': result.stdout.decode('utf-8', 'replace').strip()[-2000:]}
+        if result.returncode:
+            done = [key for key in results if key != pk]
+            raise InstallError(f'reassess_retained for {pk} failed (exit {result.returncode}); see {log}. '
+                               + (f'It ran before for {", ".join(done)}.' if done else 'It ran for no encounter before.'),
+                               details={'encounters': results})
+    after = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
+                       what='Reading the named encounters\' jobs again')['encounters']
+    for pk in encounters:
+        known = {job[0] for job in before[pk]['jobs']}
+        results[pk].update(jobs_appeared=[job for job in (after.get(pk) or {}).get('jobs', []) if job[0] not in known],
+                           state_before=before[pk]['state'], state_after=(after.get(pk) or {}).get('state'))
+    appeared = sum(len(entry['jobs_appeared']) for entry in results.values())
+    if dry and appeared:
+        raise InstallError(f'A dry run was followed by {appeared} new job(s) on the named encounters; read them in '
+                           'this receipt.', details={'encounters': results})
+    return {'tag': ctx.revision, 'dry_run': dry, 'encounters': results,
+            'summary': f'reassess_retained {"(dry run) " if dry else ""}for {len(encounters)} encounter(s): '
+                       f'{appeared} job(s) appeared'}
 
 
 def acme_probe(ctx, label) -> dict:
@@ -4607,7 +4870,7 @@ def phase_rollback_vhost(ctx) -> dict:
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
     'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
-    'provision': phase_provision,
+    'provision': phase_provision, 'operators': phase_operators, 'reassess': phase_reassess,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
     'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
     'rollback-vhost': phase_rollback_vhost,

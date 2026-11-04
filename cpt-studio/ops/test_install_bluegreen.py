@@ -1406,3 +1406,375 @@ class SwitchBackArgumentTests(ArgumentTestCase):
         self.assertIn('--provider-mode live needs --authorization-ref',
                       self.refused('--phase', 'switch-back', '--provider-mode', 'live'))
         self.refused('--phase', 'switch-back', '--provider-mode', 'disabled', '--access-check')
+
+
+class OperatorsAndReassessArgumentTests(ArgumentTestCase):
+    def test_the_phases_are_in_the_table(self):
+        for phase, function in (('operators', install.phase_operators), ('reassess', install.phase_reassess)):
+            self.assertIs(install.PHASES[phase], function)
+
+    def test_operators_takes_only_reset_passwords(self):
+        self.assertIsNone(self.parse('--phase', 'operators').reset_passwords)
+        self.assertTrue(self.parse('--phase', 'operators', '--reset-passwords').reset_passwords)
+        for extra in (('--owner-username', 'owner'), ('--provider-mode', 'disabled'), ('--encounter', ENCOUNTER)):
+            with self.subTest(extra=extra):
+                self.refused('--phase', 'operators', *extra)
+
+    def test_reassess_takes_one_to_twenty_distinct_encounter_ids_and_dry_run(self):
+        args = self.parse('--phase', 'reassess', '--encounter', ENCOUNTER, '--encounter', ENCOUNTER_2, '--dry-run')
+        self.assertEqual((args.encounter, args.dry_run), ([ENCOUNTER, ENCOUNTER_2], True))
+        self.assertIn('needs at least one --encounter', self.refused('--phase', 'reassess'))
+        self.assertIn('must not repeat', self.refused('--phase', 'reassess', '--encounter', ENCOUNTER, '--encounter',
+                                                      ENCOUNTER))
+        for value in (ENCOUNTER.upper(), ENCOUNTER[:-1], 'effe4d0b b449', '../x', ENCOUNTER + ';'):
+            with self.subTest(value=value):
+                self.assertIn('is not a lowercase encounter id', self.refused('--phase', 'reassess', '--encounter',
+                                                                             value))
+        many = []
+        for index in range(install.REASSESS_LIMIT + 1):
+            many += ['--encounter', f'00000000-0000-4000-8000-{index:012d}']
+        self.assertIn('at most 20', self.refused('--phase', 'reassess', *many))
+        for phase in ('app', 'verify', 'operators'):
+            with self.subTest(phase=phase):
+                self.refused('--phase', phase, '--dry-run')
+                self.refused('--phase', phase, '--encounter', ENCOUNTER)
+
+
+# --- the operators phase ------------------------------------------------------------------------------------------------
+
+class FakeRootFile:
+    """root_file's helper (H_ROOT_FILE), on a directory standing in for /etc/cpt-studio."""
+
+    def __init__(self, directory):
+        self.directory, self.calls = directory, []
+
+    def __call__(self, op, *, final=install.INITIAL_CREDENTIALS, staged=None, **params):
+        staged = staged or f'.{final}.new'
+        self.calls.append((op, final, staged))
+        target, stage = self.directory / final, self.directory / staged
+        if op == 'state':
+            return {'final_exists': target.exists(), 'staged_exists': stage.exists()}
+        if op == 'stage':
+            install.write_private(self.directory, staged, base64.b64decode(params['content']))
+            return {'staged': True}
+        if op == 'commit':
+            if target.exists() and not params.get('replace'):
+                raise install.InstallError('Root helper refused: the credentials file already exists')
+            os.replace(stage, target)
+            return {'committed': True}
+        if op == 'discard':
+            if stage.exists() and sha(stage.read_text()) == params['sha256']:
+                stage.unlink()
+                return {'discarded': True}
+            return {'discarded': False}
+        raise AssertionError(op)
+
+
+class OperatorsPhaseTests(TemporaryDirectoryTest):
+    def setUp(self):
+        super().setUp()
+        self.etc, self.home = self.tmp / 'etc', self.tmp / 'home'
+        self.etc.mkdir(mode=0o700)
+        self.home.mkdir(mode=0o700)
+        os.chmod(self.home, 0o700)
+        self.agent_file = self.home / 'ops-agent-credentials.json'
+        self.root = FakeRootFile(self.etc)
+        self.scripts, self.oneshots, self.mounted = [], [], {}
+        self.accounts_answer = None
+        self.check_answer = None
+        self.grant_exit = {}
+
+    def app_script(self, image_id, env, body, params, *, what, mounts=(), user=None, **kwargs):
+        self.scripts.append((body, params, list(mounts), user))
+        if body == install.OPERATOR_ACCOUNTS:
+            for mount in mounts:  # what the container would read: the RAM-only password files, still there
+                source = mount.split('src=', 1)[1].split(',', 1)[0]
+                self.mounted[Path(source).name] = Path(source).read_text()
+            return self.accounts_answer or {'accounts': {spec['username']: 'reset' if params['reset'] else 'created'
+                                                         for spec in params['accounts']}}
+        if body == install.OPERATOR_CHECK:
+            return self.check_answer or {'accounts': {
+                'ops-agent': {'operator': True, 'memberships': 0, 'actor_kind': 'agent', 'active': True},
+                'platform-operator': {'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}}}
+        raise AssertionError('unexpected script')
+
+    def oneshot(self, image_id, command, env, **kwargs):
+        self.oneshots.append((command, kwargs))
+        source = kwargs['mounts'][0].split('src=', 1)[1].split(',', 1)[0]
+        self.mounted[Path(source).name] = Path(source).read_text()
+        return SimpleNamespace(returncode=self.grant_exit.get(command[3], 0), stdout=b'granted\n', stderr=b'')
+
+    def run_phase(self, reset=None):
+        ctx = install.Context(SimpleNamespace(phase='operators', revision=REVISION, receipts=str(self.tmp),
+                                              reset_passwords=reset), self.tmp)
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value=IMAGE), require_db=mock.Mock(),
+                                 read_protected_env=mock.Mock(return_value=b''), root_file=self.root,
+                                 app_script=self.app_script, oneshot=self.oneshot,
+                                 OPS_AGENT_CREDENTIALS=self.agent_file), \
+                mock.patch.dict(os.environ, {'RULED_MUTATION_DECLARATION': 'docs/foundation/mutations/x.md',
+                                             'RULED_MUTATION_DECL_COMMIT': OTHER_COMMIT}):
+            return install.phase_operators(ctx)
+
+    def test_both_accounts_are_created_granted_and_read_back_with_their_logins_saved(self):
+        details = self.run_phase()
+        agent = json.loads(self.agent_file.read_text())
+        human = json.loads((self.etc / install.OPERATOR_CREDENTIALS).read_text())
+        self.assertEqual((agent['username'], agent['actor_kind']), ('ops-agent', 'agent'))
+        self.assertEqual((human['username'], human['actor_kind']), ('platform-operator', 'human'))
+        self.assertEqual(stat.S_IMODE(self.agent_file.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE((self.etc / install.OPERATOR_CREDENTIALS).stat().st_mode), 0o600)
+        self.assertGreaterEqual(len(agent['password']), 32)
+        self.assertNotEqual(agent['password'], human['password'])
+        self.assertEqual(agent['operator_url'], 'https://cpt.quillmd.com/ops/')
+        # the passwords reached the accounts script only as the mounted RAM-only files, never as parameters
+        body, params, mounts, user = self.scripts[0]
+        self.assertEqual(params['accounts'], [
+            {'username': 'ops-agent', 'kind': 'agent', 'display_name': 'CPT Studio operations agent',
+             'password_file': '/run/cpt-operators/ops-agent.pw'},
+            {'username': 'platform-operator', 'kind': 'human', 'display_name': 'CPT Studio platform operator',
+             'password_file': '/run/cpt-operators/platform-operator.pw'}])
+        self.assertEqual((self.mounted['ops-agent.pw'], self.mounted['platform-operator.pw']),
+                         (agent['password'], human['password']))
+        self.assertTrue(all(mount.startswith('type=bind,src=/dev/shm/') and mount.endswith(',readonly')
+                            for mount in mounts))
+        self.assertEqual(user, f'{os.getuid()}:{os.getgid()}')
+        # each account granted by the application's own command, by its contract
+        self.assertEqual([command for command, _ in self.oneshots], [
+            ['manage', 'grant_operator', '--username', 'ops-agent', '--reason-file',
+             '/run/cpt-operators/ops-agent.reason'],
+            ['manage', 'grant_operator', '--username', 'platform-operator', '--reason-file',
+             '/run/cpt-operators/platform-operator.reason']])
+        self.assertIn('owner directive 2026-11-03, section 2', self.mounted['ops-agent.reason'])
+        self.assertIn(REVISION, self.mounted['platform-operator.reason'])
+        self.assertEqual(self.scripts[1][0], install.OPERATOR_CHECK)
+        self.assertEqual(self.scripts[1][1], {'usernames': ['ops-agent', 'platform-operator']})
+        # nothing of either password in the receipt's details, and the RAM files are gone
+        flat = json.dumps(details)
+        self.assertNotIn(agent['password'], flat)
+        self.assertNotIn(human['password'], flat)
+        self.assertEqual(details['accounts'], {'ops-agent': 'created', 'platform-operator': 'created'})
+        self.assertFalse(list(Path('/dev/shm').glob('cpt-studio-operators-*')))
+        self.assertEqual([op for op, *_ in self.root.calls], ['state', 'stage', 'commit'])
+        self.assertTrue(all(final == install.OPERATOR_CREDENTIALS for _, final, _ in self.root.calls))
+
+    def test_existing_logins_are_kept_without_reset_and_rotated_with_it(self):
+        self.run_phase()
+        first = json.loads(self.agent_file.read_text())['password']
+        with self.assertRaisesRegex(install.InstallError, 'use --reset-passwords'):
+            self.run_phase()
+        self.assertEqual(len(self.scripts), 2)  # the refusal ran nothing
+        details = self.run_phase(reset=True)
+        self.assertNotEqual(json.loads(self.agent_file.read_text())['password'], first)
+        self.assertEqual(details['accounts'], {'ops-agent': 'reset', 'platform-operator': 'reset'})
+        self.assertTrue(self.scripts[2][1]['reset'])
+
+    def test_an_account_that_already_existed_saves_nothing_without_reset(self):
+        self.accounts_answer = {'accounts': {'ops-agent': 'created', 'platform-operator': 'kept'}}
+        with self.assertRaisesRegex(install.InstallError, 'already existed'):
+            self.run_phase()
+        self.assertFalse(self.agent_file.exists())
+        self.assertFalse((self.etc / install.OPERATOR_CREDENTIALS).exists())
+        self.assertFalse(list(self.etc.iterdir()))  # the staged root file was discarded
+        self.assertEqual(self.oneshots, [])  # nothing granted
+
+    def test_staged_leftovers_or_a_loose_directory_refuse_before_anything_runs(self):
+        (self.etc / f'.{install.OPERATOR_CREDENTIALS}.new').write_text('{}')
+        with self.assertRaisesRegex(install.InstallError, 'interrupted run'):
+            self.run_phase()
+        (self.etc / f'.{install.OPERATOR_CREDENTIALS}.new').unlink()
+        os.chmod(self.home, 0o755)
+        with self.assertRaisesRegex(install.InstallError, 'mode 0700'):
+            self.run_phase()
+        self.assertEqual((self.scripts, self.oneshots), ([], []))
+
+    def test_a_grant_that_fails_or_an_account_that_does_not_read_back_fails_the_phase(self):
+        self.grant_exit = {'platform-operator': 2}
+        with self.assertRaisesRegex(install.InstallError, 'grant_operator failed for platform-operator') as caught:
+            self.run_phase()
+        self.assertIn('--reset-passwords', str(caught.exception))
+        self.assertTrue(self.agent_file.exists())  # the logins match the accounts: they stay
+        self.grant_exit = {}
+        for answer in ({'operator': False, 'memberships': 0, 'actor_kind': 'agent', 'active': True},
+                       {'operator': True, 'memberships': 1, 'actor_kind': 'agent', 'active': True},
+                       {'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}):
+            self.check_answer = {'accounts': {'ops-agent': answer, 'platform-operator': {
+                'operator': True, 'memberships': 0, 'actor_kind': 'human', 'active': True}}}
+            with self.subTest(answer=answer), self.assertRaisesRegex(install.InstallError, 'ops-agent did not read back'):
+                self.run_phase(reset=True)
+
+    def test_the_in_image_scripts_compile_and_never_print_a_password(self):
+        for body in (install.OPERATOR_ACCOUNTS, install.OPERATOR_CHECK, install.REASSESS_JOBS):
+            compile(install.APP_SCRIPT_PRELUDE.format(payload='e30=', answer=install.APP_SCRIPT_ANSWER) + body,
+                    'script', 'exec')
+        self.assertNotIn('print(password', install.OPERATOR_ACCOUNTS)
+        self.assertIn('user.memberships.exists()', install.OPERATOR_ACCOUNTS)
+        self.assertNotIn('Membership', install.OPERATOR_ACCOUNTS)  # it never creates one
+        self.assertIn('from studio.operator import is_operator', install.OPERATOR_CHECK)
+
+
+# --- the reassess phase -------------------------------------------------------------------------------------------------
+
+class ReassessPhaseTests(TemporaryDirectoryTest):
+    def setUp(self):
+        super().setUp()
+        self.commands, self.reads = [], []
+        self.jobs = {ENCOUNTER: [['j1', 'assess', 'succeeded', 'k1']], ENCOUNTER_2: []}
+        self.queues = {ENCOUNTER: [['j2', 'assess', 'queued', 'k1:c:tag']], ENCOUNTER_2: [['j3', 'assess', 'queued',
+                                                                                         'k2:c:tag']]}
+        self.exit = {}
+
+    def app_script(self, image_id, env, body, params, **kwargs):
+        self.assertEqual(body, install.REASSESS_JOBS)
+        self.reads.append(list(params['encounters']))
+        return {'encounters': {pk: None if pk not in self.jobs else {'state': 'ready_for_review',
+                                                                    'jobs': list(self.jobs[pk])}
+                               for pk in params['encounters']}}
+
+    def oneshot(self, image_id, command, env, **kwargs):
+        self.commands.append((command, kwargs))
+        if command[:2] == ['manage', 'reassess_retained']:
+            pk = command[3]
+            if not self.exit.get(pk) and '--dry-run' not in command:
+                self.jobs[pk] += self.queues[pk]
+            return SimpleNamespace(returncode=self.exit.get(pk, 0), stdout=json.dumps({'queued': True}).encode(),
+                                   stderr=b'')
+        return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+    def run_phase(self, encounters, dry=None):
+        ctx = install.Context(SimpleNamespace(phase='reassess', revision=REVISION, receipts=str(self.tmp),
+                                              encounter=encounters, dry_run=dry), self.tmp)
+        with mock.patch.multiple(install, installed_image=mock.Mock(return_value=IMAGE), require_db=mock.Mock(),
+                                 read_protected_env=mock.Mock(return_value=b''), app_script=self.app_script,
+                                 oneshot=self.oneshot):
+            return install.phase_reassess(ctx)
+
+    def test_each_named_encounter_is_reassessed_by_the_contract_and_its_new_jobs_are_measured(self):
+        details = self.run_phase([ENCOUNTER, ENCOUNTER_2])
+        self.assertEqual([command for command, _ in self.commands], [
+            ['manage', 'migrate', '--check'],
+            ['manage', 'reassess_retained', '--encounter', ENCOUNTER, '--tag', REVISION],
+            ['manage', 'reassess_retained', '--encounter', ENCOUNTER_2, '--tag', REVISION]])
+        self.assertEqual(self.reads, [[ENCOUNTER, ENCOUNTER_2]] * 2)  # before and after
+        self.assertEqual(details['encounters'][ENCOUNTER]['jobs_appeared'], [['j2', 'assess', 'queued', 'k1:c:tag']])
+        self.assertEqual(details['encounters'][ENCOUNTER_2]['jobs_appeared'], [['j3', 'assess', 'queued', 'k2:c:tag']])
+        self.assertEqual(details['encounters'][ENCOUNTER]['receipt'], {'queued': True})
+        self.assertTrue(Path(details['encounters'][ENCOUNTER]['log']).exists())
+        self.assertEqual((details['tag'], details['dry_run']), (REVISION, False))
+        self.assertIn('2 job(s) appeared', details['summary'])
+        for command, kwargs in self.commands:
+            self.assertNotIn('environment', kwargs)  # the one-shot's default: provider and participants disabled
+
+    def test_a_dry_run_passes_the_flag_and_fails_when_a_job_appeared(self):
+        details = self.run_phase([ENCOUNTER], dry=True)
+        self.assertEqual(self.commands[1][0][-1], '--dry-run')
+        self.assertEqual(details['encounters'][ENCOUNTER]['jobs_appeared'], [])
+        self.jobs[ENCOUNTER].append(['j9', 'assess', 'queued', 'member'])  # someone else's, meanwhile
+        original = self.app_script
+        calls = []
+
+        def script(*args, **kwargs):
+            calls.append(1)
+            answer = original(*args, **kwargs)
+            if len(calls) == 1:
+                answer['encounters'][ENCOUNTER]['jobs'].pop()
+            return answer
+        self.app_script = script
+        with self.assertRaisesRegex(install.InstallError, 'A dry run was followed by 1 new job'):
+            self.run_phase([ENCOUNTER], dry=True)
+
+    def test_an_unknown_encounter_refuses_before_any_command_and_a_failure_says_what_ran(self):
+        with self.assertRaisesRegex(install.InstallError, 'do not exist'):
+            self.run_phase(['00000000-0000-4000-8000-000000000000'])
+        self.assertEqual([command[:2] for command, _ in self.commands], [['manage', 'migrate']])
+        self.commands.clear()
+        self.exit = {ENCOUNTER_2: 1}
+        with self.assertRaisesRegex(install.InstallError, f'failed \\(exit 1\\).*It ran before for {ENCOUNTER}'):
+            self.run_phase([ENCOUNTER, ENCOUNTER_2])
+
+    def test_it_refuses_while_this_revision_s_migrations_are_not_applied(self):
+        def pending(image_id, command, env, **kwargs):
+            self.commands.append((command, kwargs))
+            return SimpleNamespace(returncode=1, stdout=b'', stderr=b'')
+        self.oneshot = pending
+        with self.assertRaisesRegex(install.InstallError, 'run --phase app first'):
+            self.run_phase([ENCOUNTER])
+        self.assertEqual(self.reads, [])
+
+
+# --- the in-image scripts on a real database (CI's disposable PostgreSQL; skipped, never passed, without one) -----------
+
+from test_install_harness2 import DatabaseTest, run_in_image  # noqa: E402
+
+
+class OperatorAccountsOnTheDatabaseTests(DatabaseTest):
+    """OPERATOR_ACCOUNTS as `manage shell -c` runs it, on real rows: no membership, refusals change nothing."""
+
+    def specs(self, folder, passwords):
+        found = []
+        for (username, kind, display), password in zip(install.OPERATOR_ACCOUNTS_SPEC, passwords):
+            path = Path(folder) / f'{username}.pw'
+            path.write_text(password + '\n')
+            found.append({'username': username, 'kind': kind, 'display_name': display, 'password_file': str(path)})
+        return found
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        self._folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self._folder.cleanup)
+        self.folder = self._folder.name
+
+    def test_accounts_are_created_with_no_membership_then_kept_or_reset(self):
+        from studio import models
+        first = ['synthetic-operator-pass-0123456789-A', 'synthetic-operator-pass-0123456789-B']
+        answer = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, first), 'reset': False})
+        self.assertEqual(answer, {'accounts': {'ops-agent': 'created', 'platform-operator': 'created'}})
+        for (username, kind, display), password in zip(install.OPERATOR_ACCOUNTS_SPEC, first):
+            user = models.User.objects.get(username=username)
+            self.assertEqual((user.actor_kind, user.display_name, user.memberships.count()), (kind, display, 0))
+            self.assertTrue(user.check_password(password))
+        second = ['synthetic-operator-pass-9876543210-C', 'synthetic-operator-pass-9876543210-D']
+        kept = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, second), 'reset': False})
+        self.assertEqual(kept, {'accounts': {'ops-agent': 'kept', 'platform-operator': 'kept'}})
+        self.assertTrue(models.User.objects.get(username='ops-agent').check_password(first[0]))
+        reset = run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, second), 'reset': True})
+        self.assertEqual(reset, {'accounts': {'ops-agent': 'reset', 'platform-operator': 'reset'}})
+        self.assertTrue(models.User.objects.get(username='platform-operator').check_password(second[1]))
+        self.assertFalse(models.Membership.objects.filter(user__username__in=['ops-agent', 'platform-operator'])
+                         .exists())
+
+    def test_a_member_account_or_another_kind_is_refused_and_nothing_changes(self):
+        from studio import models
+        category, _ = models.Category.objects.get_or_create(slug='synthetic-ops', defaults={
+            'name': 'Synthetic', 'profiles_version': 'synthetic@1'})
+        workspace = models.Workspace.objects.create(name='Synthetic ops', category=category)
+        member = models.User.objects.create(username='platform-operator', actor_kind='human')
+        models.Membership.objects.create(user=member, workspace=workspace, role=models.Membership.OWNER)
+        passwords = ['synthetic-operator-pass-0123456789-E', 'synthetic-operator-pass-0123456789-F']
+        with self.assertRaisesRegex(SystemExit, 'holds a workspace membership'):
+            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, passwords), 'reset': True})
+        self.assertFalse(models.User.objects.filter(username='ops-agent').exists())  # rolled back with it
+        self.assertEqual(models.User.objects.get(pk=member.pk).password, member.password)  # its password untouched
+        models.Membership.objects.filter(user=member).delete()
+        member.actor_kind = 'agent'
+        member.save()
+        with self.assertRaisesRegex(SystemExit, 'another actor kind'):
+            run_in_image(install.OPERATOR_ACCOUNTS, {'accounts': self.specs(self.folder, passwords), 'reset': True})
+
+
+class ReassessJobsOnTheDatabaseTests(DatabaseTest):
+    def test_the_jobs_of_each_named_encounter_in_order_and_none_for_an_unknown_one(self):
+        from django.utils import timezone
+        from studio import models
+        encounter = self.encounter('reassess')
+        for index, (kind, state) in enumerate((('extract', 'succeeded'), ('assess', 'queued'))):
+            models.Job.objects.create(encounter=encounter, revision=encounter.current_revision, kind=kind, state=state,
+                                      idempotency_key=f'synthetic-reassess-{index}',
+                                      deadline_at=timezone.now() + dt.timedelta(minutes=30))
+        missing = '00000000-0000-4000-8000-000000000000'
+        answer = run_in_image(install.REASSESS_JOBS, {'encounters': [str(encounter.pk), missing]})
+        found = answer['encounters'][str(encounter.pk)]
+        self.assertEqual([job[1:] for job in found['jobs']], [['extract', 'succeeded', 'synthetic-reassess-0'],
+                                                             ['assess', 'queued', 'synthetic-reassess-1']])
+        self.assertEqual(found['state'], encounter.state)
+        self.assertIsNone(answer['encounters'][missing])
