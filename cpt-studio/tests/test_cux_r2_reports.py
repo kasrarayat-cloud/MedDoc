@@ -360,25 +360,25 @@ class AgentLabelTests(ExportCase):
         self.assert_all_pass(files, view, trace, s.agent.label())
 
     def test_a_human_s_approval_of_an_agent_s_reinstatement_is_labelled_with_the_human_kind(self):
+        # one rule everywhere (customer_api.agent_approval, L3-6): a person's approval is the person's, with no agent
+        # label, even where an agent reinstated the code (who reinstated it stays in the record, not in the label)
         s = persist('denied')
         self.decide(s, s.agent, '45385', 'reinstate')
         self.decide(s, s.reviewer, '45378', 'reject')
         self.decide(s, s.reviewer, '45385', 'approve')
         codes = {code['code']: code for code in self.payload(s, s.reviewer)['codes']}
-        self.assertEqual((codes['45385']['sub_label'], codes['45385']['decision']['by_kind']),
-                         (reports.AGENT_LINE, 'human'))  # the page's label and the approver's own kind
+        self.assertEqual((codes['45385']['sub_label'], codes['45385']['decision']['by_kind']), ('', 'human'))
         files = self.exports(s, s.reviewer)
         text = self.texts(files)
         (approved,) = self.rows(text[('approved', 'csv')])
         self.assertEqual((approved['code'], approved['approved_by'], approved['approver_kind'], approved['review_label']),
-                         ('45385', s.reviewer.label(), 'human', reports.AGENT_LINE))
+                         ('45385', s.reviewer.label(), 'human', ''))
         self.assertEqual({(row['code'], row['review_label']) for row in self.rows(text[('draft', 'csv')])},
-                         {('45378', ''), ('45385', reports.AGENT_LINE)})
+                         {('45378', ''), ('45385', '')})
         txt = text[('approved', 'txt')]
         self.assertIn(f'   Approved by {s.reviewer.label()} (human) at ', txt)
-        self.assertEqual(txt.splitlines()[2], reports.AGENT_LINE)
-        self.assertIn(f'   {reports.AGENT_LINE}', txt)
-        self.assertIn(f'2. 45385 — Approved — units 1 — modifiers: none\n   {reports.AGENT_LINE}\n', text[('draft', 'txt')])
+        self.assertNotIn(reports.AGENT_LINE, txt)
+        self.assertNotIn(reports.AGENT_LINE, text[('draft', 'txt')])
         view, trace = self.checked_view(s, {key: files[key] for key in (('approved', 'txt'), ('approved', 'csv'))},
                                         s.reviewer.label())
         self.assertEqual(next(p for p in view['assessment']['proposals'] if p['code'] == '45385')['reinstated_by']['reviewer_kind'],
@@ -393,10 +393,12 @@ class AgentLabelTests(ExportCase):
             owned = {f'{prefix}.items', f'{prefix}.status', f'{prefix}.units', f'{prefix}.agent_label', 'header.agent_label',
                      'csv.approval_cells', 'csv.synthetic_marker', 'marker.synthetic', 'format'}
             self.assertEqual([item for item in bad if item[0] in owned], [], (kind, fmt))
-        # the label is the export's statement: taken off the reinstated approval, the check fails
-        self.assertIn('csv.items.agent_label', self.failing('approved', 'csv', changed(text[('approved', 'csv')],
-                                                                                        f'"{reports.AGENT_LINE}"', '""'),
-                                                            view, trace, s.reviewer.label()))
+        # the label is the export's statement: an agent label put on this person's approval fails the check
+        approved_csv = text[('approved', 'csv')]
+        row = next(line for line in approved_csv.split('\r\n') if '"45385"' in line)
+        self.assertTrue(row.endswith(',""'), row)
+        forged = changed(approved_csv, row, row[:-3] + f',"{reports.AGENT_LINE}"')
+        self.assertIn('csv.items.agent_label', self.failing('approved', 'csv', forged, view, trace, s.reviewer.label()))
 
     def test_a_human_s_own_approvals_carry_no_agent_label_anywhere(self):
         s = persist('pair')

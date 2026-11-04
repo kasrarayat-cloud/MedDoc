@@ -1289,14 +1289,11 @@ def customer_status(p: dict) -> str:
 
 
 def agent_reviewed(p: dict) -> bool:
-    """Whether the code's current decision is an approval agent review took part in, by the rule the customer page and
-    both customer reports label it by (customer_api._status and approved_export_items; fidelity:8 of the report
-    repairs): the approver is an agent, or an agent's reinstatement stands behind the approval (the operator view's
-    reinstated_by, serializers._reinstated_by: review.reinstatement_for, as the page reads it)."""
+    """Whether the code's current decision is an agent's approval, by the one rule every customer surface labels it by
+    (customer_api.agent_approval, refutation round 2 L3-6): exactly when its approver is an agent. A person's approval
+    of a code an agent reinstated is the person's (who reinstated it stays in the record, never in the label)."""
     decision = p.get('decision') or {}
-    if decision.get('action') != 'approve':
-        return False
-    return decision.get('reviewer_kind') == 'agent' or (p.get('reinstated_by') or {}).get('reviewer_kind') == 'agent'
+    return decision.get('action') == 'approve' and decision.get('reviewer_kind') == 'agent'
 
 
 def act_index(api: dict) -> dict:
@@ -1314,14 +1311,17 @@ def _sliced(span, revision_text: str) -> bool:
     return isinstance(span, dict) and cp_slice(revision_text, span.get('start'), span.get('end')) == span.get('text')
 
 
+SHOWN_SUPPORT = ('pass', 'warn')  # studio/review.py SHOWN_SUPPORT: the readings a code's passages are quoted under
+
+
 def allowed_passages(p: dict, revision_text: str, acts: dict | None = None, status: str | None = None) -> tuple[list, list]:
     """(the passages a quotation of the code may be, the passages CPT Studio found unrelated) by the one rule the server
     quotes a code by - the page's "Why this code?" (customer_api._quotes) and the approved export's evidence alike
     (CORE-UX-DESIGN.md 7: CPT Studio's own located passages for the matched act first, then the provider's exact passages
     only when they support; never a passage that does not support, and none for an excluded code):
-    - support.source only where the support reading recorded it as showing the act (status 'warn': none of the
-      provider's passages does, so CPT Studio located its own). A 'not_applicable' reading's source passages are the
-      service's own, which show no act (refutation round 2, L3-7: they were accepted under "Why this code?");
+    - nothing at all unless the support reading records the act as shown ('pass' or 'warn', review.SHOWN_SUPPORT): a
+      'not_applicable' reading's source passages are the service's own, which show no act (refutation round 2, L3-7),
+      and a 'fail' shows none; then support.source;
     - the evidence CPT Studio's reading recorded for each act the support record names, while that act is stored
       'performed' or 'incomplete';
     - the provider's exact passages (context 0, exact) the support reading found supporting, never one it found unrelated.
@@ -1334,9 +1334,10 @@ def allowed_passages(p: dict, revision_text: str, acts: dict | None = None, stat
     unrelated_ids = {i for i in support.get('unrelated') or [] if type(i) is int} if isinstance(support.get('unrelated'), list) else set()
     unrelated = [exact[i] for i in sorted(unrelated_ids) if i in exact]
     reading = support.get('status') if isinstance(support.get('status'), str) else None
-    if reading is None or status == 'excluded':
+    # review.evidence_spans: nothing unless the support reading records the act as shown (SHOWN_SUPPORT)
+    if reading not in SHOWN_SUPPORT or status == 'excluded':
         return [], unrelated
-    source = [s for s in support.get('source') or [] if _sliced(s, revision_text)] if reading == 'warn' else []
+    source = [s for s in support.get('source') or [] if _sliced(s, revision_text)]
     own = []
     for act in support.get('acts') or []:
         stored = (acts or {}).get(act.get('id')) if isinstance(act, dict) else None

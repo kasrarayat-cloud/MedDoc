@@ -1590,9 +1590,10 @@ function expectedCodeRows(op) {
 // is an agent, or an agent's reinstatement stands behind the approval (the operator view's reinstated_by,
 // serializers._reinstated_by - review.reinstatement_for, as the page reads it). Refutation round 2, L3-6: the walk
 // judged by the approver alone and failed the server's label on a human's approval of an agent's reinstatement.
+// customer_api.agent_approval (refutation round 2, L3-6): an approval is an agent's exactly when its approver is one
 function agentReviewed(p) {
   const decision = p?.decision || null;
-  return decision?.action === 'approve' && (decision.reviewer_kind === 'agent' || p?.reinstated_by?.reviewer_kind === 'agent');
+  return decision?.action === 'approve' && decision.reviewer_kind === 'agent';
 }
 
 // The customer status of an operator proposal (CORE-UX-DESIGN 7's status mapping) and the sub label it must carry
@@ -1655,8 +1656,9 @@ function allowedPassages(p, points, acts = new Map(), status = null) {
   const unrelatedIds = new Set(Array.isArray(support.unrelated) ? support.unrelated.filter(Number.isInteger) : []);
   const unrelated = [...unrelatedIds].sort((a, b) => a - b).filter(index => exact.has(index)).map(index => exact.get(index));
   const reading = typeof support.status === 'string' ? support.status : null;
-  if (reading === null || status === 'excluded') return { allowed: [], unrelated };
-  const source = reading === 'warn' ? (Array.isArray(support.source) ? support.source : []).filter(sliced) : [];
+  // studio/review.py evidence_spans: nothing unless the support reading records the act as shown (SHOWN_SUPPORT)
+  if (!['pass', 'warn'].includes(reading) || status === 'excluded') return { allowed: [], unrelated };
+  const source = (Array.isArray(support.source) ? support.source : []).filter(sliced);
   const own = [];
   for (const act of Array.isArray(support.acts) ? support.acts : []) {
     const stored = act && typeof act === 'object' ? acts.get(act.id) : undefined;

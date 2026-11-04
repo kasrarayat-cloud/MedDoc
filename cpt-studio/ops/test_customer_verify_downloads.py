@@ -231,19 +231,15 @@ class ApprovedTxtTests(unittest.TestCase):
         self.assertEqual(failed(txt('approved', bare, human)), [])
 
     def test_a_human_s_approval_of_an_agent_s_reinstatement_is_labelled_with_the_human_kind(self):
-        # the page labels it agent review (customer_api: an agent's reinstatement behind the approval, fidelity:8), and
-        # the approver is the human - both are said
+        # one rule everywhere (customer_api.agent_approval, refutation round 2 L3-6): a person's approval is the
+        # person's - the human kind and no agent label - even of a code an agent reinstated
         api = reinstated_by_agent_approved_by_human(operator())
-        self.assertTrue(vd.agent_reviewed(proposal(api, '45385')))
+        self.assertFalse(vd.agent_reviewed(proposal(api, '45385')))
         text = changed(sample('customer-report-approved.txt'), f'{AGENT} (agent) at 2026-11-03T22:05:30', f'{HUMAN} (human) at 2026-11-03T22:05:30')
-        self.assertEqual(failed(txt('approved', text, api)), [])
-        self.assertIn('items.agent_label', failed(txt('approved', changed(text, f'{HUMAN} (human) at 2026-11-03T22:05:30+00:00\n   {LABEL}\n',
-                                                                                f'{HUMAN} (human) at 2026-11-03T22:05:30+00:00\n'), api)))
-        self.assertIn('items.approver', failed(txt('approved', changed(text, f'{HUMAN} (human)', f'{HUMAN} (agent)'), api)))
-        own = copy.deepcopy(api)
-        proposal(own, '45385')['reinstated_by'] = {'reviewer': HUMAN, 'reviewer_kind': 'human', 'decided_at': '2026-11-03T22:04:00+00:00'}
-        self.assertFalse(vd.agent_reviewed(proposal(own, '45385')))
-        self.assertIn('items.agent_label', failed(txt('approved', text, own)))
+        unlabelled = changed(text, f'{HUMAN} (human) at 2026-11-03T22:05:30+00:00\n   {LABEL}\n', f'{HUMAN} (human) at 2026-11-03T22:05:30+00:00\n')
+        self.assertEqual(failed(txt('approved', unlabelled, api)), [])
+        self.assertIn('items.agent_label', failed(txt('approved', text, api)))  # the person's approval labelled an agent's
+        self.assertIn('items.approver', failed(txt('approved', changed(unlabelled, f'{HUMAN} (human)', f'{HUMAN} (agent)'), api)))
 
     def test_every_quotation_is_exact_on_its_page_and_a_passage_held_as_support(self):
         self.assert_fails(lambda t: changed(t, 'characters 256–329', 'characters 257–330'), ['items.evidence.exact', 'items.evidence.support'])
@@ -470,12 +466,15 @@ class CsvTests(unittest.TestCase):
             text = sample(f'customer-report-{kind}.csv')
             self.assertIn('csv.items.agent_label', failed(csv(kind, changed(text, f'"{LABEL}"', '""', 2))))
             self.assertIn('csv.items.agent_label', failed(csv(kind, changed(text, f'"{LABEL}"', '"Rejected in review"', 2))))
+        # a person's approval carries no agent label, even of a code an agent reinstated (customer_api.agent_approval)
         api = reinstated_by_agent_approved_by_human(operator())
         text = changed(sample('customer-report-approved.csv'), f'"{AGENT}","agent","2026-11-03T22:05:30+00:00"',
                        f'"{HUMAN}","human","2026-11-03T22:05:30+00:00"')
-        self.assertEqual(failed(csv('approved', text, api)), [])
-        self.assertIn('csv.items.agent_label', failed(csv('approved', text.replace(f'"{LABEL}"\r\n"SYNTHETIC', '""\r\n"SYNTHETIC'), api)))
-        self.assertIn('csv.items.approver', failed(csv('approved', changed(text, f'"{HUMAN}","human"', f'"{HUMAN}","agent"'), api)))
+        unlabelled = text.replace(f'"{LABEL}"\r\n"SYNTHETIC', '""\r\n"SYNTHETIC')
+        self.assertNotEqual(unlabelled, text)
+        self.assertEqual(failed(csv('approved', unlabelled, api)), [])
+        self.assertIn('csv.items.agent_label', failed(csv('approved', text, api)))
+        self.assertIn('csv.items.approver', failed(csv('approved', changed(unlabelled, f'"{HUMAN}","human"', f'"{HUMAN}","agent"'), api)))
 
     def test_a_modifier_the_operator_view_does_not_record_is_never_read_as_none(self):
         text = sample('customer-report-approved.csv')

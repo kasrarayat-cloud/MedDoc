@@ -2172,10 +2172,11 @@ test('checkCustomerVsOperator accepts exactly the passages the server\'s one rul
   const quoteless = CUST();
   quoteless.codes[0].why.quotes = [];
   assert.equal(supports(quoteless, unread), 'pass');
-  // CPT Studio's located passages only where the reading says they show the act ('warn'), never a 'not_applicable' one's
+  // CPT Studio's located passages only where the reading records the act as shown ('pass' or 'warn': review.SHOWN_SUPPORT,
+  // the rule review.evidence_spans quotes by), never a 'not_applicable' or 'fail' one's
   const located80 = CUST();
   located80.codes[0].why.quotes = [{ ...located, page: 1, exact: true }];
-  for (const [reading, want] of [['warn', 'pass'], ['not_applicable', 'fail'], ['fail', 'fail'], ['pass', 'fail']]) {
+  for (const [reading, want] of [['warn', 'pass'], ['not_applicable', 'fail'], ['fail', 'fail'], ['pass', 'pass']]) {
     const o = OP();
     Object.assign(o.assessment.proposals[0].support, { status: reading, supporting: [], unrelated: [0], source: [located] });
     assert.equal(supports(located80, o), want, reading);
@@ -2186,23 +2187,27 @@ test('checkCustomerVsOperator accepts exactly the passages the server\'s one rul
   assert.deepEqual(vb.allowedPassages(op.assessment.proposals[0], Array.from(text)).allowed.map(span => span.start), [256]);
 });
 
-test('expectedCustomerStatus labels agent review where the page does: an agent approver, or an agent\'s reinstatement behind a human\'s approval (L3-6)', () => {
+// customer_api.agent_approval (refutation round 2, L3-6): an approval is labelled agent review exactly when its approver
+// is an agent - a person's approval of a code an agent reinstated is the person's, with no label
+test('expectedCustomerStatus labels agent review exactly when the approver is an agent, never a person\'s approval of an agent\'s reinstatement (L3-6)', () => {
   const at = { created_at: '2026-11-03T22:05:00+00:00' };
   const human = { action: 'approve', reviewer: 'Reviewer Four', reviewer_kind: 'human', ...at };
   const reinstated = { bucket: 'excluded', status: 'excluded', decision: human, reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent' } };
-  assert.deepEqual(vb.expectedCustomerStatus(reinstated), { status: 'approved', sub: SUB, human: false });
-  assert.equal(vb.agentReviewed(reinstated), true);
-  const own = { ...reinstated, reinstated_by: { reviewer: 'Reviewer Four', reviewer_kind: 'human' } };
-  assert.deepEqual(vb.expectedCustomerStatus(own), { status: 'approved', sub: null, human: true });
+  assert.deepEqual(vb.expectedCustomerStatus(reinstated), { status: 'approved', sub: null, human: true });
+  assert.equal(vb.agentReviewed(reinstated), false);
+  const agents = { ...reinstated, decision: { ...human, reviewer: SAMPLE_AGENT, reviewer_kind: 'agent' } };
+  assert.deepEqual(vb.expectedCustomerStatus(agents), { status: 'approved', sub: SUB, human: false });
+  assert.equal(vb.agentReviewed(agents), true);
   assert.equal(vb.agentReviewed({ bucket: 'selected', decision: { ...human, action: 'reject' } }), false);
-  // the page's label beside the true kind passes; a human's own approval labelled an agent's fails
+  // the person's approval with no label passes; the same approval labelled an agent's fails
   const op = OP();
   Object.assign(op.assessment.proposals[1], { reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent', decided_at: '2026-11-03T22:04:00+00:00' } });
   Object.assign(op.assessment.proposals[1].decision, { reviewer: 'Reviewer Four', reviewer_kind: 'human' });
   const enc = CUST();
   Object.assign(enc.codes[1].decision, { by: 'Reviewer Four', by_kind: 'human' });
+  enc.codes[1].sub_label = '';
   assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), []);
-  op.assessment.proposals[1].reinstated_by = null;
+  enc.codes[1].sub_label = SUB;
   assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.status').reason, /45385 sub label|a human approval labelled as an agent's/);
 });
 
