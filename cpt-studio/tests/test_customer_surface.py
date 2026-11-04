@@ -16,7 +16,6 @@ import hashlib
 import json
 import re
 import tempfile
-import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -764,9 +763,10 @@ class ReportTests(SurfaceCase):
 
 
 class CollectedStaticTests(SurfaceCase):
-    # P6 (CORE-UX-DESIGN.md 2, 8) owns the customer bundle: studio/static/studio/app.js and styles.css. Until its
-    # codes-first app.js lands they are today's website, which carries the operator trace UI and the participant names.
-    P6_FILES = {'studio/app.js', 'studio/styles.css'}
+    """The customer bundle (P6's codes-first studio/static/studio/app.js and styles.css, CORE-UX-DESIGN.md 2, 8) and
+    the customer shell (templates/studio/index.html, login.html) name nothing internal; the operator console's bundle
+    lives at studio/operator/, outside static, served only behind the operator grant (tests.test_operator)."""
+    TEMPLATES = Path(settings.BASE_DIR) / 'studio' / 'templates' / 'studio'
 
     def collected(self):
         """[(path, text)] of every file a fresh collectstatic writes (compressed copies decompressed)."""
@@ -786,17 +786,24 @@ class CollectedStaticTests(SurfaceCase):
     def leaking(self, texts):
         return sorted({name for name, text in texts if net_hits(text)})
 
-    @unittest.expectedFailure  # P6: expected to pass once its customer app.js and styles.css land (see P6_FILES)
     def test_the_collected_static_bundle_names_nothing_internal(self):
         texts = self.collected()
-        self.assertTrue(any(name.endswith('app.js') for name, _ in texts))
+        names = {name for name, _ in texts}
+        self.assertTrue({'studio/app.js', 'studio/styles.css'} <= names, sorted(names))
         self.assertEqual(self.leaking(texts), [])
+        # the scan reads what it is given: a planted machinery word in the bundle is found
+        self.assertEqual(self.leaking([('studio/app.js', dict(texts)['studio/app.js'] + '\n// via Corti')]),
+                         ['studio/app.js'])
 
-    def test_only_the_customer_bundle_p6_replaces_still_names_internals(self):
-        """The expected failure above fails for one reason only: every file but P6's two is clean now, so a new leaking
-        file fails here, and so does the day P6's files are clean (remove the expected failure then)."""
-        texts = self.collected()
-        self.assertEqual(self.leaking(texts), sorted(self.P6_FILES))
+    def test_the_customer_templates_and_the_sign_in_page_name_nothing_internal(self):
+        for name in ('index.html', 'login.html'):
+            with self.subTest(name):
+                self.assertEqual(net_hits((self.TEMPLATES / name).read_text(encoding='utf-8')), {})
+        with override_settings(STORAGES=PLAIN_STATIC):
+            page = Client().get('/login/')
+        self.assertEqual(page.status_code, 200)
+        self.assertClean([('GET /login/', page.content.decode('utf-8')),
+                          ('GET /login/ headers', json.dumps(dict(page.headers)))])
 
     def test_the_operator_bundle_is_never_collected_as_static(self):
         with tempfile.TemporaryDirectory(dir=settings.STATE_DIR) as root, \
