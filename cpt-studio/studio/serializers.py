@@ -3,6 +3,8 @@
 This is the OPERATOR serializer (CORE-UX-DESIGN.md 5): complete provenance - participants, models, usage, runs,
 hashes, rule ids, the trace - served only to platform operators under /ops/ (studio.operator). A workspace member
 is served studio.customer_api's allowlist, never these payloads."""
+from dataclasses import dataclass
+
 from django.conf import settings
 
 from . import models, participants, review
@@ -275,7 +277,46 @@ def _reinstated_by(proposal, decision):
             'decided_at': _iso(review.decision_root(reinstate).created_at)}
 
 
-def _proposal_json(proposal, current, assessment, membership, clarification_ids):
+@dataclass(frozen=True)
+class ReviewingMember:
+    """A member of the encounter's workspace whose role may review (an owner or a reviewer), as review.allowed_actions
+    reads a membership: customer_codes asks what such a member may record on each code now, by the rule the customer
+    page offers actions by. It is read by allowed_actions only - never stored, never given to record_decision (which
+    also requires the member's own user) - so it authorises nothing."""
+    workspace_id: object
+    can_review: bool = True
+
+
+def customer_codes(encounter, assessment, current):
+    """{proposal id: what the customer page shows for that code}, the operator view's statement of the customer page
+    (refutation round 3, B-02 and B-03): customer_api.code_rows over the review overlay - the very rows GET
+    /api/encounters/<id> serves - each as its number, status, status label, sub label and ``reviewer_actions``, the
+    actions a member who may review is allowed (review.allowed_actions for a ReviewingMember; a member who may not
+    review is allowed none). The walk (ops/verify_browser.cjs) and the download check (ops/verify_downloads.py) judge the
+    customer page and the exports against it, never against a re-derivation of the overlay's rules, which read a
+    reinstated code whose needed detail a member answered unavailable as ready with approve accepted, and one still
+    waiting on its detail as revoke only. {} while ``assessment`` is not the live one: the page then lists no code. A
+    statement that cannot be made is logged and left out ({}), so the tools cannot verify the page rather than pass it,
+    and the operator's diagnostics never fail on it."""
+    from . import customer_api  # local import: customer_api imports this module
+
+    live = review.live_assessment(encounter)
+    if assessment is None or live is None or live.pk != assessment.pk:
+        return {}
+    try:
+        rows, _ = customer_api.code_rows(assessment, current, customer_api.views_of(assessment, current),
+                                         ReviewingMember(workspace_id=encounter.workspace_id))
+    except Exception:  # noqa: BLE001 - logged; the statement serves the tools, and never fails the operator's page
+        import logging
+
+        logging.getLogger(__name__).exception('the customer page of encounter %s could not be stated', encounter.pk)
+        return {}
+    return {row['id']: {'number': row['number'], 'status': row['status'], 'status_label': row['status_label'],
+                        'sub_label': row['sub_label'], 'reviewer_actions': list(row['allowed_actions'])}
+            for row in rows}
+
+
+def _proposal_json(proposal, current, assessment, membership, clarification_ids, customer=None):
     family = profile(proposal.family) if proposal.family in PROFILES else None
     decision = current.get(proposal.pk)
     # the review overlay (CORE-UX-DESIGN.md 4): status, checks and actions as the current decisions leave them; with no
@@ -303,6 +344,11 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'reinstated_by': _reinstated_by(proposal, decision),
         'allowed_actions': review.allowed_actions(proposal, assessment, membership, views),
         'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current, views),
+        # the overlay's reason beside its status: 'detail_unavailable' while a member's answer that a needed detail is
+        # not documented (or cannot be confirmed) excludes the code, else ''
+        'overlay_reason': view.reason if view is not None else '',
+        # what the customer page shows for this code (customer_codes), None where the page does not list it
+        'customer': (customer or {}).get(str(proposal.pk)),
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
@@ -336,7 +382,8 @@ def _assessment_json(encounter, membership):
     for clarification in clarifications:
         if clarification.proposal_id and clarification.state == models.Clarification.OPEN:
             by_proposal.setdefault(clarification.proposal_id, []).append(str(clarification.pk))
-    proposals = [_proposal_json(p, current, assessment, membership, by_proposal)
+    customer = customer_codes(encounter, assessment, current)
+    proposals = [_proposal_json(p, current, assessment, membership, by_proposal, customer)
                  for p in assessment.proposals.select_related('assessment')]
     data = {
         'id': str(assessment.pk), 'profiles_version': assessment.profiles_version,

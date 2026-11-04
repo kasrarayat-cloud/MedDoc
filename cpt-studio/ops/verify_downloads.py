@@ -118,6 +118,8 @@ CSV_EVIDENCE_OFFSETS = re.compile(r'(?<=" )\[(\d+)-(\d+)(?:, p\d+)?\](?= \| "|$)
 # indented line, and every other C0 control but tab, DEL and C1 prints as \xNN; the CSV keeps line breaks inside
 # its quoted cells and escapes the same controls. Passages are compared as the renderer shows them.
 TXT_LINE_BREAKS = re.compile('[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]')
+# The breaks str.splitlines splits a value at, as reports._join splits it: \r\n is ONE break (txt_printed).
+TXT_VALUE_BREAK = re.compile('\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]')
 CONTROL = re.compile('[\x00-\x08\x0e-\x1f\x7f-\x9f]')
 HEX64 = re.compile(r'\b[0-9a-f]{64}\b', re.I)
 UUID = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', re.I)
@@ -208,6 +210,19 @@ def escaped(text: str) -> str:
 def txt_shown(text: str) -> str:
     """A passage as the TXT prints it (line breaks become continuation lines; collapse() then reads them as spaces)."""
     return escaped(TXT_LINE_BREAKS.sub('\n', text))
+
+
+def txt_printed(text: str) -> str:
+    """``text`` exactly as a customer TXT prints it inside a quotation - reports._join's one rule for a line break in a
+    value: split where str.splitlines splits it, each part's controls escaped (reports._visible), and every part after
+    the first on a line of its own, CONTINUATION deep unless it already starts that deep, when it is printed as it is.
+
+    So a printed line seven to thirteen spaces deep reads two ways (a part that had seven fewer spaces, or one that had
+    exactly as many), and a quotation is never read back by stripping a fixed indent: the passage it is compared with is
+    printed as the writer prints it, and the two must be equal (refutation round 3, B-04: stripping seven spaces read a
+    passage line the document indents eight spaces back with one, and failed the genuine export)."""
+    first, *rest = (escaped(part) for part in TXT_VALUE_BREAK.split(text))
+    return '\n'.join([first] + [part if part.startswith(CONTINUATION) else CONTINUATION + part for part in rest])
 
 
 def who(reviewer: str, kind: str) -> str:
@@ -1173,10 +1188,13 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
 # A customer report is checked against the OPERATOR view of the encounter (today's full encounter view, as
 # GET /ops/api/encounters/<id> serves it): --api-dir/<encounter id>.json when given, otherwise the operator snapshot the
 # evidence names (operator_snapshots) - never the customer API the browser session read, which is what is being
-# verified. The grammar read here is the one studio/reports.py writes (render_customer_txt, render_customer_csv), and
-# the committed samples under ops/verification/samples are that renderer's own bytes (tests/test_cux_r2_reports.py pins
-# them; refutation round 2, L3-1: the checks once read a grammar the server never wrote, so every genuine export failed):
-# when the format changes, change it there and here together; never loosen a check to fit.
+# verified. A draft's statuses are the view's statement of the customer page (each listed code's 'customer':
+# serializers.customer_codes; refutation round 3, B-02), never re-derived from the overlay's facts; where the view
+# states none, the status check cannot run (incomplete). The grammar read here is the one studio/reports.py writes
+# (render_customer_txt, render_customer_csv), and the committed samples under ops/verification/samples are that
+# renderer's own bytes (tests/test_cux_r2_reports.py pins them; refutation round 2, L3-1: the checks once read a grammar
+# the server never wrote, so every genuine export failed): when the format changes, change it there and here together;
+# never loosen a check to fit.
 #
 # TXT, as reports.render_customer_txt writes it:
 #     SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
@@ -1200,7 +1218,9 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
 #
 #     SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
 # Item lines at column 0, detail lines at three spaces; a line break inside any value continues on a line indented seven
-# spaces (reports.CONTINUATION), so stored text never starts an item, a detail or a heading.
+# spaces (reports.CONTINUATION), so stored text never starts an item, a detail or a heading - and a part of the value
+# that already starts seven spaces deep is printed as it is, so a quotation's passage is compared as txt_printed prints
+# it, never read back by stripping seven spaces (refutation round 3, B-04).
 #
 # CSV, as reports.render_customer_csv writes it: the header row (CUSTOMER_CSV_COLUMNS), a banner row (report_format =
 # the SYNTHETIC line, every other cell empty), one row per quotation of each code (a code with none has one row with
@@ -1274,18 +1294,16 @@ def customer_code_rows(api: dict) -> list:
     return first + then
 
 
-def customer_status(p: dict) -> str:
-    """The customer status of an operator proposal (ops/verify_browser.cjs expectedCustomerStatus)."""
-    action = (p.get('decision') or {}).get('action')
-    if action == 'approve':
-        return 'approved'
-    if action == 'reject':
-        return 'excluded'
-    if action == 'reinstate':
-        return 'needs_detail' if p.get('status') == 'needs_clarification' else 'ready'
-    if p.get('bucket') == 'excluded' or p.get('status') == 'excluded':
-        return 'excluded'
-    return 'needs_detail' if p.get('status') == 'needs_clarification' else 'ready'
+def customer_status(p: dict):
+    """The customer status the server gives the code - on the page and in a draft - as the operator view states it:
+    the proposal's 'customer' (serializers.customer_codes: customer_api.code_rows over the review overlay, the rows the
+    page is served; ops/verify_browser.cjs expectedCustomerStatus reads the same). UNKNOWN where the view carries none,
+    which nothing is judged against (cannot verify). Never re-derived from the overlay's facts (refutation round 3, B-02:
+    the re-derivation read a reinstated code whose needed detail a member answered unavailable - Excluded, revoke only -
+    as ready, failing the genuine draft and passing one forged to say "Ready for review")."""
+    row = p.get('customer')
+    status = row.get('status') if isinstance(row, dict) else None
+    return status if isinstance(status, str) and status in CUSTOMER_STATUS_LABELS else UNKNOWN
 
 
 def agent_reviewed(p: dict) -> bool:
@@ -1404,8 +1422,9 @@ def _decided_modifiers(decision: dict):
 
 def customer_truth(api: dict, kind: str) -> list[dict]:
     """What a customer report of ``kind`` must list, from the operator view: each code with its number, units, decided
-    modifiers (UNKNOWN where the view does not say), status, approver (label, own kind, time), whether agent review took
-    part in its approval, and the passages it may quote."""
+    modifiers (UNKNOWN where the view does not say), status (customer_status: the server's, UNKNOWN where the view does
+    not state it), approver (label, own kind, time), whether agent review took part in its approval, and the passages it
+    may quote."""
     revision_text = (api.get('revision') or {}).get('text') or ''
     rows = customer_code_rows(api)
     acts = act_index(api)
@@ -1463,11 +1482,16 @@ def parse_customer_txt(text: str) -> dict:
     def close_entry():
         nonlocal entry
         if entry is not None and item is not None:
+            # the entry is the quotation as printed - its first line from the opening quote mark, every continued line
+            # whole - so 'printed' is the passage exactly as the file prints it, which is what a passage is compared
+            # with (txt_printed); 'text' reads it with each continued line's seven-space indent removed, for messages
             match = CUSTOMER_QUOTE.match(entry)
             where = match.group('where') if match else None
             offsets = CUSTOMER_OFFSETS.search(where or '')
             page = CUSTOMER_PAGE.search(where or '')
-            item.quotes.append({'raw': entry, 'parsed': bool(match), 'text': match.group('text') if match else None,
+            printed = match.group('text') if match else None
+            item.quotes.append({'raw': entry, 'parsed': bool(match), 'printed': printed,
+                                'text': printed.replace('\n' + CUSTOMER_QUOTE_CONTINUATION, '\n') if match else None,
                                 'start': int(offsets.group(1)) if offsets else None, 'end': int(offsets.group(2)) if offsets else None,
                                 'page': int(page.group(1)) if page else None})
         entry = None
@@ -1475,7 +1499,7 @@ def parse_customer_txt(text: str) -> dict:
     for index, line in enumerate(lines):
         if entry is not None:
             if line.startswith(CUSTOMER_QUOTE_CONTINUATION):  # a line break inside the passage continues it
-                entry += '\n' + line[len(CUSTOMER_QUOTE_CONTINUATION):]
+                entry += '\n' + line  # whole: how deep it is printed is part of what it says (txt_printed)
                 continue
             close_entry()
         if line.startswith(CUSTOMER_QUOTE_CONTINUATION):
@@ -1532,7 +1556,7 @@ def parse_customer_txt(text: str) -> dict:
             elif detail == AGENT_SUB_LABEL:
                 item.agent_label = True
             elif CUSTOMER_QUOTE_OPEN.match(detail):
-                entry = detail[detail.index('"'):]
+                entry = line[line.index('"'):]  # from the line as printed, its trailing spaces kept
             elif not item.summary:
                 item.summary = detail
     close_entry()
@@ -1544,6 +1568,19 @@ def _quote_text_ok(printed: str, slice_text: str | None) -> bool:
     TXT shows them (txt_shown); never equal only once whitespace is collapsed, which would pass an offset one character
     off at a line end."""
     return slice_text is not None and printed in (slice_text, escaped(slice_text), txt_shown(slice_text))
+
+
+def _quote_matches(quote: dict, passage: str | None) -> bool:
+    """Whether a quotation is ``passage`` exactly. A TXT quotation (parse_customer_txt: it carries 'printed') is the
+    passage as reports._join prints it (txt_printed) - its line breaks continued as the writer continues them, its
+    controls escaped - never the passage read back by stripping a fixed indent, nor equal only once whitespace is
+    collapsed (refutation round 3, B-04). A CSV cell is the passage as written or with its controls escaped
+    (_quote_text_ok)."""
+    if passage is None:
+        return False
+    if 'printed' in quote:
+        return quote['printed'] is not None and quote['printed'] == txt_printed(passage)
+    return _quote_text_ok(quote['text'], passage)
 
 
 def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, prefix) -> list[Result]:
@@ -1566,7 +1603,7 @@ def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, p
     for want in truth:
         pending.setdefault(want['code'], []).append(want)
     pairs = [(item, pending[item.code].pop(0)) for item in items if pending.get(item.code)]
-    wrong_units, wrong_modifiers, unknown_modifiers, wrong_status, wrong_approver = [], [], [], [], []
+    wrong_units, wrong_modifiers, unknown_modifiers, wrong_status, unknown_status, wrong_approver = [], [], [], [], [], []
     wrong_label, inexact, unsupported, unquoted = [], [], [], []
     for item, want in pairs:
         if (item.units or '') != want['units']:
@@ -1575,7 +1612,9 @@ def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, p
             unknown_modifiers.append(f'{item.code} (the report shows {list(item.modifiers) or "none"})')
         elif tuple(item.modifiers) != tuple(want['modifiers']):
             wrong_modifiers.append(f'{item.code} modifiers {list(item.modifiers)} (persisted {list(want["modifiers"])})')
-        if kind == 'draft' and item.status != CUSTOMER_STATUS_LABELS.get(want['status']):
+        if kind == 'draft' and want['status'] is UNKNOWN:
+            unknown_status.append(f'{item.code} (the report shows {item.status or "no status"})')
+        elif kind == 'draft' and item.status != CUSTOMER_STATUS_LABELS.get(want['status']):
             wrong_status.append(f'{item.code} {item.status or "no status"} (expected {CUSTOMER_STATUS_LABELS.get(want["status"])})')
         if item.agent_label != want['agent'] or item.other_label:
             wrong_label.append(f'{item.code} {"carries" if item.agent_label else "lacks"} the agent-executed synthetic review label'
@@ -1595,7 +1634,7 @@ def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, p
                 continue
             if q['start'] is not None:
                 slice_text = cp_slice(revision_text, q['start'], q['end'])
-                if not _quote_text_ok(q['text'], slice_text):
+                if not _quote_matches(q, slice_text):
                     inexact.append(f'{item.code}[{q["start"]}:{q["end"]}]')
                 elif q['page'] is not None and page_of(pages, q['start'], q['end']) not in (None, q['page']):
                     inexact.append(f'{item.code}[{q["start"]}:{q["end"]}] page {q["page"]}')
@@ -1606,7 +1645,7 @@ def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, p
                     unsupported.append(f'{item.code}[{q["start"]}:{q["end"]}] is none of the passages CPT Studio holds as support')
             else:
                 texts = [s.get('text', '') for s in want['allowed']]
-                if not any(_quote_text_ok(q['text'], t) for t in texts):
+                if not any(_quote_matches(q, t) for t in texts):
                     unsupported.append(f'{item.code} {collapse(q["text"])[:50]!r} is none of the passages CPT Studio holds as support')
                 if kind == 'approved':
                     inexact.append(f'{item.code} {collapse(q["text"])[:40]!r} is printed without its character offsets')
@@ -1618,8 +1657,13 @@ def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, p
                           f'no "modifiers" list for {"; ".join(unknown_modifiers)}'))
     else:
         out.append(Result(doc, name, f'{prefix}.modifiers', 'pass', 'modifiers as decided (none where none was chosen)'))
-    if kind == 'draft':
-        out.append(Result(doc, name, f'{prefix}.status', 'fail' if wrong_status else 'pass', '; '.join(wrong_status) or 'each status as the operator view implies'))
+    if kind == 'draft' and wrong_status:
+        out.append(Result(doc, name, f'{prefix}.status', 'fail', '; '.join(wrong_status)))
+    elif kind == 'draft' and unknown_status:
+        out.append(Result(doc, name, f'{prefix}.status', 'incomplete', 'cannot verify: the operator view does not say what '
+                          f'the customer page shows (no "customer" status) for {"; ".join(unknown_status)}'))
+    elif kind == 'draft':
+        out.append(Result(doc, name, f'{prefix}.status', 'pass', 'each status as the server gives it on the customer page'))
     else:
         out.append(Result(doc, name, f'{prefix}.approver', 'fail' if wrong_approver else 'pass', '; '.join(wrong_approver)
                           or 'each approval by its persisted reviewer, of the reviewer\'s own kind, at its time'))

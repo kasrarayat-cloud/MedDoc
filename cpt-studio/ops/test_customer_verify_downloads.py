@@ -87,6 +87,15 @@ def without_modifiers(api: dict) -> dict:
     return api
 
 
+def stated(p: dict, status: str, sub_label: str, actions: list) -> dict:
+    """``p`` with the operator view's statement of what the customer page shows for it (serializers.customer_codes: its
+    number kept, the status and its label, the sub label and the actions a member who may review is allowed) - what a
+    test that changes the persisted state must change with it, as the server would."""
+    p['customer'] = {'number': (p.get('customer') or {}).get('number'), 'status': status,
+                     'status_label': vd.CUSTOMER_STATUS_LABELS[status], 'sub_label': sub_label, 'reviewer_actions': actions}
+    return p
+
+
 def reinstated_by_agent_approved_by_human(api: dict, code: str = '45385') -> dict:
     """``code`` as an excluded code an agent reinstated and a human then approved (the 'denied' shape of L3-6)."""
     api = copy.deepcopy(api)
@@ -94,6 +103,7 @@ def reinstated_by_agent_approved_by_human(api: dict, code: str = '45385') -> dic
     p.update(bucket='excluded', status='excluded', reinstatable=True,
              reinstated_by={'reviewer': AGENT, 'reviewer_kind': 'agent', 'decided_at': '2026-11-03T22:04:00+00:00'})
     p['decision'].update(reviewer=HUMAN, reviewer_kind='human')
+    stated(p, 'approved', '', ['revoke'])  # a person's approval: no agent label
     return api
 
 
@@ -136,6 +146,7 @@ class SampleTests(unittest.TestCase):
         self.assertEqual([t['code'] for t in vd.customer_truth(operator(), 'draft')], ['45380', '45385'])
         undecided = operator()
         undecided['assessment']['proposals'][0]['decision'] = None
+        stated(undecided['assessment']['proposals'][0], 'ready', '', ['approve', 'reject'])
         self.assertEqual([t['code'] for t in vd.customer_truth(undecided, 'approved')], ['45385'])
         first = vd.customer_truth(undecided, 'draft')[0]
         self.assertEqual((first['status'], first['modifiers'], first['agent']), ('ready', (), False))
@@ -380,6 +391,35 @@ class ApprovedTxtTests(unittest.TestCase):
         quote = vd.parse_customer_txt(text)['items'][0].quotes[0]
         self.assertEqual((quote['text'], quote['start'], quote['end'], quote['page']), (passage, start, start + len(passage), 1))
 
+    def test_a_passage_continued_onto_a_line_the_document_indents_is_read_as_the_writer_prints_it(self):
+        # refutation round 3, B-04: reports._join continues a part of a value seven spaces deep unless it already starts
+        # seven spaces deep, when it prints it as it is - so the document's own indent of seven or more is printed
+        # unchanged, and the check compares the passage printed as the writer prints it (txt_printed); stripping seven
+        # spaces read an eight-space line back with one and failed the genuine export
+        for indent in (0, 6, 7, 8, 13, 14, 20):
+            with self.subTest(indent=indent):
+                api = operator()
+                pad = ' ' * indent
+                text = api['revision']['text'] + f'Findings (fictional):\n{pad}A 4 mm polyp was removed.\n{pad}A 9 mm polyp was removed.\n'
+                passage = f'A 4 mm polyp was removed.\n{pad}A 9 mm polyp was removed.'
+                start = text.index(passage)
+                api['revision'].update(text=text, pages=[{'page': 1, 'start': 0, 'end': len(text)}])
+                api['assessment']['proposals'][0]['evidence'] = [{'context_index': 0, 'start': start, 'end': start + len(passage),
+                                                                  'text': passage, 'exact': True, 'page': 1}]
+                printed = pad if indent >= 7 else '       ' + pad  # as reports._join prints the second part
+                self.assertEqual(vd.txt_printed(passage), f'A 4 mm polyp was removed.\n{printed}A 9 mm polyp was removed.')
+                where = f'(page 1, characters {start}–{start + len(passage)})'
+                report = changed(sample('customer-report-approved.txt'), QUOTE_80,
+                                 f'   Quote: "A 4 mm polyp was removed.\n{printed}A 9 mm polyp was removed." {where}')
+                self.assertEqual(failed(txt('approved', report, api)), [])
+                quote = vd.parse_customer_txt(report)['items'][0].quotes[0]
+                self.assertEqual((quote['printed'], quote['start']), (vd.txt_printed(passage), start))
+                # the same line one space deeper, or (where it is deeper than seven) one space shallower: not the passage
+                # at those offsets (a quotation with offsets is support by its offsets, so only its exactness fails)
+                for other in [' ' + printed] + ([printed[1:]] if len(printed) > 7 else []):
+                    moved = changed(report, f'\n{printed}A 9 mm', f'\n{other}A 9 mm')
+                    self.assertEqual(failed(txt('approved', moved, api)), ['items.evidence.exact'], len(other))
+
     def test_a_code_not_approved_named_outside_the_items_is_a_warning(self):
         api = operator()
         api['assessment']['proposals'][0]['decision'] = None
@@ -395,6 +435,7 @@ class DraftTxtTests(unittest.TestCase):
     def test_the_draft_lists_every_suggested_code_with_its_status_and_only_decided_modifiers(self):
         api = operator()
         api['assessment']['proposals'][1]['decision'] = None  # 45385 undecided: Ready for review, no modifier, no label
+        stated(api['assessment']['proposals'][1], 'ready', '', ['approve', 'reject'])
         text = changed(sample('customer-report-draft.txt'), f'2. 45385 — Approved — units 1 — modifiers: XS\n   {LABEL}\n',
                        '2. 45385 — Ready for review — units 1 — modifiers: none\n')
         self.assertEqual(failed(txt('draft', text, api)), [])
@@ -424,11 +465,76 @@ class DraftTxtTests(unittest.TestCase):
         api = operator()
         p = proposal(api, '45385')
         p['decision'].update(action='reject', modifiers=[])
+        stated(p, 'excluded', 'Rejected in review', ['revoke'])
         text = changed(sample('customer-report-draft.txt'), f'2. 45385 — Approved — units 1 — modifiers: XS\n   {LABEL}\n',
                        '2. 45385 — Excluded — units 1 — modifiers: none\n   Rejected in review\n')
         self.assertEqual(failed(txt('draft', text, api)), ['items.evidence.support'])  # its quotation stands
         quote = '   Quote: "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare." (page 1)\n'
         self.assertEqual(failed(txt('draft', changed(text, quote, ''), api)), [])
+
+
+class ServerStatementTests(unittest.TestCase):
+    """Refutation round 3, B-02: a draft's statuses are the server's statement of the customer page - the operator view's
+    'customer' on each code (serializers.customer_codes: customer_api.code_rows' rows) - never re-derived from the
+    overlay's facts; a view that states none cannot verify them."""
+
+    def answered(self):
+        """45385 as a reinstated code whose needed detail a member answered "Not documented": the server shows it Excluded,
+        "A needed detail is not documented", and accepts revoke only - beside facts (an exclusion, a reinstate decision,
+        nothing withholding approve) a re-derivation read as Ready for review - and its genuine draft, TXT and CSV."""
+        api = operator()
+        p = proposal(api, '45385')
+        p.update(bucket='excluded', status='excluded', reinstatable=True, overlay_reason='detail_unavailable', approve_withheld_by=None)
+        p['decision'].update(action='reinstate', modifiers=[], note='Synthetic reinstatement.')
+        stated(p, 'excluded', 'A needed detail is not documented', ['revoke'])
+        report = changed(sample('customer-report-draft.txt'), f'2. 45385 — Approved — units 1 — modifiers: XS\n   {LABEL}\n',
+                         '2. 45385 — Excluded — units 1 — modifiers: none\n   A needed detail is not documented\n')
+        report = changed(report, '   Quote: "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare." (page 1)\n', '')
+        table = changed(sample('customer-report-draft.csv'), '"2","45385","1","XS","approved"', '"2","45385","1","","excluded"')
+        table = changed(table, f'"COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.","1","330","394","{LABEL}"', '"","","","",""')
+        return api, report, table
+
+    def test_the_server_s_status_is_the_one_a_draft_is_held_to(self):
+        api, report, table = self.answered()
+        self.assertEqual([t['status'] for t in vd.customer_truth(api, 'draft')], ['approved', 'excluded'])
+        self.assertEqual(failed(txt('draft', report, api)), [])
+        self.assertEqual(failed(csv('draft', table, api)), [])
+        forged = changed(changed(report, '45385 — Excluded —', '45385 — Ready for review —'),
+                         '   A needed detail is not documented\n', '   Reinstated in review\n')
+        self.assertEqual(failed(txt('draft', forged, api)), ['items.status'])
+        self.assertEqual(failed(csv('draft', changed(table, '"2","45385","1","","excluded"', '"2","45385","1","","ready"'), api)),
+                         ['csv.items.status'])
+        detail = next(r.detail for r in txt('draft', forged, api) if r.check == 'items.status')
+        self.assertEqual(detail, '45385 Ready for review (expected Excluded)')
+
+    def test_a_view_that_states_no_status_cannot_verify_a_draft(self):
+        bare = operator()
+        for p in bare['assessment']['proposals']:
+            p.pop('customer', None)
+        self.assertEqual([t['status'] for t in vd.customer_truth(bare, 'draft')], [vd.UNKNOWN, vd.UNKNOWN])
+        for kind, fmt, results, check in (('draft', 'txt', txt('draft', api=bare), 'items.status'),
+                                          ('draft', 'csv', csv('draft', api=bare), 'csv.items.status')):
+            with self.subTest(fmt=fmt):
+                self.assertEqual((failed(results), statuses(results)[check]), ([], 'incomplete'))
+                self.assertIn('cannot verify', next(r.detail for r in results if r.check == check))
+                self.assertEqual(vd.exit_status(results), 2)
+        # a draft that misstates a status still cannot pass against such a view: it cannot be verified either way
+        wrong = changed(sample('customer-report-draft.txt'), '45385 — Approved —', '45385 — Ready for review —')
+        self.assertEqual(statuses(txt('draft', wrong, bare))['items.status'], 'incomplete')
+        # the approved export lists approvals only, which the persisted decisions name: no status is read there
+        for results in (txt('approved', api=bare), csv('approved', api=bare)):
+            self.assertEqual([(r.check, r.status) for r in results if r.status != 'pass'], [])
+
+    def test_the_status_is_read_from_the_statement_alone(self):
+        row = {'number': 1, 'status': 'needs_detail', 'status_label': 'Needs a detail', 'sub_label': 'Reinstated in review',
+               'reviewer_actions': ['reject', 'revoke']}
+        facts = {'bucket': 'excluded', 'status': 'needs_clarification', 'decision': {'action': 'reinstate'}}
+        self.assertEqual(vd.customer_status({**facts, 'customer': row}), 'needs_detail')
+        for customer in (None, {}, 'needs_detail', {**row, 'status': 'Needs a detail'}, {**row, 'status': 'needs_clarification'},
+                         {**row, 'status': None}):
+            with self.subTest(customer=customer):
+                self.assertIs(vd.customer_status({**facts, 'customer': customer}), vd.UNKNOWN)
+        self.assertIs(vd.customer_status(facts), vd.UNKNOWN)
 
 
 class CsvTests(unittest.TestCase):
