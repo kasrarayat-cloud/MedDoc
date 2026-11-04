@@ -85,13 +85,20 @@ class QueuedTitleTests(SimpleTestCase):
                               timeout=60, check=True).stdout
 
     def doc(self, first_state):
+        """A queued document with the message the server serves for its steps (progress.queued_message; refutation r3,
+        C-R3-4: the title is checked against a served message, never one the server would not send)."""
         steps = [{'key': key, 'label': label, 'state': state, 'started_at': None, 'finished_at': None}
                  for (key, label), state in zip(progress.STEPS, (first_state, 'waiting', 'not_started', 'not_started'))]
         return {'id': 'e1', 'state': 'processing', 'permissions': {'can_review': True}, 'progress': {
             'phase': 'queued', 'busy': True, 'steps': steps, 'active_detail': '', 'started_at': None, 'finished_at': None,
-            'server_time': '2026-11-04T10:00:00Z', 'slow': False, 'message': progress.NEXT_STEP_QUEUED, 'can_stop': True,
-            'can_resume': False, 'can_leave': True, 'error': None}}
+            'server_time': '2026-11-04T10:00:00Z', 'slow': False, 'message': progress.queued_message(steps, None),
+            'can_stop': True, 'can_resume': False, 'can_leave': True, 'error': None}}
 
     def test_a_step_waiting_after_a_finished_one_is_not_waiting_to_start(self):
-        self.assertIn('<h2 id="progressTitle">Waiting for the next step</h2>', self.render(self.doc('done')))
-        self.assertIn('<h2 id="progressTitle">Waiting to start</h2>', self.render(self.doc('waiting')))
+        after, before = self.doc('done'), self.doc('waiting')
+        self.assertEqual((after['progress']['message'], before['progress']['message']),
+                         (progress.NEXT_STEP_QUEUED, progress.MESSAGES['queued']))
+        self.assertIn('<h2 id="progressTitle">Waiting for the next step</h2>'
+                      f'<p class="progress-message">{progress.NEXT_STEP_QUEUED}</p>', self.render(after))
+        self.assertIn('<h2 id="progressTitle">Waiting to start</h2>'
+                      f'<p class="progress-message">{progress.MESSAGES["queued"]}</p>', self.render(before))

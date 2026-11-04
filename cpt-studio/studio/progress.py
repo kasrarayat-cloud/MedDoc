@@ -199,21 +199,49 @@ def _skip(job):
     return job.state == Job.SUCCEEDED and job.kind != Job.EXTRACT and _recorded(job) == SKIPPED
 
 
+def _step_outcome(job):
+    """The state one finished job gives its step, or None when it did nothing for the step (refutation r3, C-R3-5).
+
+    A job's own state first: failed, or stopped (cancelled, or an outcome still being confirmed: JOB_STEP_STATES). A
+    stage that succeeded is read by what it recorded (_recorded): a skip, or a send a member date conflict held, did
+    nothing (None). A send an unknown outcome blocked (refutation r2, L5-4), or one whose own outcome is unknown, did
+    not finish: it reads as an outcome still being confirmed reads - never done, never a failure. A document review or
+    its re-check (SENDING_KINDS) whose request gave the document no answer - it failed, it was not sent, it is a request
+    that failed before and is never sent again, or sending is disabled - did not finish its step: the document then
+    reads provider_failed or provider_not_run ("Processing could not finish"). A check's own failure blocks only itself
+    (HARNESS.md I10): the document's processing goes on and the checks say what was unavailable, so it leaves the step
+    done. Anything else is done."""
+    if job.state != Job.SUCCEEDED:
+        return JOB_STEP_STATES.get(job.state, 'failed')
+    if _skip(job):
+        return None
+    sends = job.kind in SENDING_KINDS + CHECK_KINDS
+    if sends and _held(None, job.context):
+        return None  # nothing was asked while a member date conflict held the document (the step reads skipped)
+    value = _recorded(job)
+    if value == BLOCKED or (sends and value == models.ProviderRun.UNKNOWN):
+        return 'stopped'
+    if job.kind in SENDING_KINDS and value is not None and value not in USED_OUTCOMES:
+        return 'failed'
+    return 'done'
+
+
+# How one step reads the outcomes of its stages, the first that any stage gives: an outcome still being confirmed, or a
+# stop, outranks a failure (as the being_confirmed and stopped phases outrank failed), and a failure outranks done.
+FOLD_ORDER = ('stopped', 'failed', 'done')
+
+
 def _fold(rows):
     states = [job.state for job in rows]
     if Job.RUNNING in states:
         return 'active'
     if Job.QUEUED in states:
         return 'active' if any(state != Job.QUEUED for state in states) else 'waiting'
-    last = ([job for job in rows if not _skip(job)] or rows)[-1]
-    if _skip(last):
-        return 'skipped'
-    if last.state == Job.SUCCEEDED and _recorded(last) == BLOCKED:
-        # Refutation r2, L5-4: a stage an unknown outcome blocked stopped where it would send, and nothing was asked -
-        # never done; it reads as an outcome still being confirmed does (the being_confirmed phase says what happens
-        # next)
-        return 'stopped'
-    return JOB_STEP_STATES.get(last.state, 'failed')
+    # Refutation r3, C-R3-5: every finished stage of the step is read, never only its last - a document review that did
+    # not finish is not made done by the checks that ran after it - and a stage that did nothing leaves the others to
+    # say what the step did (every one of them skipped: skipped, refutation r2, L5-4)
+    found = {outcome for outcome in map(_step_outcome, rows) if outcome is not None}
+    return next((state for state in FOLD_ORDER if state in found), 'skipped')
 
 
 def _step(key, label, rows, state):
@@ -249,6 +277,26 @@ def _steps(runs, revision):
     if revision is not None and revision.extraction_status == models.SourceRevision.FAILED and out[0]['state'] == 'done':
         out[0]['state'] = 'failed'  # the extract stage finished by recording that no text could be read
     return out
+
+
+def next_step_queued(steps):
+    """Whether the queued phase is a step waiting its turn after a finished one (refutation r2, L5-7): a step the panel
+    shows reads done - one of this run, or one it keeps from an earlier run, as a member's save, Resume, detail,
+    reconciliation or re-check re-reads what was read and checked before - so it is never "Waiting to start" as if
+    nothing had been done. Refutation r3, C-R3-4: the message read only the current run's jobs while the page's title
+    read every step, so the two disagreed after a member's re-run. One rule over the steps the server serves: the server
+    says NEXT_STEP_QUEUED by it (queued_message), and the page titles the queued phase "Waiting for the next step" by
+    the same rule over the same served steps (app.js progressPanel)."""
+    return any(step['state'] == 'done' for step in steps)
+
+
+def queued_message(steps, queued):
+    """The message of a queued phase that is not slow: TAKING_TURN for a step its stage put back to wait its turn (a
+    retry: Job.result 'requeued'), else NEXT_STEP_QUEUED after a finished step (next_step_queued), else
+    MESSAGES['queued']."""
+    if queued is not None and (queued.result or {}).get('requeued'):
+        return TAKING_TURN
+    return NEXT_STEP_QUEUED if next_step_queued(steps) else MESSAGES['queued']
 
 
 def date_held(encounter):
@@ -494,12 +542,13 @@ def encounter_progress(encounter, now=None) -> dict:
         else:
             limited = _partial(encounter, revision)
             phase = 'partial' if limited else 'completed'
+    steps = _steps(runs, revision)
     if slow:
         message = slow_message
-    elif phase == 'queued' and queued is not None and (queued.result or {}).get('requeued'):
-        message = TAKING_TURN
-    elif phase == 'queued' and any(job.state not in ACTIVE for job in current):
-        message = NEXT_STEP_QUEUED  # a step of this run finished: the next one waits its turn (refutation r2, L5-7)
+    elif phase == 'queued':
+        # a retry waits its turn; a step after one the panel shows done waits for the next step (refutation r2, L5-7),
+        # by the rule the page titles it with (refutation r3, C-R3-4: next_step_queued)
+        message = queued_message(steps, queued)
     elif error is not None:
         message = error['text']
     elif limited:
@@ -510,7 +559,7 @@ def encounter_progress(encounter, now=None) -> dict:
         message = MESSAGES[phase]
     finished = [_end(job) for job in current if job.state not in ACTIVE]
     return {
-        'phase': phase, 'busy': busy, 'steps': _steps(runs, revision),
+        'phase': phase, 'busy': busy, 'steps': steps,
         'active_detail': DETAILS.get(active.kind, '') if busy and active is not None else '',
         'started_at': _iso(current[0].created_at) if current else None,
         'finished_at': _iso(max(finished)) if finished and not busy else None,
