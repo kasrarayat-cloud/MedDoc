@@ -73,7 +73,11 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 reverse, so the site is never interrupted: see **Switching back**.
 `rollback-app` removes the web and worker containers - the site is down from
 that moment until a pair is installed again; prefer `switch-back` after a
-successful `app`. It keeps the database,
+successful `app`. (In the S4 keep layout `rollback-app` acts on the right containers
+instead, with this revision's image, and the site stays served: see **Recovery
+notes**. With a `cpt-studio-web-next` in any other layout, or a web and a worker
+of different images, it refuses and stops nothing: which web serves, and whose
+records to read, cannot be told from the names.) It keeps the database,
 volumes, images and secrets, and needs the database to be running. First, with
 the pair's own image, it reads the records their revision made that an older
 revision would act on, or show, wrongly (listed under **Reinstalling an older
@@ -149,10 +153,17 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   migrated schema, `rollback-app` hands an older pair the rows, and nothing is
   reversed. Accepted: a new table; a column that is nullable, has `db_default`,
   or whose database default the same migration's SQL sets (an older pair's
-  insert names no such column); an index; a constraint on a new table; SQL that
-  only sets column defaults. Anything else (a removed, renamed or altered column
-  or table, a constraint on an existing table, `RunPython`, other SQL, a form the
-  check does not read, a file in the migrations directory that is not a
+  insert names no such column); Django's own (non-unique) index, or any index on
+  a new table; a unique index (`studio.models.UniqueIndex`) only when it is
+  partial over rows whose column - one the same migration adds as nullable,
+  with no database default, and one the index holds - is set
+  (`condition=Q(<column>__isnull=False)`: an older pair never writes that
+  column, so its rows hold NULL there and stay outside the index, and none of
+  its writes is refused); a constraint on a new table; SQL
+  that only sets column defaults. Anything else (a removed, renamed or altered
+  column or table, a constraint or any other unique index on an existing table,
+  an index of a class the check does not read, `RunPython`, other SQL, a form
+  the check does not read, a file in the migrations directory that is not a
   migration) is refused. The receipt records each checked migration and why it
   passed. 0006, 0007 and 0008 pass: 0007 adds `endpoint`, `requested_model`,
   `returned_model` and `response_id` to `studio_providerrun` and `participants`
@@ -205,7 +216,10 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   proxying to the port the running `cpt-studio-web` publishes (the site is
   served: the incoming web goes on the other port, which must be free, with no
   `cpt-studio-web-next` or `*-previous` left over, and the preflight receipt -
-  the baseline the switch is verified against - must exist); otherwise the
+  the baseline the switch is verified against - must exist, and co-tenant
+  routing and app.quillmd.com must still answer as it recorded: a baseline that
+  no longer holds refuses the switch before anything starts, starting and
+  stopping nothing - run `preflight` again, then `app`); otherwise the
   **swap** of a host where nothing is served through the vhost (no
   `quillmd-cpt`, its HTTP stage, or an HTTPS stage no running web answers),
   on 9150 or the port that HTTPS stage names. A vhost holding an earlier
@@ -231,7 +245,17 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   nginx` reloads gracefully (old nginx workers finish what they accepted), and
   `https://cpt.quillmd.com/health/` must serve this revision through the public
   path with the co-tenants and app.quillmd.com as the preflight baseline found
-  them; **S4** the new worker starts - processing resumes under the new rules;
+  them (read again right before the file is replaced: a baseline that drifted
+  since S1 fails S3 before anything changes). When the old web is the same
+  revision (a same-revision re-run), `/health/` cannot tell the two webs apart,
+  so nginx must also be seen loading the switched file: new nginx worker
+  processes started since it was written (`/proc`, the host master's children;
+  nginx applies a reload by starting new workers and refuses one by keeping
+  them, and `systemctl reload` exits 0 either way). In every switch a reload that
+  was asked for is treated as applied, whatever its call answered: systemd runs a
+  reload job it took even when its client is interrupted (Ctrl-C) or gives up
+  at the 30 s timeout; **S4** the new worker starts - processing resumes under
+  the new rules;
   **S5** the old web is drained - at least 130 s (above gunicorn's 120 s
   request timeout), then until 10 consecutive one-second samples of
   `/proc/net/tcp` and `tcp6` show no connection to its port a request can be in
@@ -309,17 +333,32 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   - S2 (the old worker could not be parked): it runs again (park starts it
     when its rename fails); the incoming web is removed.
   - S3 (`nginx -t`, a new warning, the reload or the verification): the exact
-    previous vhost bytes are put back and nginx reloaded again, so the old web
-    serves throughout. Every stage queued, run or left resumable since the file
+    previous vhost bytes are put back, and nginx is reloaded with them whenever
+    a reload of the switched file was asked for, so the old web serves. Whenever
+    nginx may have run the switched file - a reload of it was asked for,
+    whatever its call answered, or nginx loaded any configuration since the file
+    was written (anyone's reload: the TLS renewal hook's, a co-tenant's) - the
+    undo reloads the restored file once more and must prove nginx runs it (new
+    nginx workers seen, and the public `/health/` answered by the old revision;
+    the new workers alone when both webs are the same revision) before the
+    incoming web is drained and removed; when that is not proven, both webs are
+    left running and the old worker parked (a switch that stopped half way:
+    **Recovery notes**). Every stage queued, run or left resumable since the file
     was replaced, and every open stage of a kind the old worker cannot run, is
     closed as failed (the new web may have served seconds of requests; this can
-    also close what a member started on the old web in those seconds), the list
-    states the old revision labels otherwise are put back, the incoming web is
-    drained when it took traffic and removed, and the old worker is put back
-    and started - held, as in the swap below, while the close names records it
-    would act on under its own rules. A state it would merely show wrongly is
-    named in the receipt only: the old web never stopped showing it, and no new
-    worker ran.
+    also close what a member started on the old web in those seconds), and
+    closed again once it has stopped taking traffic (the incoming web, drained,
+    finished the requests it had accepted), the list states the old revision
+    labels otherwise are put back after each close, the incoming web is removed,
+    and the old worker is put back and started - held, as in the swap below,
+    while either close names records it would act on under its own rules, or
+    records only this revision's web writes (a member's answer, a reviewer's
+    chosen modifier - no worker makes either, and no revision before the core
+    repair can, so the new web wrote them while it served: the old web shows
+    them wrongly, and its worker's re-assessment would drop a chosen modifier).
+    A state the old web would merely show wrongly that a worker made (a second
+    review's, a harness participant's) is named in the receipt only: the old
+    web never stopped showing it, and no new worker ran.
   - S4 (the new worker is not ready): it is stopped and what the new pair
     started is closed. When the close names a state the old web would show
     wrongly whatever it is handed (**second_review_refused**,
@@ -328,9 +367,19 @@ this installer's) and reloads nginx; the certificate lineage is kept.
     stopped and the old worker parked: nothing is processed until a person
     decides (**Recovery notes**). Otherwise the states are put back and the
     upstream is switched back the same way (graceful reload, `/health/` = the
-    old revision), the incoming web is drained and removed with the new worker,
-    and the old worker is put back and started (or held). A close, put-back or
-    switch back that fails also leaves the new web serving.
+    old revision), the incoming web is drained, what the new web started is
+    closed again once it has stopped taking traffic (it took every request until
+    the switch back's reload, and finished those in flight during the drain),
+    the states are put back again, the incoming web is removed with the new
+    worker, and the old worker is put back and started - or held, while either
+    close names records it would act on, or the second one a state the old web
+    shows wrongly (the new web wrote it after the first close: a member's
+    answer, a chosen modifier; the receipt names it). A close, put-back or
+    switch back that fails also leaves the new web serving - unless the switch
+    back's reload was asked for: then the undo reloads the new web's vhost again
+    and must prove nginx runs it, and when that is not proven both webs are left
+    running, the new worker stopped and the old worker parked, and the receipt
+    says that nginx may route to either web.
   - S5 (the drain or the renames): the new pair serves and nothing is undone;
     the receipt says which names are left and that the stored list states were
     not recomputed (rerun `app` once it is resolved).
@@ -456,7 +505,9 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   unchanged) aborts and discards them unless `--reset-passwords` was given.
   Passwords travel as RAM-only files under `/dev/shm`, never argv or output.
 - **operators** (after `app`; it needs the revision's operator grant, owner
-  directive 2026-11-03 section 2) creates the two platform-operator accounts
+  directive 2026-11-03 section 2, and refuses - creating no account and no file -
+  unless `manage migrate --check` passes with this revision's image) creates the
+  two platform-operator accounts
   as `provision` creates its own: passwords generated by the installer,
   travelling only as RAM-only files under `/dev/shm` into one-shots of this
   revision's image (never argv, output or receipts), the human's login staged
@@ -469,8 +520,12 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   top-level `username` and `password`) and the root-only 0600
   `/etc/cpt-studio/operator-credentials.json` are committed; each account is
   then granted by the application's own command, `manage grant_operator
-  --username <name> --reason-file <file>` (the reason names the directive, the
-  revision and the declaration), and read back: an active operator
+  --username <name> --reason-file <file> --by <who>` (the reason names the
+  directive, the revision and the declaration; `--by` names this installer and
+  the host login that ran it, given explicitly because the one-shot runs as this
+  user's uid, which the image has no passwd entry for - the command's own
+  default reads the login from the environment, else names the uid, and never
+  looks it up), and read back: an active operator
   (`studio.operator.is_operator`) with no membership. Files already there
   refuse unless `--reset-passwords`, which rotates both. A grant that fails
   leaves the accounts and their files in place: rerun with `--reset-passwords`
@@ -537,6 +592,12 @@ reinstall's preflight baseline.
 
 ## Switching back (post-success rollback without interruption)
 
+Run `preflight` again right before `switch-back` (as before any `app`): the
+switch is verified against that receipt's baseline - co-tenant routing and
+`app.quillmd.com /health/`, whose release changes on every deploy of that
+co-tenant - and `switch-back` refuses, starting and stopping nothing, while they
+no longer answer as it recorded.
+
 `--phase switch-back --provider-mode <mode> [--astra-mode …] [--fable-mode …]
 [--authorization-ref …]` runs under this revision's declaration and installer
 (an older installer cannot switch: `check_tree` binds a phase to its own
@@ -555,12 +616,21 @@ resumable since it was created, and every open stage of a kind the previous
 worker does not run, is closed (as `rollback-app` closes them; let the queue
 drain first), the switch-back refusing to go on while the close names a
 record, and the list states the previous revision labels otherwise are put
-back; **B5** the upstream is switched to the idle port (`/health/` = the
-previous revision); **B6** this revision's web is drained, stopped and parked;
+back - and before that close, the baseline and this revision's records are read
+again, so nothing is closed for a switch that cannot pass or would refuse;
+**B5** the upstream is switched to the idle port (`/health/` = the previous
+revision; a reload of the switched file that was asked for and then failed is
+treated as applied, as in `app`: nginx is reloaded with this revision's vhost
+again and must be proven to run it before the previous web is drained and
+removed, and both webs are left running otherwise); **B6** this revision's web
+is drained, stopped and parked;
 **B7** the close runs again for what this revision's web started between B4 and
 the end of its drain - which also closes what a member started on the previous
 web during that window (**Known limits**) - and the previous worker is held
-while it names a record; **B8** the previous worker starts; **B9** this
+while it names a record (one only this revision's web writes - a member's
+answer, a chosen modifier - was written by it before it stopped taking traffic:
+the previous web shows it wrongly, and the receipt says so; `app` again comes
+back to this revision); **B8** the previous worker starts; **B9** this
 revision's parked pair is removed (its image is kept). Before B5 any failure
 resumes this revision's pair (its worker started again, its list states
 recomputed with its own derivation, the previous web drained when it took
@@ -635,7 +705,10 @@ before the harness, 80df1831d168 included, on the last two:
   leaves the decision set without a reviewer's decision. No list state can be
   put back for it, so it is named, never handed over.
 - **member_answer** (core repair 2026-11-03): a member's answer that stands
-  ("Not documented" or "Cannot confirm") on the current assessment. No revision
+  ("Not documented" or "Cannot confirm") on the revision of the current
+  assessment or the current revision - an answer belongs to its revision and
+  stands through every re-assessment of it (a context change re-assesses the
+  same revision), as this revision's review applies it. No revision
   before the core repair reads one: its page asks that question again and shows
   the code held, where this revision shows it Excluded with the answer and who
   gave it. Named, never handed over; the answer row stays.
@@ -763,7 +836,13 @@ recomputes every state.
   `app` refuses while one exists.
 - A `cpt-studio-web-next` left by an interrupted blue/green `app` (or
   `switch-back`): read the receipt's `left` and the vhost's port
-  (`grep proxy_pass /etc/nginx/sites-available/quillmd-cpt`). If the vhost
+  (`grep proxy_pass /etc/nginx/sites-available/quillmd-cpt`). When the receipt
+  says the switch stopped half way, nginx may run another configuration than
+  the file names (a reload whose outcome was not seen): make it run the file
+  first (`sudo -n /usr/sbin/nginx -t`, then `sudo -n /usr/bin/systemctl reload
+  nginx`), confirm a new set of nginx worker processes, and confirm
+  `https://cpt.quillmd.com/health/` answers the revision of the web on the port
+  the file names - only then is the rest of this note true. If the vhost
   names the old web's port, nothing is routed to the incoming web: once it has
   no connection, stop and remove it, put the old worker back if it is parked
   (`docker rename cpt-studio-worker-previous cpt-studio-worker`, `docker
@@ -782,14 +861,26 @@ recomputes every state.
   or put the vhost bytes back (`rollback-vhost` is not for this: restore the
   rendering for the old port through the root helper, reload, and put the old
   worker back).
-- An S4 failure whose close named a shown state leaves the NEW web serving as
-  `cpt-studio-web-next`, its worker stopped as `cpt-studio-worker`, the old
-  worker parked and the old web running on the old port with no traffic. To
-  keep this revision: fix the worker's failure, remove the old web and the
-  parked worker, rename `-next` to `cpt-studio-web`, then rerun `app` (a
-  same-revision switch, which starts the worker and recomputes the states). To
-  go back: clear the named records on this web first (**Reinstalling an older
-  revision**).
+- An S4 failure whose close named a shown state leaves the S4 keep layout: the
+  NEW web serving as `cpt-studio-web-next`, its worker stopped as
+  `cpt-studio-worker`, the old worker parked and the old web running on the old
+  port with no traffic. To keep this revision: fix the worker's failure, remove
+  the old web and the parked worker, rename `-next` to `cpt-studio-web`, then
+  rerun `app` (a same-revision switch, which starts the worker and recomputes
+  the states). To go back: clear the named records on this web first
+  (**Reinstalling an older revision**), run `preflight` again, then run this
+  revision's `rollback-app`. In the S4 keep layout `rollback-app` acts on the
+  right containers - this revision's web and worker, with this revision's
+  image - and the site stays served: it refuses, changing nothing, while this
+  revision recorded what an older revision would act on or show wrongly, or
+  while the baseline no longer holds; otherwise it closes every stage this
+  revision's pair started since its incoming web was created (and every open
+  stage of a kind the old worker cannot run), stopping there if that close
+  names a record, puts back the list states, switches the upstream back to the
+  old web (graceful, `/health/` = its revision), drains this revision's web,
+  closes again, removes this revision's web and worker, and puts the old worker
+  back - held while a close names a record. Do not remove the old web by hand:
+  it is what `rollback-app` switches back to.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
   interrupted `provision`, or `.operator-credentials.json.new` /
   `.ops-agent-credentials.json.new` from an interrupted `operators`: delete them
@@ -887,8 +978,12 @@ verified inside the image under that setting.
      as queued.
   5. `systemctl reload nginx` is host-global. It is graceful, and the switch's
      verification requires co-tenant routing and app.quillmd.com unchanged
-     from the preflight baseline. The app phase therefore runs the two
-     `sudo -n` nginx commands, which the declaration must say.
+     from the preflight baseline - read before anything starts and again right
+     before the vhost changes (and before `switch-back` closes anything), so a
+     co-tenant deploy since `preflight` refuses the phase rather than failing
+     the switch after nginx moved: run `preflight` again. A deploy inside the
+     switch's own seconds still fails it, and is undone. The app phase therefore
+     runs the two `sudo -n` nginx commands, which the declaration must say.
   6. The vhost file changes on every install (its sha256 alternates with the
      port), so declarations name the expected sha256 instead of listing
      `quillmd-cpt` under "must not change".
@@ -910,3 +1005,16 @@ verified inside the image under that setting.
   10. A `deploy/nginx/` change between revisions cannot ride the switch: `app`
       refuses it and the republish (`rollback-vhost` … `https-vhost`) takes the
       site down between the removal and the HTTPS stage.
+  11. Which configuration nginx runs is read from `/proc`: the host master's
+      worker processes (its pid file names it). An undo that cannot read them,
+      or cannot prove a reload applied, treats nginx as possibly running the
+      switched file, keeps both webs and parks the worker (half way) rather than
+      remove a web nginx may route to; a same-revision switch whose new workers
+      are not seen fails S3. A worker that nginx respawns after a crash, inside
+      the seconds of a reload it refused, would read as applied.
+  12. A record only this revision's web writes (a member's answer, a chosen
+      modifier) that it wrote after an undo's first close - in the seconds
+      before the switch back's reload, or in a request it finished during the
+      drain - is handed to the old web, which shows it wrongly until this
+      revision is installed again: the second close names it and holds the old
+      worker. `switch-back`'s B7 likewise.

@@ -91,6 +91,8 @@ class BlueGreenWorld:
         self.close_answer = {'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []}
         self.vhost_text = self.confs[live]['https']
         self.nginx_port = live
+        self.generation = 1         # the configuration nginx runs: an applied reload starts new workers (refute-r2 L6-1)
+        self.ingress_answers = []   # the next ingress_checks answers, in order (then: none)
         self.inflight = {}          # port -> requests old nginx workers still hold to it
         self.availability = None    # the recorder's model: every invariant point it saw, served or not
         self.next_id = 0
@@ -258,7 +260,18 @@ class BlueGreenWorld:
                 'a worker still ran when nginx moved its traffic'
             self.inflight[self.nginx_port] = self.inflight.get(self.nginx_port, 0) + 2  # old workers finish these
         self.nginx_port = self.file_port()
+        self.generation += 1
         return self.done()
+
+    def nginx_generation(self):
+        self.act('generation')
+        return self.done((1, frozenset({f'worker-{self.generation}'})))
+
+    def public_health(self, revision):
+        self.act('health', self.nginx_port, revision)
+        web = self.web_on(self.nginx_port)
+        passed = web is not None and web['healthy'] and web['revision'] == revision
+        return self.done((passed, [{'attempt': 0, 'status': 200 if passed else 503}]))
 
     def https_checks(self, ctx, revision=None):
         expected = revision or ctx.revision
@@ -271,7 +284,7 @@ class BlueGreenWorld:
 
     def ingress_checks(self, ctx, preflight):
         self.act('ingress')
-        return self.done([])
+        return self.done(list(self.ingress_answers.pop(0)) if self.ingress_answers else [])
 
     def drain_web(self, port):
         self.act('drain', port)
@@ -345,6 +358,8 @@ class BlueGreenWorld:
             smoke_web=self.smoke_web, vhost_state=self.vhost_state, live_vhost_bytes=self.live_vhost_bytes,
             vhost_operation=self.vhost_operation, nginx_test=self.nginx_test, nginx_reload=self.nginx_reload,
             https_checks=self.https_checks, ingress_checks=self.ingress_checks, drain_web=self.drain_web,
+            nginx_generation=self.nginx_generation, public_health=self.public_health, RELOAD_SEEN_ATTEMPTS=1,
+            RELOAD_SEEN_INTERVAL=0,
             host_listening_ports=self.host_listening_ports, close_undone_stages=self.close,
             put_back_states=self.put_back, stage_kinds_of=self.stage_kinds_of, undo_hazards=self.undo_hazards,
             app_script=self.app_script, oneshot=self.oneshot, rendered_vhosts=self.rendered_vhosts,
@@ -658,20 +673,36 @@ class FailureArmTests(TemporaryDirectoryTest):
         world.fail[('https', 9151)] = install.InstallError('https://cpt.quillmd.com/health/ did not serve it')
         message, details = self.failed(world)
         self.assert_old_pair_serves(world)
-        self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150)])
+        # the restore's reload, then the undo's own (refute-r2 L6-1): nginx proven back on the old web before anything
+        self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150), ('reload', 9150)])
+        proven = world.events.index(('health', 9150, OLD))
         drain, remove = world.events.index(('drain', 9151)), world.events.index(('stop', NEXT, '30'))
+        self.assertLess(proven, drain)
         self.assertLess(drain, remove)
-        self.assertEqual(len(world.closes), 1)
+        self.assertTrue(details['settle']['proven'])
+        # closed when the file was put back, and again once the incoming web was drained (refute-r2 L6-3)
+        self.assertEqual(len(world.closes), 2)
+        closes = [index for index, event in enumerate(world.events) if event[0] == 'close']
+        self.assertLess(proven, closes[0])
+        self.assertLess(closes[0], drain)
+        self.assertLess(drain, closes[1])
+        self.assertLess(closes[1], remove)
         self.assertGreaterEqual(world.closes[0]['since'], dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
-        self.assertEqual(world.put_backs, [OLD_IMAGE])  # the old pair's own derivation
+        self.assertGreaterEqual(world.closes[1]['since'], world.closes[0]['since'])
+        self.assertEqual(world.put_backs, [OLD_IMAGE, OLD_IMAGE])  # the old pair's own derivation, both times
         self.assertEqual(details['availability']['non_200_count'], 0)
 
-    def test_s3_a_reload_that_fails_restores_the_file_without_reloading(self):
+    def test_s3_a_reload_that_fails_is_treated_as_possibly_applied(self):
+        # refute-r2 L6-1: whatever the reload call answered, systemd may have taken the job, so the restored file is
+        # reloaded too, and the undo reloads it once more and proves nginx runs it before the incoming web goes
         world = BlueGreenWorld(self.tmp)
         world.fail[('reload',)] = install.InstallError('sudo systemctl reload nginx failed with exit 1.')
         message, details = self.failed(world)
         self.assert_old_pair_serves(world)
-        self.assertEqual(world.acts('reload'), [('reload', 9151)])  # attempted, failed, not repeated
+        self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150), ('reload', 9150)])
+        self.assertTrue(details['settle']['proven'])
+        self.assertLess(world.events.index(('drain', 9151)), world.events.index(('stop', NEXT, '30')))
+        self.assertIn('nginx proven to run it again', message)
 
     def test_s3_acting_hazards_hold_the_old_worker_and_shown_ones_are_named_only(self):
         world = BlueGreenWorld(self.tmp)
@@ -1308,7 +1339,10 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertEqual(details['previous'], {'image': OLD_IMAGE, 'revision': OLD})
         self.assertEqual(details['availability']['non_200_count'], 0)
         self.assertIn('switched back to bbbbbbbbbbbb', details['summary'])
-        self.assertEqual(world.acts('hazards'), [('hazards', IMAGE)])  # rollback-app's check, first
+        # rollback-app's check, first, and again right before B4's close (refute-r2 L6-4)
+        self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])
+        self.assertLess(world.events.index(('hazards', IMAGE), world.events.index(('stop', WORKER, '600'))),
+                        world.events.index(('close', IMAGE, tuple(KINDS_OLD))))
 
     def test_it_refuses_before_starting_anything(self):
         cases = {'a hazard': (dict(), 'hold records an older revision would act on'),
@@ -1483,6 +1517,7 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         self.accounts_answer = None
         self.check_answer = None
         self.grant_exit = {}
+        self.migrate_exit = 0
 
     def app_script(self, image_id, env, body, params, *, what, mounts=(), user=None, **kwargs):
         self.scripts.append((body, params, list(mounts), user))
@@ -1500,6 +1535,8 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
 
     def oneshot(self, image_id, command, env, **kwargs):
         self.oneshots.append((command, kwargs))
+        if command == ['manage', 'migrate', '--check']:  # refute-r2 L6-2: the phase's first act
+            return SimpleNamespace(returncode=self.migrate_exit, stdout=b'', stderr=b'')
         source = kwargs['mounts'][0].split('src=', 1)[1].split(',', 1)[0]
         self.mounted[Path(source).name] = Path(source).read_text()
         return SimpleNamespace(returncode=self.grant_exit.get(command[3], 0), stdout=b'granted\n', stderr=b'')
@@ -1538,12 +1575,16 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         self.assertTrue(all(mount.startswith('type=bind,src=/dev/shm/') and mount.endswith(',readonly')
                             for mount in mounts))
         self.assertEqual(user, f'{os.getuid()}:{os.getgid()}')
-        # each account granted by the application's own command, by its contract
+        # this revision's migrations checked first; each account granted by the application's own command, by its
+        # contract, with who records it given explicitly (refute-r2 L6-2: the one-shot's uid has no passwd entry)
+        by = install.operator_granted_by()
+        self.assertTrue(by.startswith('ops/install.py --phase operators ('), by)
         self.assertEqual([command for command, _ in self.oneshots], [
+            ['manage', 'migrate', '--check'],
             ['manage', 'grant_operator', '--username', 'ops-agent', '--reason-file',
-             '/run/cpt-operators/ops-agent.reason'],
+             '/run/cpt-operators/ops-agent.reason', '--by', by],
             ['manage', 'grant_operator', '--username', 'platform-operator', '--reason-file',
-             '/run/cpt-operators/platform-operator.reason']])
+             '/run/cpt-operators/platform-operator.reason', '--by', by]])
         self.assertIn('owner directive 2026-11-03, section 2', self.mounted['ops-agent.reason'])
         self.assertIn(REVISION, self.mounted['platform-operator.reason'])
         self.assertEqual(self.scripts[1][0], install.OPERATOR_CHECK)
@@ -1575,7 +1616,7 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         self.assertFalse(self.agent_file.exists())
         self.assertFalse((self.etc / install.OPERATOR_CREDENTIALS).exists())
         self.assertFalse(list(self.etc.iterdir()))  # the staged root file was discarded
-        self.assertEqual(self.oneshots, [])  # nothing granted
+        self.assertEqual([command for command, _ in self.oneshots], [['manage', 'migrate', '--check']])  # no grant
 
     def test_staged_leftovers_or_a_loose_directory_refuse_before_anything_runs(self):
         (self.etc / f'.{install.OPERATOR_CREDENTIALS}.new').write_text('{}')
@@ -1585,7 +1626,8 @@ class OperatorsPhaseTests(TemporaryDirectoryTest):
         os.chmod(self.home, 0o755)
         with self.assertRaisesRegex(install.InstallError, 'mode 0700'):
             self.run_phase()
-        self.assertEqual((self.scripts, self.oneshots), ([], []))
+        self.assertEqual(self.scripts, [])
+        self.assertEqual({tuple(command) for command, _ in self.oneshots}, {('manage', 'migrate', '--check')})
 
     def test_a_grant_that_fails_or_an_account_that_does_not_read_back_fails_the_phase(self):
         self.grant_exit = {'platform-operator': 2}

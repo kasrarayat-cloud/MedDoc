@@ -2,10 +2,12 @@
 
 The grant is the only thing that opens the operator diagnostics at /ops/; no workspace role confers it, and nothing
 over HTTP records one. The reason is read from a file (never argv) and recorded with the grant, beside who ran the
-command (--by, default the operating-system login). An account that already holds a grant keeps it: nothing is written
-and the command says so. A username that does not exist, or an inactive account, is refused.
+command (--by, default the operating-system login the environment names, else the process's uid - never a passwd
+lookup: the installer runs this in a one-shot as a uid the image has no passwd entry for). An account that already
+holds a grant keeps it: nothing is written and the command says so. A username that does not exist, or an inactive
+account, is refused.
 """
-import getpass
+import os
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -32,9 +34,19 @@ def account(username):
     return user
 
 
+# The variables getpass.getuser() reads before it falls back to the passwd database, in its order.
+LOGIN_VARIABLES = ('LOGNAME', 'USER', 'LNAME', 'USERNAME')
+
+
 def by_label(value):
-    label = (value or '').strip() or getpass.getuser()
-    return label[:120]
+    """Who records a grant or revocation: ``value`` (--by), else the login the environment names, else the process's
+    uid. Never a passwd lookup (refutation r2, L6-2): the installer's operators phase runs this command in a one-shot as
+    its own uid, which the image has no passwd entry for, and getpass.getuser() raised KeyError there - for both
+    accounts, after they and their credentials files were created, on every rerun."""
+    label = (value or '').strip()
+    for name in LOGIN_VARIABLES:
+        label = label or (os.environ.get(name) or '').strip()
+    return (label or f'uid {os.getuid()}')[:120]
 
 
 class Command(BaseCommand):
@@ -43,7 +55,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--username', required=True)
         parser.add_argument('--reason-file', required=True)
-        parser.add_argument('--by', default='', help='Who records the grant (default: the operating-system login).')
+        parser.add_argument('--by', default='', help='Who records the grant (default: the login the environment '
+                                                     'names, else the uid).')
 
     @transaction.atomic
     def handle(self, *args, **options):
