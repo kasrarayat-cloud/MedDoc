@@ -15,6 +15,8 @@ bound each stage really has where it runs (stage_bound; jobs.QUEUE_DEADLINE for 
 SLOW_SHARE of its bound says what it is waiting for. The wording never implies a limit it enforces: the threshold is
 the page's, not a stop.
 """
+import uuid
+
 from django.conf import settings
 from django.utils import timezone
 
@@ -46,8 +48,12 @@ FAILED_STATES = ('extraction_failed', 'processing_failed', 'provider_failed', 'p
 # A first reading's or a peer review's outcome that leaves the independent checks incomplete (Assessment.participants
 # states; 'not_run' there is a configured participant that gave nothing).
 INCOMPLETE_OUTCOMES = ('failed', 'refused', 'unknown', 'not_sent', 'blocked', 'not_run')
-# What a finished sending stage recorded (Job.result 'provider' for the document review, 'state' for a check).
+# What a finished sending stage recorded (Job.result 'provider' for the document review, 'second_review' for its
+# re-check, 'state' for a check).
 USED_OUTCOMES = ('succeeded', 'reused')
+# What a stage that did not do its work recorded (Job.result 'blocked': an unknown outcome stopped it where it would
+# send; 'skipped': it had nothing to do for the current document, its context or its assessment) - never done.
+BLOCKED, SKIPPED = 'blocked', 'skipped'
 
 MESSAGES = {
     'queued': 'Waiting to start. Documents are processed one at a time, in the order they arrive.',
@@ -64,6 +70,14 @@ MESSAGES = {
                'this page shows the next step once the service is back.'),
 }
 TAKING_TURN = 'Waiting its turn: the coding service checks one document at a time.'
+# Refutation r2, L5-7: the run has begun - a step of it finished - and its next step waits in the queue (one worker
+# takes the oldest queued step of any document), so never "Waiting to start" as if nothing had been done.
+NEXT_STEP_QUEUED = ('Waiting for the next step to start. Steps are processed one at a time, in the order they are '
+                    'queued.')
+# Refutation r2, L5-5: the re-check of what is still open (session decision (n)) was asked for this result and did not
+# complete - it failed, was not sent, or its outcome stayed unknown - so the results are the earlier check's.
+RECHECK_INCOMPLETE = ('Your results are ready, but checking what is still open again could not be completed. The '
+                      'results shown are from the earlier check.')
 SLOW_MESSAGES = {
     Job.EXTRACT: ('Reading is taking longer than usual. Long or scanned documents take more time while their text is '
                   'recognised.'),
@@ -99,6 +113,22 @@ def _iso(value):
 def _end(job):
     """When a finished job finished (a row recorded before every path set finished_at: when it started, else queued)."""
     return job.finished_at or job.started_at or job.created_at
+
+
+def _recorded(job):
+    """What a finished job's own result says its stage did: BLOCKED or SKIPPED when it did not do its work (refutation
+    r2, L5-4), else the outcome it recorded - a re-check's under 'second_review' (jobs.stage_review2; refutation r2,
+    L5-5), the document review's under 'provider', a check's under 'state' - or None when it records none (an
+    extract, an analyze, an assess)."""
+    result = job.result if isinstance(job.result, dict) else {}
+    if BLOCKED in result:
+        return BLOCKED
+    if SKIPPED in result:
+        return SKIPPED
+    if job.kind == Job.REVIEW2:
+        # the stale sweep records a re-check it settles under 'provider', as it does a document review's
+        return result.get('second_review', result.get('provider'))
+    return result.get('provider', result.get('state'))
 
 
 def _runs(rows):
@@ -159,13 +189,28 @@ def _by_step(run, revision):
     return out
 
 
+def _skip(job):
+    """Whether ``job`` finished without doing its stage's work: it recorded that it had nothing to do for the current
+    document, context or assessment (Job.result 'skipped'). A skip is never done by itself (refutation r2, L5-4); what
+    its step or function did before stands. An extract whose text was already recorded did read it."""
+    return job.state == Job.SUCCEEDED and job.kind != Job.EXTRACT and _recorded(job) == SKIPPED
+
+
 def _fold(rows):
     states = [job.state for job in rows]
     if Job.RUNNING in states:
         return 'active'
     if Job.QUEUED in states:
         return 'active' if any(state != Job.QUEUED for state in states) else 'waiting'
-    return JOB_STEP_STATES.get(rows[-1].state, 'failed')
+    last = ([job for job in rows if not _skip(job)] or rows)[-1]
+    if _skip(last):
+        return 'skipped'
+    if last.state == Job.SUCCEEDED and _recorded(last) == BLOCKED:
+        # Refutation r2, L5-4: a stage an unknown outcome blocked stopped where it would send, and nothing was asked -
+        # never done; it reads as an outcome still being confirmed does (the being_confirmed phase says what happens
+        # next)
+        return 'stopped'
+    return JOB_STEP_STATES.get(last.state, 'failed')
 
 
 def _step(key, label, rows, state):
@@ -177,19 +222,23 @@ def _step(key, label, rows, state):
 
 def _steps(runs, revision):
     """The four steps: each step of the current run as its jobs stand; a step before the run's first is the latest
-    earlier run's (a re-assessment re-reads what was read and checked before); one between its first and its last was
-    skipped (nothing was sent while a member date conflict held the document); one after its last has not started."""
+    earlier run's (a re-assessment re-reads what was read and checked before), and so is one every job of which skipped
+    its work in this run (a skip did nothing: what the step did before stands, or it reads skipped); one between its
+    first and its last was skipped (nothing was sent while a member date conflict held the document); one after its last
+    has not started."""
     current = _by_step(runs[-1], revision) if runs else {}
     present = [STEP_ORDER.index(key) for key in current]
     first, last = (min(present), max(present)) if present else (None, None)
     out = []
     for index, (key, label) in enumerate(STEPS):
-        if key in current:
-            out.append(_step(key, label, current[key], _fold(current[key])))
-        elif first is not None and index < first:
+        mine = current.get(key)
+        if mine and not all(_skip(job) for job in mine):
+            out.append(_step(key, label, mine, _fold(mine)))
+        elif mine or (first is not None and index < first):
             earlier = next((rows for rows in (_by_step(run, revision).get(key) for run in reversed(runs[:-1])) if rows),
                            None)
-            out.append(_step(key, label, earlier, _fold(earlier)) if earlier else _step(key, label, [], 'not_started'))
+            out.append(_step(key, label, earlier, _fold(earlier)) if earlier
+                       else _step(key, label, [], 'skipped' if mine else 'not_started'))
         elif first is not None and first < index < last:
             out.append(_step(key, label, [], 'skipped'))
         else:
@@ -251,11 +300,29 @@ def final_assessment(encounter):
     return assessment
 
 
+def recheck_incomplete(assessment):
+    """Refutation r2, L5-5: the newest re-check of what is still open (the bounded second review the page offers as
+    "Check what is still open again", session decision (n)) made for the answer ``assessment`` reads, when it did not
+    complete - failed, not sent, or with an outcome unknown (reconciled or not) - else None (none was asked, or it was
+    answered).
+    Its own run's outcome (jobs._second_run_for with any outcome, as jobs.second_review_status names it), since an
+    assessment reads only a second review that was answered."""
+    run = assessment.provider_run
+    if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
+        return None
+    second = jobs._second_run_for(assessment.revision, run, any_outcome=True)
+    return second if second is not None and second.state != models.ProviderRun.SUCCEEDED else None
+
+
 def _document_outcome(assessment):
+    """'not_run' when no request was made (none, or the member date hold); 'done' when the answer the assessment reads
+    was used and a re-check asked for it completed; else 'unavailable' - the request did not succeed, a response was
+    refused whole, or the re-check did not complete (refutation r2, L5-5: a failed paid re-check read 'done')."""
     run = assessment.provider_run
     if run is None or _held(run, None):
         return 'not_run'
-    if run.state == models.ProviderRun.SUCCEEDED and review._refused_run(assessment) is None:
+    if (run.state == models.ProviderRun.SUCCEEDED and review._refused_run(assessment) is None
+            and recheck_incomplete(assessment) is None):
         return 'done'
     return 'unavailable'
 
@@ -282,18 +349,36 @@ def _validation_outcome(assessment):
         _reference_validation(assessment, False)['state'], 'not_run')
 
 
+def _assessed_outcome(job):
+    """Coding validation as the assessment a finished assess made records it (_validation_outcome; Job.result
+    'assessment') - never 'done' from the job alone (refutation r2, L5-4: once a later request was blocked, the same
+    assess read 'done' through its job and 'not_run' through its assessment). 'unavailable' when that assessment
+    cannot be read."""
+    pk = (job.result or {}).get('assessment')
+    try:
+        assessment = models.Assessment.objects.filter(pk=uuid.UUID(str(pk))).first() if pk else None
+    except ValueError:
+        assessment = None
+    return _validation_outcome(assessment) if assessment is not None else 'unavailable'
+
+
 def _jobs_outcome(rows):
-    """A function's finished jobs of one run, as what they recorded: 'unavailable' when one gave nothing usable,
-    'not_run' when every one was disabled, else 'done'."""
+    """A function's finished jobs of one run, as what they recorded (_recorded): 'unavailable' when one gave nothing
+    usable - a request blocked by an unknown outcome, or a re-check that did not complete, included (refutation r2,
+    L5-4, L5-5) - 'not_run' when every one was disabled or skipped its work, else 'done'; an assess as the assessment it
+    made records coding validation."""
     outcomes = []
     for job in rows:
         if _held(job.provider_run if job.kind == Job.ASSESS else None, job.context):
             outcomes.append('not_run')  # nothing was asked while a member date conflict held the document
             continue
-        result = job.result or {}
-        value = result.get('provider', result.get('state'))
-        if job.state != Job.SUCCEEDED or (value is not None and value not in USED_OUTCOMES + ('disabled',)):
+        value = _recorded(job)
+        if _skip(job):
+            outcomes.append('not_run')  # it asked nothing (the callers leave skips out: what came before stands)
+        elif job.state != Job.SUCCEEDED or (value is not None and value not in USED_OUTCOMES + ('disabled',)):
             outcomes.append('unavailable')
+        elif job.kind == Job.ASSESS:
+            outcomes.append(_assessed_outcome(job))
         else:
             outcomes.append('not_run' if value == 'disabled' else 'done')
     if 'unavailable' in outcomes:
@@ -329,8 +414,9 @@ def checks_summary(encounter):
         elif assessment is not None:
             state = outcome(assessment)
         else:
-            latest = next((found for found in ([job for job in run if job.kind in kinds] for run in reversed(runs))
-                           if found), [])
+            # a skip did nothing for its function, so the run before it stands (refutation r2, L5-4)
+            latest = next((found for found in ([job for job in run if job.kind in kinds and not _skip(job)]
+                                               for run in reversed(runs)) if found), [])
             state = _jobs_outcome(latest) if latest else 'not_run'
         out.append({'key': key, 'label': label, 'state': state})
     return out
@@ -340,7 +426,9 @@ def _busy_state(key, mine, current, revision, configured):
     """A function with no job running or queued while its document is processing: the final assessment comes last, so
     coding validation waits for it; a function that finished its part of this run says what it recorded, or waits for
     its peer reviews; one this run has not reached waits, and one this run did not ask for keeps what was recorded
-    before (a re-assessment re-reads the answers it already has)."""
+    before (a re-assessment re-reads the answers it already has) - as does one whose jobs of this run skipped their work
+    (refutation r2, L5-4: a skip asked nothing)."""
+    mine = [job for job in mine if not _skip(job)]
     active = next((job for job in current if job.state in ACTIVE), None)
     if key == 'coding_validation' or active is None:
         return 'waiting'
@@ -376,7 +464,7 @@ def encounter_progress(encounter, now=None) -> dict:
     running = next((job for job in current if job.state == Job.RUNNING), None)
     queued = next((job for job in current if job.state == Job.QUEUED), None)
     active = running or queued
-    slow, slow_message, error = False, '', None
+    slow, slow_message, error, limited = False, '', None, None
     if date_held(encounter):
         phase = 'action_needed'
     elif busy and jobs.worker_responding(now=now) is False:
@@ -400,16 +488,19 @@ def encounter_progress(encounter, now=None) -> dict:
             phase = 'being_confirmed'
         elif _open_details(encounter):
             phase = 'awaiting_detail'
-        elif _partial(encounter, revision):
-            phase = 'partial'
         else:
-            phase = 'completed'
+            limited = _partial(encounter, revision)
+            phase = 'partial' if limited else 'completed'
     if slow:
         message = slow_message
     elif phase == 'queued' and queued is not None and (queued.result or {}).get('requeued'):
         message = TAKING_TURN
+    elif phase == 'queued' and any(job.state not in ACTIVE for job in current):
+        message = NEXT_STEP_QUEUED  # a step of this run finished: the next one waits its turn (refutation r2, L5-7)
     elif error is not None:
         message = error['text']
+    elif limited:
+        message = limited
     else:
         message = MESSAGES[phase]
     finished = [_end(job) for job in current if job.state not in ACTIVE]
@@ -434,11 +525,18 @@ def _open_details(encounter):
 
 
 def _partial(encounter, revision):
-    """Completed with limits (directive 5, "partially completed"): the final assessment is present, and an independent
-    check or a reference check could not be completed, or the document's text was read only in part."""
+    """The message of a result completed with limits (directive 5, "partially completed"), or None when it has none:
+    the final assessment is present, and a re-check of what is still open asked for it did not complete
+    (RECHECK_INCOMPLETE: it says so; refutation r2, L5-5), or the document review, an independent check or a reference
+    check could not be completed, or the document's text was read only in part (MESSAGES['partial']) - the same readings
+    the checks state, so a check read 'unavailable' is never beside a result called complete."""
     assessment = final_assessment(encounter)
     if assessment is None:
-        return False
-    if revision is not None and revision.extraction_status == models.SourceRevision.PARTIAL:
-        return True
-    return _checks_outcome(assessment) == 'unavailable' or _validation_outcome(assessment) == 'unavailable'
+        return None
+    if recheck_incomplete(assessment) is not None:
+        return RECHECK_INCOMPLETE
+    if ((revision is not None and revision.extraction_status == models.SourceRevision.PARTIAL)
+            or _document_outcome(assessment) == 'unavailable' or _checks_outcome(assessment) == 'unavailable'
+            or _validation_outcome(assessment) == 'unavailable'):
+        return MESSAGES['partial']
+    return None

@@ -934,15 +934,25 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
             requested_by=job.requested_by, service_date=service_date, purpose=purpose, scope=scope or {},
             **(_participant_identity(provider) if independent else {}))
-        if _stop_requested(job, encounter):
-            run.state = models.ProviderRun.CANCELLED
-            run.error = 'Stopped before sending; nothing was sent.'
-            run.finished_at = timezone.now()
-            run.save()
-            raise StageCancelled('Stopped before the provider request was sent.')
-        run.state = models.ProviderRun.SENDING
-        run.started_at = timezone.now()
-        run.save(update_fields=['state', 'started_at'])
+        try:
+            if _stop_requested(job, encounter):
+                run.state = models.ProviderRun.CANCELLED
+                run.error = 'Stopped before sending; nothing was sent.'
+                run.finished_at = timezone.now()
+                run.save()
+                raise StageCancelled('Stopped before the provider request was sent.')
+            run.state = models.ProviderRun.SENDING
+            run.started_at = timezone.now()
+            run.save(update_fields=['state', 'started_at'])
+        except StageCancelled:
+            raise
+        except Exception:
+            # Refutation r2, L5-3: the stage fails between the reservation and the send (a read of the Stop or the
+            # write that marks the run sending raised), so nothing reached the provider. The run is never left
+            # 'reserved', which nothing settles once its stage has ended: it is recorded not sent, and the stage fails
+            # as before.
+            _settle_reservation(run)
+            raise
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
                      run_identity=str(run.run_identity), purpose=purpose)
@@ -981,6 +991,21 @@ UNRECORDED_OUTCOME_MESSAGE = ('The answer arrived but its outcome could not be r
 ORPHANED_SENDING_MESSAGE = ('The stage that sent this request ended without recording its outcome. The request may have '
                             'reached the vendor and been billed: it is recorded with an unknown outcome, and nothing is '
                             'sent again until it is reconciled.')
+UNSENT_RESERVATION_MESSAGE = ('Nothing was sent: the stage stopped with an unexpected error (logged) after reserving '
+                              'this request and before sending it.')
+ORPHANED_RESERVATION_MESSAGE = ('Nothing was sent: the stage that reserved this request ended before sending it.')
+
+
+def _settle_reservation(run):
+    """Refutation r2, L5-3: ``run``, reserved and never marked sending - nothing reached the provider - recorded not
+    sent once its stage failed, with no start recorded: a reservation settled unsent still owes the attempt it reserved
+    (_run_in_use, _newest_finished and _unsent_attempt read one so, as they read a dead worker's). Only while it is
+    still 'reserved'. A failure here is logged; the stale sweep settles it (mark_stale)."""
+    try:
+        models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.RESERVED).update(
+            state=models.ProviderRun.NOT_SENT, sent=False, error=UNSENT_RESERVATION_MESSAGE, finished_at=timezone.now())
+    except Exception:  # noqa: BLE001 - logged; the sweep settles a reservation whose stage no longer runs
+        log.exception('provider run %s could not be settled as not sent after its stage failed', run.pk)
 
 
 def _settle_unrecorded(run, exchange):
@@ -2588,6 +2613,13 @@ def mark_stale():
                     revision=job.revision, created_at__gte=job.started_at, purpose=SENDING_PURPOSES[job.kind],
                     state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.UNKNOWN,
                                models.ProviderRun.NOT_SENT))
+                # a reservation settled unsent (_settle_reservation; refutation r2, L5-3) never reached the send: no
+                # outcome of the stage, which still owes the attempt it reserved, as a reservation settled below does
+                # (the shape _run_in_use and _newest_finished leave out)
+                from django.db.models import Q
+
+                runs = runs.exclude(Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
+                                    & ~Q(request_sha256=''))
                 if job.kind in Job.PARTICIPANT_KINDS:
                     runs = runs.filter(provider=job.kind)  # its own run: both participants' runs are 'independent'
                 elif job.kind in Job.PEER_KINDS:
@@ -2662,6 +2694,19 @@ def mark_stale():
             settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
                 state=models.ProviderRun.UNKNOWN, error=ORPHANED_SENDING_MESSAGE, finished_at=timezone.now(),
                 sent=run.sent or reached)
+        if settled:
+            review.refresh_state(run.encounter)
+    # Refutation r2, L5-3: a reservation left by a stage that no longer runs - the stage failed before sending it, and
+    # its own settling (_settle_reservation) failed too - never reached the provider. It is settled not sent, as a dead
+    # worker's reservation is above (no start recorded: the attempt it reserved is still owed), so nothing reads it as
+    # an outcome to confirm that nothing could ever settle. Its own stage, were it running, started before it.
+    for run in models.ProviderRun.objects.filter(state=models.ProviderRun.RESERVED, created_at__lt=cutoff):
+        if Job.objects.filter(encounter_id=run.encounter_id, state=Job.RUNNING,
+                              started_at__lte=run.created_at).exists():
+            continue
+        settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.RESERVED).update(
+            state=models.ProviderRun.NOT_SENT, sent=False, error=ORPHANED_RESERVATION_MESSAGE,
+            finished_at=timezone.now())
         if settled:
             review.refresh_state(run.encounter)
 

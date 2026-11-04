@@ -73,6 +73,9 @@ BUCKET_STATUSES = {
 CLARIFICATION_SCOPES = ('encounter', 'service', 'proposal')
 ACTIVE_JOB_STATES = (Job.QUEUED, Job.RUNNING)
 UNSETTLED_RUN_STATES = (ProviderRun.RESERVED, ProviderRun.SENDING, ProviderRun.UNKNOWN)
+# The derived failures whose customer error tells the member to upload the document again (progress.ERRORS): while an
+# outcome is unknown, that upload would make the same paid request again, so none of them outranks it (_state_and_run).
+RESUBMIT_STATES = ('extraction_failed', 'processing_failed', 'provider_failed')
 MAX_CODE_LENGTH = Proposal._meta.get_field('code').max_length
 
 STATE_LABELS = {
@@ -1221,15 +1224,22 @@ def _failed_stage_state(encounter, revision, job):
         # assessment's own state stands, and the second-review card says why it did not complete (ec5 re-check: it read
         # "Provider not run" beside the primary request's proposals). None: derive the state from the assessment.
         return (None if job.kind == Job.REVIEW2 else 'provider_not_run'), None
-    if run.state in UNSETTLED_RUN_STATES:
+    # Refutation r2, L5-3: a reservation is written before any network I/O and is marked 'sending' only as the request
+    # leaves (jobs._send), so one its stage left behind - the stage failed between the two, and nothing runs now (the
+    # caller reads no active job) - never reached the provider. Nothing is being confirmed and nothing could settle it
+    # as an unknown outcome (reconcile takes only unknown ones): it reads as the request recorded not sent that
+    # jobs._send and the stale sweep settle it to, never as provider_unknown ("Nothing will be sent again") while every
+    # send door, which reads _unreconciled_unknown, sends.
+    state = ProviderRun.NOT_SENT if run.state == ProviderRun.RESERVED else run.state
+    if state in UNSETTLED_RUN_STATES:
         return 'provider_unknown', None
-    if job.kind == Job.REVIEW2 and run.state in (ProviderRun.NOT_SENT, ProviderRun.CANCELLED):
+    if job.kind == Job.REVIEW2 and state in (ProviderRun.NOT_SENT, ProviderRun.CANCELLED):
         # Nor did one whose request was never sent - stopped before sending, or settled as not sent when the stage was
         # closed: no request failed, so never provider_failed ("The provider request failed" beside a primary answer
         # that succeeded, refutation P2FR, ROLLBACK 1: an undo then left that state to 057a7d39, which labels it by its
         # name). None: the assessment's own state, worded from that run ('Second review not sent').
         return None, None
-    if run.state == ProviderRun.SUCCEEDED:
+    if state == ProviderRun.SUCCEEDED:
         return 'processing_failed', None
     return 'provider_failed', run
 
@@ -1302,24 +1312,36 @@ def _state_and_run(encounter):
     revision = encounter.current_revision
     if revision is None or _active_jobs(encounter):
         return 'processing', None
+    # Decision (k), HARNESS.md 2 (refutation r2, L5-1): an outcome still unknown - a run recorded unknown and not
+    # reconciled, or one left 'sending' by a stage that no longer runs - blocks every further send, and the encounter
+    # waits on its reconciliation whatever failed after it. A failure read past it tells the member to upload the
+    # document again (RESUBMIT_STATES), and that upload makes the same paid request again while the first may have been
+    # answered and billed: such a failure never outranks it. A member's Stop still reads stopped where it did (its
+    # Resume sends nothing past the block), and provider_not_run, which says no request was made and offers nothing,
+    # reads as before; the review queue lists the reconciliation either way.
+    unknown = _unreconciled_unknown(encounter)
+
+    def failure(state, run=None):
+        return ('provider_unknown', None) if unknown and state in RESUBMIT_STATES else (state, run)
+
     if revision.extraction_status == SourceRevision.FAILED:
-        return 'extraction_failed', None
+        return failure('extraction_failed')
     latest = encounter.jobs.filter(revision=revision).order_by('-created_at', '-pk').first()
     if latest is not None and latest.state == Job.CANCELLED:
         return 'stopped', None
     if revision.extraction_status == SourceRevision.PENDING:
-        return ('processing' if latest is None else 'extraction_failed'), None
+        return ('processing', None) if latest is None else failure('extraction_failed')
     if latest is not None and latest.state in (Job.FAILED, Job.UNKNOWN):
         failed, run = _failed_stage_state(encounter, revision, latest)
         if failed is not None:
-            return failed, run
+            return failure(failed, run)
     assessment = live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
-        return ('provider_unknown' if _unreconciled_unknown(encounter) else 'processing'), None
+        return ('provider_unknown' if unknown else 'processing'), None
     run = assessment.provider_run
     if run is None:
         return 'provider_not_run', None
-    if run.state in UNSETTLED_RUN_STATES or _unreconciled_unknown(encounter):
+    if run.state in UNSETTLED_RUN_STATES or unknown:
         # An outcome still unknown - the second review's included - blocks every further send until a member reconciles
         # it, so the encounter waits on that, whatever the run in use says (refutation r1, sends-5: a second review the
         # provider never answered left "Ready for review", then "Reviewed" and off the review queue, while the same
