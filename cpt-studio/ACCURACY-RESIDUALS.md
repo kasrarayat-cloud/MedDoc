@@ -1073,3 +1073,66 @@ The reason id, the cue and the engine's stored question and detail reach none of
 
 The first fresh walk document's two gaps, the prophylactic clip in a colonoscopy-only note, and rule 1's same-lesion
 pairing read as the section above records. The hold-only form moves none of them.
+
+## Core repair, round 5b (2026-11-04): three fixes to the hold-only form, and what they leave
+
+This round lands the lead's patch (`verify-r4/apply_z21.py`, run without `--d`) verbatim on the hold-only head. It was
+declared before code in `tests/fixtures/gi4/declarations/cux-r5-binding.json`, `amendment_20261104_hold_only_r5b`. That
+amendment governs wherever the hold-only amendment disagrees. Refutation round 5b (`refute-r5b-results.json`) found four
+new defects in the hold-only form, and Y-F3 besides. Each finding was reproduced by its verifier, and again by this round
+before code.
+
+**The three fixes.**
+- (a) `engine._second_review` counts a match held for reason `named_only` as a documented act. A code the bounded second
+  review selects for a service left without a proposal is then added as a proposal and held. Before, it was dropped to
+  an informational alternative, and the approved export could leave a documented polypectomy uncoded (X-R5B-1).
+- (b) `services._merge_acts` keeps `NAME_ONLY_CUE` on a merged act only when every merged statement carries it. A
+  restatement that names the act's site or service lifts the hold, and an addendum is such a restatement (Y-F1, Y-F2).
+- (c) `reconcile.match` gives the `named_only` hold the acts it rests on. The rules that read a code's acts, the
+  separate-lesion modifier review among them, read them as before. The code stays held (X-R5B-2).
+
+*Hold-only* is head `bbe4266d`; *round 5b* is this branch.
+
+| id | input | hold-only | main | installed | round 5b |
+|---|---|---|---|---|---|
+| X-R5B-1 (blocking) | the Y3 or 1146 row. The primary selects 43239 only, and the re-check returns 45385 citing "Polyp A was removed with a cold snare." | 45385 is an alternative only, and the colonoscopy stays unresolved. Once 43239 is approved, the approved export lists 43239 alone | 45385 ready. The export waits for its decision | 45385 ready | 45385 is added from the second review as "Needs a detail". The export waits until it is decided |
+| X-R5B-2 (minor) | the Y3 row plus "Polyp B - descending colon: a 4 mm polyp was removed with cold biopsy forceps."; 45380 approved with XS | no modifier review. The approval with XS is refused (409) | both codes offer 59 or XS, and the approval succeeds | no modifier review | both codes offer 59 or XS, and the approval succeeds. 45385 stays held |
+| Y-F1 (major) | a label-only snare, then the impression line "2. 8 mm sigmoid colon polyp removed with a cold snare." | 45385 held | ready | ready | ready |
+| Y-F2 (major) | the Y1 row. From the detail row, the physician posts "Polyp A was removed with a cold snare during the colonoscopy, in the sigmoid colon, on the date of service." | still held. Both answers exclude the code | ready | ready | ready after the addendum, and the approval succeeds |
+| Y-F3 (major) | a clause naming a site the anatomy reader does not know, such as "just above the dentate line" or "at 38 cm from the incisors" | held | ready | ready | still held (recorded below) |
+
+The X-R5B-2, Y-F1 and Y-F2 inputs are battery rows, prefix `R8 R5 Z`. The X-R5B-1 inputs are the Y3 and 1146 rows. The
+second-review merges, the modifier reviews and the customer flows are recorded in the declaration.
+
+**What the fixes move.**
+- **The battery:** against main there are 26 movements, every one READY to held. They are the hold-only form's 4 fixes
+  and 21 costs, and the Z3 row's 45385 (a Y3 shape). There are no new violations. Against the hold-only head, the Z1 and
+  Z2 rows' 45385 move from held to READY.
+- **The lead's adversarial cases** (2,924 cases of rounds 4, 4b, 5 and 5b): 0 cells move toward READY against main, 0
+  violations are new against main, and 113 of main's violations are fixed. 383 cells are held where main reads READY
+  with truth done (the hold-only head: 507); 270 of them are READY on installed too. The 124 cells the fixes release
+  against the hold-only head all have truth done and read READY on main.
+- **No act moves.** Over the 5,980 corpus, battery and fixture texts, no act placement changes.
+
+**What a customer sees now:**
+- after a second review, a code tied to its act only by a lesion's name is a code that "Needs a detail", and reject is
+  its only action. The approved export is refused until the code is decided ("45385 needs a detail.");
+- a held code still shows no quote. Where a partner code accounts for an act on another lesion, both codes now offer the
+  separate-lesion modifier review;
+- an addendum that restates the act with its site or service lifts the hold, and the code reads "Ready for review".
+
+### What round 5b leaves (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| a site the anatomy reader does not know (Y-F3) | "Polyp A - rectum: ..." then "Polyp A was removed with a cold snare just above the dentate line." Also "at the anastomosis", "at 30 cm", "at 25 cm", "Lesion 1 was biopsied with cold forceps at 38 cm from the incisors." and "... at the incisura."; truth: done | ready | ready | held [performed_status] | The class requires that the act's clause names no site of its own. The code reads that as "the ANATOMY reader reads no site in the clause", so a site it does not know counts as no site. The lead's fixes do not touch this, and its holds are among the 383 cells above |
+| a diagnostic base code cited alone beside a label-only act told after the other examination | the B3 probe with 43235 alone, in dash and paren form; truth: not done | ready | held | ready | Pre-existing on main, and worse than installed in this shape. R1a-r3 (round 3) drops the label-only biopsy told after the colonoscope, so `base_included` finds no reportable act. On the lead's cases these 2 cells are the only violations the head has that installed lacks |
+| an addendum in which the inventory reads no statement of the act | "The cold snare polypectomy was performed on the date of service, as documented.", "Polyp A was located in the sigmoid colon." and "Correction: the snare removal of Polyp A took place in the colonoscopy."; truth: done | ready | ready | held | No statement merges into the act, so its one label-only statement keeps the cue. The detail row's two answers still exclude the code |
+
+**The `--d` variant, and why it was not taken.** The lead also measured `apply_z21.py --d`. With it, R1a-r3 would no
+longer drop or move an act in a document of several performed procedures, and the cue would hold its codes instead. On
+the lead's 2,924 cases it fixes 122 of main's violations. But it moves one cell toward READY against main: round 4's
+"E3-1g control: the same, gastroscope named (dash)", where 45380 would read READY with truth not done. Main and the taken
+form hold that cell. Installed reads it READY too, so the lead's note that installed holds it is not right. A violation
+main lacks is what the standard forbids. The variant would also have held the B3 dash probe's base code; that residual is
+recorded above instead.

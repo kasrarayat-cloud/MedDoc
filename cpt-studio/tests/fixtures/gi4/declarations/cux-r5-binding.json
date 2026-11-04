@@ -10858,5 +10858,257 @@
    "the request side"
   ],
   "cost": "Per second-review candidate, one more comparison; per merged act, one tuple membership and at most one tuple filter; per named_only match, the tuple of acts it already computed. No new pass, no pattern, no new read of the text."
+ },
+ "after_code_20261104_hold_only_r5b": {
+  "provenance": "Written 2026-11-04 AFTER the code and its measurement, as a record: it changes no key above it (each value is identical; the only byte added before this key is the separating comma, checked when it was appended). amendment_20261104_hold_only_r5b was committed alone in cd1d7c9239d11da2c2d122c6ff3fdcc305785f77 2026-11-04T21:03:20+00:00 (declared_before_code). The code, alone, is in 93c0e0159b28177c5676ff6996c8fa323bdcc8e2 2026-11-04T21:03:34+00:00: the lead's script, run without --d on bbe4266d, printed engine.py before 8a5f1a1670f0f7b0, after 90ba74e8f50aac4b; services.py before 6525b08a7b38349a, after d0ed5996c0481554; reconcile.py before a01fdc18e1b915c0, after b2aa6e5ef1743694; applied: True. The full sha256 of each file equals the required value and verify-r4/proto-Z21a's file. The battery edit and the tests are in 7e182e20876c2cea382d730622b729487d007194 2026-11-04T21:10:53+00:00; ops/gi4/battery.py is byte-identical to the scratch harness the amendment's readings were measured with (4e49f0f6cb86779b3e43e8c4e3407c2d69e82ba5faf99ac511286d7991188e95). Every measurement below ran on this session's own sealed git-archive export of 7e182e20 (scratch-r5c/exports/head, chmod a-w, byte-identical to the worktree's cpt-studio), beside the sealed main, installed, hold-only and patched exports of the amendment; one tree per process, offline, and the customer flows on the throwaway test server 127.0.0.1:55461 (suffix r5c14). Every export's tree digest was the same after every run as before it, and no bytecode was written.",
+  "governs": "This record measures amendment_20261104_hold_only_r5b, which governs. Its 26 declared movements (22 costs of the hold class, 4 fixes), its readings, inventory acts, named_only support acts, offers, second-review merges, modifier reviews and customer flows are reproduced below. A movement named there is a declared cost or fix; any other is a finding.",
+  "H4_battery": [
+   "python -m ops.gi4.battery --base <sealed main> --head <sealed head> --declare scratch-r5c/declare-r5b.json (top-level 'battery' = the amendment's 'battery', verbatim): == base {'rows': 278, 'codes': 454, 'violations': 6, 'judged': 437, 'ready': 179, 'excluded': 14, 'held': 261} == head {'rows': 278, 'codes': 454, 'violations': 2, 'judged': 437, 'ready': 153, 'excluded': 14, 'held': 287} == 26 movements, 0 undeclared; 0 new violations (exit 0). Exactly the 26 declared: 4 fixes and 22 costs, every one READY to held; the 2 violations left are the known S2/S3 exclusions (scratch-r5c/out/ac-battery-vs-main.log)",
+   "the same with --declare tests/fixtures/gi4/declarations/cux-r5-binding.json: == base {'rows': 278, 'codes': 454, 'violations': 6, 'judged': 437, 'ready': 179, 'excluded': 14, 'held': 261} == head {'rows': 278, 'codes': 454, 'violations': 2, 'judged': 437, 'ready': 153, 'excluded': 14, 'held': 287} == 26 movements, 15 undeclared; 0 new violations (exit 1). The tool reads the file's top-level 'battery' only, which is the refuted unbinding form's 12; the 15 it calls undeclared are declared in this amendment's 'battery'",
+   "python -m ops.gi4.battery --base <sealed installed> --head <sealed head>: == base {'rows': 278, 'codes': 454, 'violations': 80, 'judged': 437, 'ready': 254, 'excluded': 8, 'held': 192} == head {'rows': 278, 'codes': 454, 'violations': 2, 'judged': 437, 'ready': 153, 'excluded': 14, 'held': 287} == 145 movements, 145 undeclared; 0 new violations (none declared against installed, so exit 1 by design; 0 new violations; ac-battery-vs-inst.log)"
+  ],
+  "H1_replay": "python -m ops.gi4.replay --fixtures --base <sealed main> --head <sealed head>: EQUAL. The four date.sends-only-the-truth HARD failures of h4-03 are on base and head alike, as recorded before (scratch-r5c/out/ac-replay.log)",
+  "H2_freeze": [
+   "python -m ops.gi4.freeze --base <sealed main> --head <sealed head> --workers 6:",
+   "== H2 freeze: base /home/claude/cpt-studio-ux-20261103/scratch-r5c/exports/main/cpt-studio",
+   "               head /home/claude/cpt-studio-ux-20261103/scratch-r5c/exports/head/cpt-studio",
+   "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+   "    sections.layout over 5723 texts: identical",
+   "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+   "(c) requests over 19780 primary and dated requests: changed 0",
+   "(d) mention counts over 5723 texts: changed 0",
+   "== GATE HOLDS",
+   "(scratch-r5c/out/ac-freeze.log)"
+  ],
+  "corpus_inventory": "The lead's invdump_main.py (its fixture root moved to the sealed main export) on the sealed head, compared with scratch-r4b/diffinv.py against this session's main dump (byte-identical to the lead's inv-x-20a64b860138.json): texts 5980, differ 0, so no act placement changes. The head's dump equals the patched export's (and the lead's inv-x-bbe4266da6f4.json) on all 6,046 common texts; the head adds 69 texts, its 'R8 R5 ' rows. scratch-r5c/tools/cue_census.py on the head: 36 texts carry the cue (the hold-only head's 35 and the Z3 row), every one a battery row; 0 corpus texts and 0 of the 48 fixtures (Mara among them)",
+  "refuter_cases": "verify-r4/drive2.py over verify-r4/refuter-cases4.json (2,924 cases) on the sealed head: byte-identical to the lead's rc4-proto-Z21a.json (and this session's main and installed outputs to the lead's rc4-x-20a64b860138.json and rc4-x-41e03656df61.json). Against main: 0 cells toward READY, 0 violations main lacks, 0 new exclusions, 113 of main's 262 violations fixed; held where main reads READY with truth done: 383 cells, 270 of them READY on installed too; 2 violations installed lacks, both main's (the B3 probe's EGD base code cited alone, dash and paren). The lead's numbers, equal",
+  "cases_and_base_probes": "verify-r4/drive2.py over verify-r4/base-probes2.json and cases.json on the sealed head: byte-identical to the lead's bp2-proto-Z21a.json and c18b-proto-Z21a.json. The four false READYs stay held; the B3 probes' EGD base code alone reads 43235 READY as on main (a residual, recorded)",
+  "rows": "Every 'R8 R5 ' cell (bucket/status, clarifications, support reason; 125 cells of 69 rows), every inventory act and cue of those rows, the A3 rows, the residuals and Mara (77 texts), the support acts of the 27 named_only cells, and the offers of all 228 'R8 ' rows, read on the sealed head: identical to the amendment's readings, inventory_acts, named_only_support_acts and offer_battery, and every field of scratch-r5c's row probe equal to the patched export's before code. No register cell reads a violation; the five residual rows read as recorded",
+  "second_review_modifier_review_and_y_lens": "The X-R5B-1 verifier's driver and 38 cases (engine.assess with the second-review response), the X-R5B-2 verifier's driver and 7 cases (the stages, then the review overlay), and the Y lens's driver over its case files c1, c2, c3, c4, c7, c8 and c9, on the sealed head: every output identical to the patched export's before code, and so to the amendment's second_review and modifier_review records",
+  "customer_flows": "scratch-r5c's API probes (tools/apiprobe) run from the sealed head on the throwaway test server (suffix r5c14): 13 tests, OK; every outcome equal to the patched export's before code, ids and times aside (the amendment's customer_flows.outcomes)",
+  "regressions": {
+   "X-R5B-1": "Re-run through engine.assess with the second-review response (the verifier's 38 cases): in the 18 of its 21 second-review cases where the hold-only head dropped 45385 to an informational alternative (the Y1 rows x3, the Y3 rows x4, Y5, the 1146, 1277 and 1406 rows, SR3 on Y1 and Y3, and SR0 on the A3 control, X3 FD4b, the two Y4 rows and the denied-title row) it is now added from the second review, held [performed_status] (named_only); the other 3 are unchanged (SR4 already held; the colonoscopy-only control READY). Through the customer API (the Y3 and 1146 rows): after the re-check 45385 is a code 'Needs a detail' (reject its only action), nothing is listed as an alternative only and nothing is unresolved; after 43239 is approved the approved export is refused (409, blockers ['45385 needs a detail.']); once 45385 is rejected the export (201) lists 43239. X3: 45385 held, the other provider's EGD stays unresolved as on main.",
+   "X-R5B-2": "Re-run through the overlay (the verifier's 7 cases) and the customer API (the Z3 text): 45385 records support acts [S2-A1] and its separate-lesion consideration (and, with a screening indication, the screening-became-therapeutic one); both 45385 (held) and 45380 offer the modifier review [59, XS]; approving 45380 with XS returns 201 with modifiers ['XS'], with 59 201 with ['59'], with none 201, as on main.",
+   "Y-F1": "Re-run offline (the Y lens's c7 and c3): R1 realistic and M1 to M5 read 45385 READY [service], as main and installed; R1r and M1r READY; R1c (no impression), EM1 and S6 still held - the declared class, no restatement. The Z1 row (R1 realistic) reads READY with its snare's two statements merged and no cue.",
+   "Y-F2": "Re-run through the customer API (the Y1 row; the finding's addendum posted from the detail row, the provider citing the original line, the addendum line, or both): revision 2 reads 45385 'Ready for review' (approve, reject), no detail row, and the approval returns 201. With no addendum it stays held and an answer excludes it (the declared class). Offline (c2, c4): E1, E4, E5, E6, A1, A2, A3, A5 and A6 READY; E2, E3 and A7 held (the inventory reads no statement of the act in them); E7 held [service_uncertain] on every tree.",
+   "Y-F3": "Re-run offline (c8, c9, c1): unchanged and still held [performed_status] (named_only) - 'just above the dentate line', 'at the anastomosis', 'at 30 cm', 'at 25 cm', 'at 38 cm from the incisors', 'at the incisura' - where main and installed read READY; the controls the anatomy reader knows read READY. Not fixed: recorded as a residual (declared_costs.hold_class.as_implemented; ACCURACY-RESIDUALS.md, round 5b)."
+  },
+  "declared_costs_measured_after_code": {
+   "cost_cells": [
+    [
+     "R8 R3 A3 control, the colonoscope told again before the labelled act",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 B2 dash base code: label-only line before the EGD",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 X3 an EGD by another provider, the snare code",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a Bravo pH capsule",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a PillCam placement",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a gastrostomy tube exchange",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 2. Colonoscopy heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 Part 2: Colonoscopy heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y4 a separately reported same-day EGD",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y5 a specimen-numbered act",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Z3 a label-only snare beside a forceps removal on its own line",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1146 a procedures-performed line, the label acted on by name",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1277 findings first, the label acted on after the colonoscope",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1383 an upper lesion acted on by its label",
+     "43251",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold, a combined title whose second service the note denies",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ]
+   ],
+   "fixes": [
+    [
+     "R8 R5 R1 dash",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R1b dash upper endoscopy named",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R3 dash",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R2 dash combined",
+     "45382",
+     "selected/ready",
+     "selected/needs_clarification"
+    ]
+   ],
+   "note": "each reads after code exactly as declared: every cost a done code held [performed_status], reason named_only, no violation; every fix a not-done code held"
+  },
+  "mutation_proofs": {
+   "method": "scratch-r5c/tools/mutate_r5c.py, in place in this worktree (only this session edits these files). A baseline run on the unmutated files comes first. For each mutant: the committed file's sha256 is taken, its anchor is asserted to occur once, and the mutant is written and read back ('mutation applied: True') and compiled. tests.test_cux_r5_binding then runs on the throwaway server 127.0.0.1:55461 (it must have run and must fail). The file is restored byte for byte, and its sha256 is compared with the one taken before.",
+   "results": [
+    "cpt-studio/studio/validation/engine.py committed sha256 90ba74e8f50aac4b3118fdf9365d93bfab33433954b316baa15fe13c2b8303d8",
+    "cpt-studio/studio/gi/services.py committed sha256 d0ed5996c0481554e40e621e0afe6fdb38569e32c7a6d6049990f357bf001242",
+    "cpt-studio/studio/validation/reconcile.py committed sha256 b2aa6e5ef17436946c2c609a368690ab38720a89738bf2ab75adf5c19bdd6941",
+    "baseline (unmutated): Ran 33; OK",
+    "M1 fix (a) reverted: the second review counts a performed or incomplete match only: anchor occurs 1 time(s) in engine.py",
+    "   mutation applied: True",
+    "   Ran 33 tests; FAILED (failures=18, errors=5) -> KILLED",
+    "     failing: SecondReviewApprovedExportTests.test_1146_the_approved_export_waits_for_the_added_code",
+    "     failing: SecondReviewAddsTheHeldCodeTests.test_every_declared_second_review_case_merges_as_declared",
+    "     failing: SecondReviewAddsTheHeldCodeTests.test_the_named_only_code_is_added_held_and_the_service_is_accounted_for",
+    "     failing: SecondReviewApprovedExportTests.test_y3_the_approved_export_waits_for_the_added_code",
+    "   failing tests: 4",
+    "   restore sha256 90ba74e8f50aac4b==90ba74e8f50aac4b: True",
+    "M2 fix (b) reverted: a merged act keeps its first statement's cues: anchor occurs 1 time(s) in services.py",
+    "   mutation applied: True",
+    "   Ran 33 tests; FAILED (failures=8) -> KILLED",
+    "     failing: MergedCueTests.test_a_sited_restatement_or_addendum_lifts_the_hold",
+    "     failing: AddendumLiftsTheHoldTests.test_an_addendum_naming_the_site_and_service_lifts_the_hold",
+    "     failing: PlacementTests.test_every_act_is_where_main_puts_it_with_its_declared_cue",
+    "     failing: MergedCueTests.test_the_cue_survives_a_merge_only_when_every_statement_carries_it",
+    "     failing: HoldOnlyRowsTests.test_the_rows",
+    "   failing tests: 5",
+    "   restore sha256 d0ed5996c0481554==d0ed5996c0481554: True",
+    "M3 fix (c) reverted: the named_only hold carries no acts: anchor occurs 1 time(s) in reconcile.py",
+    "   mutation applied: True",
+    "   Ran 33 tests; FAILED (failures=29, errors=2) -> KILLED",
+    "     failing: HeldCodeCarriesItsActsTests.test_every_named_only_cell_names_its_acts",
+    "     failing: HeldCodeCarriesItsActsTests.test_the_held_snare_keeps_its_modifier_review_and_considerations",
+    "     failing: ModifierReviewTests.test_the_partner_code_offers_its_modifier_review_and_an_xs_approval_succeeds",
+    "   failing tests: 3",
+    "   restore sha256 b2aa6e5ef1743694==b2aa6e5ef1743694: True",
+    "final cpt-studio/studio/validation/engine.py 90ba74e8f50aac4b3118fdf9365d93bfab33433954b316baa15fe13c2b8303d8 True",
+    "final cpt-studio/studio/gi/services.py d0ed5996c0481554e40e621e0afe6fdb38569e32c7a6d6049990f357bf001242 True",
+    "final cpt-studio/studio/validation/reconcile.py b2aa6e5ef17436946c2c609a368690ab38720a89738bf2ab75adf5c19bdd6941 True",
+    "all killed: True"
+   ]
+  },
+  "tests": {
+   "named_set": "WT=<this worktree> tools/t.sh r5c1 tests.test_cux_r5_binding tests.test_cux_r3_reader tests.test_cux_r2_bind tests.test_cux_r2_em tests.test_cux_r2_variants tests.test_cux_bind tests.test_cux_hold tests.test_cux_lead tests.test_gi4_battery tests.test_gi4_state tests.test_harness_engine_parity tests.test_harness2_r2_parity tests.test_harness_pipeline tests.test_cux_review tests.test_customer_fixtures tests.test_cux_wire tests.test_cux_queue_recheck tests.test_services_reconcile: Ran 384 tests in 187.901s, OK (scratch-r5c/out/tests-r5c1.log)",
+   "full_suite": "/home/claude/cpt-studio-ux-20261103/tools/cilike-chunked.sh <this worktree> r5c5 scratch-r5c/ci/full 4 (the CI-like run on the throwaway server: check, makemigrations, the Django suite in four chunks, ops, the verification tests and the node suites): head 7e182e20876c2cea382d730622b729487d007194 prefix r5c5 chunks 4 start 2026-11-04T21:21:18Z; check exit 0; makemigrations exit 0; django-00.log Ran 1536 tests in 796.500s OK (skipped=1) exit 0; django-01.log Ran 1320 tests in 794.955s OK exit 0; django-02.log Ran 1428 tests in 862.708s OK (skipped=1) exit 0; django-03.log Ran 1527 tests in 720.743s OK (skipped=1) exit 0; ops.log Ran 524 tests in 96.060s OK exit 0; verification exit 0 Ran 41 tests in 1.278s OK; node ops/verification/test_verify_browser.cjs exit 0 pass 118 fail 0; node tests/frontend/app.test.cjs exit 0 pass 62 fail 0; node tests/operator/ops.test.cjs exit 0 pass 134 fail 0; end 2026-11-04T21:36:01Z",
+   "between_commits": "as the amendment declared: on cd1d7c92 and 93c0e015 tests/test_cux_hold.RegisterOfferTests fails (the amendment's offer_battery names the Z rows the battery did not yet have) and the hold-only form's tests/test_cux_r5_binding.py passes (measured on 93c0e015: 20 tests OK, RegisterOfferTests the one failure; scratch-r5c/out/t-r5c21-codecommit.log); from 7e182e20 both pass",
+   "unit_pins": "Moved, as declared: tests/test_cux_r5_binding.py - its row tests read the round-5b amendment (69 rows, 26 movements, 22 cost cells, the inventory acts with the Z rows), and 13 tests were added for the three fixes (SecondReviewAddsTheHeldCodeTests, MergedCueTests, HeldCodeCarriesItsActsTests, SecondReviewApprovedExportTests, AddendumLiftsTheHoldTests, ModifierReviewTests). No other test or pin moved: tests/test_cux_r3_reader.py, tests/test_cux_hold.py, the parity digests, tests/test_harness_pipeline, tests/test_gi4_battery's pins and tests/test_customer_fixtures pass on their committed fixtures."
+  },
+  "customer_surface": "Re-read on the sealed head (customer_flows): a named_only hold reaches a customer as needs_detail with the uncertain summary, the fixed performed_status qualification and detail row, reject its only action and no quote; where a partner code accounts for an act on another lesion both codes offer the separate-lesion modifier review. The reason id, the cue and the engine's stored question and detail reach none of the 30 surfaces read for each of the 1146 row and the Z3 shape; contract pass, denylist hard hits 0, assertClean pass.",
+  "findings_recorded_not_fixed": [
+   "Y-F3: a site the ANATOMY reader does not know (the dentate line, an anastomosis, a distance in cm, the incisura) counts as no site, so its act is in the class and its code is held where main and installed read READY. The lead's fixes do not touch it (declared_costs.hold_class.as_implemented; ACCURACY-RESIDUALS.md, round 5b).",
+   "The B3 probe with its EGD base code cited alone (dash and paren) reads 43235 READY where its truth says not done, on main, the hold-only head and this head; installed holds it. It comes from R1a-r3's drop of the act (round 3), is pre-existing on main and worse than installed in that shape, and is the only kind of violation the head has that installed lacks on the lead's cases. The --d variant would hold the dash form; it was not taken.",
+   "An addendum in which the inventory reads no statement of the act ('The cold snare polypectomy was performed on the date of service, as documented.', 'Polyp A was located in the sigmoid colon.', 'Correction: the snare removal of Polyp A took place in the colonoscopy.') leaves the hold, and the detail row's two answers still exclude the code.",
+   "The lead's note on the --d variant says it reads E3-1g's 45380 READY 'where main and installed hold it'; the lead's own output (rc4-x-41e03656df61.json) reads that cell READY on installed. Main and this form hold it.",
+   "ops.gi4.battery --declare reads only a declaration's top-level 'battery', so a superseding amendment is checked with a scratch file that copies its 'battery' verbatim (H4_battery)."
+  ]
  }
 }
