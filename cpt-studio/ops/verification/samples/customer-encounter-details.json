@@ -1,0 +1,259 @@
+{
+  "id": "7d0c4a52-2f6e-4c39-9a51-3b1e6f0d2a11",
+  "title": "Synthetic colonoscopy (two lesions)",
+  "created_at": "2026-11-03T22:00:00+00:00",
+  "updated_at": "2026-11-03T22:10:00+00:00",
+  "state": "awaiting_detail",
+  "state_label": "A few details needed",
+  "permissions": {
+    "can_review": true
+  },
+  "document": {
+    "kind": "paste",
+    "name": null,
+    "media_type": "text/plain",
+    "size": null,
+    "page_count": 1,
+    "revision": 1,
+    "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nPatient: Synthetic Patient Nine (fictional)\nDate of service: 2026-11-03\nProcedure: Colonoscopy with polyp removal.\nThe colonoscope was advanced to the cecum.\nCOL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.\nCOL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.\nPlan: upper endoscopy is scheduled next month.\nNo separate office evaluation and management encounter is documented on this date.\n",
+    "pages": [
+      {
+        "page": 1,
+        "start": 0,
+        "end": 525
+      }
+    ],
+    "reading": {
+      "status": "ok",
+      "label": "Text read",
+      "messages": []
+    },
+    "original_url": null
+  },
+  "service_date": {
+    "value": null,
+    "source": "conflict",
+    "document_value": "2026-11-03",
+    "document_quote": {
+      "text": "Date of service: 2026-11-03",
+      "start": 142,
+      "end": 169
+    },
+    "entered_value": "2026-11-02",
+    "conflict": true,
+    "can_use_document_date": true
+  },
+  "progress": {
+    "phase": "awaiting_detail",
+    "busy": false,
+    "steps": [
+      {
+        "key": "reading",
+        "label": "Reading your document",
+        "state": "done",
+        "started_at": "2026-11-03T22:00:01+00:00",
+        "finished_at": "2026-11-03T22:00:02+00:00"
+      },
+      {
+        "key": "identifying",
+        "label": "Identifying procedures",
+        "state": "done",
+        "started_at": "2026-11-03T22:00:02+00:00",
+        "finished_at": "2026-11-03T22:00:03+00:00"
+      },
+      {
+        "key": "checking",
+        "label": "Checking suggested codes",
+        "state": "done",
+        "started_at": "2026-11-03T22:00:03+00:00",
+        "finished_at": "2026-11-03T22:00:04+00:00"
+      },
+      {
+        "key": "preparing",
+        "label": "Preparing your results",
+        "state": "done",
+        "started_at": "2026-11-03T22:00:04+00:00",
+        "finished_at": "2026-11-03T22:00:05+00:00"
+      }
+    ],
+    "active_detail": "",
+    "started_at": "2026-11-03T22:00:01+00:00",
+    "finished_at": "2026-11-03T22:00:05+00:00",
+    "server_time": "2026-11-03T22:10:00+00:00",
+    "slow": false,
+    "message": "A few details are needed.",
+    "can_stop": false,
+    "can_resume": false,
+    "can_leave": true,
+    "error": null
+  },
+  "checks": [
+    {
+      "key": "document_review",
+      "label": "Document review",
+      "state": "done"
+    },
+    {
+      "key": "independent_checks",
+      "label": "Independent checks",
+      "state": "done"
+    },
+    {
+      "key": "coding_validation",
+      "label": "Coding validation",
+      "state": "done"
+    }
+  ],
+  "codes": [
+    {
+      "id": "a1f0b2c3-0001-4d5e-8f60-718293a4b5c6",
+      "number": 1,
+      "code": "45380",
+      "units": 1,
+      "modifiers": [],
+      "modifier_review": {
+        "options": [
+          "59",
+          "XS"
+        ],
+        "text": "The two removals are documented on separate lesions (COL-1 ascending colon, COL-2 sigmoid colon). The CMS claims manual example allows a distinct-lesion modifier for them; procedure-to-procedure edits and payer modifier policies are not checked. Choose a modifier only if it applies.",
+        "sources": [
+          "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+        ]
+      },
+      "status": "ready",
+      "status_label": "Ready for review",
+      "sub_label": "",
+      "summary": "The colonoscopy documents removal of the 4 mm ascending colon polyp (COL-1) with cold biopsy forceps.",
+      "why": {
+        "quotes": [
+          {
+            "text": "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.",
+            "start": 256,
+            "end": 329,
+            "page": 1,
+            "exact": true
+          }
+        ],
+        "qualifications": [
+          "Removed from a separate lesion; see the modifier review."
+        ]
+      },
+      "detail_ids": [],
+      "allowed_actions": [
+        "approve",
+        "reject"
+      ],
+      "decision": null
+    },
+    {
+      "id": "a1f0b2c3-0002-4d5e-8f60-718293a4b5c6",
+      "number": 2,
+      "code": "45385",
+      "units": 1,
+      "modifiers": [],
+      "modifier_review": {
+        "options": [
+          "59",
+          "XS"
+        ],
+        "text": "The two removals are documented on separate lesions (COL-1 ascending colon, COL-2 sigmoid colon). The CMS claims manual example allows a distinct-lesion modifier for them; procedure-to-procedure edits and payer modifier policies are not checked. Choose a modifier only if it applies.",
+        "sources": [
+          "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+        ]
+      },
+      "status": "needs_detail",
+      "status_label": "Needs a detail",
+      "sub_label": "",
+      "summary": "The colonoscopy documents removal of the 9 mm sigmoid colon polyp (COL-2) with a cold snare.",
+      "why": {
+        "quotes": [
+          {
+            "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.",
+            "start": 330,
+            "end": 394,
+            "page": 1,
+            "exact": true
+          }
+        ],
+        "qualifications": [
+          "Removed from a separate lesion; see the modifier review."
+        ]
+      },
+      "detail_ids": [
+        "detail-extent"
+      ],
+      "allowed_actions": [
+        "reject"
+      ],
+      "decision": null
+    }
+  ],
+  "other_codes": [
+    {
+      "code": "45378",
+      "reason": "Considered, not suggested: a diagnostic colonoscopy is included when a removal is coded."
+    }
+  ],
+  "not_separately_coded": [],
+  "details_needed": [
+    {
+      "id": "detail-service-date",
+      "fact": "service_date",
+      "family_label": "Encounter",
+      "prompt": "Which date of service applies?",
+      "control": "date",
+      "choices": [],
+      "allow": [],
+      "document_value": "2026-11-03",
+      "entered_value": "2026-11-02",
+      "quote": {
+        "text": "Date of service: 2026-11-03",
+        "start": 142,
+        "end": 169
+      },
+      "affects": [
+        "45380",
+        "45385"
+      ],
+      "saved": null,
+      "addendum_allowed": false
+    },
+    {
+      "id": "detail-extent",
+      "fact": "extent",
+      "family_label": "Colonoscopy",
+      "prompt": "Is the extent of the examination documented?",
+      "control": "confirm",
+      "choices": [],
+      "allow": [
+        "not_documented",
+        "cannot_confirm"
+      ],
+      "document_value": null,
+      "entered_value": null,
+      "quote": null,
+      "affects": [
+        "45385"
+      ],
+      "saved": null,
+      "addendum_allowed": true
+    }
+  ],
+  "unresolved": [],
+  "limitations": [
+    "CPT descriptions are withheld: no licensed CPT description is connected.",
+    "Procedure-to-procedure edits and payer modifier policies are not checked.",
+    "Whether each service was performed is read from the document; review the whole document."
+  ],
+  "readiness": {
+    "draft": true,
+    "approved": false,
+    "blockers": [
+      "45380 has no decision.",
+      "45385 needs a detail."
+    ]
+  },
+  "reports": [],
+  "activity": []
+}

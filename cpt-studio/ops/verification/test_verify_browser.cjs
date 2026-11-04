@@ -83,17 +83,21 @@ const failures = results => results.filter(r => r.status === 'fail').map(r => r.
 // --- arguments, helpers, session -----------------------------------------------------------
 
 test('parseArgs requires every input and normalises the base URL', () => {
-  const opts = vb.parseArgs(['--base-url', 'https://cpt.quillmd.com/x/', '--credentials', 'c.json', '--docs', 'd', '--manifest',
-    'm.json', '--out=o', '--only=gi-01, gi-03', '--deadline-seconds', '60', '--stop-on-failure']);
+  const opts = vb.parseArgs(['--base-url', 'https://cpt.quillmd.com/x/', '--credentials', 'c.json', '--operator-credentials', 'op.json',
+    '--docs', 'd', '--manifest', 'm.json', '--out=o', '--only=gi-01, gi-03', '--deadline-seconds', '60', '--stop-on-failure']);
   assert.equal(opts.baseUrl, 'https://cpt.quillmd.com');
   assert.deepEqual(opts.only, ['gi-01', 'gi-03']);
   assert.equal(opts.deadlineSeconds, 60);
   assert.equal(opts.stopOnFailure, true);
   assert.equal(opts.allowLiveProvider, false);
   assert.throws(() => vb.parseArgs(['--base-url', 'https://x']), /missing --credentials/);
-  assert.throws(() => vb.parseArgs(['--base-url', 'not a url', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o']), vb.UsageError);
-  assert.throws(() => vb.parseArgs(['--base-url', 'ftp://x', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o']), /http/);
-  assert.throws(() => vb.parseArgs(['--base-url', 'https://x', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o', '--deadline-seconds', '5']), /at least 10/);
+  assert.throws(() => vb.parseArgs(['--base-url', 'not a url', '--credentials', 'c', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o']), vb.UsageError);
+  assert.throws(() => vb.parseArgs(['--base-url', 'ftp://x', '--credentials', 'c', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o']), /http/);
+  assert.throws(() => vb.parseArgs(['--base-url', 'https://x', '--credentials', 'c', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o', '--deadline-seconds', '5']), /at least 10/);
+  // the operator session is not optional: every proof a customer may not be shown is read there
+  assert.throws(() => vb.parseArgs(['--base-url', 'https://x', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o']), /missing --operator-credentials/);
+  assert.equal(opts.noReloadWhileProcessing, false);
+  assert.equal(vb.parseArgs(['--base-url', 'https://x', '--credentials', 'c', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o', '--no-reload-while-processing']).noReloadWhileProcessing, true);
   assert.throws(() => vb.parseArgs(['--retry']), /unknown option/);
   assert.throws(() => vb.parseArgs(['stray']), /unexpected argument/);
 });
@@ -350,36 +354,8 @@ test('checkEvidenceMarks: the exact support.source passages of a selected propos
   assert.deepEqual(failures(vb.checkEvidenceMarks(enc, [...marks, { keys: ['p-colo:s2'], text: EXTENT }], cards)), ['dom.marks.known']);
 });
 
-test('checkDecisionDom requires the decided badge, the reviewer and the agent label', () => {
-  const enc = decided(decided(encounter(), 'p-flex', 'approve', 'n'), 'p-colo', 'reject', 'n');
-  const made = [{ proposal_id: 'p-flex', code: '45331', action: 'approve', http_status: 201 }, { proposal_id: 'p-colo', code: '45380', action: 'reject', http_status: 201 }];
-  const insight = `Approved by ${AGENT} 23 Oct 2026 · agent-executed synthetic review — not clinical approval`;
-  const cards = [{ id: 'card-p-flex', badge: 'Approved · agent', insight }, { id: 'card-p-colo', badge: 'Rejected', insight: insight.replace('Approved', 'Rejected') }];
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards)), []);
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [{ ...cards[0], badge: 'Approved' }, { ...cards[1], insight: 'Rejected by someone' }])), ['dom.decision.45331', 'dom.decision.45380']);
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [])), ['dom.decision.45331', 'dom.decision.45380']);
-  assert.deepEqual(vb.checkDecisionDom([{ ...made[0], http_status: 409 }], enc, []), []);
-});
 
-test('checkDownloads: every expected report downloaded with matching hashes; reviewed withheld until ready', () => {
-  const file = { http_status: 201, size: 10, sha256: 'a', api_sha256: 'a', refetch_sha256: 'a', header_sha256: 'a', report_id: 'r' };
-  const ready = { draft: true, reviewed: true };
-  const all = ['draft', 'reviewed'].flatMap(kind => ['txt', 'csv'].map(fmt => ({ ...file, kind, fmt })));
-  assert.deepEqual(failures(vb.checkDownloads(all, ready, null)), []);
-  assert.deepEqual(failures(vb.checkDownloads([{ ...all[0], api_sha256: 'b' }, ...all.slice(1)], ready, null)), ['download.draft.txt']);
-  assert.deepEqual(failures(vb.checkDownloads([{ ...all[0], refetch_sha256: 'b' }, ...all.slice(1)], ready, null)), ['download.draft.txt']);
-  assert.deepEqual(failures(vb.checkDownloads(all.slice(0, 3), ready, null)), ['download.reviewed.csv']);
-  assert.deepEqual(failures(vb.checkDownloads([{ ...all[1], error: 'download failed: canceled' }, all[0]], { draft: true, reviewed: false }, { offered: false })), ['download.draft.csv']);
-  assert.deepEqual(failures(vb.checkDownloads(all.slice(0, 2), { draft: true, reviewed: false }, { offered: true })), ['download.reviewed_withheld']);
-  assert.deepEqual(failures(vb.checkDownloads(all.slice(0, 2), { draft: true, reviewed: false }, { offered: false })), []);
-  assert.deepEqual(vb.expectedDownloads({ draft: false, reviewed: false }), []);
-});
 
-test('checkListing: every downloaded report is listed on the encounter with its sha256', () => {
-  const downloads = [{ kind: 'draft', fmt: 'txt', report_id: 'r1', sha256: 'a' }, { kind: 'draft', fmt: 'csv', report_id: 'r2', sha256: 'b' }];
-  const enc = encounter({ reports: [{ id: 'r1', kind: 'draft', fmt: 'txt', sha256: 'a' }, { id: 'r2', kind: 'draft', fmt: 'csv', sha256: 'c' }] });
-  assert.deepEqual(vb.checkListing(downloads, enc).map(r => r.status), ['pass', 'fail']);
-});
 
 test('documentResult fails on an error or a hard failure, never on warnings', () => {
   assert.equal(vb.documentResult({ error: null, assertions: [{ status: 'pass' }, { status: 'warn' }, { status: 'skipped' }] }), 'pass');
@@ -392,69 +368,6 @@ test('summarize records the state without the revision text', () => {
   assert.equal(summary.revision.characters, Array.from(TEXT).length);
   assert.equal(JSON.stringify(summary).includes(BIOPSY), false);
   assert.deepEqual(summary.proposals.map(p => [p.code, p.exact_evidence]), [['45331', 2], ['45380', 1], ['45330', 1], ['45378', 1]]);
-});
-
-// --- the live frontend's markup ---------------------------------------------------------------
-
-const APP = path.join(ROOT, 'studio', 'static', 'studio', 'app.js');
-const UNESCAPE = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'", '&#x60;': '`' };
-const unescape = text => text.replace(/&(amp|lt|gt|quot|#x27|#x60);/g, m => UNESCAPE[m]);
-const textOf = html => unescape(html.replace(/<[^>]*>/g, ''));
-
-function elements(html, tag, className) {
-  const out = [];
-  for (const match of html.matchAll(new RegExp(`<${tag}\\b([^>]*)>([\\s\\S]*?)</${tag}>`, 'g'))) {
-    const classes = (/\bclass="([^"]*)"/.exec(match[1]) || [])[1] || '';
-    if (classes.split(' ').includes(className)) out.push({ attrs: match[1], inner: match[2] });
-  }
-  return out;
-}
-
-function attr(attrs, name) {
-  return unescape((new RegExp(`\\b${name}="([^"]*)"`).exec(attrs) || [])[1] || '');
-}
-
-function parseReview(html) {
-  const marks = elements(html, 'button', 'evidence-mark').map(el => ({ keys: (attr(el.attrs, 'data-keys') || attr(el.attrs, 'data-evidence')).split(' ').filter(Boolean), text: textOf(el.inner) }));
-  const cards = elements(html, 'article', 'code-card').map(el => ({
-    id: attr(el.attrs, 'id'),
-    badge: textOf((/<div class="code-card-top">[\s\S]*?(<span class="status[^"]*">[\s\S]*?<\/span>)/.exec(el.inner) || [])[1] || '').trim(),
-    insight: textOf((/<div class="review-insight">([\s\S]*?)<\/div><\/div>/.exec(el.inner) || [])[1] || '').replace(/\s+/g, ' ').trim(),
-    unlocated: (el.inner.match(/class="evidence-chip unlocated"/g) || []).length,
-  }));
-  return { marks, cards };
-}
-
-test('the DOM checks agree with the markup the live app.js renders', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
-  const app = require(APP);
-  const enc = decided(decided(encounter(), 'p-flex', 'approve', NOTES.approve), 'p-colo', 'reject', NOTES.reject);
-  enc.assessment.proposals[0].evidence.push(at(EXTENT, { text: 'not in the source' }));
-  const html = app.reviewView(enc, app.documentLayout(enc), 'codes', false);
-  const { marks, cards } = parseReview(html);
-  // The overlapping biopsy spans share one mark; the span across a blank line is split in two.
-  assert.deepEqual(marks.map(m => m.keys), [['p-colo:0', 'p-flex:0'], ['p-flex:1'], ['p-flex:1']]);
-  assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks, cards)), []);
-  assert.equal(cards.find(c => c.id === 'card-p-flex').unlocated, 1);
-  const made = [{ proposal_id: 'p-flex', code: '45331', action: 'approve', http_status: 201 }, { proposal_id: 'p-colo', code: '45380', action: 'reject', http_status: 201 }];
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards)), []);
-  assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks.filter(m => !m.keys.includes('p-flex:1')), cards)), ['dom.marks.45331']);
-  const options = app.exportOptions({ draft: true, reviewed: false });
-  assert.ok(options.includes('data-export-kind="draft" data-export-fmt="txt"') && options.includes('data-export-kind="draft" data-export-fmt="csv"'));
-  assert.equal(options.includes('data-export-kind="reviewed"'), false);
-});
-
-// refutation p2, reports2:4: the support.source marks the live app.js renders - for a support that was checked and for
-// one that was not (not_applicable: the documented service's passages) - are read as known exact spans.
-test('the DOM checks read the support.source marks the live app.js renders as known', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
-  const app = require(APP);
-  for (const status of ['warn', 'not_applicable']) {
-    const enc = encounter();
-    enc.assessment.proposals[1].support = { status, source: [sourceSpan(EXTENT), sourceSpan(HISTORY)] };
-    const html = app.reviewView(enc, app.documentLayout(enc), 'codes', false);
-    const { marks, cards } = parseReview(html);
-    assert.ok(marks.some(m => m.keys.includes('p-colo:s0')) && marks.some(m => m.keys.includes('p-colo:s1')), status);
-    assert.deepEqual(failures(vb.checkEvidenceMarks(enc, marks, cards)), [], status);
-  }
 });
 
 // --- round 5: a confirmed exclusion has no code card (pipeline:3); the walk confirms only must_not_code (pipeline:5)
@@ -475,16 +388,6 @@ function confirmed(enc, id) {
   return enc;
 }
 
-test('checkDecisionDom reads a confirmed exclusion from its candidate row, not from a code card', () => {
-  const enc = confirmed(withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy'), 'p-plan');
-  const made = [{ proposal_id: 'p-plan', code: '45378', action: 'confirm', http_status: 201 }];
-  const row = { proposal: 'p-plan', text: `45378 · Colonoscopy Documented as planned, not as performed on the date of service. Exclusion confirmed by ${AGENT}. Undo decision` };
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [row])), []);
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [])), ['dom.decision.45378']);
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [{ ...row, text: 'Exclusion confirmed by someone else.' }])), ['dom.decision.45378']);
-  const undone = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy');
-  assert.deepEqual(failures(vb.checkDecisionDom(made, undone, [], [row])), ['dom.decision.45378']);
-});
 
 test('planConfirmations confirms only the families must_not_code names', () => {
   // pipeline:5's witness: a misread exclusion of the visit the author expects to be coded is never confirmed.
@@ -497,113 +400,6 @@ test('planConfirmations confirms only the families must_not_code names', () => {
     const other = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', extra);
     assert.deepEqual(vb.planConfirmations(other, [{ family: 'gi.colonoscopy' }], {}), [], JSON.stringify(extra));
   }
-});
-
-// --- round 6, pipeline:3: readDom's candidate rows, over the markup the live app renders -----------------------------
-//
-// A minimal DOM for readDom's own selectors (tag, .class, [attr="value"], compound and descendant), so the unit suite
-// runs the same $$eval callbacks the real walk runs in Chromium. Dropping the candidate rows from readDom must fail here.
-
-function parseHtml(html) {
-  const decode = text => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
-    .replace(/&#x60;/g, '`').replace(/&amp;/g, '&');
-  const VOID = new Set(['area', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-  const root = { tag: '#root', attrs: {}, children: [], parent: null };
-  let node = root;
-  const token = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|([^<]+)/g;
-  for (const m of html.matchAll(token)) {
-    if (m[5] !== undefined) { node.children.push({ text: decode(m[5]) }); continue; }
-    if (!m[2]) continue;
-    const tag = m[2].toLowerCase();
-    if (m[1]) {
-      let open = node;
-      while (open && open.tag !== tag) open = open.parent;
-      if (open && open.parent) node = open.parent;
-      continue;
-    }
-    const attrs = {};
-    for (const a of m[3].matchAll(/([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) attrs[a[1].toLowerCase()] = decode(a[2] ?? a[3] ?? a[4] ?? '');
-    const element = { tag, attrs, children: [], parent: node };
-    node.children.push(element);
-    if (!VOID.has(tag) && !m[4]) node = element;
-  }
-  return root;
-}
-
-function compoundMatches(node, compound) {
-  if (!node || !node.tag || node.tag === '#root') return false;
-  const tag = compound.match(/^[a-z][a-z0-9-]*/i);
-  if (tag && node.tag !== tag[0].toLowerCase()) return false;
-  const classes = (node.attrs.class || '').split(/\s+/);
-  for (const [, name] of compound.matchAll(/\.([\w-]+)/g)) if (!classes.includes(name)) return false;
-  for (const [, name, value] of compound.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)) {
-    if (!(name in node.attrs) || (value !== undefined && node.attrs[name] !== value)) return false;
-  }
-  return true;
-}
-
-function selectorMatches(node, selector) {
-  const parts = selector.trim().split(/\s+/);
-  if (!compoundMatches(node, parts.pop())) return false;
-  let ancestor = node.parent;
-  while (parts.length) {
-    while (ancestor && !compoundMatches(ancestor, parts[parts.length - 1])) ancestor = ancestor.parent;
-    if (!ancestor) return false;
-    parts.pop();
-    ancestor = ancestor.parent;
-  }
-  return true;
-}
-
-function wrap(node) {
-  const descendants = function* walk(n) { for (const child of n.children || []) { if (child.tag) { yield child; yield* walk(child); } } };
-  const text = n => (n.text !== undefined ? n.text : (n.children || []).map(text).join(''));
-  const dataset = {};
-  for (const [name, value] of Object.entries(node.attrs || {})) {
-    if (name.startsWith('data-')) dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
-  }
-  return {
-    id: node.attrs.id || '', dataset, textContent: text(node),
-    closest(selector) {
-      for (let n = node; n && n.tag !== '#root'; n = n.parent) if (selectorMatches(n, selector)) return wrap(n);
-      return null;
-    },
-    querySelector(selector) { for (const d of descendants(node)) if (selectorMatches(d, selector)) return wrap(d); return null; },
-    querySelectorAll(selector) { return [...descendants(node)].filter(d => selectorMatches(d, selector)).map(wrap); },
-  };
-}
-
-function fakePage(html) {
-  const root = parseHtml(html);
-  root.attrs = {};
-  const top = wrap(root);
-  return { $$eval: async (selector, fn) => fn(top.querySelectorAll(selector)) };
-}
-
-test('readDom reads a confirmed exclusion from its candidate row in the rendered page, and the decision check passes', async () => {
-  const app = require('../../studio/static/studio/app.js');
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'tests', 'fixtures', 'api', 'encounter-ready.json'), 'utf8'));
-  const id = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f';
-  const excluded = { ...doc.assessment.proposals[0], id, code: '45378', bucket: 'excluded', status: 'excluded', reinstatable: true,
-    exclusion_reason: 'Documented as planned, not as performed on the date of service.', reinstated_by: null,
-    decision: { action: 'confirm', reviewer: 'Review Agent One', reviewer_kind: 'agent' }, decision_state: 'exclusion_confirmed',
-    allowed_actions: ['revoke'], approve_withheld_by: null };
-  // A decided selected code shows its own undo button inside its code card: that one is not a candidate row.
-  const [first, ...rest] = doc.assessment.proposals;
-  const approved = { ...first, decision: { action: 'approve', reviewer: 'Review Agent One', reviewer_kind: 'agent' },
-    decision_state: 'approved', allowed_actions: ['revoke'] };
-  const enc = { ...doc, assessment: { ...doc.assessment, proposals: [approved, ...rest, excluded] } };
-  const html = app.reviewView(enc, app.documentLayout(enc), 'codes', true);
-  assert.ok(html.includes(`data-decision="revoke" data-proposal="${approved.id}"`), 'the code card has no undo button: the filter is untested');
-  const dom = await vb.readDom(fakePage(html));
-  assert.ok(Array.isArray(dom.candidates), 'readDom returned no candidate rows');
-  assert.deepEqual(dom.candidates.map(c => c.proposal), [id]);
-  assert.ok(dom.candidates[0].text.includes('Exclusion confirmed by Review Agent One'), dom.candidates[0].text);
-  assert.ok(dom.cards.length >= 1, 'the code cards were not read: the fake page proves nothing');
-  const made = [{ http_status: 201, action: 'confirm', proposal_id: id, code: '45378' }];
-  assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, dom.candidates).map(r => r.status), ['pass']);
-  // and the same check fails when the row is missing, as it did when readDom dropped the rows
-  assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, []).map(r => r.status), ['fail']);
 });
 
 test('a STOP file in the evidence directory stops the batch before the next upload', () => {
@@ -670,15 +466,15 @@ function editedEncounter(before, { date = DOCUMENTED, origin = 'user', userValue
   return enc;
 }
 
-const EDIT_OK = { http_status: 201, error: null, posted: { service_date: DOCUMENTED, setting: '', billing_context: '' },
-  identical: { via: 'api', form_posted: false, form_toast: 'No context change to save.', http_status: 201, error: null } };
+const EDIT_OK = { http_status: 201, error: null, posted: { answers: [{ id: 'detail-date', fact: 'service_date', value: DOCUMENTED }] },
+  identical: { via: 'api', http_status: 201, error: null, panel_asks_again: false } };
 const SERVICE_DATE_PLAN = { service_date: DOCUMENTED, clear_member_date: false };
 const CLEAR_PLAN = { service_date: '', clear_member_date: true };
 const clone = value => JSON.parse(JSON.stringify(value));
 const hardFailures = results => results.filter(r => r.severity === 'hard' && r.status === 'fail').map(r => r.id);
 
 test('parseArgs: --no-auto-approve is an option, off by default', () => {
-  const base = ['--base-url', 'https://x', '--credentials', 'c', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
+  const base = ['--base-url', 'https://x', '--credentials', 'c', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
   assert.equal(vb.parseArgs(base).noAutoApprove, false);
   assert.equal(vb.parseArgs([...base, '--no-auto-approve']).noAutoApprove, true);
   assert.throws(() => vb.parseArgs([...base, '--no-auto-approve=yes']), vb.UsageError);
@@ -818,9 +614,11 @@ test('checkContextEdit: a reused answer sends nothing and passes; the soft check
   const soft = vb.checkContextEdit(before, after, viaReuse, SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
   assert.deepEqual(hardFailures(soft), []);
   assert.deepEqual(statuses(soft, 'context_edit.identical_save_rechecks'), ['warn']);
-  // the screen posted an identical save instead of refusing it (the server then judged it)
-  const posted = { ...EDIT_OK, identical: { via: 'form', form_posted: true, form_toast: '', http_status: 201, error: null } };
-  assert.deepEqual(statuses(vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, posted, MEMBER), 'context_edit.form_refuses_identical'), ['warn']);
+  // after the save and a reload the details panel still asks the answered question (the server then judged the repeat)
+  const asked = { ...EDIT_OK, identical: { ...EDIT_OK.identical, panel_asks_again: true } };
+  assert.deepEqual(statuses(vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, asked, MEMBER), 'context_edit.panel_shows_saved'), ['warn']);
+  // the details endpoint may answer any 2xx; a 4xx is no save
+  assert.deepEqual(hardFailures(vb.checkContextEdit(before, after, clone(after), SERVICE_DATE_PLAN, { ...EDIT_OK, http_status: 200, identical: { ...EDIT_OK.identical, http_status: 204 } }, MEMBER)), []);
   // an unknown outcome is the operator's to reconcile: soft
   const unknown = editedEncounter(before, { runs: [hold(), run('run-u', { state: 'unknown', http_status: null, usage: {}, response_sha256: '' })] });
   const outcome = vb.checkContextEdit(before, unknown, clone(unknown), SERVICE_DATE_PLAN, EDIT_OK, MEMBER);
@@ -954,20 +752,6 @@ test('checkDecisionLabels: every decision made carries the agent label and its l
   assert.deepEqual(vb.checkDecisionLabels([], encounter(), MUST_NOT).checks.map(r => r.status), ['pass', 'pass']);
 });
 
-test('the context step\'s selectors and the screen behaviour it relies on are the live frontend\'s', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
-  const app = require(APP);
-  const source = fs.readFileSync(APP, 'utf8');
-  const page = fs.readFileSync(path.join(ROOT, 'studio', 'templates', 'studio', 'index.html'), 'utf8');
-  for (const id of ['contextDialog', 'contextForm', 'contextServiceDate', 'contextSetting', 'contextBilling', 'saveContext', 'serviceDate', 'toast']) {
-    assert.ok(page.includes(`id="${id}"`), id);
-  }
-  const idle = encounter();
-  assert.ok(app.reviewView(idle, app.documentLayout(idle), 'codes', false).includes('data-action="edit-context"'));
-  const busy = encounter({ pipeline: { busy: true, can_stop: true, stages: [] } });
-  assert.equal(app.reviewView(busy, app.documentLayout(busy), 'codes', false).includes('data-action="edit-context"'), false);
-  assert.ok(source.includes("toast('No context change to save.')"), 'the screen no longer refuses an identical save with that message');
-  assert.ok(/\nasync function api\(path, \{ method = 'GET', json, form \} = \{\}\)/.test(source), 'the page\'s api() client changed');
-});
 
 // --- fix round gi2, agent 'truth' (refutation lens 'ops') ------------------------------------------------------------
 //
@@ -1221,8 +1005,8 @@ test('verifyDocument refuses an attached encounter the gate rejects before it ed
   const body = source.slice(source.indexOf('async function verifyDocument('));
   const refusal = body.indexOf('if (foreign.length) throw new Error(`refusing to act on encounter');
   assert.ok(refusal > 0, 'the attach refusal is not in verifyDocument');
-  assert.ok(body.indexOf('const foreign = record.attached ? attachedProblems(enc, item) : [];') < refusal);
-  for (const act of ['await editContext(', 'await askSecondReview(', 'await decide(']) {
+  assert.ok(body.indexOf('const foreign = record.attached ? attachedProblems(opView, item) : [];') < refusal);
+  for (const act of ['await editContext(', 'await saveDetails(', 'await decide(']) {
     const at = body.indexOf(act);
     assert.ok(at > refusal, `${act} comes before the attach refusal`);
   }
@@ -1253,8 +1037,8 @@ const DATE_QUESTION = { id: 'c-date', scope: 'encounter', proposal_id: null, fam
   reason: 'Conflicting dates of service are documented (“Date of procedure: 2026-10-07”, “Date of service: 2026-10-08”); '
     + 'every service and every dated reference check depends on it.' };
 const USER_NOTE = 'Supplied by a workspace member as encounter metadata; not clinical documentation.';
-const ANSWER_EDIT = { http_status: 201, error: null, posted: { service_date: ANSWER, setting: '', billing_context: '' },
-  identical: { via: 'api', form_posted: false, form_toast: 'No context change to save.', http_status: 201, error: null } };
+const ANSWER_EDIT = { http_status: 201, error: null, posted: { answers: [{ id: 'detail-date', fact: 'service_date', value: ANSWER }] },
+  identical: { via: 'api', http_status: 201, error: null, panel_asks_again: false } };
 const QUESTION_HARD = ['context_edit.question_open', 'context_edit.date_unestablished', 'context_edit.dateless_before',
   'context_edit.request', 'context_edit.date_after', 'context_edit.one_request', 'context_edit.sent_at_most_once',
   'context_edit.earlier_runs_kept', 'context_edit.question_closed', 'context_edit.identical_save'];
@@ -1502,166 +1286,9 @@ test('the date question, the dateless request and the answer the walk reads are 
   assert.ok(jobs.includes('    # The bounded second review is never queued here: a workspace owner or reviewer asks for it'));
 });
 
-// A scripted page for verifyDocument's attached walk (--encounter): GET /api/encounters/<id> serves the encounter of
-// the stage reached; the context form behaves as app.js's openContext and submitContext do (prefilled from the
-// member's values; a save that changes nothing closes with a toast and sends nothing); page.evaluate is the page's
-// api() client. Every act is recorded; anything else the walk asks of it is not a function, so a step the walk was not
-// expected to take ends it with an error.
-function walkPage(id, states) {
-  const base = 'https://cpt.example';
-  const target = `/api/encounters/${id}/context`;
-  const acts = [];
-  const posts = [];
-  let current = states[0];
-  let url = 'about:blank';
-  let dialog = null;
-  let toast = '';
-  let pendingRequest = null;
-  let pendingResponse = null;
-  const serve = body => {
-    posts.push(body);
-    current = states[Math.min(posts.length, states.length - 1)];
-    return { status: () => 201, json: async () => ({ context_id: `ctx-${posts.length}` }) };
-  };
-  const answered = response => ({ status: () => response.status(), json: response.json, url: () => `${base}${target}`,
-    request: () => ({ method: () => 'POST' }) });
-  const deferred = () => {
-    let resolve;
-    const promise = new Promise(done => { resolve = done; });
-    return { promise, resolve };
-  };
-  const locator = selector => {
-    const self = {
-      first: () => self,
-      count: async () => (selector === 'button[data-action="edit-context"]' || selector === '#exportDialog[open]' ? 1 : 0),
-      click: async () => {
-        if (selector !== 'button[data-action="edit-context"]') throw new Error(`unexpected click on ${selector}`);
-        acts.push('open the context form');
-        dialog = { value: current.context.user_values.service_date || '', closed: deferred() };
-      },
-      waitFor: async ({ state } = {}) => {
-        if (selector !== '#contextDialog') throw new Error(`unexpected wait for ${selector}`);
-        if (state === 'visible' && !dialog) throw new Error('the context dialog is not open');
-        if (state === 'hidden' && dialog) await dialog.closed.promise;
-      },
-      textContent: async () => (selector === '#toast' ? toast : ''),
-    };
-    return self;
-  };
-  const page = {
-    acts, posts,
-    goto: async next => { url = next; },
-    url: () => url,
-    waitForURL: async predicate => { if (!predicate(new URL(url))) throw new Error(`not at ${url}`); },
-    request: { get: async address => {
-      const where = new URL(address).pathname;
-      if (where === `/api/encounters/${id}`) return { ok: () => true, status: () => 200, json: async () => clone(current) };
-      if (where === `/api/encounters/${id}/original`) return { ok: () => false, status: () => 404, body: async () => Buffer.alloc(0) };
-      throw new Error(`unexpected GET ${where}`);
-    } },
-    waitForFunction: async () => true,
-    $$eval: async () => [],
-    locator,
-    inputValue: async selector => (selector === '#contextServiceDate' ? dialog.value : ''),
-    fill: async (selector, value) => {
-      if (selector !== '#contextServiceDate') throw new Error(`unexpected fill of ${selector}`);
-      acts.push(`fill the service date with ${JSON.stringify(value)}`);
-      dialog.value = value;
-    },
-    waitForRequest: () => { pendingRequest = deferred(); return pendingRequest.promise; },
-    waitForResponse: () => { pendingResponse = deferred(); return pendingResponse.promise; },
-    click: async selector => {
-      if (selector !== '#saveContext') throw new Error(`unexpected click on ${selector}`);
-      const values = current.context.user_values;
-      const body = { service_date: dialog.value, setting: values.setting || '', billing_context: values.billing_context || '' };
-      const closing = dialog.closed;
-      dialog = null;
-      if (Object.keys(body).every(name => body[name] === (values[name] || ''))) {  // app.js submitContext
-        acts.push('the form refused an identical save');
-        toast = 'No context change to save.';
-        closing.resolve();
-        return;
-      }
-      acts.push('the form posted');
-      const response = serve(body);
-      pendingRequest?.resolve({ method: () => 'POST', url: () => `${base}${target}`, postDataJSON: () => body, response: async () => response });
-      pendingResponse?.resolve(answered(response));
-      setTimeout(() => closing.resolve(), 5);
-    },
-    evaluate: async (fn, [encounterId, json]) => {
-      assert.equal(encounterId, id);
-      acts.push('the page api() posted');
-      pendingResponse?.resolve(answered(serve(json)));
-      return null;
-    },
-    reload: async () => { acts.push('reload'); dialog = null; },
-    keyboard: { press: async () => {} },
-    setViewportSize: async () => {},
-    waitForTimeout: async () => {},
-    screenshot: async () => {},
-  };
-  return page;
-}
 
-// extra: options for the walk (opts) and the manifest's review_notes (notes), for the acceptance reviewer's walk
-async function walkQuestion(states, expectedClarifications = [], extra = {}) {
-  const id = '0b9e3f7a-1c2d-4e5f-8a9b-0c1d2e3f4a5b';
-  const out = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'cpt-verify-question-'));
-  try {
-    const doc = { id: 'gi3-question', title: 'documented date question', source: 'documents/gi3-question.txt',
-      delivery: { format: 'paste', file: 'gi3-question.paste.txt' }, upload: { service_date: null }, expected_extraction: {},
-      expected_context: {}, expected_routing: {}, expected_clarifications: expectedClarifications, must_not_code: [],
-      incomplete_services: [], review_plan: { reject: null, context_edit: { service_date: ANSWER } } };
-    const item = { doc, sourceText: QUESTION_TEXT,
-      delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(QUESTION_TEXT), size: Buffer.byteLength(QUESTION_TEXT) } };
-    const page = walkPage(id, states.map(state => ({ ...clone(state), id })));
-    const opts = { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60, noAutoApprove: false, ...extra.opts };
-    const notes = extra.notes || { approve: 'Agent-executed synthetic verification review' };
-    const record = await vb.verifyDocument(page, opts, { review_notes: notes }, item, []);
-    return { record, acts: page.acts, posts: page.posts };
-  } finally {
-    fs.rmSync(out, { recursive: true, force: true });
-  }
-}
 
-test('the walk answers an open date question through the form once, repeats it through api(), and judges both', async () => {
-  const before = questionEncounter();
-  const after = answeredEncounter(before);
-  const { record, acts, posts } = await walkQuestion([before, after, clone(after)], [{ fact: 'service_date', scope_in: ['encounter'] }]);
-  assert.equal(record.error, null);
-  assert.deepEqual(acts, ['open the context form', 'fill the service date with "2026-10-08"', 'the form posted', 'reload',
-    'open the context form', 'fill the service date with "2026-10-08"', 'the form refused an identical save', 'the page api() posted', 'reload',
-    'reload']);
-  assert.deepEqual(posts, [ANSWER_EDIT.posted, ANSWER_EDIT.posted]);
-  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
-  assert.deepEqual(record.assertions.filter(a => a.id.startsWith('context_edit.') && a.severity === 'hard').map(a => `${a.id}:${a.status}`),
-    QUESTION_HARD.map(id => `${id}:pass`));
-  assert.equal(record.result, 'pass');
-  assert.deepEqual([record.context_edit.answers_question, record.context_edit.http_status, record.context_edit.request_date,
-    record.context_edit.expected_request_sha256, record.context_edit.identical.via, record.context_edit.identical.form_toast],
-  [true, 201, ANSWER, QUESTION_REQUEST[ANSWER], 'api', 'No context change to save.']);
-});
 
-test('the walk makes no edit when the date question is not open: nothing is posted, and the run fails saying why', async () => {
-  for (const [label, change] of [
-    ['no question', enc => { enc.clarifications = []; }],
-    ['a dated request already sent', enc => { enc.provider_runs[0].request_sha256 = QUESTION_REQUEST['2026-10-07']; }],
-    ['a service date established', enc => { enc.context.facts.service_date = { name: 'service_date', value: DOCUMENTED, origin: 'document',
-      member_conflict: false, note: '', evidence: [inQuestion('Date of procedure: 2026-10-07')] }; }],
-  ]) {
-    const before = questionEncounter();
-    change(before);
-    const { record, acts, posts } = await walkQuestion([before, answeredEncounter(before)]);
-    assert.equal(record.error, null, label);
-    assert.deepEqual([acts.filter(act => act !== 'reload'), posts], [[], []], label);
-    assert.equal(record.context_edit.http_status, null, label);
-    assert.match(record.context_edit.error, /^not made: context_edit\.\w+ failed, so the edit has nothing verified to answer$/, label);
-    const failed = record.assertions.filter(a => a.status === 'fail').map(a => a.id);
-    assert.equal(failed.includes('context_edit.request'), true, label);
-    assert.equal(failed.filter(id => ['context_edit.question_open', 'context_edit.date_unestablished', 'context_edit.dateless_before'].includes(id)).length, 1, label);
-    assert.equal(record.result, 'fail', label);
-  }
-});
 
 // --- the ordinary-reviewer acceptance mode (CPT Studio GI interpretation 63) ------------------------------------------
 //
@@ -1720,12 +1347,10 @@ function writeFile(dir, name, content, mode = 0o600) {
   return file;
 }
 
-const SIGN_IN = ['--base-url', 'https://x', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
+const SIGN_IN = ['--base-url', 'https://x', '--operator-credentials', 'op', '--docs', 'd', '--manifest', 'm', '--out', 'o'];
 
 test('a human approval as the app records it: the account\'s actor kind, its label, the human attestation the session serves', () => {
-  const app = require(APP);
   const human = attestation('human');
-  assert.equal(human, app.ACKNOWLEDGEMENTS.human, 'studio/review.py and app.js hold different human attestations');
   assert.notEqual(human, attestation('agent'));
   assert.ok(REVIEW_PY.includes('        if action == APPROVE and acknowledgement != ACKNOWLEDGEMENTS.get(user.actor_kind):\n'),
     'an approval no longer has to carry the attestation of its own actor kind');
@@ -1855,11 +1480,11 @@ async function runMain(args, debug) {
   }
 }
 
-test('main refuses a password-file run under such a DEBUG before reading anything; a credentials run is refused as before', async () => {
+test('main refuses any run under such a DEBUG before reading anything: every run types the operator\'s password', async () => {
   const dir = privateDir();
   try {
-    const missing = [ '--base-url', 'https://x', '--docs', path.join(dir, 'docs'), '--manifest', path.join(dir, 'no-manifest.json'),
-      '--out', path.join(dir, 'out')];
+    const missing = [ '--base-url', 'https://x', '--operator-credentials', path.join(dir, 'ops.json'), '--docs', path.join(dir, 'docs'),
+      '--manifest', path.join(dir, 'no-manifest.json'), '--out', path.join(dir, 'out')];
     const pwArgs = [...missing, '--password-file', path.join(dir, 'no-password-file'), '--username', 'demo-reviewer'];
     const refused = await runMain(pwArgs, 'pw:protocol');
     assert.equal(refused.code, 2);
@@ -1869,10 +1494,12 @@ test('main refuses a password-file run under such a DEBUG before reading anythin
     for (const args of [pwArgs, [...missing, '--credentials', path.join(dir, 'agent.json')]]) {
       assert.match((await runMain(args, 'pw:api')).err, /^verify_browser: refusing to run with DEBUG=pw:api: Playwright would log the password\n/);
     }
-    // a credentials run under pw:protocol is not refused for it (unchanged): it stops on the missing manifest instead
+    // a credentials run is refused too: the operator's password is typed into the sign-in form in every run
     const agent = await runMain([...missing, '--credentials', path.join(dir, 'agent.json')], 'pw:protocol');
     assert.equal(agent.code, 2);
-    assert.match(agent.err, /^verify_browser: cannot read manifest /);
+    assert.match(agent.err, /^verify_browser: refusing to run with DEBUG=pw:protocol: a Playwright call, channel or protocol log would carry the password\n/);
+    // without DEBUG a credentials run reads its inputs first: the manifest
+    assert.match((await runMain([...missing, '--credentials', path.join(dir, 'agent.json')], undefined)).err, /^verify_browser: cannot read manifest /);
     // without DEBUG the password-file run reads its inputs first: the manifest, then the password file
     assert.match((await runMain(pwArgs, undefined)).err, /^verify_browser: cannot read manifest /);
   } finally {
@@ -2016,7 +1643,7 @@ test('the reload check: each approval is the human reviewer\'s with its note kep
   assert.deepEqual(vb.checkAcceptanceDecisions([], encounter(), MUST_NOT, ACCOUNT).checks.map(r => r.status), ['pass', 'pass']);
 });
 
-test('checkPersistence and checkDecisionDom hold a human approval to the acceptance mode, and an agent\'s to agent mode', () => {
+test('checkPersistence holds a human approval to the acceptance mode, and an agent\'s to agent mode', () => {
   const before = encounter();
   const after = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE);
   const made = [{ proposal_id: 'p-flex', code: '45331', action: 'approve', note: ACC_NOTE, http_status: 201 }];
@@ -2024,219 +1651,21 @@ test('checkPersistence and checkDecisionDom hold a human approval to the accepta
   assert.deepEqual(failures(vb.checkPersistence(made, before, after, after)), ['persist.decision.45331']);
   const agentAfter = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE, AGENT_ACCOUNT);
   assert.deepEqual(failures(vb.checkPersistence(made, before, agentAfter, agentAfter, 'human')), ['persist.decision.45331']);
-  const card = { id: 'card-p-flex', badge: 'Approved', insight: `Approved by Demo Reviewer 1 Nov 2026 · revision 1 · Note: ${ACC_NOTE}` };
-  const dom = (cards, decisions = made, shape = after) => vb.checkDecisionDom(decisions, shape, cards, [], { acceptance: true });
-  assert.deepEqual(dom([card]).map(r => `${r.id}:${r.status}`), ['dom.decision.45331:pass']);
-  assert.deepEqual(failures(dom([{ ...card, badge: 'Approved · agent' }])), ['dom.decision.45331']);
-  assert.deepEqual(failures(dom([{ ...card, badge: 'Ready for review' }])), ['dom.decision.45331']);
-  assert.deepEqual(failures(dom([{ ...card, insight: 'Approved by someone' }])), ['dom.decision.45331']);
-  assert.deepEqual(failures(dom([])), ['dom.decision.45331']);
-  assert.match(dom([], [{ ...made[0], action: 'reject' }])[0].reason, /the acceptance reviewer makes approvals only/);
-  // agent mode is unchanged: the same human card fails it (no agent label)
-  assert.deepEqual(failures(vb.checkDecisionDom(made, after, [card], [])), ['dom.decision.45331']);
+  // the row on the customer page: Approved, never labelled as an agent's for the acceptance reviewer; an agent's must be
+  const row = sub => ({ rows: [{ proposal: 'p-flex', status: 'approved', status_text: 'Approved', sub, modifiers: '' }] });
+  assert.deepEqual(failures(vb.checkDecisionRows(made, null, row(''), { acceptance: true })), []);
+  assert.deepEqual(failures(vb.checkDecisionRows(made, null, row('Agent-executed synthetic review — not clinical approval'), { acceptance: true })), ['dom.decision.45331']);
+  assert.deepEqual(failures(vb.checkDecisionRows(made, null, row(''))), ['dom.decision.45331']);
+  assert.deepEqual(failures(vb.checkDecisionRows(made, null, { rows: [] }, { acceptance: true })), ['dom.decision.45331']);
 });
 
-test('the acceptance checks agree with the markup the live app.js renders for a human approval, and record it verbatim', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, () => {
-  const app = require(APP);
-  const enc = decidedBy(encounter(), 'p-flex', 'approve', ACC_NOTE);
-  const { cards } = parseReview(app.reviewView(enc, app.documentLayout(enc), 'codes', false));
-  const card = cards.find(c => c.id === 'card-p-flex');
-  assert.ok(card, 'no code card for the approved code');
-  const made = [{ proposal_id: 'p-flex', code: '45331', family: 'gi.flex_sig', action: 'approve', note: ACC_NOTE, http_status: 201, decision_id: 'd-p-flex' }];
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards, [], { acceptance: true })), []);
-  const result = vb.checkAcceptanceDecisions(made, enc, MUST_NOT, ACCOUNT, cards);
-  assert.deepEqual(failures(result.checks), []);
-  assert.deepEqual([result.labels[0].card_badge, result.labels[0].card_insight], [card.badge, card.insight]);
-  // what the app shows for it: approved, not as an agent's, by the reviewer, with the labelled note
-  assert.equal(card.badge, 'Approved');
-  assert.ok(card.insight.startsWith('Approved by Demo Reviewer'), card.insight);
-  assert.ok(card.insight.includes(`Note: ${ACC_NOTE}`) && !/agent/i.test(card.insight), card.insight);
-  // and agent mode fails the same card
-  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, cards, [])), ['dom.decision.45331']);
-});
 
-// A scripted review page for verifyDocument's decisions (an attached, pasted encounter). GET /api/encounters/<id> serves
-// the encounter as decided so far; the page is the live app.js's reviewView of it, read through readDom's own selectors
-// (parseHtml, wrap); a decision is made only as the screen makes one - its button, the review dialog, the acknowledgement
-// box for an approval, the note, Save - and recorded as studio/review.py records it for ``account`` (app.js submitReview
-// posts the trimmed note and, for an approval, the session's attestation). Every act is recorded; anything else the
-// walk asks of the page ends it with an error.
-function reviewPage(id, start, account) {
-  const app = require(APP);
-  const acts = [];
-  const posts = [];
-  let current = clone(start);
-  let url = 'about:blank';
-  let dialog = null;
-  let pending = null;
-  const dom = () => {
-    const root = parseHtml(app.reviewView(current, app.documentLayout(current), 'codes', false));
-    root.attrs = {};
-    return wrap(root);
-  };
-  const locator = selector => {
-    const self = {
-      first: () => self,
-      count: async () => {
-        if (selector === '#exportDialog[open]') return 1;  // read as open: the walk only asks it what it offers
-        if (selector.startsWith('#exportOptions ')) return 0;  // nothing is ready to export (readiness says none)
-        if (selector.startsWith('button[data-decision=')) return dom().querySelectorAll(selector).length;
-        throw new Error(`unexpected count of ${selector}`);
-      },
-      click: async () => {
-        const match = /^button\[data-decision="(\w+)"\]\[data-proposal="([^"]+)"\]$/.exec(selector);
-        if (!match || !dom().querySelectorAll(selector).length) throw new Error(`unexpected click on ${selector}`);
-        dialog = { action: match[1], proposal: match[2], acknowledged: false, note: '' };
-        acts.push(`open the ${match[1]} dialog for ${match[2]}`);
-      },
-      waitFor: async ({ state } = {}) => {
-        if (selector !== '#reviewDialog') throw new Error(`unexpected wait for ${selector}`);
-        if ((state === 'visible') !== Boolean(dialog)) throw new Error(`the review dialog is not ${state}`);
-      },
-    };
-    return self;
-  };
-  return {
-    acts, posts, current: () => current,
-    goto: async next => { url = next; },
-    url: () => url,
-    waitForURL: async predicate => { if (!predicate(new URL(url))) throw new Error(`not at ${url}`); },
-    request: { get: async address => {
-      const where = new URL(address).pathname;
-      if (where === `/api/encounters/${id}`) return { ok: () => true, status: () => 200, json: async () => clone(current) };
-      if (where === `/api/encounters/${id}/original`) return { ok: () => false, status: () => 404, body: async () => Buffer.alloc(0) };
-      throw new Error(`unexpected GET ${where}`);
-    } },
-    waitForFunction: async () => true,
-    $$eval: async (selector, fn) => fn(dom().querySelectorAll(selector)),
-    locator,
-    check: async selector => {
-      if (selector !== '#reviewAcknowledgement' || !dialog) throw new Error(`unexpected check of ${selector}`);
-      dialog.acknowledged = true;
-    },
-    fill: async (selector, value) => {
-      if (selector !== '#reviewNote' || !dialog) throw new Error(`unexpected fill of ${selector}`);
-      dialog.note = value;
-    },
-    waitForResponse: () => {
-      let resolve;
-      const promise = new Promise(done => { resolve = done; });
-      pending = { promise, resolve };
-      return promise;
-    },
-    click: async selector => {
-      if (selector !== '#saveReview' || !dialog) throw new Error(`unexpected click on ${selector}`);
-      if (dialog.action === 'approve' && !dialog.acknowledged) throw new Error('the screen refuses an approval without its acknowledgement');
-      const body = { proposal_id: dialog.proposal, action: dialog.action, note: dialog.note.trim(),
-        acknowledgement: dialog.action === 'approve' ? account.acknowledgement : '' };
-      posts.push(body);
-      decidedBy(current, body.proposal_id, body.action, body.note, account);
-      const decision = current.assessment.proposals.find(p => p.id === body.proposal_id).decision;
-      acts.push(`${body.action} ${decision.code}`);
-      dialog = null;
-      pending.resolve({ status: () => 201, json: async () => clone(decision) });
-    },
-    reload: async () => { acts.push('reload'); },
-    keyboard: { press: async () => {} },
-    setViewportSize: async () => {},
-    waitForTimeout: async () => {},
-    screenshot: async () => {},
-  };
-}
 
-// gi-08 pasted, its two codes ready, an exclusion of a must_not_code family to confirm and a second review on offer: an
-// agent walk would approve, reject, confirm and ask; the acceptance walk only approves.
-function acceptanceEncounter() {
-  const enc = withExcluded(pastedEncounter(), 'p-plan', '43260', 'gi.ercp');
-  enc.second_review = { available: true, can_request: true, items: ['Service S1'], reason: '' };
-  enc.readiness = { draft: false, reviewed: false, blockers: ['Every selected code needs a decision.'] };
-  return enc;
-}
 
-async function walkDecisions({ opts = {}, notes, account, reviewPlan }) {
-  const id = '6c1f0e9a-2b3d-4c5e-8f9a-0b1c2d3e4f5a';
-  const out = privateDir();
-  try {
-    const doc = { id: 'acceptance-walk', title: 'acceptance walk', source: 'documents/gi-08-flexible-sigmoidoscopy-biopsy.txt',
-      delivery: { format: 'paste', file: 'gi-08.paste.txt' }, upload: { service_date: null }, expected_extraction: {},
-      expected_context: {}, expected_routing: {}, expected_clarifications: [], incomplete_services: [],
-      must_not_code: [{ family: 'gi.ercp', reason: 'documented as planned, not performed' }], review_plan: reviewPlan };
-    const item = { doc, sourceText: TEXT, delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(TEXT), size: Buffer.byteLength(TEXT) } };
-    const page = reviewPage(id, { ...acceptanceEncounter(), id }, account);
-    const record = await vb.verifyDocument(page, { out, baseUrl: 'https://cpt.example', encounter: id, deadlineSeconds: 60,
-      noAutoApprove: false, ...opts }, { review_notes: notes }, item, []);
-    return { record, acts: page.acts, posts: page.posts, final: page.current() };
-  } finally {
-    fs.rmSync(out, { recursive: true, force: true });
-  }
-}
 
-const ACCEPTANCE_PLAN = { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] }, approve_codes: ['45331'],
-  second_review: { ask: true, approve_codes: ['45380'] } };
 
-test('the acceptance walk approves only the named code, through the screen, as the human reviewer, and records what it did not do', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
-  const { record, acts, posts, final } = await walkDecisions({ opts: { acceptanceReviewer: true, noAutoApprove: true, account: ACCOUNT },
-    notes: { ...ACC_NOTES, reject: AGENT_NOTES.reject }, account: ACCOUNT, reviewPlan: ACCEPTANCE_PLAN });
-  assert.equal(record.error, null);
-  assert.deepEqual(acts, ['open the approve dialog for p-flex', 'approve 45331', 'reload']);
-  assert.deepEqual(posts, [{ proposal_id: 'p-flex', action: 'approve', note: ACC_NOTE, acknowledgement: attestation('human') }]);
-  assert.deepEqual(record.decisions.map(d => [d.code, d.action, d.http_status, d.reviewer_kind, d.note]), [['45331', 'approve', 201, 'human', ACC_NOTE]]);
-  assert.deepEqual(final.assessment.proposals.map(p => `${p.code}:${p.decision_state}`),
-    ['45331:approved', '45380:undecided', '45330:undecided', '45378:undecided', '43260:undecided']);
-  const card = record.decision_labels[0].card_insight;
-  assert.deepEqual({ ...record.decision_labels[0], card_insight: undefined }, { code: '45331', action: 'approve', decision_id: 'd-p-flex',
-    recorded: true, approval: true, human: true, reviewer: 'Demo Reviewer', reviewer_is_account: true, note_kept: true, note_labelled: true,
-    acknowledgement: attestation('human'), acknowledgement_is_session_attestation: true, card_badge: 'Approved', card_insight: undefined });
-  assert.ok(card.startsWith('Approved by Demo Reviewer') && card.includes(`Note: ${ACC_NOTE}`), card);
-  const by = Object.fromEntries(record.assertions.map(a => [a.id, a]));
-  for (const id of ['second_review.asked', 'decisions.rejection', 'decisions.confirmations']) assert.equal(by[id]?.status, 'skipped', id);
-  assert.match(by['decisions.confirmations'].reason, /left undecided: 43260$/);
-  assert.match(by['decisions.not_in_approve_codes'].reason, /--acceptance-reviewer\): 45380$/);
-  for (const id of ['persist.decision.45331', 'dom.decision.45331', 'decisions.labelled', 'decisions.never_approved_must_not_code',
-    'readiness.reviewed_blocked']) assert.equal(by[id]?.status, 'pass', id);
-  assert.equal(record.designated_rejection, null);
-  assert.equal(record.second_review, undefined);
-  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
-  assert.equal(record.result, 'pass');
-});
 
-test('the agent walk on the same page and plan still approves, rejects the designated code and confirms the exclusion', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
-  const { second_review: _asked, ...plan } = ACCEPTANCE_PLAN;  // the scripted page does not answer a second review
-  const { record, acts, posts } = await walkDecisions({ notes: AGENT_NOTES, account: AGENT_ACCOUNT, reviewPlan: plan });
-  assert.equal(record.error, null);
-  assert.deepEqual(acts, ['open the approve dialog for p-flex', 'approve 45331', 'open the reject dialog for p-colo', 'reject 45380',
-    'open the confirm dialog for p-plan', 'confirm 43260', 'reload']);
-  assert.deepEqual(posts.map(p => [p.action, p.acknowledgement]), [['approve', attestation('agent')], ['reject', ''], ['confirm', '']]);
-  assert.equal(record.designated_rejection, '45380');
-  assert.deepEqual(record.decision_labels.map(l => [l.code, l.agent, l.note_kept, l.note_labelled, l.acknowledgement_labelled]),
-    [['45331', true, true, true, true], ['45380', true, true, true, null], ['43260', true, true, true, null]]);
-  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
-  assert.equal(record.result, 'pass');
-  // the same agent walk with the acceptance reviewer's note is refused before anything is uploaded
-  assert.match(vb.planProblems({ id: 'acceptance-walk', review_plan: plan }, ACC_NOTES)[0], /must say "agent-executed synthetic"/);
-});
 
-test('the acceptance walk answers the clarification the document needs once, records it as a clarification answer, and saves nothing else', async () => {
-  const before = questionEncounter();
-  const after = answeredEncounter(before);
-  const { record, acts, posts } = await walkQuestion([before, after], [{ fact: 'service_date', scope_in: ['encounter'] }],
-    { opts: { acceptanceReviewer: true, noAutoApprove: true, account: ACCOUNT }, notes: ACC_NOTES });
-  assert.equal(record.error, null);
-  assert.deepEqual(acts, ['open the context form', 'fill the service date with "2026-10-08"', 'the form posted', 'reload', 'reload']);
-  assert.deepEqual(posts, [ANSWER_EDIT.posted]);
-  assert.deepEqual([record.context_edit.clarification_answer, record.context_edit.coding_decision, record.context_edit.http_status,
-    record.context_edit.request_date, record.context_edit.identical.via], [true, false, 201, ANSWER, null]);
-  assert.match(record.context_edit.identical.skipped, /answers the clarification once/);
-  const hard = record.assertions.filter(a => a.id.startsWith('context_edit.') && (a.severity === 'hard' || a.status === 'skipped'));
-  assert.deepEqual(hard.map(a => `${a.id}:${a.status}`), QUESTION_HARD.map(id => `${id}:${id === 'context_edit.identical_save' ? 'skipped' : 'pass'}`));
-  assert.deepEqual(record.decisions, []);
-  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => a.id), []);
-  assert.equal(record.result, 'pass');
-  // the agent walk of the same question still makes the same save again and judges it (unchanged)
-  const agent = await walkQuestion([before, after, clone(after)], [{ fact: 'service_date', scope_in: ['encounter'] }]);
-  assert.equal(agent.record.context_edit.clarification_answer, undefined);
-  assert.equal(agent.record.context_edit.identical.via, 'api');
-});
 
 // The planner makes approvals only under --acceptance-reviewer (its tests above), so no fixture reaches the walk's own
 // approvals-only refusal; it is held in place by position, as the attach refusal is (ops-2): before any decision is made.
@@ -2250,10 +1679,10 @@ test('verifyDocument refuses anything but an approval under --acceptance-reviewe
     return index;
   };
   const refusal = at('if (other.length) throw new Error(`refusing to decide: the acceptance reviewer makes approvals only');
-  assert.ok(at('const deciding = [...plan.decisions, ...confirmations];') < refusal);
+  assert.ok(at('const deciding = [...decisionPlan.decisions, ...confirmations];') < refusal);
   assert.ok(at("const other = deciding.filter(d => d.action !== 'approve');") < refusal);
   assert.ok(refusal < at('await decide('), 'a decision is made before the approvals-only refusal');
-  assert.ok(at('for (const decision of deciding) record.decisions.push(await decide(page, id, decision));') > refusal);
+  assert.ok(at('for (const [index, decision] of deciding.entries()) {') > refusal);
 });
 
 test('planProblems --acceptance-reviewer: an approval note the screen or the server would change is refused before any upload', () => {
@@ -2288,100 +1717,16 @@ test('planProblems --acceptance-reviewer: an approval note the screen or the ser
   assert.deepEqual(vb.planProblems(doc, { approve: ` ${AGENT_NOTES.approve}` }), []);
 });
 
-// --- harness@1: the Review participants card (HARNESS.md 7) ----------------------------------------------------------
+// --- the operator view's summary (HARNESS.md 7): which participants ran, with which models ------------------------------
 //
-// The card is held to the API's harness, and nothing the harness adds to the page (the card, a code card's statuses,
-// positions and retrieved references) moves what readDom reads for the walk's other DOM checks.
+// The walk reads these from the OPERATOR view (/ops/api/encounters/<id>, today's full encounter view, whose shape these
+// fixtures are); the customer page shows none of it.
 
 const API_FIXTURES = path.join(ROOT, 'tests', 'fixtures', 'api');
 const apiFixture = name => JSON.parse(fs.readFileSync(path.join(API_FIXTURES, name), 'utf8'));
-const CARD_ROWS = [['corti', 'done'], ['astra', 'refused'], ['fable', 'unknown'], ['reference_validation', 'done'], ['clarification', 'none'],
-  ['final', 'provider_unknown']].map(([key, state]) => ({ key, state }));
 
-test('checkParticipantsCard holds the card to the harness the API serves, and skips a payload without one', () => {
-  const enc = apiFixture('encounter-harness-degraded.json');
-  assert.deepEqual(vb.checkParticipantsCard(enc, CARD_ROWS).map(r => [r.id, r.status]), [['dom.participants', 'pass']]);
-  // a row in another state than the API's, a missing row, no card: each fails
-  for (const broken of [CARD_ROWS.map(row => (row.key === 'fable' ? { ...row, state: 'done' } : row)), CARD_ROWS.filter(row => row.key !== 'final'),
-    CARD_ROWS.filter(row => row.key !== 'astra'), CARD_ROWS.map(row => (row.key === 'reference_validation' ? { ...row, state: 'waiting' } : row)), []]) {
-    assert.deepEqual(failures(vb.checkParticipantsCard(enc, broken)), ['dom.participants'], JSON.stringify(broken));
-  }
-  assert.deepEqual(vb.checkParticipantsCard(encounter(), []).map(r => r.status), ['skipped']);
-  assert.deepEqual(vb.checkParticipantsCard({ ...enc, harness: { participants: 'x' } }, CARD_ROWS).map(r => r.status), ['skipped']);
-  // the live harness walk (--expect-harness): no harness is a failure, never a skip
-  for (const payload of [encounter(), { ...enc, harness: { participants: 'x' } }, { ...enc, harness: null }]) {
-    assert.deepEqual(failures(vb.checkParticipantsCard(payload, CARD_ROWS, { expectHarness: true })), ['dom.participants'], JSON.stringify(payload.harness));
-  }
-  assert.deepEqual(failures(vb.checkParticipantsCard(enc, CARD_ROWS, { expectHarness: true })), []);
-  // a served harness always names corti, astra and fable in that order: an empty list, a missing or a reordered one fails
-  const byName = name => enc.harness.participants.find(item => item.name === name);
-  for (const participants of [[], [byName('corti'), byName('astra')], [byName('astra'), byName('corti'), byName('fable')],
-    [byName('corti'), byName('astra'), byName('fable'), byName('fable')], [byName('corti'), byName('astra'), { ...byName('fable'), name: 3 }]]) {
-    for (const expectHarness of [false, true]) {
-      assert.deepEqual(failures(vb.checkParticipantsCard({ ...enc, harness: { ...enc.harness, participants } }, CARD_ROWS, { expectHarness })),
-        ['dom.participants'], `${expectHarness} ${JSON.stringify(participants.map(item => item.name))}`);
-    }
-  }
-});
 
-test('readDom reads the participants card the live app.js renders, and the walk\'s other DOM checks read the page as before', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
-  const app = require(APP);
-  for (const name of ['encounter-harness-ready.json', 'encounter-harness-degraded.json', 'encounter-processing.json']) {
-    const enc = apiFixture(name);
-    const html = app.reviewView(enc, app.documentLayout(enc), 'codes', true);
-    const dom = await vb.readDom(fakePage(html));
-    assert.equal(dom.participants.length, 6, name);
-    assert.deepEqual(failures(vb.checkParticipantsCard(enc, dom.participants)), [], name);
-    const moved = { ...enc, harness: { ...enc.harness, participants: enc.harness.participants.map(p => (p.name === 'astra' ? { ...p, state: 'failed' } : p)) } };
-    assert.deepEqual(failures(vb.checkParticipantsCard(moved, dom.participants)), ['dom.participants'], name);
-    if (!enc.assessment) continue;
-    assert.equal(html.includes('progress-card'), false, 'a finished review shows no progress card, so waitForReviewScreen resolves');
-    assert.deepEqual(failures(vb.checkEvidenceMarks(enc, dom.marks, dom.cards)), [], name);
-    assert.ok(dom.cards.length >= 1 && dom.cards.every(card => card.badge === 'Ready for review' && card.insight === '' && card.unlocated === 0), JSON.stringify(dom.cards));
-  }
-  // a decision on a code card with the harness statuses is read from its own badge and decision line
-  const ready = apiFixture('encounter-harness-ready.json');
-  const [first, ...rest] = ready.assessment.proposals;
-  const approved = { ...first, decision: { id: 'd-1', action: 'approve', reviewer: AGENT, reviewer_kind: 'agent', note: NOTES.approve, created_at: '2026-10-30T10:00:00Z' },
-    decision_state: 'approved', allowed_actions: ['revoke'] };
-  const decidedEnc = { ...ready, assessment: { ...ready.assessment, proposals: [approved, ...rest] } };
-  const dom = await vb.readDom(fakePage(app.reviewView(decidedEnc, app.documentLayout(decidedEnc), 'codes', false)));
-  const made = [{ proposal_id: first.id, code: first.code, action: 'approve', http_status: 201 }];
-  assert.deepEqual(failures(vb.checkDecisionDom(made, decidedEnc, dom.cards, dom.candidates)), []);
-  assert.ok(dom.cards.find(card => card.id === `card-${first.id}`).insight.startsWith(`Approved by ${AGENT}`));
-  // a state the API leaves out is drawn as the page draws it ("State not recorded", reference validation "not_run") and
-  // held to the API the same way, never failed for a type
-  const odd = { ...ready, harness: { ...ready.harness, participants: ready.harness.participants.map(p => (p.name === 'fable' ? { ...p, state: undefined } : p)),
-    reference_validation: { ...ready.harness.reference_validation, state: undefined } } };
-  const oddDom = await vb.readDom(fakePage(app.reviewView(odd, app.documentLayout(odd), 'codes', false)));
-  assert.deepEqual(oddDom.participants.filter(row => ['fable', 'reference_validation'].includes(row.key)), [{ key: 'fable', state: '' }, { key: 'reference_validation', state: 'not_run' }]);
-  assert.deepEqual(failures(vb.checkParticipantsCard(odd, oddDom.participants)), []);
-});
 
-test('checkParticipantsCard holds a failed reference validation to the card the live app.js draws: failed, never not run or done', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
-  // refutation round 1, parity-1: a retrieval that raised is served as reference_validation 'failed', with its note
-  const app = require(APP);
-  const ready = apiFixture('encounter-harness-ready.json');
-  const failed = { ...ready.harness.reference_validation, state: 'failed', codes_checked: 0, passages: 0, sources: [],
-    detail: 'Reference validation failed: CPT Studio could not retrieve the CMS facts and passages for this assessment\'s codes.' };
-  const enc = { ...ready, harness: { ...ready.harness, reference_validation: failed } };
-  const dom = await vb.readDom(fakePage(app.reviewView(enc, app.documentLayout(enc), 'codes', true)));
-  assert.deepEqual(dom.participants.filter(row => row.key === 'reference_validation'), [{ key: 'reference_validation', state: 'failed' }]);
-  assert.deepEqual(vb.checkParticipantsCard(enc, dom.participants).map(r => [r.id, r.status]), [['dom.participants', 'pass']]);
-  // a card that shows it as not run or done fails, and a card showing failed fails against an API that says otherwise
-  for (const shown of ['not_run', 'done', 'waiting']) {
-    const rows = dom.participants.map(row => (row.key === 'reference_validation' ? { ...row, state: shown } : row));
-    assert.deepEqual(failures(vb.checkParticipantsCard(enc, rows)), ['dom.participants'], shown);
-  }
-  for (const served of ['not_run', 'done']) {
-    const other = { ...enc, harness: { ...enc.harness, reference_validation: { ...failed, state: served } } };
-    assert.deepEqual(failures(vb.checkParticipantsCard(other, dom.participants)), ['dom.participants'], served);
-  }
-  // the walk's summary records the state as served, and never the sentence
-  const summary = vb.summarize(enc);
-  assert.deepEqual(summary.harness.reference_validation, { state: 'failed', codes_checked: 0, passages: 0, sources: [] });
-  assert.equal(JSON.stringify(summary).includes(failed.detail), false);
-});
 
 test('summarize records which participants ran and what reference validation retrieved, never a participant\'s sentence', () => {
   const enc = apiFixture('encounter-harness-degraded.json');
@@ -2397,118 +1742,20 @@ test('summarize records which participants ran and what reference validation ret
   assert.equal(vb.summarize(encounter()).harness, null);
 });
 
-// --- harness@2: the peer-review rows and the candidate answers (HARNESS.md 11.1, 12.5, 12.6) -------------------------
-//
-// The rows and the questions are held to what the API serves, read from the markup the live app.js renders for the
-// serializer's own fixtures; the walk reads them and never confirms anything.
+// --- harness@2 in the operator view's summary (HARNESS.md 11.1, 12.5, 12.6); the walk never confirms anything -----------
 
 // encounter-harness2-dormant.json: the final scenario as the dormant confirmation path serves it (HARNESS.md 12.10: this
 // release offers no confirmation, so the final fixture serves its candidates unchecked and can_confirm false)
 const H2 = ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness2-confirmed.json',
   'encounter-harness2-dormant.json'];
-const statusOf = results => results.map(r => [r.id, r.status]);
 
-test('readDom reads the peer-review rows and each question\'s candidates the live app.js renders, and both checks pass', { skip: !fs.existsSync(APP) && 'studio/static/studio/app.js is not present' }, async () => {
-  const app = require(APP);
-  for (const name of H2) {
-    const enc = apiFixture(name);
-    const dom = await vb.readDom(fakePage(app.reviewView(enc, app.documentLayout(enc), 'codes', true)));
-    assert.deepEqual(dom.participants.map(row => row.key), ['corti', 'astra', 'fable', 'reference_validation', 'clarification', 'final'], name);
-    assert.deepEqual(failures(vb.checkParticipantsCard(enc, dom.participants)), [], name);
-    assert.deepEqual(dom.peers, enc.harness.participants.filter(p => p.name !== 'corti').map(p => ({ key: p.name, state: p.peer.state || '' })), name);
-    assert.deepEqual(statusOf(vb.checkPeerRows(enc, dom.peers)), [['dom.peer_reviews', 'pass']], name);
-    const served = enc.clarifications.filter(c => c.candidates.length || c.confirmation);
-    assert.deepEqual(dom.questions.map(q => q.id).sort(), served.map(c => c.id).sort(), name);  // the encounter's card first
-    assert.deepEqual(statusOf(vb.checkCandidates(enc, dom.questions)), [[`dom.candidates`, served.length ? 'pass' : 'skipped']], name);
-  }
-  // this release (HARNESS.md 12.10): every question's candidates drawn unchecked, and no Confirm action anywhere - moved by
-  // refutation round 4 (12.10 as amended, the session's D8): it serves no question a candidate, the page draws no
-  // question's candidate block, and the check has nothing served to hold it to
-  const release = apiFixture(H2[1]);
-  assert.ok(release.clarifications.length > 0 && release.clarifications.every(c => c.candidates.length === 0 && !c.confirmation));
-  const drawn = await vb.readDom(fakePage(app.reviewView(release, app.documentLayout(release), 'codes', true)));
-  assert.deepEqual(drawn.questions, []);
-  assert.deepEqual(statusOf(vb.checkCandidates(release, drawn.questions)), [['dom.candidates', 'skipped']]);
-  // moved by refutation round 3 (HARNESS.md 12.10): a Confirm action is drawn only for the dormant confirmation path's
-  // fixture, which this part held the final fixture to
-  const final = apiFixture(H2[3]);
-  const dom = await vb.readDom(fakePage(app.reviewView(final, app.documentLayout(final), 'codes', true)));
-  const extent = final.clarifications.find(c => c.fact === 'extent');
-  assert.deepEqual(dom.questions.find(q => q.id === extent.id), { id: extent.id, confirmation: '',
-    candidates: extent.candidates.map(c => ({ id: c.id, verified: c.verified })), confirmable: 1 });
-  // a viewer is offered nothing, and the check holds the page to that - moved by refutation round 4 (D8): a member who
-  // may not confirm is served no candidate and the page draws none, so the check skips it; a payload that served one
-  // anyway is drawn with none either, which the check reports as candidates the page does not show
-  const viewer = { ...final, permissions: { ...final.permissions, can_confirm: false } };
-  const viewed = await vb.readDom(fakePage(app.reviewView(viewer, app.documentLayout(viewer), 'codes', true)));
-  assert.deepEqual(viewed.questions, []);
-  const asServed = { ...viewer, clarifications: viewer.clarifications.map(c => ({ ...c, candidates: [] })) };
-  assert.deepEqual(statusOf(vb.checkCandidates(asServed, viewed.questions)), [['dom.candidates', 'skipped']]);
-  assert.deepEqual(failures(vb.checkCandidates(viewer, viewed.questions)), ['dom.candidates']);
-  assert.deepEqual(failures(vb.checkCandidates(viewer, dom.questions)), ['dom.candidates'], 'a Confirm action the API does not allow');
-  assert.deepEqual(failures(vb.checkCandidates({ ...release, clarifications: final.clarifications }, dom.questions)), ['dom.candidates'],
-    'nor one this release does not offer');
-  // a confirmed question shows the confirmation's id and offers no confirmation
-  const confirmation = apiFixture(H2[2]).confirmations[0];
-  const confirmed = { ...final, clarifications: final.clarifications.map(c => (c.id === extent.id ? { ...c, confirmation: { ...confirmation, clarification_id: extent.id } } : c)) };
-  const after = await vb.readDom(fakePage(app.reviewView(confirmed, app.documentLayout(confirmed), 'codes', true)));
-  assert.deepEqual(after.questions.find(q => q.id === extent.id).confirmation, confirmation.id);
-  assert.equal(after.questions.find(q => q.id === extent.id).confirmable, 0);
-  assert.deepEqual(failures(vb.checkCandidates(confirmed, after.questions)), []);
-  assert.deepEqual(failures(vb.checkCandidates(confirmed, dom.questions)), ['dom.candidates']);
-});
 
-test('checkPeerRows fails a row in another state, a missing or extra row, and skips a payload with no peer review', () => {
-  const enc = apiFixture(H2[0]);
-  const rows = [{ key: 'astra', state: 'running' }, { key: 'fable', state: 'waiting' }];
-  assert.deepEqual(statusOf(vb.checkPeerRows(enc, rows)), [['dom.peer_reviews', 'pass']]);
-  for (const broken of [[rows[0], { key: 'fable', state: 'done' }], [rows[0]], [...rows, { key: 'corti', state: '' }], [...rows, rows[1]], []]) {
-    assert.deepEqual(failures(vb.checkPeerRows(enc, broken)), ['dom.peer_reviews'], JSON.stringify(broken));
-  }
-  // where the API serves no peer review for a participant (phase 1, {}), the row says so: data-peer-state ''
-  const none = { ...enc, harness: { ...enc.harness, participants: enc.harness.participants.map(p => ({ ...p, peer: {} })) } };
-  assert.deepEqual(failures(vb.checkPeerRows(none, [{ key: 'astra', state: '' }, { key: 'fable', state: '' }])), []);
-  assert.deepEqual(failures(vb.checkPeerRows(none, rows)), ['dom.peer_reviews']);
-  // skipped: a release before harness@2, a Corti-only encounter (phase 0), a payload without a harness
-  for (const payload of [apiFixture('encounter-harness-ready.json'), { ...none, harness: { ...none.harness, phase: 0 } }, encounter()]) {
-    assert.deepEqual(statusOf(vb.checkPeerRows(payload, [])), [['dom.peer_reviews', 'skipped']]);
-    // the live harness walk (--expect-harness) expects the peer-review rows: none served is a failure, never a skip
-    assert.deepEqual(failures(vb.checkPeerRows(payload, [], { expectHarness: true })), ['dom.peer_reviews']);
-  }
-  assert.deepEqual(failures(vb.checkPeerRows(enc, rows, { expectHarness: true })), []);
-});
 
-test('checkCandidates holds each question to the API\'s candidates, flags and confirmation, and skips a payload that serves none', () => {
-  // moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): the final fixture serves no candidate, so
-  // the check is held to the dormant path's, which serves them (the final fixture is skipped below)
-  const enc = apiFixture(H2[3]);
-  const shown = enc.clarifications.map(c => ({ id: c.id, confirmation: '', candidates: c.candidates.map(x => ({ id: x.id, verified: x.verified })),
-    confirmable: c.candidates.filter(x => x.verified).length }));
-  assert.deepEqual(statusOf(vb.checkCandidates(enc, shown)), [['dom.candidates', 'pass']]);
-  const edit = (index, fields) => shown.map((q, i) => (i === index ? { ...q, ...fields } : q));
-  const broken = {
-    dropped: edit(0, { candidates: shown[0].candidates.slice(1) }),
-    reordered: edit(0, { candidates: [...shown[0].candidates].reverse() }),
-    flagged: edit(0, { candidates: shown[0].candidates.map(x => ({ ...x, verified: true })) }),
-    extra: edit(0, { candidates: [...shown[0].candidates, { id: 'ffffffffffffffff', verified: true }] }),
-    confirmed: edit(0, { confirmation: 'e2b00000-0000-4000-8000-0000000000ff' }),
-    offered: edit(0, { confirmable: 2 }),
-    missing: shown.slice(1),
-    stray: [...shown, { id: 'not-a-served-question', confirmation: '', candidates: [], confirmable: 0 }],
-  };
-  for (const [name, questions] of Object.entries(broken)) assert.deepEqual(failures(vb.checkCandidates(enc, questions)), ['dom.candidates'], name);
-  // a question that is not open is not held; nothing served is skipped
-  assert.deepEqual(statusOf(vb.checkCandidates({ ...enc, clarifications: enc.clarifications.map(c => ({ ...c, state: 'answered' })) }, [])), [['dom.candidates', 'skipped']]);
-  for (const name of ['encounter-harness2-peer.json', 'encounter-harness2-final.json', 'encounter-harness-ready.json', 'encounter-clarification.json']) {
-    assert.deepEqual(statusOf(vb.checkCandidates(apiFixture(name), [])), [['dom.candidates', 'skipped']], name);
-  }
-});
 
 test('the walk never confirms a finding: it posts to no confirmation endpoint and clicks no Confirm action', () => {
   const source = fs.readFileSync(path.join(ROOT, 'ops', 'verify_browser.cjs'), 'utf8');
   assert.equal(/clarifications\//.test(source), false, 'the confirmation endpoint is never addressed');
-  const uses = source.split('\n').filter(line => line.includes('confirm-finding'));
-  assert.deepEqual(uses.map(line => line.trim()), ["confirmable: el.querySelectorAll('[data-action=\"confirm-finding\"]').length,"], 'it is only counted');
+  assert.equal(source.includes('confirm-finding'), false, 'the customer page offers no finding confirmation, and the walk reads none');
   assert.equal(/data-attest|data-confirm[="\]]/.test(source), false, 'no candidate is selected and no attestation ticked');
 });
 
@@ -2534,4 +1781,1180 @@ test('summarize records the phase, the peer reviews, the candidates and the conf
   // a payload served before harness@2 records as before
   const older = vb.summarize(apiFixture('encounter-harness-degraded.json'));
   assert.equal('phase' in older.harness || 'confirmations' in older || older.harness.participants.some(p => 'peer' in p), false);
+});
+
+// --- the customer surface (CORE-UX-DESIGN 5-8) ---------------------------------------------------------------------------
+//
+// Over the synthetic samples ops/verification/samples/make_samples.py writes to the contract (one two-lesion colonoscopy as
+// the operator view, the customer API, the customer page and its reports serve it). Each check passes on the samples and
+// fails on the defect it exists for.
+
+const SAMPLES = path.join(__dirname, 'samples');
+const sample = name => fs.readFileSync(path.join(SAMPLES, name), 'utf8');
+const sampleJson = name => JSON.parse(sample(name));
+const { fakeDocument } = require('./fake_dom.cjs');
+const domOf = html => vb.readCustomerDom(fakeDocument(html));
+const OP = () => sampleJson('operator-encounter.json');
+const TRACE = () => sampleJson('operator-trace.json');
+const CUST = () => sampleJson('customer-encounter.json');
+const DETAILS = () => sampleJson('customer-encounter-details.json');
+const SUB = 'Agent-executed synthetic review — not clinical approval';
+const SAMPLE_AGENT = 'CPT Studio review agent (automated agent)';
+const ids = results => results.map(r => `${r.id}:${r.status}`);
+const failed = results => results.filter(r => r.status === 'fail').map(r => r.id);
+const hitIds = hits => [...new Set(hits.map(h => h.id))].sort();
+
+test('the denylist vectors hold in this reader (ops/verify_downloads.py and ops/scan_customer.py run the same vectors)', () => {
+  const ctx = vb.scanContext();
+  assert.ok(vb.DENYLIST.vectors.length >= 30);
+  for (const vector of vb.DENYLIST.vectors) {
+    assert.deepEqual(hitIds(vb.scanText(vector.text, ctx, vector.surface)), vector.hits, `${vector.surface}: ${vector.text}`);
+  }
+  // every pattern compiles the same in both languages' common subset: no flag is inline, no named group, no \p
+  for (const p of vb.DENYLIST.patterns) assert.equal(/\(\?[a-z]|\(\?<\w|\\p\{/i.test(p.source), false, p.id);
+});
+
+test('shapeProblems: the customer samples hold to the contract; an extra key, a missing key, a wrong type and a wrong enum are each named', () => {
+  assert.deepEqual(vb.shapeProblems(CUST(), vb.CONTRACT.encounter), []);
+  assert.deepEqual(vb.shapeProblems(DETAILS(), vb.CONTRACT.encounter), []);
+  assert.deepEqual(vb.shapeProblems(sampleJson('customer-session.json'), vb.CONTRACT.session), []);
+  const cases = [
+    [enc => { enc.codes[0].vendor = 'OpenAI'; }, '$.codes[0].vendor: not in the customer contract'],
+    [enc => { delete enc.codes[1].why; }, '$.codes[1].why: missing (the contract lists it)'],
+    [enc => { enc.codes[0].units = '1'; }, '$.codes[0].units: string where the contract has integer'],
+    [enc => { enc.state = 'needs_clarification'; }, '$.state: "needs_clarification" is not one of'],
+    [enc => { enc.progress.started_at = 'yesterday'; }, '$.progress.started_at: string where the contract has iso?'],
+    [enc => { enc.codes[0].decision.modifiers = 'XS'; }, '$.codes[0].decision.modifiers: string where the contract has a list'],
+    [enc => { enc.provider_runs = []; }, '$.provider_runs: not in the customer contract'],
+    [enc => { enc.service_date.document_value = '11/03/2026'; }, '$.service_date.document_value: string where the contract has date?'],
+  ];
+  for (const [mutate, want] of cases) {
+    const enc = CUST();
+    mutate(enc);
+    const problems = vb.shapeProblems(enc, vb.CONTRACT.encounter);
+    assert.ok(problems.some(problem => problem.startsWith(want)), `${want}: ${problems.join(' | ')}`);
+  }
+  // null where the contract allows it, never where it does not
+  const nulls = CUST();
+  nulls.codes[0].modifier_review = null;
+  nulls.codes[0].decision = null;
+  nulls.progress.error = null;
+  assert.deepEqual(vb.shapeProblems(nulls, vb.CONTRACT.encounter), []);
+  nulls.codes[0].why = null;
+  assert.ok(vb.shapeProblems(nulls, vb.CONTRACT.encounter).some(problem => problem.startsWith('$.codes[0].why: null where')));
+  assert.deepEqual(failed(vb.checkCustomerContract({ ...sampleJson('customer-session.json'), provider_mode: 'live' }, 'session', 'session.contract')), ['session.contract']);
+});
+
+test('checkCustomerVocabulary: the contract\'s words for states, statuses, checks, steps and details controls', () => {
+  assert.deepEqual(failed(vb.checkCustomerVocabulary(CUST())), []);
+  assert.deepEqual(failed(vb.checkCustomerVocabulary(DETAILS())), []);
+  for (const mutate of [
+    enc => { enc.state_label = 'Ready'; },
+    enc => { enc.codes[0].status_label = 'Ready for review'; },
+    enc => { enc.checks.reverse(); },
+    enc => { enc.checks[1].label = 'Astra and Fable'; },
+    enc => { enc.progress.steps[0].label = 'Reading'; },
+    enc => { enc.details_needed = [{ ...DETAILS().details_needed[1], control: 'date' }]; },
+    enc => { enc.details_needed = [{ ...DETAILS().details_needed[1], choices: [{ value: 'cecum', label: 'Cecum' }] }]; },
+    enc => { enc.details_needed = [{ ...DETAILS().details_needed[1], allow: [] }]; },
+  ]) {
+    const enc = CUST();
+    mutate(enc);
+    assert.deepEqual(failed(vb.checkCustomerVocabulary(enc)), ['customer.vocabulary'], mutate.toString());
+  }
+});
+
+test('denyValuesFrom harvests the operator view\'s identifiers, never a plain word', () => {
+  const values = vb.denyValuesFrom(OP(), TRACE());
+  for (const want of ['c0ffee00-0001-4a5b-8c6d-7e8f9a0b1c2d', 'gpt-6-astra', 'claude-fable-5-1', 'gpt-6-astra-2026-10-01', 'evidence.exact',
+    'cpt-studio:provider@1', 'gi.colonoscopy@3', 'engine-2026.11.03@1', 'req_astra0123456789', 'call_fable55555555', OP().revision.text_sha256,
+    OP().provider_runs[0].request_sha256, OP().assessment.id, OP().revision.id]) {
+    assert.ok(values.includes(want), want);
+  }
+  for (const word of ['OpenAI', 'Anthropic', 'Corti', 'reviewed', 'Colonoscopy', 'units']) assert.equal(values.includes(word), false, word);
+  assert.deepEqual(vb.harvest({ a: [{ b: ['x1', 'y2'] }, { b: ['z3'] }] }, 'a[].b[]'), ['x1', 'y2', 'z3']);
+  assert.deepEqual(vb.harvest({ frozen: [['name', 'hash-1'], ['other', 'hash-2']] }, 'frozen[].1'), ['hash-1', 'hash-2']);
+  assert.deepEqual(vb.harvest({ a: 3 }, 'a'), []);
+});
+
+test('scanJson: the customer sample is clean against every operator identifier; a leak of each kind is a hit; a quotation of the document is not', () => {
+  const op = OP();
+  const ctx = vb.scanContext({ documentText: op.revision.text, denyValues: vb.denyValuesFrom(op, TRACE()) });
+  assert.deepEqual(vb.scanJson(CUST(), ctx), []);
+  assert.deepEqual(vb.scanJson(DETAILS(), ctx), []);
+  assert.deepEqual(vb.scanJson(sampleJson('customer-session.json'), ctx), []);
+  // the operator view itself, served to a customer, is a flood of hits
+  const flood = hitIds(vb.scanJson(op, ctx));
+  for (const id of ['forbidden_key', 'provider_name', 'model_id', 'long_hex', 'deny_value', 'rule_id']) assert.ok(flood.includes(id), id);
+  const leaks = [
+    [enc => { enc.codes[0].vendor = 'OpenAI'; }, ['forbidden_key', 'provider_name', 'vendor']],
+    [enc => { enc.codes[0].summary = `Read by ${op.provider_runs[1].requested_model}.`; }, ['deny_value', 'model_id', 'provider_name']],
+    [enc => { enc.limitations.push(`Request ${op.provider_runs[0].request_sha256}`); }, ['deny_value', 'long_hex']],
+    [enc => { enc.activity[0].summary = 'Fable response recorded (HTTP 200)'; }, ['http_status', 'provider_name']],
+    [enc => { enc.codes[0].why.qualifications.push('evidence.exact passed'); }, ['deny_value', 'rule_id']],
+    [enc => { enc.unresolved.push(`run ${op.provider_runs[2].id}`); }, ['deny_value']],
+    [enc => { enc.progress.message = 'Waiting for the peer reviews of the participants'; }, ['participant', 'peer_review']],
+  ];
+  for (const [mutate, want] of leaks) {
+    const enc = CUST();
+    mutate(enc);
+    assert.deepEqual(hitIds(vb.scanJson(enc, ctx)), want, mutate.toString());
+  }
+  // a document that names a patient Claude: its quotation is the document's own text, never a hit; the same name in a
+  // server sentence is one
+  const text = `${op.revision.text}Referred by Dr Claude Fable (fictional).\n`;
+  const named = vb.scanContext({ documentText: text });
+  assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Referred by Dr Claude Fable (fictional).' }] } }, named), []);
+  assert.deepEqual(hitIds(vb.scanJson({ summary: 'Dr Claude Fable reviewed the codes.' }, named)), ['provider_name']);
+  // the site's own host is no rule id
+  assert.deepEqual(vb.scanText('Questions: support@cpt.quillmd.com', vb.scanContext({ allowed: ['cpt.quillmd.com'] }), 'dom'), []);
+});
+
+test('scanFile and scanHeaders: a customer report quoting the document is clean; a provider line, a hash or X-Content-SHA256 is a hit', () => {
+  const op = OP();
+  const ctx = vb.scanContext({ documentText: op.revision.text, denyValues: vb.denyValuesFrom(op, TRACE()) });
+  for (const [name, fmt] of [['customer-report-approved.txt', 'txt'], ['customer-report-draft.txt', 'txt'], ['customer-report-approved.csv', 'csv'], ['customer-report-draft.csv', 'csv']]) {
+    assert.deepEqual(vb.scanFile(sample(name), ctx, name, fmt), [], name);
+  }
+  const txt = sample('customer-report-approved.txt').replace('LIMITATIONS', `PROVIDER USAGE\n  corti · ${op.provider_runs[0].request_sha256}\n\nLIMITATIONS`);
+  assert.deepEqual(hitIds(vb.scanFile(txt, ctx, 'approved.txt', 'txt')), ['deny_value', 'long_hex', 'provider_machinery', 'provider_name', 'provider_word']);
+  const csv = sample('customer-report-approved.csv').replace('approved,CPT Studio', 'approved (gpt-6-astra),CPT Studio');
+  assert.deepEqual(hitIds(vb.scanFile(csv, ctx, 'approved.csv', 'csv')), ['deny_value', 'model_id', 'provider_name']);
+  assert.deepEqual(vb.csvRows('a,"b ""c"", d"\r\n1,2\n'), [['a', 'b "c", d'], ['1', '2']]);
+  assert.deepEqual(vb.scanHeaders({ 'content-type': 'text/plain', 'content-security-policy': "script-src 'sha256-abc'", 'set-cookie': 'x=1' }, ctx, 'GET /'), []);
+  assert.deepEqual(hitIds(vb.scanHeaders({ 'x-content-sha256': 'ab'.repeat(32) }, ctx, 'GET /api/reports/x/download')), ['long_hex', 'sha256']);
+});
+
+test('expectedCustomerStatus and expectedCodeRows: the contract\'s status mapping and order', () => {
+  const at = { created_at: '2026-11-03T22:05:00+00:00' };
+  const cases = [
+    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'agent', ...at } }, { status: 'approved', sub: SUB, human: false }],
+    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'human', ...at } }, { status: 'approved', sub: null, human: true }],
+    [{ bucket: 'selected', status: 'ready', decision: { action: 'reject', reviewer_kind: 'agent' } }, { status: 'excluded', sub: 'Rejected in review' }],
+    [{ bucket: 'excluded', status: 'excluded', decision: { action: 'reinstate' } }, { status: 'ready', sub: null }],
+    [{ bucket: 'excluded', status: 'needs_clarification', decision: { action: 'reinstate' } }, { status: 'needs_detail', sub: null }],
+    [{ bucket: 'excluded', status: 'excluded', decision: { action: 'confirm' } }, { status: 'excluded', sub: null }],
+    [{ bucket: 'excluded', status: 'excluded', decision: null }, { status: 'excluded', sub: null }],
+    [{ bucket: 'selected', status: 'needs_clarification', decision: null }, { status: 'needs_detail', sub: null }],
+    [{ bucket: 'selected', status: 'excluded', decision: null }, { status: 'excluded', sub: null }],  // a detail answered "not documented"
+    [{ bucket: 'selected', status: 'ready', decision: null }, { status: 'ready', sub: null }],
+  ];
+  for (const [p, want] of cases) assert.deepEqual(vb.expectedCustomerStatus(p), want, JSON.stringify(p));
+  const op = { assessment: { proposals: [
+    { id: 'x-excl', bucket: 'excluded', reinstatable: true, decision: null },
+    { id: 'a-sel', bucket: 'selected', decision: null },
+    { id: 'alt', bucket: 'alternative', decision: null },
+    { id: 'b-rein', bucket: 'excluded', reinstatable: true, decision: { action: 'reinstate' } },
+    { id: 'hist', bucket: 'excluded', reinstatable: false, decision: null },
+    { id: 'conf', bucket: 'excluded', reinstatable: false, decision: { action: 'confirm' } },
+    { id: 'c-sel', bucket: 'selected', decision: { action: 'approve' } },
+  ] } };
+  assert.deepEqual(vb.expectedCodeRows(op).map(p => p.id), ['a-sel', 'b-rein', 'c-sel', 'x-excl', 'conf']);
+});
+
+test('checkCustomerVsOperator: the samples agree; each disagreement with the operator view is named', () => {
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(CUST(), OP())), []);
+  const cases = [
+    ['customer.document', enc => { enc.document.text += ' '; }],
+    ['customer.document', enc => { enc.document.revision = 2; }],
+    ['customer.codes.listed', enc => { enc.codes.reverse(); enc.codes.forEach((code, i) => { code.number = i + 1; }); }],
+    ['customer.codes.listed', enc => { enc.codes[1].number = 3; }],
+    ['customer.codes.status', enc => { enc.codes[0].status = 'ready'; enc.codes[0].status_label = 'Ready for review'; }],
+    ['customer.codes.status', enc => { enc.codes[0].sub_label = ''; }],
+    ['customer.codes.units_modifiers', enc => { enc.codes[0].units = 2; }],
+    ['customer.codes.units_modifiers', enc => { enc.codes[1].modifiers = ['59', 'XS']; }],
+    ['customer.codes.decision', enc => { enc.codes[1].decision.modifiers = ['59', 'XS']; }],
+    ['customer.codes.decision', enc => { enc.codes[0].decision.by = 'Somebody else'; }],
+    ['customer.codes.decision', enc => { enc.codes[0].decision.at = '2026-11-03T23:00:00+00:00'; }],
+    ['customer.codes.actions', enc => { enc.codes[0].allowed_actions = ['approve', 'reject']; }],
+    [['customer.why.exact', 'customer.why.supports'], enc => { enc.codes[0].why.quotes[0].start += 1; }],  // no passage held there either
+    ['customer.why.exact', enc => { enc.codes[0].why.quotes[0].page = 2; }],
+    ['customer.why.supports', enc => { const cecum = OP().routing.families[0].mentions[0].span; enc.codes[0].why.quotes = [{ text: cecum.text, start: cecum.start, end: cecum.end, page: 1, exact: true }]; }],
+    ['customer.service_date', enc => { enc.service_date.value = '2026-11-02'; }],
+    ['customer.service_date', enc => { enc.service_date.conflict = true; }],
+    ['customer.readiness', enc => { enc.readiness.approved = false; }],
+    ['customer.details.asked_once', enc => { enc.details_needed = [DETAILS().details_needed[1], DETAILS().details_needed[1]]; }],
+    ['customer.details.affects', enc => { enc.details_needed = [{ ...DETAILS().details_needed[1], affects: ['99213'] }]; }],
+  ];
+  for (const [id, mutate] of cases) {
+    const enc = CUST();
+    mutate(enc);
+    assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, OP())), [].concat(id), `${id}: ${mutate.toString()}`);
+  }
+  // an alternative listed as a code: listed wrongly (and judged as a code it is not)
+  const alternative = CUST();
+  alternative.codes.push({ ...alternative.codes[0], id: 'a1f0b2c3-0003-4d5e-8f60-718293a4b5c6', code: '45378', number: 3 });
+  const listed = vb.checkCustomerVsOperator(alternative, OP()).find(r => r.id === 'customer.codes.listed');
+  assert.equal(listed.status, 'fail');
+  assert.match(listed.reason, /an alternative is listed as a code/);
+  // a quotation of a passage CPT Studio found unrelated is never one
+  const op = OP();
+  op.assessment.proposals[0].support.unrelated = [0];
+  op.assessment.proposals[0].support.supporting = [];
+  op.assessment.proposals[0].support.source = [];
+  const unrelated = vb.checkCustomerVsOperator(CUST(), op).find(r => r.id === 'customer.why.supports');
+  assert.equal(unrelated.status, 'fail');
+  assert.match(unrelated.reason, /a passage CPT Studio found unrelated/);
+});
+
+test('readCustomerDom reads the DOM contract\'s hooks, and checkResultList holds each row to the API', () => {
+  const html = sample('customer-page.html');
+  const dom = domOf(html);
+  assert.equal(dom.list, true);
+  assert.deepEqual(dom.rows.map(row => [row.code, row.status, row.status_text, row.number, row.units, row.modifiers]),
+    [['45380', 'approved', 'Approved', '1.', '1 unit', ''], ['45385', 'approved', 'Approved', '2.', '1 unit', 'Modifier XS']]);
+  assert.deepEqual(dom.rows[0].why.quotes.map(q => [q.start, q.end, q.page]), [['256', '329', '1']]);
+  assert.deepEqual(dom.checks.map(c => [c.key, c.state]), [['document_review', 'done'], ['independent_checks', 'done'], ['coding_validation', 'done']]);
+  assert.equal(dom.progress.phase, 'completed');
+  assert.deepEqual(dom.export.options.map(o => `${o.kind}.${o.fmt}:${o.disabled}`), ['draft.txt:false', 'draft.csv:false', 'approved.txt:false', 'approved.csv:false']);
+  const cust = CUST();
+  assert.deepEqual(failed(vb.checkResultList(cust, dom)), []);
+  assert.deepEqual(failed(vb.checkChecksPanel(cust, dom)), []);
+  assert.deepEqual(failed(vb.checkDetailsPanel(cust, dom)), []);
+  const broken = [
+    ['dom.result_list', h => h.replace(/<li class="result-row"[\s\S]*?<\/li>/, '')],
+    ['dom.row.45380', h => h.replace('<span class="status" data-status="approved">Approved</span>', '<span class="status" data-status="approved">Approved · agent</span>')],
+    ['dom.row.45380', h => h.replace('data-start="256"', 'data-start="255"')],
+    ['dom.row.45380', h => h.replace('</div></li>', `<button type="button" data-decision="approve" data-proposal="${cust.codes[0].id}">Approve</button></div></li>`)],
+    ['dom.row.45385', h => h.replace('Modifier XS', '')],
+    ['dom.row.45380', h => h.replace(`<span class="result-sub">${SUB}</span>`, '<span class="result-sub"></span>')],
+    ['dom.row.45380', h => h.replace('<summary>Why this code?</summary>', '<summary>Details</summary>')],
+    ['dom.row.45380', h => h.replace(/<details class="why-code">[\s\S]*?<\/details>/, '')],
+  ];
+  for (const [id, mutate] of broken) {
+    const mutated = mutate(html);
+    assert.notEqual(mutated, html, `${id}: the mutation did not apply`);
+    assert.ok(failed(vb.checkResultList(cust, domOf(mutated))).includes(id), `${id}: ${mutate.toString()}`);
+  }
+  // the units element may stay empty for a single unit; a code of 2 units must say so
+  const two = CUST();
+  two.codes[0].units = 2;
+  assert.deepEqual(failed(vb.checkResultList(two, dom)), ['dom.row.45380']);
+  assert.deepEqual(failed(vb.checkResultList(cust, domOf(html.replace('<span class="result-units">1 unit</span>', '<span class="result-units"></span>')))), []);
+  // the checks panel in another order or state
+  assert.deepEqual(failed(vb.checkChecksPanel(cust, domOf(html.replace('data-check="coding_validation" data-state="done"', 'data-check="coding_validation" data-state="running"')))), ['dom.checks_panel']);
+});
+
+test('checkDetailsPanel: a date row with "Use document date" beside both dates, a confirmation with "Not documented" and "Cannot confirm", Save', () => {
+  const html = sample('customer-page-details.html');
+  const enc = DETAILS();
+  const dom = domOf(html);
+  assert.equal(dom.details.heading, 'A few details needed');
+  assert.deepEqual(dom.details.rows.map(row => [row.id, row.fact, row.date_input, row.use_document, row.choices]),
+    [['detail-service-date', 'service_date', true, true, []], ['detail-extent', 'extent', false, false, ['not_documented', 'cannot_confirm']]]);
+  assert.deepEqual(failed(vb.checkDetailsPanel(enc, dom)), []);
+  assert.deepEqual(failed(vb.checkResultList(enc, dom)), []);
+  const broken = [
+    h => h.replace('<button type="button" data-action="use-document-date">Use document date</button>', ''),
+    h => h.replace('<button type="button" data-detail-choice="cannot_confirm">Cannot confirm</button>', ''),
+    h => h.replace('<button type="button" data-action="save-details">Save details</button>', ''),
+    h => h.replace('<h2>A few details needed</h2>', '<h2>Clarifications</h2>'),
+    h => h.replace('<p class="detail-entered-date">You entered: 2026-11-02</p>', ''),
+    h => h.replace('<p class="detail-affects">Affects 45385</p>', '<label><input type="radio" name="detail-detail-extent" value="cecum"> Cecum</label>'),
+    h => h.replace(/<section class="details-panel">[\s\S]*?<\/section>/, ''),
+  ];
+  for (const mutate of broken) {
+    const mutated = mutate(html);
+    assert.notEqual(mutated, html, mutate.toString());
+    assert.deepEqual(failed(vb.checkDetailsPanel(enc, domOf(mutated))), ['dom.details_panel'], mutate.toString());
+  }
+  // "Use document date" only where the API allows it
+  const disallowed = DETAILS();
+  disallowed.service_date.can_use_document_date = false;
+  assert.deepEqual(failed(vb.checkDetailsPanel(disallowed, dom)), ['dom.details_panel']);
+  // a panel where nothing is asked
+  assert.deepEqual(failed(vb.checkDetailsPanel(CUST(), dom)), ['dom.details_panel']);
+});
+
+test('checkNoEmQuestions: no office E/M question when no separate E/M service is documented, in either view', () => {
+  assert.deepEqual(failed(vb.checkNoEmQuestions(CUST(), OP())), []);
+  assert.deepEqual(failed(vb.checkNoEmQuestions(DETAILS(), OP())), []);
+  const op = OP();
+  op.clarifications = [{ id: 'c1', scope: 'service', family: 'gi.office_em', fact: 'setting', state: 'open', question: 'Which setting?' }];
+  assert.deepEqual(failed(vb.checkNoEmQuestions(CUST(), op)), ['details.no_em_question']);
+  op.clarifications[0].state = 'answered';
+  assert.deepEqual(failed(vb.checkNoEmQuestions(CUST(), op)), []);
+  for (const row of [{ fact: 'patient_status', family_label: 'Office visit', prompt: 'New or established?' },
+    { fact: 'setting', family_label: 'Encounter', prompt: 'Where did the office visit take place?' },
+    { fact: 'em_basis', family_label: 'Visit', prompt: 'Which basis?' }]) {
+    const enc = CUST();
+    enc.details_needed = [{ ...DETAILS().details_needed[1], ...row }];
+    assert.deepEqual(failed(vb.checkNoEmQuestions(enc, OP())), ['details.no_em_question'], row.fact);
+  }
+});
+
+// A processing encounter and the panel the page draws for it.
+function busyCustomer(phase = 'processing', step = 'checking') {
+  const enc = CUST();
+  const states = { failed: ['failed', 'Could not finish'], stopped: ['stopped', 'Stopped'] };
+  [enc.state, enc.state_label] = states[phase] || ['processing', 'Processing'];
+  const order = ['reading', 'identifying', 'checking', 'preparing'];
+  enc.progress = { ...enc.progress, phase, busy: !['failed', 'stopped'].includes(phase), finished_at: null, can_stop: true, can_resume: false,
+    message: 'Checking the suggested codes.', active_detail: 'Independent checks',
+    steps: enc.progress.steps.map(s => ({ ...s, state: order.indexOf(s.key) < order.indexOf(step) ? 'done' : s.key === step ? (phase === 'failed' ? 'failed' : phase === 'stopped' ? 'stopped' : 'active') : 'not_started', finished_at: order.indexOf(s.key) < order.indexOf(step) ? s.finished_at : null })) };
+  if (['failed', 'stopped'].includes(phase)) Object.assign(enc.progress, { can_stop: false, can_resume: true, message: phase === 'failed' ? 'The check could not finish.' : 'Processing was stopped.' });
+  return enc;
+}
+
+function panelHtml(enc, { extra = '', card = enc.progress.busy, elapsed = '1 min 04 s' } = {}) {
+  const p = enc.progress;
+  const steps = p.steps.map(s => `<li class="progress-step" data-step="${s.key}" data-state="${s.state}">${s.label}</li>`).join('');
+  return `<html><body><section class="progress-panel${card ? ' progress-card' : ''}" data-phase="${p.phase}" role="status"><ol>${steps}</ol>`
+    + `<p>Elapsed <span data-elapsed>${elapsed}</span></p><p class="progress-message">${p.message}</p>`
+    + `<p class="leave-note">You can leave this page.</p>${p.can_stop ? '<button data-action="stop">Stop</button>' : ''}`
+    + `${p.can_resume ? '<button data-action="resume">Resume</button>' : ''}${extra}</section></body></html>`;
+}
+
+test('checkProgressDom: the served phase and steps, elapsed time, no percentage or ETA, the busy card, Stop, Resume, and stillness once failed or stopped', () => {
+  const busy = busyCustomer();
+  assert.deepEqual(failed(vb.checkProgressDom(busy, domOf(panelHtml(busy)))), []);
+  assert.ok(ids(vb.checkProgressDom(busy, domOf(panelHtml(busy)))).includes('progress.dom.stop:pass'));
+  const cases = [
+    ['progress.dom.phase', panelHtml(busy).replace('data-phase="processing"', 'data-phase="queued"')],
+    ['progress.dom.steps', panelHtml(busy).replace('data-step="checking" data-state="active"', 'data-step="checking" data-state="done"')],
+    ['progress.dom.elapsed', panelHtml(busy, { elapsed: '' })],
+    ['progress.dom.no_percentage_or_eta', panelHtml(busy, { extra: '<p>42% complete</p>' })],
+    ['progress.dom.no_percentage_or_eta', panelHtml(busy, { extra: '<p>About 3 minutes remaining</p>' })],
+    ['progress.dom.no_percentage_or_eta', panelHtml(busy, { extra: '<progress value="3" max="4"></progress>' })],
+    ['progress.dom.card_while_busy', panelHtml(busy, { card: false })],
+    ['progress.dom.stop', panelHtml(busy).replace('<button data-action="stop">Stop</button>', '')],
+    ['progress.dom.message', panelHtml(busy).replace('Checking the suggested codes.', 'Astra is reading the document.')],
+  ];
+  for (const [id, html] of cases) assert.deepEqual(failed(vb.checkProgressDom(busy, domOf(html))), [id], id);
+  for (const phase of ['failed', 'stopped']) {
+    const settled = busyCustomer(phase);
+    assert.deepEqual(failed(vb.checkProgressDom(settled, domOf(panelHtml(settled)), [])), [], phase);
+    assert.deepEqual(failed(vb.checkProgressDom(settled, domOf(panelHtml(settled)), ['li.progress-step (pulse)'])), ['progress.dom.settled_still'], phase);
+    assert.ok(failed(vb.checkProgressDom(settled, domOf(panelHtml(settled).replace(/data-state="(failed|stopped)"/, 'data-state="active"')), [])).includes('progress.dom.settled_still'), phase);
+    assert.deepEqual(failed(vb.checkProgressDom(settled, domOf(panelHtml(settled).replace('<button data-action="resume">Resume</button>', '')), [])), ['progress.dom.resume'], phase);
+  }
+  // not processing: no panel is fine, a leftover progress card is not
+  assert.deepEqual(failed(vb.checkProgressDom(CUST(), domOf('<html><body></body></html>'))), []);
+  assert.deepEqual(failed(vb.checkProgressDom(busy, domOf('<html><body></body></html>'))), ['progress.dom.panel']);
+  assert.ok(failed(vb.checkProgressDom(CUST(), domOf(panelHtml(CUST(), { card: true })))).includes('progress.dom.card_while_busy'));
+});
+
+test('foldedSteps and checkProgressFold: the served steps are the jobs\' own state, folded as P5 folds them', () => {
+  const op = OP();
+  assert.deepEqual(vb.foldedSteps(op), { reading: 'done', identifying: 'done', checking: 'done', preparing: 'done' });
+  assert.deepEqual(failed(vb.checkProgressFold(CUST(), op)), []);
+  const stages = kinds => kinds.map(([kind, state]) => ({ kind, state, error: '', finished_at: null }));
+  const fold = kinds => vb.foldedSteps({ pipeline: { stages: stages(kinds) } });
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'running']]), { reading: 'done', identifying: 'active', checking: 'none', preparing: 'none' });
+  // the first assess, with peer reviews after it, is still checking; the last one prepares the results
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'succeeded'], ['astra', 'succeeded'], ['fable', 'succeeded'],
+    ['assess', 'succeeded'], ['astra_peer', 'running'], ['fable_peer', 'queued']]), { reading: 'done', identifying: 'done', checking: 'active', preparing: 'none' });
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'failed']]).checking, 'failed');
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'cancelled']]).checking, 'stopped');
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]).checking, 'unknown');
+  const confirming = CUST();
+  confirming.progress.steps[2].state = 'waiting';
+  confirming.progress.steps[3].state = 'not_started';
+  assert.deepEqual(failed(vb.checkProgressFold(confirming, { pipeline: { stages: stages([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]) } })), []);
+  confirming.progress.steps[2].state = 'done';
+  assert.deepEqual(failed(vb.checkProgressFold(confirming, { pipeline: { stages: stages([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'unknown']]) } })), ['progress.backend_stage']);
+  // a resumed stage: the last job of the kind is what counts
+  assert.deepEqual(fold([['extract', 'succeeded'], ['analyze', 'succeeded'], ['predict', 'cancelled'], ['predict', 'succeeded'], ['assess', 'succeeded']]),
+    { reading: 'done', identifying: 'done', checking: 'done', preparing: 'done' });
+  const served = CUST();
+  served.progress.steps[3].state = 'active';
+  assert.deepEqual(failed(vb.checkProgressFold(served, op)), ['progress.backend_stage']);
+});
+
+test('checkUploadAck: the acknowledgement is on screen when the page first asks for the new encounter, and only after the 201', () => {
+  const id = 'e0000000-0000-4000-8000-000000000001';
+  const watch = {
+    requests: [{ method: 'POST', path: '/api/encounters', t: 10, status: 201, t_end: 120 }, { method: 'GET', path: `/api/encounters/${id}`, t: 140, status: 200, t_end: 180 }],
+    gets: [{ path: `/api/encounters/${id}`, t: 140, ack_present: true, ack_visible: true, ack_text: 'Uploaded. Reading your document…' }],
+    ack: { t: 125, text: 'Uploaded. Reading your document…' },
+  };
+  assert.deepEqual(ids(vb.checkUploadAck(watch, id)), ['upload.acknowledged:pass', 'upload.ack_after_created:pass', 'upload.ack_wording:pass']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, gets: [{ ...watch.gets[0], ack_present: false, ack_visible: false }] }, id)), ['upload.acknowledged']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, gets: [{ ...watch.gets[0], ack_visible: false }] }, id)), ['upload.acknowledged']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, gets: [] }, id)), ['upload.acknowledged']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, ack: { ...watch.ack, t: 60 } }, id)), ['upload.ack_after_created']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, ack: null }, id)), ['upload.ack_after_created']);
+  assert.deepEqual(failed(vb.checkUploadAck({ ...watch, requests: watch.requests.slice(1) }, id)), ['upload.ack_after_created']);
+  assert.deepEqual(vb.checkUploadAck({ ...watch, ack: { t: 125, text: 'Working…' } }, id).map(r => r.status), ['pass', 'pass', 'warn']);
+});
+
+function sent(id, extra = {}) {
+  return { id, provider: 'astra', purpose: 'independent', state: 'succeeded', request_sha256: 'a'.repeat(64), response_sha256: 'b'.repeat(64),
+    reused_from: null, reconciled: false, usage: { input_tokens: 1 }, created_at: `2026-11-03T22:00:0${id.slice(-1)}+00:00`, error: '', ...extra };
+}
+
+test('duplicateSends: a request sent again after an answer or an unreconciled unknown outcome is a duplicate paid request; a retry after a failure is not', () => {
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(OP())), []);
+  const runs = list => ({ provider_runs: list });
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1'), sent('r2')]))), ['pipeline.no_duplicate_send']);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1', { state: 'failed' }), sent('r2')]))), []);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1', { state: 'unknown' }), sent('r2')]))), ['pipeline.no_duplicate_send']);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1', { state: 'unknown', reconciled: true }), sent('r2')]))), []);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1'), sent('r2', { reused_from: 'r1', state: 'succeeded' })]))), [], 'a reuse sends nothing');
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1'), sent('r2', { purpose: 'peer_review' })]))), [], 'another purpose is another request');
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1'), sent('r2', { request_sha256: 'c'.repeat(64) })]))), []);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(runs([sent('r1'), sent('r2', { state: 'not_sent' })]))), [], 'a not-sent run is no request');
+});
+
+test('checkReloadIdentity: a reload while processing keeps the encounter, its jobs and its runs, sends nothing twice and brings the screen back', () => {
+  const id = OP().id;
+  const busy = busyCustomer();
+  const op = OP();
+  op.pipeline.stages = op.pipeline.stages.slice(0, 4).map((s, i) => (i === 3 ? { ...s, state: 'running', finished_at: null } : s));
+  op.provider_runs = op.provider_runs.slice(0, 1);
+  const before = { url: `https://x/#doc/${id}`, ids: [id, 'other'], op, cust: busy };
+  const later = clone(op);
+  later.pipeline.stages.push({ kind: 'fable', state: 'queued', error: '', finished_at: null });
+  later.provider_runs.push(OP().provider_runs[1]);
+  const after = { url: `https://x/#doc/${id}`, ids: [id, 'other'], op: later, cust: busy, dom: domOf(panelHtml(busy)) };
+  assert.deepEqual(failed(vb.checkReloadIdentity(id, before, after)), []);
+  const broken = [
+    ['reload.same_encounter', a => { a.url = 'https://x/#documents'; }],
+    ['reload.same_encounter', a => { a.ids = [...a.ids, 'new-encounter']; }],
+    ['reload.jobs_kept', a => { a.op.pipeline.stages.splice(1, 1); }],
+    ['reload.jobs_kept', a => { a.op.pipeline.stages[0].finished_at = '2026-11-03T23:59:00+00:00'; }],
+    ['reload.runs_kept', a => { a.op.provider_runs.shift(); }],
+    ['reload.runs_kept', a => { a.op.provider_runs[0].usage = {}; }],
+    ['reload.no_duplicate_send', a => { a.op.provider_runs.push({ ...a.op.provider_runs[0], id: 'again', created_at: '2026-11-03T23:00:00+00:00' }); }],
+    ['reload.progress_restored', a => { a.dom = domOf('<html><body></body></html>'); }],
+    ['reload.progress_restored', a => { a.dom = domOf(panelHtml(busy).replace('data-phase="processing"', 'data-phase="completed"')); }],
+  ];
+  for (const [id2, mutate] of broken) {
+    const a = { ...after, op: clone(after.op), ids: [...after.ids] };
+    mutate(a);
+    assert.deepEqual(failed(vb.checkReloadIdentity(id, before, a)), [id2], `${id2}: ${mutate.toString()}`);
+  }
+});
+
+test('checkStopResume: Stop answers, the encounter reads stopped and still, nothing is sent while stopped, Resume continues the same jobs', () => {
+  const id = OP().id;
+  const op = OP();
+  const stoppedCust = busyCustomer('stopped');
+  const record = {
+    stop_status: 201, before: { ids: [id], op }, stopped: { cust: stoppedCust, op, dom: domOf(panelHtml(stoppedCust)), animating: [] },
+    quiet: { op: clone(op) }, resume_status: 201,
+    resumed: { url: `https://x/#doc/${id}`, ids: [id], op: clone(op), cust: CUST(), dom: domOf(sample('customer-page.html')) },
+  };
+  assert.deepEqual(failed(vb.checkStopResume(id, record)), []);
+  const broken = [
+    ['stop.request', r => { r.stop_status = 409; }],
+    ['stop.state', r => { r.stopped.cust = busyCustomer(); }],
+    ['stop.settled_still', r => { r.stopped.animating = ['li.progress-step.is-running (pulse)']; }],
+    ['stop.nothing_sent_while_stopped', r => { r.quiet.op.provider_runs.push({ ...sent('r9'), id: 'while-stopped' }); }],
+    ['resume.request', r => { r.resume_status = null; r.resume_error = 'expected one Resume in the progress panel, found 0'; }],
+    ['resume.no_duplicate_send', r => { r.resumed.op.provider_runs.push({ ...op.provider_runs[1], id: 'resent', created_at: '2026-11-03T23:00:00+00:00' }); }],
+    ['resume.jobs_kept', r => { r.resumed.op.pipeline.stages.shift(); }],
+    ['resume.finished', r => { r.resumed.cust = busyCustomer('stopped'); }],
+  ];
+  for (const [want, mutate] of broken) {
+    const r = clone({ ...record, stopped: { ...record.stopped, dom: null }, resumed: { ...record.resumed, dom: null } });
+    r.stopped.dom = record.stopped.dom;
+    r.resumed.dom = record.resumed.dom;
+    mutate(r);
+    assert.ok(failed(vb.checkStopResume(id, r)).includes(want), `${want}: ${failed(vb.checkStopResume(id, r)).join(', ')}`);
+  }
+});
+
+test('checkProvenance: the operator view keeps the participants, models, request hashes, usage, reuse and the trace', () => {
+  assert.deepEqual(failed(vb.checkProvenance(OP(), TRACE(), { expectHarness: true })), []);
+  assert.deepEqual(vb.checkProvenance({ provider_runs: [] }, undefined).map(r => `${r.id}:${r.status}`)[0], 'provenance.participants:skipped');
+  assert.deepEqual(failed(vb.checkProvenance({ provider_runs: [] }, undefined, { expectHarness: true })), ['provenance.participants']);
+  const cases = [
+    ['provenance.participants', op => { op.harness.participants.pop(); }],
+    ['provenance.models', op => { op.harness.participants[1].model = ''; }],
+    ['provenance.peer_reviews', op => { delete op.harness.participants[2].peer; }],
+    ['provenance.request_hashes', op => { op.provider_runs[0].request_sha256 = ''; }],
+    ['provenance.request_hashes', op => { op.provider_runs[1].response_sha256 = null; }],
+    ['provenance.reuse', op => { op.provider_runs[2].reused_from = op.provider_runs[1].id; }],  // a reuse that bills usage of its own
+  ];
+  for (const [id, mutate] of cases) {
+    const op = OP();
+    mutate(op);
+    assert.ok(failed(vb.checkProvenance(op, TRACE(), { expectHarness: true })).includes(id), id);
+  }
+  const bare = TRACE();
+  delete bare.participants[1].runs[0].endpoint;
+  assert.deepEqual(failed(vb.checkProvenance(OP(), bare)), ['provenance.trace']);
+  assert.deepEqual(failed(vb.checkProvenance(OP(), null)), ['provenance.trace']);
+  const unmetered = OP();
+  unmetered.provider_runs[0].usage = {};
+  assert.deepEqual(vb.checkProvenance(unmetered, TRACE()).find(r => r.id === 'provenance.usage').status, 'warn');
+});
+
+test('checkAuthorization: every /ops/ URL is 404 to the customer, the old trace is gone for everyone, nobody signed in reads nothing, the operator reads all', () => {
+  const id = OP().id;
+  const probes = [
+    ...vb.OPS_GET_PATHS(id).map(p => ({ who: 'customer', method: 'GET', path: p, status: 404 })),
+    ...vb.OPS_POST_PATHS(id).map(p => ({ who: 'customer', method: 'POST', path: p, status: 404 })),
+    ...vb.REMOVED_PATHS(id).map(p => ({ who: 'customer', method: 'GET', path: p, status: 404 })),
+    { who: 'anonymous', method: 'GET', path: `/ops/api/encounters/${id}`, status: 404 },
+    { who: 'anonymous', method: 'GET', path: '/ops/', status: 302, location: '/login/?next=/ops/' },
+    ...vb.OPS_GET_PATHS(id).map(p => ({ who: 'operator', method: 'GET', path: p, status: 200 })),
+    ...vb.REMOVED_PATHS(id).map(p => ({ who: 'operator', method: 'GET', path: p, status: 404 })),
+  ];
+  assert.deepEqual(failed(vb.checkAuthorization(probes)), []);
+  const change = (index, fields) => probes.map((p, i) => (i === index ? { ...p, ...fields } : p));
+  const at = (who, where) => probes.findIndex(p => p.who === who && p.path === where);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('customer', `/ops/api/encounters/${id}`), { status: 200 }))), ['authorization.customer_ops_404']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('customer', '/ops/'), { status: 403 }))), ['authorization.customer_ops_404'], 'never 403');
+  assert.deepEqual(failed(vb.checkAuthorization(change(probes.findIndex(p => p.who === 'customer' && p.method === 'POST'), { status: 400 }))), ['authorization.customer_ops_404']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('customer', `/api/encounters/${id}/trace`), { status: 200 }))), ['authorization.trace_removed']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('operator', `/api/encounters/${id}/trace`), { status: 200 }))), ['authorization.trace_removed']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('anonymous', `/ops/api/encounters/${id}`), { status: 200 }))), ['authorization.anonymous']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('anonymous', '/ops/'), { location: 'https://elsewhere.example/' }))), ['authorization.anonymous']);
+  assert.deepEqual(failed(vb.checkAuthorization(change(at('operator', `/ops/api/encounters/${id}/trace`), { status: 404 }))), ['authorization.operator_reads']);
+  assert.deepEqual(failed(vb.checkAuthorization(probes.filter(p => p.who !== 'customer'))), ['authorization.customer_ops_404', 'authorization.trace_removed']);
+  assert.deepEqual(vb.checkArtifactsHidden(probes).map(r => r.status), ['skipped']);
+  const artifacts = [...probes, { who: 'customer', method: 'GET', path: '/api/reports/r1/download', status: 404, artifact: true }];
+  assert.deepEqual(failed(vb.checkArtifactsHidden(artifacts)), []);
+  assert.deepEqual(failed(vb.checkArtifactsHidden(artifacts.map(p => (p.artifact ? { ...p, status: 200 } : p)))), ['authorization.operator_artifacts_hidden']);
+});
+
+function metrics(width, extra = {}) {
+  const item = { left: 16, right: width - 16, width: width - 32, height: 60, shown: true, hit: true, enabled: true };
+  return { width, height: 844, scroll_width: width, rows: [{ proposal: 'p1', ...item }],
+    actions: [{ action: 'approve', proposal: 'p1', ...item, width: 120, height: 48 }], controls: [], offenders: [], ...extra };
+}
+
+test('checkViewport: no horizontal scroll, rows on screen, actions and details controls operable, touch targets of 44 px', () => {
+  assert.deepEqual(failed(vb.checkViewport('mobile', metrics(390))), []);
+  const m = metrics(390);
+  const cases = [
+    ['viewport.mobile.no_horizontal_scroll', { scroll_width: 520, offenders: ['table.code-table (right 520)'] }],
+    ['viewport.mobile.rows_visible', { rows: [{ ...m.rows[0], right: 520 }] }],
+    ['viewport.mobile.actions_operable', { actions: [{ ...m.actions[0], hit: false }] }],
+    ['viewport.mobile.actions_operable', { actions: [{ ...m.actions[0], enabled: false }] }],
+    ['viewport.mobile.actions_operable', { actions: [{ ...m.actions[0], shown: false }] }],
+    ['viewport.mobile.details_operable', { controls: [{ control: 'save-details', ...m.actions[0], hit: false }] }],
+  ];
+  for (const [id, extra] of cases) assert.deepEqual(failed(vb.checkViewport('mobile', metrics(390, extra))), [id], id);
+  const small = vb.checkViewport('mobile', metrics(390, { actions: [{ ...m.actions[0], height: 32 }] }));
+  assert.deepEqual(small.find(r => r.id === 'viewport.mobile.touch_targets').status, 'warn');
+});
+
+test('checkDecisionRows and checkCustomerDecisions: an agent approval is Approved and labelled as agent review, a rejection Excluded, the modifier shown', () => {
+  const cust = CUST();
+  const dom = domOf(sample('customer-page.html'));
+  const made = [
+    { proposal_id: cust.codes[0].id, code: '45380', action: 'approve', note: 'Agent-executed synthetic verification review', http_status: 201, modifier: null },
+    { proposal_id: cust.codes[1].id, code: '45385', action: 'approve', note: 'Agent-executed synthetic verification review', http_status: 201, modifier: 'XS' },
+  ];
+  const account = { label: SAMPLE_AGENT };
+  assert.deepEqual(failed(vb.checkDecisionRows(made, cust, dom)), []);
+  assert.deepEqual(failed(vb.checkCustomerDecisions(made, cust, account)), []);
+  // the acceptance reviewer's approval must never read as an agent's
+  assert.deepEqual(failed(vb.checkDecisionRows(made, cust, dom, { acceptance: true })), ['dom.decision.45380', 'dom.decision.45385']);
+  assert.deepEqual(failed(vb.checkCustomerDecisions(made, cust, account, 'human')), ['customer.decision.45380', 'customer.decision.45385']);
+  const html = sample('customer-page.html');
+  assert.deepEqual(failed(vb.checkDecisionRows(made, cust, domOf(html.replace('Modifier XS', '')))), ['dom.decision.45385']);
+  assert.deepEqual(failed(vb.checkDecisionRows(made, cust, domOf(html.replace(`data-code="45380" data-status="approved"`, 'data-code="45380" data-status="ready"')))), ['dom.decision.45380']);
+  const other = clone(cust);
+  other.codes[1].decision.modifiers = [];
+  other.codes[1].modifiers = [];
+  assert.deepEqual(failed(vb.checkCustomerDecisions(made, other, account)), ['customer.decision.45385']);
+  assert.deepEqual(failed(vb.checkCustomerDecisions(made, cust, { label: 'Someone else' })), ['customer.decision.45380', 'customer.decision.45385']);
+  // a rejection reads Excluded, "Rejected in review"
+  const rejected = clone(cust);
+  Object.assign(rejected.codes[0], { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review', modifiers: [] });
+  rejected.codes[0].decision = { ...rejected.codes[0].decision, action: 'reject', modifiers: [] };
+  const rejectHtml = html.replace('data-code="45380" data-status="approved"><span class="result-number">1.</span> <span class="result-code">45380</span> <span class="result-units">1 unit</span> <span class="result-modifiers"></span> <span class="status" data-status="approved">Approved</span> <span class="result-sub">Agent-executed synthetic review — not clinical approval</span>',
+    'data-code="45380" data-status="excluded"><span class="result-number">1.</span> <span class="result-code">45380</span> <span class="result-units">1 unit</span> <span class="result-modifiers"></span> <span class="status" data-status="excluded">Excluded</span> <span class="result-sub">Rejected in review</span>');
+  assert.notEqual(rejectHtml, html);
+  const rejection = [{ ...made[0], action: 'reject' }];
+  assert.deepEqual(failed(vb.checkDecisionRows(rejection, rejected, domOf(rejectHtml))), []);
+  assert.deepEqual(failed(vb.checkCustomerDecisions(rejection, rejected, account)), []);
+});
+
+test('checkModifierDialogs: the choice is shown exactly where the code has a modifier review, with "", 59 and XS, never prefilled, and the chosen one posted', () => {
+  const cust = CUST();
+  const ok = { proposal_id: cust.codes[1].id, code: '45385', action: 'approve', http_status: 201, modifier: 'XS', modifier_offered: true,
+    modifier_options: ['', '59', 'XS'], modifier_prefilled: '', posted: { modifiers: ['XS'] } };
+  assert.deepEqual(failed(vb.checkModifierDialogs([ok], cust)), []);
+  assert.deepEqual(failed(vb.checkModifierDialogs([{ ...ok, modifier: null, posted: {} }], cust)), [], 'no modifier chosen, none posted');
+  for (const change of [{ modifier_prefilled: 'XS' }, { modifier_options: ['59', 'XS', '59 and XS'] }, { posted: { modifiers: ['59', 'XS'] } },
+    { modifier: null, posted: { modifiers: ['XS'] } }, { modifier_offered: false }]) {
+    assert.deepEqual(failed(vb.checkModifierDialogs([{ ...ok, ...change }], cust)), ['decision.modifier.45385'], JSON.stringify(change));
+  }
+  const unreviewed = clone(cust);
+  unreviewed.codes[1].modifier_review = null;
+  assert.deepEqual(failed(vb.checkModifierDialogs([ok], unreviewed)), ['decision.modifier.45385'], 'offered where no modifier review is served');
+  assert.equal(vb.modifierFor({ modifiers: { 45385: 'XS' } }, { code: '45385', action: 'approve' }), 'XS');
+  assert.equal(vb.modifierFor({ modifiers: { 45385: 'XS' } }, { code: '45385', action: 'reject' }), null);
+  assert.equal(vb.modifierFor({ modifiers: { 45385: ['59', 'XS'] } }, { code: '45385', action: 'approve' }), null);
+});
+
+function download(kind, fmt, extra = {}) {
+  const hash = crypto.createHash('sha256').update(`${kind}.${fmt}`).digest('hex');
+  return { kind, fmt, audience: 'customer', viewport: 'desktop', offered: true, error: null, http_status: 201, report_id: `r-${kind}-${fmt}`, size: 120,
+    sha256: hash, refetch_sha256: hash, header_sha256: null, operator_sha256: hash, operator_audience: 'customer', operator_download_sha256: hash,
+    operator_header_sha256: hash, path: `${kind}.${fmt}`, ...extra };
+}
+
+test('checkCustomerDownloads and checkCustomerListing: each owed download re-fetched and held by the operator byte for byte, one at mobile width', () => {
+  const readiness = { draft: true, approved: true, blockers: [] };
+  const all = [download('draft', 'txt', { viewport: 'mobile' }), download('draft', 'csv'), download('approved', 'txt'), download('approved', 'csv')];
+  assert.deepEqual(vb.expectedCustomerDownloads(readiness), ['draft.txt', 'draft.csv', 'approved.txt', 'approved.csv']);
+  assert.deepEqual(failed(vb.checkCustomerDownloads(all, readiness, null)), []);
+  const swap = (index, fields) => all.map((d, i) => (i === index ? { ...d, ...fields } : d));
+  for (const [fields, id] of [[{ header_sha256: 'f'.repeat(64) }, 'download.draft.csv'], [{ refetch_sha256: 'e'.repeat(64) }, 'download.draft.csv'],
+    [{ operator_sha256: null }, 'download.draft.csv'], [{ operator_audience: 'operator' }, 'download.draft.csv'],
+    [{ operator_download_sha256: 'd'.repeat(64) }, 'download.draft.csv'], [{ error: 'the export dialog does not offer this report' }, 'download.draft.csv']]) {
+    assert.deepEqual(failed(vb.checkCustomerDownloads(swap(1, fields), readiness, null)), [id], JSON.stringify(fields));
+  }
+  assert.deepEqual(failed(vb.checkCustomerDownloads(all.map(d => ({ ...d, viewport: 'desktop' })), readiness, null)), ['download.mobile']);
+  // the approved export withheld until the review is complete: offered disabled, every blocker listed
+  const pending = { draft: true, approved: false, blockers: ['45380 has no decision.'] };
+  const withheld = { options: [{ kind: 'approved', fmt: 'txt', disabled: true }, { kind: 'approved', fmt: 'csv', disabled: true }], text: 'Approved codes (TXT) 45380 has no decision.' };
+  const drafts = all.slice(0, 2);
+  assert.deepEqual(failed(vb.checkCustomerDownloads(drafts, pending, withheld)), []);
+  assert.deepEqual(failed(vb.checkCustomerDownloads(drafts, pending, { ...withheld, options: [{ kind: 'approved', fmt: 'txt', disabled: false }] })), ['download.approved_withheld']);
+  assert.deepEqual(failed(vb.checkCustomerDownloads(drafts, pending, { ...withheld, text: 'Approved codes (TXT)' })), ['download.approved_withheld']);
+  assert.deepEqual(failed(vb.checkCustomerDownloads(drafts, pending, { options: [], text: '' })), ['download.approved_withheld']);
+  const cust = { reports: all.map(d => ({ id: d.report_id, kind: d.kind, fmt: d.fmt, current: true })) };
+  assert.deepEqual(failed(vb.checkCustomerListing(all, cust)), []);
+  assert.deepEqual(failed(vb.checkCustomerListing(all, { reports: cust.reports.map((r, i) => (i === 2 ? { ...r, current: false } : r)) })), ['listing.approved.txt']);
+  assert.deepEqual(failed(vb.checkCustomerListing(all, { reports: cust.reports.slice(1) })), ['listing.draft.txt']);
+});
+
+test('detailsPlan and planProblems: the details, modifiers and Stop the 2026-11-03 walk carries out, each refused when malformed', () => {
+  const doc = (plan, extra = {}) => ({ id: 'd1', upload: { service_date: null }, review_plan: plan, ...extra });
+  const notes = { approve: 'Agent-executed synthetic verification review' };
+  assert.deepEqual(vb.detailsPlan(doc({ details: [{ fact: 'extent', value: 'not_documented', code: '45385' }] })), [{ fact: 'extent', value: 'not_documented', code: '45385' }]);
+  assert.deepEqual(vb.detailsPlan(doc({ context_edit: { clear_member_date: true } }, { upload: { service_date: '2026-11-02' } })),
+    [{ fact: 'service_date', value: 'use_document', context_edit: true }]);
+  assert.deepEqual(vb.detailsPlan(doc({ context_edit: { service_date: '2026-11-03' } })), [{ fact: 'service_date', value: '2026-11-03', context_edit: true }]);
+  assert.deepEqual(vb.planProblems(doc({ details: [{ fact: 'extent', value: 'not_documented', code: '45385' }], modifiers: { 45385: 'XS' }, stop_and_resume: true }), notes), []);
+  assert.deepEqual(vb.planProblems(doc({}, { expected_no_em_questions: true }), notes), []);
+  for (const [plan, extra, want] of [
+    [{ detail: [] }, {}, /unknown key: detail/],
+    [{ details: [] }, {}, /must be a non-empty list/],
+    [{ details: [{ fact: 'extent' }] }, {}, /needs a non-empty fact and value/],
+    [{ details: [{ fact: 'extent', value: 'x', why: 'y' }] }, {}, /must hold only fact, value and code/],
+    [{ details: [{ fact: 'service_date', value: 'yesterday' }] }, {}, /YYYY-MM-DD date or "use_document"/],
+    [{ details: [{ fact: 'extent', value: '2026-11-03' }] }, {}, /only the service date/],
+    [{ details: [{ fact: 'service_date', value: 'use_document' }], context_edit: { service_date: '2026-11-03' } }, {}, /context_edit's, never answered twice/],
+    [{ details: [{ fact: 'extent', value: 'not_documented' }, { fact: 'extent', value: 'cannot_confirm' }] }, {}, /answered twice/],
+    [{ modifiers: { 45385: ['59', 'XS'] } }, {}, /one modifier, "59" or "XS"/],
+    [{ modifiers: { 45385: 'XU' } }, {}, /one modifier/],
+    [{ stop_and_resume: 'yes' }, {}, /stop_and_resume must be true or false/],
+    [{}, { expected_no_em_questions: 'yes' }, /expected_no_em_questions must be true or false/],
+  ]) {
+    const problems = vb.planProblems(doc(plan, extra), notes);
+    assert.equal(problems.length, 1, `${JSON.stringify(plan)}: ${problems.join(' | ')}`);
+    assert.match(problems[0], want);
+  }
+});
+
+test('checkDetailsSave: answers held as the member\'s context with attribution, never a revision, asked once, kept after a reload', () => {
+  const op = OP();
+  const before = { cust: DETAILS(), op };
+  const answers = [{ fact: 'service_date', value: 'use_document' }, { fact: 'extent', value: 'not_documented', code: '45385' }];
+  const saveOk = { requests: 1, http_status: 200, error: null, rows: { service_date: 'detail-service-date', extent45385: 'detail-extent' },
+    posted: { answers: [{ id: 'detail-service-date', fact: 'service_date', value: 'use_document' }, { id: 'detail-extent', fact: 'extent', value: 'not_documented' }] } };
+  const answered = () => {
+    const cust = DETAILS();
+    cust.service_date = { ...CUST().service_date };
+    cust.details_needed = [{ ...cust.details_needed[1], saved: { value: 'not_documented', label: 'Not documented', by: SAMPLE_AGENT, at: '2026-11-03T22:06:00+00:00', answer_id: 'ans-1' } }];
+    return cust;
+  };
+  const after = { cust: answered(), op };
+  const reloaded = { cust: answered(), op, dom: domOf(sample('customer-page-details.html').replace('<p class="detail-affects">Affects 45385</p>', '<p class="detail-saved">Saved: Not documented</p><p class="detail-affects">Affects 45385</p>')) };
+  const account = { label: SAMPLE_AGENT };
+  assert.deepEqual(failed(vb.checkDetailsSave(answers, before, after, saveOk, reloaded, account)), []);
+  const cases = [
+    ['details.request', s => { s.save.requests = 2; }],
+    ['details.request', s => { s.save.posted = { answers: [saveOk.posted.answers[0]] }; }],
+    ['details.request', s => { s.save.http_status = 409; }],
+    ['details.not_a_revision', s => { s.after.op = clone(op); s.after.op.revision.number = 2; s.after.op.revision.revisions_total = 2; }],
+    ['details.member_context', s => { s.after.op = clone(op); s.after.op.context.user_values = { service_date: '2026-11-02' }; }],
+    ['details.member_context', s => { s.after.cust.details_needed[0].saved.by = 'Someone else'; }],
+    ['details.member_context', s => { s.after.cust.details_needed[0].saved.answer_id = ''; }],
+    ['details.member_context', s => { s.after.cust.service_date = DETAILS().service_date; }],
+    ['details.persist_after_reload', s => { s.reloaded.dom = domOf(sample('customer-page-details.html')); }],
+    ['details.persist_after_reload', s => { s.reloaded.cust.details_needed[0].saved = null; }],
+    ['details.asked_once', s => { s.reloaded.cust.details_needed.push({ ...DETAILS().details_needed[1], id: 'again' }); }],
+  ];
+  for (const [want, mutate] of cases) {
+    const s = { save: clone(saveOk), after: { cust: answered(), op }, reloaded: { ...reloaded, cust: answered() } };
+    mutate(s);
+    const got = failed(vb.checkDetailsSave(answers, before, s.after, s.save, s.reloaded, account));
+    assert.ok(got.includes(want), `${want}: ${got.join(', ')}`);
+  }
+  // a save of "not documented" answers alone sends nothing
+  const only = [answers[1]];
+  const onlySave = { ...saveOk, posted: { answers: [saveOk.posted.answers[1]] } };
+  const sentOp = clone(op);
+  sentOp.provider_runs.push({ ...op.provider_runs[0], id: 'after-answer', created_at: '2026-11-03T23:00:00+00:00' });
+  assert.deepEqual(failed(vb.checkDetailsSave(only, before, { cust: answered(), op: sentOp }, onlySave, { ...reloaded, op: sentOp }, account)), ['details.member_answer_sends_nothing']);
+});
+
+test('sessionProblems on the customer session: no username and no provider mode served, so the live provider is accepted only by --allow-live-provider', () => {
+  const session = sampleJson('customer-session.json');
+  assert.match(vb.sessionProblems(session, {})[0], /serves no provider mode .* --allow-live-provider/);
+  assert.deepEqual(vb.sessionProblems(session, { allowLiveProvider: true }), []);
+  assert.deepEqual(vb.sessionProblems(session, { allowLiveProvider: true, username: 'review-agent' }), [], 'no username served: the fresh sign-in is the account');
+  const human = { ...session, user: { ...session.user, actor_kind: 'human', label: 'Demo Reviewer' } };
+  assert.deepEqual(vb.sessionProblems(human, { allowLiveProvider: true, acceptanceReviewer: true, username: 'demo-reviewer' }), []);
+  assert.equal(vb.sessionProblems(human, { allowLiveProvider: true }).length, 1, 'agent mode needs an agent account');
+});
+
+test('mergeSamples keeps the first failure of any sample; checkBundle wants one script, none inline, nothing foreign and a clean bundle', () => {
+  const merged = vb.mergeSamples([{ results: [{ id: 'progress.dom.phase', severity: 'hard', status: 'pass', reason: 'a' }] },
+    { results: [{ id: 'progress.dom.phase', severity: 'hard', status: 'fail', reason: 'b' }] }, { results: [{ id: 'progress.dom.phase', severity: 'hard', status: 'pass', reason: 'c' }] }]);
+  assert.deepEqual(merged.map(r => [r.id, r.status, r.reason]), [['progress.sampled.phase', 'fail', 'b (3 sample(s))']]);
+  const bundle = { files: [{ path: '/', status: 200 }, { path: '/static/studio/app.js', status: 200 }], hits: [], scripts: 1, inline: 0 };
+  assert.deepEqual(failed(vb.checkBundle(bundle)), []);
+  assert.deepEqual(failed(vb.checkBundle({ ...bundle, scripts: 2 })), ['bundle.one_script']);
+  assert.deepEqual(failed(vb.checkBundle({ ...bundle, inline: 1 })), ['bundle.one_script']);
+  assert.deepEqual(failed(vb.checkBundle({ ...bundle, files: [...bundle.files, { path: 'https://cdn.example/x.js', foreign: true }] })), ['bundle.one_script']);
+  assert.deepEqual(failed(vb.checkBundle({ ...bundle, files: [...bundle.files, { path: '/static/studio/ops.js', status: 404 }] })), ['bundle.read']);
+  const hits = vb.scanText("const RUN_PROVIDERS = { corti: 'Corti' }; location.hash = '#trace/1';", vb.scanContext(), 'bundle', '/static/studio/app.js');
+  assert.deepEqual(failed(vb.checkBundle({ ...bundle, hits })), ['scan.bundle']);
+});
+
+test('scanDocument: every body, header, page string, toast and file is scanned, and a scan over nothing fails rather than passes', () => {
+  const op = OP();
+  const sc = vb.scanContext({ documentText: op.revision.text, denyValues: vb.denyValuesFrom(op, TRACE()) });
+  const record = { downloads: [] };
+  const empty = { bodies: [], domStrings: new Map(), toasts: new Set() };
+  assert.deepEqual(failed(vb.scanDocument(empty, sc, record, '/nowhere')).sort(), ['scan.dom', 'scan.header', 'scan.json']);
+  const ctx = { bodies: [{ method: 'GET', path: '/api/encounters/x', status: 200, headers: { 'content-type': 'application/json' }, body: sample('customer-encounter.json') }],
+    domStrings: new Map([['Ready for review', 'text span.status']]), toasts: new Set(['Saved.']) };
+  assert.deepEqual(failed(vb.scanDocument(ctx, sc, record, '/nowhere')), []);
+  ctx.toasts.add('Fable request failed (HTTP 529)');
+  ctx.bodies.push({ method: 'POST', path: '/api/encounters/x/reports', status: 409, headers: { 'x-content-sha256': 'ab'.repeat(32) }, body: '{"error": "Astra is busy"}' });
+  assert.deepEqual(failed(vb.scanDocument(ctx, sc, record, '/nowhere')).sort(), ['scan.dom', 'scan.header', 'scan.json']);
+  assert.deepEqual(record.scans.hits.dom > 0 && record.scans.hits.json > 0 && record.scans.hits.header > 0, true);
+});
+
+test('sampleProgress compares the panel with what the PAGE was served, reads a mismatch twice, and fails when it saw no served read', async () => {
+  const busy = busyCustomer();
+  let html = panelHtml(busy);
+  let reads = 0;
+  const page = {
+    evaluate: async fn => {
+      if (fn === vb.readCustomerDom) { reads += 1; return vb.readCustomerDom(fakeDocument(html)); }
+      if (fn.name === 'collectDomStrings' || fn.name === 'readAnimations') return [];
+      return [];
+    },
+    waitForTimeout: async () => { html = panelHtml(busy); },
+  };
+  const ctx = { lastServed: new Map([['enc', { json: busy }]]), domStrings: new Map(), toasts: new Set() };
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), []);
+  // the page drew an older phase on the first read and caught up 900 ms later: no failure, two reads
+  reads = 0;
+  html = panelHtml(busy).replace('data-phase="processing"', 'data-phase="queued"');
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), []);
+  assert.equal(reads, 2);
+  // the page never caught up: the mismatch stands
+  page.waitForTimeout = async () => {};
+  html = panelHtml(busy).replace('data-phase="processing"', 'data-phase="queued"');
+  assert.deepEqual(failed((await vb.sampleProgress(page, ctx, 'enc')).results), ['progress.dom.phase']);
+  // nothing the page was served was seen: no comparison is no pass
+  assert.deepEqual(failed((await vb.sampleProgress(page, { ...ctx, lastServed: new Map() }, 'enc')).results), ['progress.dom.served']);
+});
+
+test('loadOperatorCredentials: a private JSON file with a top-level username and password, its content never quoted', () => {
+  const dir = privateDir();
+  try {
+    const good = writeFile(dir, 'ops.json', JSON.stringify({ username: 'ops-agent', password: 'synthetic-operator-password' }));
+    assert.deepEqual(vb.loadOperatorCredentials(good), { username: 'ops-agent', password: 'synthetic-operator-password', source: 'operator_credentials', mode: 0o600 });
+    const open = writeFile(dir, 'open.json', JSON.stringify({ username: 'ops-agent', password: 'synthetic-operator-password' }), 0o644);
+    assert.throws(() => vb.loadOperatorCredentials(open), /mode 0644: a group or other user may read/);
+    const nested = writeFile(dir, 'nested.json', JSON.stringify({ service: 'cpt-studio', accounts: [{ username: 'ops-agent', password: 'x' }] }));
+    assert.throws(() => vb.loadOperatorCredentials(nested), /must hold a non-empty top-level "username" and "password"/);
+    const broken = writeFile(dir, 'broken.json', '{"username": "ops-agent", "password": "s3cret-not-json');
+    assert.throws(() => vb.loadOperatorCredentials(broken), error => /is not a JSON object/.test(error.message) && !error.message.includes('s3cret'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('main refuses an operator account that is the customer account, before Playwright', async () => {
+  const dir = privateDir();
+  try {
+    const manifest = path.join(dir, 'manifest.json');
+    fs.writeFileSync(manifest, JSON.stringify({ documents: [], review_notes: {} }));
+    fs.mkdirSync(path.join(dir, 'docs'));
+    fs.writeFileSync(path.join(dir, 'docs', 'generated.json'), JSON.stringify({ manifest_sha256: sha(fs.readFileSync(manifest, 'utf8')), documents: [] }));
+    const creds = writeFile(dir, 'agent.json', JSON.stringify({ username: 'review-agent', password: 'synthetic-a' }));
+    const same = writeFile(dir, 'same.json', JSON.stringify({ username: 'review-agent', password: 'synthetic-b' }));
+    const args = ['--base-url', 'https://x', '--credentials', creds, '--operator-credentials', same, '--docs', path.join(dir, 'docs'), '--manifest', manifest, '--out', path.join(dir, 'out')];
+    const refused = await runMain(args, undefined);
+    assert.equal(refused.code, 2);
+    assert.match(refused.err, /^verify_browser: the operator account must not be the customer account/);
+    assert.equal(refused.err.includes('synthetic-a') || refused.err.includes('synthetic-b'), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- the walk itself, over a scripted site (no server, no browser) ---------------------------------------------------------
+//
+// fakeSite serves the customer API and the customer page (markup written to the DOM contract from the customer state, read
+// by the walk's own readCustomerDom through fake_dom.cjs), the operator API beside it, and answers the decisions, details
+// and report POSTs as the contract says the server does, keeping the operator view in step. Every act is recorded; a step
+// the walk was not expected to take ends it with an error. leak: switches for each broken shape the walk must catch.
+
+const BASE = 'https://cpt.example';
+
+function pendingCustomer() {
+  const enc = CUST();
+  enc.state = 'ready';
+  enc.state_label = 'Ready for review';
+  enc.codes.forEach(code => Object.assign(code, { status: 'ready', status_label: 'Ready for review', sub_label: '', modifiers: [], decision: null,
+    allowed_actions: ['approve', 'reject'] }));
+  enc.readiness = { draft: true, approved: false, blockers: ['45380 has no decision.', '45385 has no decision.'] };
+  enc.reports = [];
+  enc.activity = [];
+  return enc;
+}
+
+function pendingOperator() {
+  const op = OP();
+  op.state = 'ready_for_review';
+  op.state_label = 'Ready for review';
+  for (const p of op.assessment.proposals) {
+    if (p.bucket !== 'selected') continue;
+    Object.assign(p, { decision: null, decision_state: 'undecided', allowed_actions: ['approve', 'reject'] });
+  }
+  op.decisions.history = [];
+  op.readiness = { draft: true, reviewed: false, blockers: ['45380 has no decision.'] };
+  op.reports = [];
+  return op;
+}
+
+function rowHtml(code) {
+  const quotes = code.why.quotes.map(q => `<blockquote class="why-quote" data-start="${q.start}" data-end="${q.end}" data-page="${q.page}">“${q.text}”</blockquote>`).join('');
+  const quals = code.why.qualifications.map(q => `<p class="why-qualification">${q}</p>`).join('');
+  const buttons = code.allowed_actions.map(a => `<button type="button" data-decision="${a}" data-proposal="${code.id}">${a}</button>`).join('');
+  return `<li class="result-row" id="card-${code.id}" data-proposal="${code.id}" data-code="${code.code}" data-status="${code.status}">`
+    + `<span class="result-number">${code.number}.</span><span class="result-code">${code.code}</span><span class="result-units">${code.units} unit</span>`
+    + `<span class="result-modifiers">${code.modifiers.length ? `Modifier ${code.modifiers.join(', ')}` : ''}</span>`
+    + `<span class="status" data-status="${code.status}">${code.status_label}</span><span class="result-sub">${code.sub_label}</span>`
+    + `<p class="result-summary">${code.summary}</p><details class="why-code"${code.whyOpen ? ' open' : ''}><summary>Why this code?</summary>${quotes}${quals}</details>${buttons}</li>`;
+}
+
+function fakeSite({ leak = {} } = {}) {
+  const state = { customer: pendingCustomer(), operator: pendingOperator(), trace: TRACE(), url: 'about:blank', dialog: null, exportOpen: false,
+    whyOpen: false, viewport: 'desktop', acts: [], posts: [], gets: [], files: new Map(), listing: [], legacy: leak.legacyArtifact ? [{ id: 'legacy-1', audience: 'operator', kind: 'reviewed', fmt: 'txt', sha256: 'f'.repeat(64) }] : [] };
+  const id = state.customer.id;
+  const waiters = [];
+  const downloads = [];
+  const requestListeners = new Set();
+  const json = (status, body, headers = {}) => ({ ok: () => status >= 200 && status < 300, status: () => status, json: async () => clone(body),
+    text: async () => JSON.stringify(body), body: async () => Buffer.from(JSON.stringify(body)), headers: () => ({ 'content-type': 'application/json', ...headers }) });
+  const bytes = (status, data, headers = {}) => ({ ok: () => status === 200, status: () => status, body: async () => Buffer.from(data), text: async () => String(data),
+    json: async () => JSON.parse(String(data)), headers: () => headers });
+  const html = () => {
+    const c = state.customer;
+    const rows = c.codes.map(code => rowHtml({ ...code, whyOpen: state.whyOpen && code === c.codes[0] })).join('');
+    const options = ['draft', 'approved'].flatMap(kind => ['txt', 'csv'].map(fmt => `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${c.readiness[kind] ? '' : ' disabled'}>${kind} ${fmt}</button>`)).join('');
+    const dialog = state.dialog;
+    const code = dialog ? c.codes.find(item => item.id === dialog.proposal) : null;
+    const select = code && code.modifier_review ? `<select id="reviewModifier"><option value=""${dialog.modifier ? '' : ' selected'}></option>${['59', 'XS'].map(v => `<option value="${v}"${dialog.modifier === v ? ' selected' : ''}>${v}</option>`).join('')}</select>` : '';
+    return `<html><head><title>CPT Studio</title></head><body><main><h1>${c.title}</h1>${leak.toast ? `<div id="toast" role="status">${leak.toast}</div>` : ''}`
+      + `<section class="progress-panel" data-phase="${c.progress.phase}" role="status"><ol>${c.progress.steps.map(s => `<li class="progress-step" data-step="${s.key}" data-state="${s.state}">${s.label}</li>`).join('')}</ol>`
+      + `<p class="progress-message">${c.progress.message}</p><p class="leave-note">You can leave this page.</p></section>`
+      + `<ul class="checks-panel">${c.checks.map(k => `<li class="check-step" data-check="${k.key}" data-state="${k.state}">${k.label}</li>`).join('')}</ul>`
+      + `<ol class="result-list">${rows}</ol><button type="button" data-action="export"${leak.exportAria ? ` aria-label="${leak.exportAria}"` : ''}>Download</button></main>`
+      + `${dialog ? `<dialog id="reviewDialog" open><input type="checkbox" id="reviewAcknowledgement">${select}<textarea id="reviewNote"></textarea><button id="saveReview">Save</button></dialog>` : ''}`
+      + `<dialog id="exportDialog"${state.exportOpen ? ' open' : ''}><div id="exportOptions">${options}</div><ul>${c.readiness.blockers.map(b => `<li>${b}</li>`).join('')}</ul></dialog></body></html>`;
+  };
+  const doc = () => fakeDocument(html());
+  const resolve = response => {
+    const index = waiters.findIndex(w => w.predicate(response));
+    if (index >= 0) waiters.splice(index, 1)[0].resolve(response);
+  };
+  const posted = (where, body, status, answer) => {
+    const request = { method: () => 'POST', url: () => `${BASE}${where}`, postDataJSON: () => clone(body) };
+    const response = { ...json(status, answer), url: () => `${BASE}${where}`, request: () => request };
+    request.response = async () => response;
+    for (const listen of requestListeners) listen(request);
+    state.posts.push({ path: where, body: clone(body) });
+    resolve(response);
+    return response;
+  };
+  const readiness = () => {
+    const c = state.customer;
+    const undecided = c.codes.filter(code => !code.decision);
+    c.readiness = { draft: true, approved: undecided.length === 0, blockers: undecided.map(code => `${code.code} has no decision.`) };
+    state.operator.readiness = { draft: true, reviewed: undecided.length === 0, blockers: c.readiness.blockers };
+    if (!undecided.length) { c.state = 'reviewed'; c.state_label = 'Reviewed'; state.operator.state = 'reviewed'; }
+  };
+  const decideOn = body => {
+    const c = state.customer;
+    const code = c.codes.find(item => item.id === body.proposal_id);
+    const p = state.operator.assessment.proposals.find(item => item.id === body.proposal_id);
+    const at = '2026-11-03T22:05:00+00:00';
+    const modifiers = leak.dropModifier ? [] : (body.modifiers || []);
+    const by = leak.wrongReviewer ? 'Somebody else' : SAMPLE_AGENT;
+    p.decision = { id: `d-${p.id}`, proposal_id: p.id, code: p.code, action: body.action, note: body.note, reviewer: by, reviewer_kind: 'agent',
+      created_at: at, decided_at: at, carried_at: null, acknowledgement: body.acknowledgement, carried_from: null, invalidated: null, revision_number: 1, modifiers };
+    p.decision_state = body.action === 'approve' ? 'approved' : 'rejected';
+    p.allowed_actions = ['revoke'];
+    state.operator.decisions.history.push(clone(p.decision));
+    Object.assign(code, body.action === 'approve'
+      ? { status: 'approved', status_label: 'Approved', sub_label: SUB } : { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review' });
+    Object.assign(code, { modifiers, allowed_actions: ['revoke'], decision: { action: body.action, by, by_kind: 'agent', at, note: body.note, modifiers } });
+    readiness();
+    return { id: p.decision.id, reviewer_kind: 'agent' };
+  };
+  const reportOn = body => {
+    const n = state.listing.length + 1;
+    const rid = `b0b0b0b0-00${String(n).padStart(2, '0')}-4c4c-8d8d-9e9e9e9e9e${String(n).padStart(2, '0')}`;
+    const text = sample(`customer-report-${body.kind}.${body.fmt}`);
+    const data = leak.reportLine ? text.replace('LIMITATIONS', `${leak.reportLine}\n\nLIMITATIONS`) : text;
+    state.files.set(rid, data);
+    const hash = crypto.createHash('sha256').update(data).digest('hex');
+    state.listing.push({ id: rid, audience: leak.operatorAudience || 'customer', kind: body.kind === 'approved' ? 'reviewed' : 'draft', fmt: body.fmt, sha256: hash });
+    const row = { id: rid, kind: body.kind, fmt: body.fmt, filename: `CPT-Studio-${body.kind}.${body.fmt}`, generated_at: '2026-11-03T22:10:00+00:00',
+      generated_by: SAMPLE_AGENT, download_url: `/api/reports/${rid}/download`, current: true };
+    state.customer.reports.push(row);
+    for (const d of downloads.splice(0)) {
+      d.resolve({ suggestedFilename: () => row.filename, failure: async () => null, saveAs: async target => fs.writeFileSync(target, data) });
+    }
+    return row;
+  };
+  const customerGet = where => {
+    state.gets.push(where);
+    if (where === '/api/encounters') return json(200, { encounters: [{ id, title: state.customer.title, state: state.customer.state, state_label: state.customer.state_label,
+      service_date: '2026-11-03', date_conflict: false, open_details: 0, created_at: state.customer.created_at, kind: 'paste' }] });
+    if (where === `/api/encounters/${id}`) {
+      const body = clone(state.customer);
+      if (leak.vendorKey) body.codes[0].vendor = 'OpenAI';
+      return json(200, body);
+    }
+    if (where === `/api/encounters/${id}/original`) return json(404, { error: 'Not found.' });
+    const report = /^\/api\/reports\/([^/]+)\/download$/.exec(where);
+    if (report && state.files.has(report[1])) return bytes(200, state.files.get(report[1]), { 'content-type': 'text/plain', ...(leak.customerHash ? { 'x-content-sha256': crypto.createHash('sha256').update(state.files.get(report[1])).digest('hex') } : {}) });
+    if (report && state.legacy.some(item => item.id === report[1])) return bytes(leak.legacyVisible ? 200 : 404, 'legacy', {});
+    if (where.startsWith('/ops/')) return leak.opsOpen && where === `/ops/api/encounters/${id}` ? json(200, state.operator) : json(404, { error: 'Not found.' });
+    if (where === `/api/encounters/${id}/trace`) return json(404, { error: 'Not found.' });
+    throw new Error(`unexpected customer GET ${where}`);
+  };
+  const operatorGet = where => {
+    if (where === '/ops/api/encounters') return json(200, { encounters: [{ id }] });
+    if (where === `/ops/api/encounters/${id}`) return json(200, state.operator);
+    if (where === `/ops/api/encounters/${id}/trace`) return json(200, state.trace);
+    if (where === `/ops/api/encounters/${id}/reports`) return json(200, { reports: [...state.listing, ...state.legacy] });
+    if (where === '/ops/' || where === '/ops/assets/ops.js') return bytes(200, 'operator page', { 'content-type': 'text/html' });
+    const report = /^\/ops\/api\/reports\/([^/]+)\/download$/.exec(where);
+    if (report && state.files.has(report[1])) {
+      const data = state.files.get(report[1]);
+      return bytes(200, data, { 'x-content-sha256': crypto.createHash('sha256').update(data).digest('hex') });
+    }
+    if (where === `/api/encounters/${id}/trace`) return json(404, { error: 'Not found.' });
+    throw new Error(`unexpected operator GET ${where}`);
+  };
+  const strings = () => {
+    const out = [];
+    const walk = node => {
+      for (const child of node.childNodes) {
+        if (child.text !== undefined) { if (child.text.trim()) out.push(['text', node.tag, child.text]); continue; }
+        for (const [name, value] of Object.entries(child.attrs)) if (/^(aria-|data-|title$|alt$|placeholder$|value$)/.test(name)) out.push(['attr', `${child.tag}@${name}`, value]);
+        walk(child);
+      }
+    };
+    walk(doc().root);
+    return out;
+  };
+  const measure = () => {
+    const width = state.viewport === 'mobile' ? 390 : 1440;
+    const item = { left: 16, right: width - 16, width: width - 32, height: 60, shown: true, hit: true, enabled: true };
+    const rows = state.customer.codes.map(code => ({ proposal: code.id, ...item }));
+    const actions = state.customer.codes.flatMap(code => code.allowed_actions.map(action => ({ action, proposal: code.id, ...item, width: 120, height: 48 })));
+    return { width, height: state.viewport === 'mobile' ? 844 : 1000, scroll_width: leak.overflowMobile && state.viewport === 'mobile' ? 640 : width, rows, actions, controls: [], offenders: [] };
+  };
+  const clickOn = (selector, index = 0) => {
+    const nodes = doc().querySelectorAll(selector);
+    const node = nodes[index];
+    if (!node) throw new Error(`nothing to click at ${selector}`);
+    const decision = node.getAttribute('data-decision');
+    if (decision) {
+      state.dialog = { action: decision, proposal: node.getAttribute('data-proposal'), ack: false, note: '', modifier: '' };
+      state.acts.push(`open ${decision} ${state.customer.codes.find(c => c.id === state.dialog.proposal).code}`);
+      return;
+    }
+    if (node.getAttribute('data-action') === 'export') { state.exportOpen = true; state.acts.push('open export'); return; }
+    if (node.tag === 'summary') { state.whyOpen = true; state.acts.push('open why'); return; }
+    if (node.attrs.class === 'export-option') {
+      const body = { kind: node.getAttribute('data-export-kind'), fmt: node.getAttribute('data-export-fmt') };
+      state.acts.push(`export ${body.kind}.${body.fmt} at ${state.viewport}`);
+      const row = reportOn(body);
+      posted(`/api/encounters/${id}/reports`, body, 201, row);
+      return;
+    }
+    throw new Error(`unexpected click on ${selector}`);
+  };
+  const locator = (selector, index = null) => {
+    const at = () => (index === null ? 0 : index);
+    const self = {
+      first: () => locator(selector, 0), nth: i => locator(selector, i), locator: sub => locator(`${selector} ${sub}`, null),
+      count: async () => doc().querySelectorAll(selector).length,
+      click: async () => clickOn(selector, at()),
+      isVisible: async () => doc().querySelectorAll(selector).length > at(),
+      isDisabled: async () => Boolean(doc().querySelectorAll(selector)[at()]?.disabled),
+      waitFor: async ({ state: wanted } = {}) => {
+        const present = doc().querySelectorAll(selector).length > 0;
+        if ((wanted || 'visible') === 'visible' && !present && selector !== '#exportDialog') throw new Error(`${selector} is not visible`);
+      },
+      inputValue: async () => (selector.includes('reviewModifier') ? state.dialog.modifier : ''),
+      selectOption: async value => { state.dialog.modifier = value; state.acts.push(`modifier ${value}`); },
+      evaluate: async fn => fn(doc().querySelectorAll(selector)[at()]),
+      evaluateAll: async fn => fn(doc().querySelectorAll(selector)),
+      textContent: async () => doc().querySelectorAll(selector)[at()]?.textContent || '',
+    };
+    return self;
+  };
+  const page = {
+    goto: async next => { state.url = next; },
+    url: () => state.url,
+    waitForURL: async predicate => { if (!predicate(new URL(state.url))) throw new Error(`not at ${state.url}`); },
+    request: {
+      get: async address => customerGet(new URL(address).pathname),
+      post: async (address, { data } = {}) => {
+        const where = new URL(address).pathname;
+        if (where.startsWith('/ops/')) return json(leak.opsPostOpen ? 400 : 404, { error: leak.opsPostOpen ? 'Choose a report.' : 'Not found.' });
+        if (where === `/api/encounters/${id}/details`) { state.acts.push('details posted again'); state.posts.push({ path: where, body: clone(data) }); return json(200, { saved: true }); }
+        throw new Error(`unexpected customer POST ${where}`);
+      },
+    },
+    context: () => ({ cookies: async () => [{ name: 'cptstudio_csrf', value: 'synthetic-csrf' }] }),
+    evaluate: async (fn) => {
+      if (fn === vb.readCustomerDom) return vb.readCustomerDom(doc());
+      const source = String(fn);
+      if (fn.name === 'collectDomStrings') return strings();
+      if (fn.name === 'readAnimations') return [];
+      if (fn.name === 'measureViewport') return measure();
+      if (source.includes('toasts.slice')) return leak.toast ? [leak.toast] : [];
+      throw new Error(`unexpected evaluate: ${source.slice(0, 80)}`);
+    },
+    waitForFunction: async () => true,
+    waitForTimeout: async () => {},
+    reload: async () => { state.acts.push('reload'); state.dialog = null; state.exportOpen = false; state.whyOpen = false; },
+    screenshot: async ({ path: file }) => fs.writeFileSync(file, 'png'),
+    setViewportSize: async size => { state.viewport = size.width === 390 ? 'mobile' : 'desktop'; },
+    locator,
+    check: async selector => {
+      if (selector === '#reviewAcknowledgement' && state.dialog) { state.dialog.ack = true; return; }
+      throw new Error(`unexpected check of ${selector}`);
+    },
+    fill: async (selector, value) => {
+      if (selector === '#reviewNote' && state.dialog) { state.dialog.note = value; return; }
+      throw new Error(`unexpected fill of ${selector}`);
+    },
+    click: async selector => {
+      if (selector === '#saveReview' && state.dialog) {
+        const dialog = state.dialog;
+        if (dialog.action === 'approve' && !dialog.ack) throw new Error('the screen refuses an approval without its acknowledgement');
+        const body = { proposal_id: dialog.proposal, action: dialog.action, note: dialog.note.trim(),
+          acknowledgement: dialog.action === 'approve' ? sampleJson('customer-session.json').acknowledgement : '', ...(dialog.modifier ? { modifiers: [dialog.modifier] } : {}) };
+        state.acts.push(`${dialog.action} ${state.customer.codes.find(c => c.id === dialog.proposal).code} at ${state.viewport}`);
+        state.dialog = null;
+        posted(`/api/encounters/${id}/decisions`, body, 201, decideOn(body));
+        return;
+      }
+      clickOn(selector);
+    },
+    waitForResponse: predicate => new Promise(done => { waiters.push({ predicate, resolve: done }); }),
+    waitForEvent: kind => {
+      if (kind !== 'download') throw new Error(`unexpected event ${kind}`);
+      return new Promise(done => { downloads.push({ resolve: done }); });
+    },
+    on: (kind, listen) => { if (kind === 'request') requestListeners.add(listen); },
+    off: (kind, listen) => { requestListeners.delete(listen); },
+    once: () => {},
+    keyboard: { press: async () => { state.dialog = null; state.exportOpen = false; } },
+  };
+  const op = { request: { get: async address => operatorGet(new URL(address).pathname) } };
+  const anonymous = { get: async address => (new URL(address).pathname.startsWith('/ops/') ? json(leak.anonymousOpen ? 200 : 404, {}) : json(401, {})) };
+  return { page, op, anonymous, state, id };
+}
+
+async function walkSite(site, { plan = {}, notes = AGENT_NOTES, opts = {}, doc: extra = {} } = {}) {
+  const out = privateDir();
+  try {
+    const text = OP().revision.text;
+    const doc = { id: 'cux-01', title: 'customer walk', source: 'documents/cux-01.txt', delivery: { format: 'paste', file: 'cux-01.paste.txt' },
+      upload: { service_date: null }, expected_extraction: {}, expected_context: {}, expected_routing: {}, expected_clarifications: [], incomplete_services: [],
+      must_not_code: [{ family: 'gi.egd', reason: 'planned, not performed' }], review_plan: plan, ...extra };
+    const item = { doc, sourceText: text, delivery: { format: 'paste', file: doc.delivery.file, sha256: sha(text), size: Buffer.byteLength(text) } };
+    const watch = { current: null };
+    const account = { username: null, label: SAMPLE_AGENT, actor_kind: 'agent', acknowledgement: sampleJson('customer-session.json').acknowledgement };
+    const record = await vb.verifyDocument(site.page, { out, baseUrl: BASE, encounter: site.id, deadlineSeconds: 60, noAutoApprove: false, account, ...opts },
+      { review_notes: notes }, item, [], { op: site.op, anonymous: site.anonymous, watch, account });
+    return { record, out: null };
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true });
+  }
+}
+
+test('the walk decides, reloads, downloads and probes through the customer page with the operator view beside it, and passes on a consistent site', async () => {
+  const site = fakeSite();
+  const { record } = await walkSite(site, { plan: { modifiers: { 45385: 'XS' } } });
+  assert.equal(record.error, null);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => `${a.id}: ${a.reason}`), []);
+  assert.equal(record.result, 'pass');
+  assert.deepEqual(site.state.acts, ['open why', 'open approve 45380', 'approve 45380 at mobile', 'open approve 45385', 'modifier XS', 'approve 45385 at desktop', 'reload',
+    'open export', 'export draft.txt at mobile', 'open export', 'export draft.csv at desktop', 'open export', 'export approved.txt at desktop', 'open export',
+    'export approved.csv at desktop']);
+  assert.deepEqual(site.state.posts.filter(p => p.path.endsWith('/decisions')).map(p => [p.body.action, p.body.modifiers || []]), [['approve', []], ['approve', ['XS']]]);
+  const by = Object.fromEntries(record.assertions.map(a => [a.id, a.status]));
+  for (const id of ['customer.contract', 'customer.vocabulary', 'customer.codes.listed', 'customer.why.exact', 'customer.why.supports', 'provenance.participants',
+    'provenance.trace', 'pipeline.no_duplicate_send', 'dom.row.45380', 'dom.checks_panel', 'dom.why_opens', 'viewport.desktop.no_horizontal_scroll',
+    'viewport.mobile.no_horizontal_scroll', 'decision.mobile', 'decision.modifier.45385', 'persist.decision.45385', 'dom.decision.45385', 'customer.decision.45385',
+    'decisions.labelled', 'download.draft.txt', 'download.approved.csv', 'download.mobile', 'listing.approved.txt', 'authorization.customer_ops_404',
+    'authorization.trace_removed', 'authorization.anonymous', 'authorization.operator_reads', 'scan.json', 'scan.header', 'scan.dom', 'scan.file',
+    'after_reload.customer.contract', 'final.no_duplicate_send']) {
+    assert.equal(by[id], 'pass', id);
+  }
+  assert.equal(by['reload.same_encounter'], 'skipped', 'nothing was busy, so no reload while processing was due');
+  assert.deepEqual(record.downloads.map(d => [d.kind, d.fmt, d.viewport, d.operator_audience]), [['draft', 'txt', 'mobile', 'customer'], ['draft', 'csv', 'desktop', 'customer'],
+    ['approved', 'txt', 'desktop', 'customer'], ['approved', 'csv', 'desktop', 'customer']]);
+  assert.ok(record.screenshots.some(s => s.name === 'review-dialog' && s.viewport === 'mobile'));
+  assert.ok(Object.keys(record.operator_snapshots).includes('final') && Object.keys(record.customer_snapshots).includes('final'));
+  // the customer probes never touched an operator view with the customer session
+  assert.ok(site.state.gets.filter(g => g.startsWith('/ops/')).length >= 6);
+});
+
+test('the walk catches each leak and each broken promise of the customer surface', async () => {
+  const cases = [
+    [{ vendorKey: true }, ['customer.contract', 'scan.json']],
+    [{ opsOpen: true }, ['authorization.customer_ops_404', 'scan.json']],
+    [{ opsPostOpen: true }, ['authorization.customer_ops_404']],
+    [{ anonymousOpen: true }, ['authorization.anonymous']],
+    [{ customerHash: true }, ['download.draft.txt', 'download.draft.csv', 'download.approved.txt', 'download.approved.csv', 'scan.header']],
+    [{ toast: 'Fable request failed (HTTP 529)' }, ['scan.dom']],
+    [{ exportAria: 'Download the trace' }, ['scan.dom']],
+    [{ reportLine: 'Provider usage: corti 3 credits' }, ['scan.file']],
+    [{ operatorAudience: 'operator' }, ['download.draft.txt', 'download.draft.csv', 'download.approved.txt', 'download.approved.csv']],
+    // the page posted XS (decision.modifier passes); the server dropped it: the row and the served decision say so
+    [{ dropModifier: true }, ['dom.decision.45385', 'customer.decision.45385']],
+    [{ wrongReviewer: true }, ['customer.decision.45380', 'customer.decision.45385']],
+    [{ overflowMobile: true }, ['viewport.mobile.no_horizontal_scroll']],
+    [{ legacyArtifact: true, legacyVisible: true }, ['authorization.operator_artifacts_hidden']],
+  ];
+  for (const [leak, wanted] of cases) {
+    const { record } = await walkSite(fakeSite({ leak }), { plan: { modifiers: { 45385: 'XS' } } });
+    const got = record.assertions.filter(a => a.status === 'fail').map(a => a.id);
+    for (const id of wanted) assert.ok(got.includes(id), `${JSON.stringify(leak)}: ${id} not failed (failed: ${got.join(', ')}${record.error ? `; error ${record.error}` : ''})`);
+    assert.equal(record.result, 'fail', JSON.stringify(leak));
+  }
+  // a legacy artifact the customer cannot reach is a pass
+  const { record } = await walkSite(fakeSite({ leak: { legacyArtifact: true } }), { plan: { modifiers: { 45385: 'XS' } } });
+  assert.equal(record.assertions.find(a => a.id === 'authorization.operator_artifacts_hidden').status, 'pass');
+  assert.equal(record.result, 'pass');
+});
+
+test('the walk without a modifier plan chooses none, and the acceptance reviewer\'s approvals are refused as an agent site\'s', async () => {
+  const site = fakeSite();
+  const { record } = await walkSite(site);
+  assert.deepEqual(site.state.posts.filter(p => p.path.endsWith('/decisions')).map(p => p.body.modifiers || []), [[], []]);
+  assert.equal(record.result, 'pass');
+  // the acceptance reviewer records HUMAN approvals: a site that records them as an agent's fails the reload checks
+  const human = { username: 'demo-reviewer', label: SAMPLE_AGENT, actor_kind: 'human', acknowledgement: 'x' };
+  const accepted = await walkSite(fakeSite(), { notes: ACC_NOTES, plan: { approve_codes: ['45380'] }, opts: { acceptanceReviewer: true, noAutoApprove: true, account: human } });
+  const got = accepted.record.assertions.filter(a => a.status === 'fail').map(a => a.id);
+  for (const id of ['persist.decision.45380', 'dom.decision.45380', 'customer.decision.45380', 'decisions.labelled']) assert.ok(got.includes(id), `${id}: ${got.join(', ')}`);
 });

@@ -3339,3 +3339,42 @@ save for all rows), the checks strip (Document review, Independent checks, Codin
 approved apart, "Not separately coded", "Other codes considered (not suggested)" behind a closed disclosure, the
 limitations and the history. Status labels: Ready for review, Needs a detail, Approved, Excluded. The page's client
 contract is in API.md ("Core repair and customer interface (2026-11-03): P6 UI").
+
+## Core repair and customer interface (2026-11-03): P8 VERIFY
+
+The verification tooling for the customer interface (CORE-UX-DESIGN.md sections 5-9). Every tool reads one copy of
+the customer contract (`ops/verification/customer-contract.json`, section 7: every key listed, nothing else) and one
+denylist (`ops/verification/customer-denylist.json`: patterns per surface - DOM, API JSON, response headers,
+downloads, served bundle - forbidden JSON keys, the operator-view paths whose identifiers no customer surface may
+carry, and vectors that the JavaScript and Python readers' tests both run). A string that is a quotation of the
+encounter's own document is never scanned.
+
+- `ops/verify_browser.cjs` walks the customer page as the agent account (agent mode stays the default: every test
+  approval is labelled an agent-executed synthetic review) with a second, platform-operator session beside it
+  (`--operator-credentials FILE`, private JSON with top-level `username` and `password`; required; the walk refuses
+  to start unless `/ops/api/encounters` answers it). Everything a customer may no longer be shown - provider runs,
+  request hashes, models, usage, reuse, jobs, the trace - is read from `/ops/api/encounters/<id>` and its trace,
+  including every "no duplicate paid request" proof (a reload while processing, Stop and Resume, a details save made
+  twice). The customer encounter is held to the contract and to the operator view (the same text; the codes in the
+  contract's order and status mapping; units, decided modifiers and decisions; every "Why this code?" quotation an
+  exact slice on its page and a passage CPT Studio holds as support for the code). The page is read through the DOM
+  contract's hooks only. Negative scans cover every customer API body and header, every DOM text node and wording
+  attribute, toasts, every download and the served page and bundle. Every `/ops/` URL must answer 404 to the
+  customer session (GET, and POST with a body the operator views refuse), the old trace 404 to everyone. Progress:
+  the upload acknowledgement on screen when the page first asks for the encounter, sampled panels equal to what the
+  page was served, elapsed time, no percentage or ETA, nothing animating once failed or stopped, the steps equal to
+  the jobs. One decision and one download are made at 390x844; both viewports are measured and photographed. New
+  manifest keys: `review_plan.details`, `review_plan.modifiers` ("59" or "XS", never both), `review_plan.stop_and_resume`
+  and the document key `expected_no_em_questions`; `review_plan.second_review` is not carried out (the customer contract
+  offers none). Evidence schema `cpt-studio-browser-evidence@2` (customer and operator snapshots apart).
+- `ops/verify_downloads.py` reads `cpt-studio-customer-report@1` in the grammar
+  `ops/verification/samples/make_samples.py` writes down, and holds each customer download to the operator view
+  (`--api-dir` of operator encounter JSON, else the operator snapshot the evidence names; never the customer API the
+  browser read): approved items only, units, decided modifiers, approver, time and agent label, every quotation exact
+  at its offsets and a supporting passage, the fixed CSV columns, no X-Content-SHA256 on the customer download, the
+  bytes equal to the operator's stored bytes, and the negative scan. Operator reports are read as before.
+- `ops/scan_customer.py` (stdlib) signs a customer account in and makes only GET requests: the page and its bundle,
+  the session, the list, each named or listed encounter, its reports, and every `/ops/` URL and the removed trace.
+
+Not walked: the 409 a stale approved export answers once a decision changes (it needs a decision revoked on the walked
+encounter; the server tests hold it), and the operator page's own markup.
