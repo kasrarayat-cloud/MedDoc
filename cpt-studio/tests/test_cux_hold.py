@@ -142,6 +142,7 @@ UNMOVED = {
     ('R8 D9 release-1 to be removed tomorrow', '45378'): HELD,
     ('R8 D9 release-1 ordered by the referrer', '45378'): HELD,
     ('R8 D10 attached prior EGD report title', '45378'): READY,
+    ('R8 D12 E/M control, h4-01 time-only twin', '99204'): READY,
 }
 
 
@@ -453,3 +454,57 @@ class IndicationInATitledReportTests(SimpleTestCase):
                 self.assertIn(('gi.colonoscopy', 'biopsy', 'performed'), acts(text))
                 item = proposal(run(text, [sel('45380', span(text, TODAY_BX))]), '45380')
                 self.assertEqual(item.status, 'ready')
+
+
+H401 = (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'regression' / 'h4-01.txt').read_text(encoding='utf-8')
+L39 = ('Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside '
+       'results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, '
+       'and documentation.')
+L40 = ('Complexity of decision making: moderate. One new problem with an uncertain diagnosis; outside results and an '
+       'outside note reviewed; tests ordered.')
+TWIN = L39.replace(' the orders,', '', 1)
+CC = 'Loose stools, bloating and tiredness for about four months.'
+NB = ' '
+EMDAY = {'service_date': '2026-10-26'}
+
+
+def em_chassis(*pairs):
+    """h4-01's time-only, orders-free twin (R8 D12's chassis), with further asserted replacements."""
+    text = H401
+    for old, new in (('\n' + L40, ''), (L39, TWIN)) + pairs:
+        assert text.count(old) == 1, old[:60]
+        text = text.replace(old, new, 1)
+    return text
+
+
+class NotInPersonOnAFoldedCopyTests(SimpleTestCase):
+    """D12 (the design's D12: R8 1.2 and reader-repair DESIGN 3.1): C4 (detect._pv1_not_in_person_words) also reads a
+    folded copy of the text - no-break and other Unicode spaces turned into a space, soft hyphens and zero-width
+    characters removed - when the text holds any, so "Patient not<NBSP>seen<NBSP>in<NBSP>person today." holds as the
+    plain sentence does; and _PV1_IN_PERSON's "in person today" no longer matches inside "not seen in person today"
+    (a verb before it is read by that verb's own alternative, which reads its negation). Hold-only. Telehealth, video
+    and virtual visits stay read as visits (cues.NOT_IN_PERSON's comment: a policy this repair does not make)."""
+
+    def test_d12_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D12 ')
+
+    def visit(self, text):
+        item = proposal(run(text, [sel('99204', span(text, TWIN))], user_values=EMDAY), '99204')
+        return item.bucket, item.status
+
+    def test_not_seen_in_person_holds_in_any_spacing(self):
+        for words in ('Patient not seen in person today.', f'Patient not{NB}seen{NB}in{NB}person today.',
+                      'Patient not seen in person today.', 'Patient not seen in per­son today.',
+                      'Patient not​ seen in person today.'):
+            for where in ('history', 'exam'):
+                with self.subTest(words, where=where):
+                    pair = ((CC, CC + ' ' + words) if where == 'history'
+                            else ('Vital Signs and Exam\n', 'Vital Signs and Exam\n' + words + '\n'))
+                    self.assertEqual(self.visit(em_chassis(pair)), ('selected', 'needs_clarification'))
+
+    def test_controls_an_in_person_visit_stays_ready(self):
+        self.assertEqual(self.visit(em_chassis()), ('selected', 'ready'))
+        for pair in ((CC, CC + ' She was seen in person today.'), (CC, CC + f' She was seen{NB}in{NB}person today.'),
+                     ('Vital Signs and Exam\n', f'Vital Signs and Exam\nBlood{NB}pressure 118/72.\n')):
+            with self.subTest(pair[1][-40:]):
+                self.assertEqual(self.visit(em_chassis(pair)), ('selected', 'ready'))

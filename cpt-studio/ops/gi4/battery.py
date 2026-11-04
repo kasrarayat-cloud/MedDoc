@@ -55,6 +55,13 @@ R8_CECUM_LM = ('The colonoscope was advanced to the cecum, identified by the app
 R8_LAST = 'Last colonoscopy: 9 mm polyp removed with hot snare.'
 R8_INDICATION = 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare.'
 R8_INDEX = 'At the index colonoscopy, a 9 mm polyp was removed with a hot snare.'
+R8_L39 = ('Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the '
+          'outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, '
+          'the orders, and documentation.')
+R8_L40 = ('Complexity of decision making: moderate. One new problem with an uncertain diagnosis; outside results and an '
+          'outside note reviewed; tests ordered.')
+R8_TWIN = R8_L39.replace(' the orders,', '', 1)  # h4-01's time statement, orders-free (R8 D12's chassis)
+R8_CC = 'Loose stools, bloating and tiredness for about four months.'
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -64,6 +71,17 @@ R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace o
 
 def _r8(head, *lines):
     return head + ''.join(line + '\n' for line in lines)
+
+
+def _r8_edit(text, *pairs):
+    for old, new in pairs:
+        assert text.count(old) == 1, old[:60]
+        text = text.replace(old, new, 1)
+    return text
+
+
+R8_EM = _r8_edit((boot.HARNESS_TREE / 'tests' / 'fixtures' / 'gi4' / 'regression' / 'h4-01.txt').read_text(
+    encoding='utf-8'), ('\n' + R8_L40, ''), (R8_L39, R8_TWIN))
 
 
 def _r8_earlier(line):
@@ -440,6 +458,20 @@ CASES = {
         _r8(R8_COLON, R8_SEEN, 'Cold snare removal of the polyp was ordered by the referring physician.'),
         [('45378', R8_CECUM, 'done'),
          ('45385', 'Cold snare removal of the polyp was ordered by the referring physician.', 'not_done')]),
+    # D12: an E/M visit that is not an in-person visit of this date (h4-01's time-only, orders-free twin; the walk's date)
+    'R8 D12 E/M control, h4-01 time-only twin': (R8_EM, [('99204', R8_TWIN, 'done')]),
+    'R8 D12 E/M not seen in person, history, plain': (
+        _r8_edit(R8_EM, (R8_CC, R8_CC + ' Patient not seen in person today.')), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, history, NBSP': (
+        _r8_edit(R8_EM, (R8_CC, R8_CC + ' Patient not\u00a0seen\u00a0in\u00a0person today.')),
+        [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, exam, plain': (
+        _r8_edit(R8_EM, ('Vital Signs and Exam\n', 'Vital Signs and Exam\nPatient not seen in person today.\n')),
+        [('99204', R8_TWIN, 'no_ready')]),
+    'R8 D12 E/M not seen in person, exam, NBSP': (
+        _r8_edit(R8_EM, ('Vital Signs and Exam\n',
+                         'Vital Signs and Exam\nPatient not\u00a0seen\u00a0in\u00a0person today.\n')),
+        [('99204', R8_TWIN, 'no_ready')]),
     # D10: an attached prior report's title
     'R8 D10 attached prior EGD report title': (
         R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
@@ -447,7 +479,10 @@ CASES = {
         [('45378', R8_CECUM, 'done'), ('43235', 'Upper endoscopy report (fictional)', 'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
-R8_USER: dict = {}
+R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
+    'R8 D12 E/M control, h4-01 time-only twin', 'R8 D12 E/M not seen in person, history, plain',
+    'R8 D12 E/M not seen in person, history, NBSP', 'R8 D12 E/M not seen in person, exam, plain',
+    'R8 D12 E/M not seen in person, exam, NBSP')}
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')
