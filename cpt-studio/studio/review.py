@@ -231,13 +231,16 @@ DETAIL_UNAVAILABLE = 'detail_unavailable'  # review_view.DETAIL_UNAVAILABLE
 
 
 def _member_answers(assessment):
-    """P5 FILLS THIS (member-answer effects, CORE-UX-DESIGN.md 6): the current member answers of ``assessment``'s
-    encounter and revision - MemberAnswer rows that are not revoked - each a mapping or object with ``code``, ``family``,
-    ``fact`` and ``value`` ('not_documented' | 'cannot_confirm'), bound to the (code, family, fact) it was asked of and
-    never to a proposal key (lesson EV-1); ``code`` is '' for a documented service's question. The review overlay applies
-    them at read time (review_view.review_view: a code's answered question makes it detail_unavailable; a service's
-    closes that question only). [] in package P3: no member answer exists yet."""
-    return []
+    """The member-answer effects (CORE-UX-DESIGN.md 6; P5's details flow): the standing member answers of
+    ``assessment``'s revision - MemberAnswer rows no MemberAnswerRevocation withdrew (answers.saved_answers) - each a
+    mapping with ``code``, ``family``, ``fact`` and ``value`` ('not_documented' | 'cannot_confirm'), bound to the
+    (code, family, fact) it was asked of and never to a proposal key (lesson EV-1); ``code`` is '' for a documented
+    service's question. The review overlay applies them at read time (review_view.review_view: a code's answered
+    question makes it detail_unavailable - excluded, never approvable, nothing to decide - until the answer is
+    withdrawn; a service's closes that question only), so every reader of the overlay - the actions, readiness, coding
+    completeness, the encounter state, both APIs and the reports - reads the same answers."""
+    from . import answers  # local import: answers imports this module
+    return answers.saved_answers(assessment)
 
 
 def effective_view(assessment, current=None):

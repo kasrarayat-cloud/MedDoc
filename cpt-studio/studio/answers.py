@@ -286,6 +286,16 @@ def _questions(encounter, assessment, view, answers):
         for spec in getattr(item, 'questions', ()) or ():
             fact, family = spec.get('fact') or '', spec.get('family') or ''
             held.append(('proposal', fact, family or proposal.family, proposal.code, (2, proposal.position)))
+    # A code a standing answer excluded (review.DETAIL_UNAVAILABLE) holds no open question in its view - the answer
+    # closed it - and the question may be the overlay's own, with no stored row: its answered rows stay, so the member
+    # still sees the answer in effect and can withdraw it.
+    excluded = {proposal.code: proposal for key, proposal in proposals.items()
+                if getattr(view.get(key), 'reason', '') == review.DETAIL_UNAVAILABLE}
+    for answer in answers:
+        proposal = excluded.get(answer.code) if answer.code else None
+        if proposal is not None:
+            held.append(('proposal', answer.fact, answer.family or proposal.family, answer.code,
+                         (2, proposal.position)))
     return held
 
 
