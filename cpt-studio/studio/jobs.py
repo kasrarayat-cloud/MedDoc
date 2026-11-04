@@ -575,7 +575,9 @@ def addendum_block(revision):
 
 
 def _unreconciled_unknown(encounter):
-    return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+    # one rule with the derived state's: an unknown outcome not reconciled, or a run left 'sending' by a stage that no
+    # longer runs (decision (k), 2026-11-03: it blocks every send door like an unknown outcome)
+    return review._unreconciled_unknown(encounter)
 
 
 FAILED_BEFORE_MESSAGE = ('Nothing was sent: this request was sent before for this document and failed, and an '
@@ -950,7 +952,17 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter))
             _finish_loop(run, outcome)
         else:
-            _finish_run(run, provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30))
+            exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
+            try:
+                _finish_run(run, exchange)
+            except Exception:  # noqa: BLE001 - logged; the run records why, never the internals
+                # Decision (k) (2026-11-03; R6 4.6): the answer arrived and its outcome could not be recorded. The run
+                # is never left 'sending' - a failed job is not swept, so nothing would block an identical send - but
+                # recorded unknown, as _finish_loop records a participant's: it may have reached the vendor and been
+                # billed, so every send door waits on its reconciliation. The stage fails as before.
+                log.exception('the outcome of provider run %s could not be recorded', run.pk)
+                _settle_unrecorded(run, exchange)
+                raise
         # a participant's row names its provider, so the Activity tab words it ("Astra response recorded")
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
@@ -961,6 +973,29 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
     return run
+
+
+UNRECORDED_OUTCOME_MESSAGE = ('The answer arrived but its outcome could not be recorded (logged). The request may have '
+                              'reached the vendor and been billed: it is recorded with an unknown outcome, and nothing '
+                              'is sent again until it is reconciled.')
+ORPHANED_SENDING_MESSAGE = ('The stage that sent this request ended without recording its outcome. The request may have '
+                            'reached the vendor and been billed: it is recorded with an unknown outcome, and nothing is '
+                            'sent again until it is reconciled.')
+
+
+def _settle_unrecorded(run, exchange):
+    """Decision (k): ``run`` (still 'sending') recorded unknown - or not sent, where its exchange provably sent nothing -
+    with only small fields written, since writing the whole outcome just failed. A failure here is logged and leaves
+    the run 'sending', which every send door still reads as an unknown outcome (review._orphaned_sending) and the stale
+    sweep settles (mark_stale)."""
+    unsent = exchange.outcome == 'not_sent' and not exchange.sent
+    try:
+        models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
+            state=models.ProviderRun.NOT_SENT if unsent else models.ProviderRun.UNKNOWN, sent=bool(exchange.sent),
+            error='Nothing was sent; its record could not be written (logged).' if unsent else UNRECORDED_OUTCOME_MESSAGE,
+            finished_at=timezone.now())
+    except Exception:  # noqa: BLE001 - logged; the run stays 'sending', which blocks every send door
+        log.exception('provider run %s could not be settled after its outcome failed to record', run.pk)
 
 
 def _stop_requested(job, encounter):
@@ -2616,6 +2651,19 @@ def mark_stale():
             job.finished_at = timezone.now()
             job.save(update_fields=['state', 'error', 'result', 'finished_at'])
         review.refresh_state(job.encounter)
+    # Decision (k): a run left 'sending' by a stage that no longer runs - its outcome never recorded, the job failed or
+    # ended - is settled unknown like a dead worker's, so its reconciliation can release one new attempt. Until then
+    # every send door blocks on it (review._orphaned_sending). Its own stage, were it running, started before it.
+    for run in models.ProviderRun.objects.filter(state=models.ProviderRun.SENDING, created_at__lt=cutoff):
+        if Job.objects.filter(encounter_id=run.encounter_id, state=Job.RUNNING, started_at__lte=run.created_at).exists():
+            continue
+        with transaction.atomic():
+            reached = may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists()
+            settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
+                state=models.ProviderRun.UNKNOWN, error=ORPHANED_SENDING_MESSAGE, finished_at=timezone.now(),
+                sent=run.sent or reached)
+        if settled:
+            review.refresh_state(run.encounter)
 
 
 def remove_stale_ingest_dirs():

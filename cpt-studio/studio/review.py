@@ -891,8 +891,25 @@ def _active_jobs(encounter):
     return encounter.jobs.filter(state__in=ACTIVE_JOB_STATES).exists()
 
 
+def _orphaned_sending(encounter):
+    """Decision (k) of the core repair (2026-11-03; R6 4.6): whether a provider run of ``encounter`` was left 'sending'
+    by a stage that no longer runs - its outcome never recorded (an answer that arrived and could not be written, or a
+    write after it that failed: the job failed, and the stale sweep visits only running stages). A stage running now
+    creates its own run after it starts, so a run created before the running stage started (or with none running) is
+    never that stage's request in flight. Such a run may have reached the vendor and been billed."""
+    sending = encounter.provider_runs.filter(state=ProviderRun.SENDING)
+    running = encounter.jobs.filter(state=Job.RUNNING, started_at__isnull=False).order_by('-started_at').first()
+    if running is not None:
+        sending = sending.filter(created_at__lt=running.started_at)
+    return sending.exists()
+
+
 def _unreconciled_unknown(encounter):
-    return encounter.provider_runs.filter(state=ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+    """Whether a provider outcome of ``encounter`` is unknown and not reconciled - the rule the derived state and every
+    send door read (jobs._unreconciled_unknown is this one): a run recorded unknown, or one left 'sending' by a stage
+    that no longer runs (_orphaned_sending, decision (k)), which blocks every further send like an unknown outcome."""
+    return (encounter.provider_runs.filter(state=ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+            or _orphaned_sending(encounter))
 
 
 def decidable(proposal) -> bool:
