@@ -359,7 +359,10 @@ class SecondCloseTests(TemporaryDirectoryTest):
                 self.assertEqual(world.violations, [])
 
     def test_s4_a_record_the_new_web_wrote_after_the_first_close_holds_the_old_worker(self):
-        for hazards, words in (({'e1': ['modifier']}, 'modifier 1 hold states the old web shows wrongly'),
+        # (refute-r3 D-2: a close that does not say when a modifier was written holds it as written since the first
+        # close, and says so - test_install_r3.WindowedRecordTests holds the cases where it does say)
+        for hazards, words in (({'e1': ['modifier']}, 'modifier 1 hold records only a revision since the core repair '
+                                                      'writes'),
                                ({'e1': ['unknown']}, 'unknown 1 hold records it would act on')):
             with self.subTest(hazards=hazards):
                 world = World(self.tmp)
@@ -372,7 +375,9 @@ class SecondCloseTests(TemporaryDirectoryTest):
                 closes = [index for index, event in enumerate(world.events) if event[0] == 'close']
                 self.assertEqual(len(closes), 2)
                 self.assertLess(world.events.index(('drain', 9151)), closes[1])
-                self.assertLess(closes[1], world.events.index(('stop', NEXT, '30')))
+                # refute-r3 D-6: the incoming web is stopped before that close, and removed after it
+                self.assertLess(world.events.index(('stop', NEXT, '30')), closes[1])
+                self.assertLess(closes[1], world.events.index(('rm', NEXT)))
                 self.assertIn(words, str(failure))
                 self.assertIn('It is held - nothing can be sent', str(failure))
                 self.assertGreaterEqual(world.closes[1]['since'], world.closes[0]['since'])
@@ -411,7 +416,10 @@ class SecondCloseTests(TemporaryDirectoryTest):
 # --- L6-6: what only this revision's web writes is never said to have been shown by the old web ----------------------
 
 class WebWrittenHazardTests(TemporaryDirectoryTest):
-    def test_s3_a_member_answer_or_a_modifier_holds_the_old_worker_and_is_named_as_written_by_the_new_web(self):
+    def test_s3_a_member_answer_or_a_modifier_the_close_does_not_place_in_time_holds_the_old_worker(self):
+        # refute-r3 D-2: which web wrote one cannot be read, and the receipt no longer says the new web did; a close
+        # that names one without saying when it was written holds it (test_install_r3.WindowedRecordTests: one it
+        # places before the switch is named only, one since holds)
         world = World(self.tmp)
         world.fail[('https', 9151)] = install.InstallError('a co-tenant answered differently')
         world.close_answer = named({'e1': ['member_answer'], 'e2': ['modifier']})
@@ -419,8 +427,10 @@ class WebWrittenHazardTests(TemporaryDirectoryTest):
         self.assertEqual(world.violations, [])
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, False)})
         message = str(failure)
-        self.assertIn("2 encounter(s): member_answer 1, modifier 1 hold records only this revision's web writes",
-                      message)
+        self.assertIn('2 encounter(s): member_answer 1, modifier 1 hold records only a revision since the core repair '
+                      'writes', message)
+        self.assertIn('at a time the close did not say', message)
+        self.assertNotIn('while it served', message)
         self.assertNotIn('never stopped showing', message)
         self.assertIn('It is held - nothing can be sent', message)
 
@@ -442,13 +452,16 @@ class WebWrittenHazardTests(TemporaryDirectoryTest):
         self.assertIn(('start', WORKER), world.events)
         self.assertNotIn('only this revision', str(failure))
 
-    def test_switch_back_b7_says_the_previous_web_shows_what_this_web_wrote(self):
+    def test_switch_back_b7_says_when_what_it_names_was_written(self):
+        # refute-r3 D-2: the previous web writes them too when it is a revision since the core repair, so the receipt
+        # says what is known - none stood at B4's own check - and never that this revision's web wrote them
         world = switched_back_world(self.tmp)
         closes_answering(world, [named({}), named({'e1': ['member_answer']})])
         details, failure = run_switch_back(world)
         self.assertEqual(world.violations, [])
-        self.assertIn("member_answer 1 only this revision's web writes: it wrote them before it stopped taking traffic",
-                      str(failure))
+        self.assertIn('member_answer 1: a member\'s answer or a chosen modifier, written since this switch-back read '
+                      'none standing', str(failure))
+        self.assertNotIn("only this revision's web writes", str(failure))
         self.assertFalse([name for name, c in world.containers.items() if c['role'] == 'worker' and c['running']])
 
 
@@ -635,7 +648,10 @@ class KeepLayoutRollbackTests(TemporaryDirectoryTest):
         changes = {
             'the old web stopped': lambda w: w.containers[WEB].update(running=False),
             'the new worker running': lambda w: w.containers[WORKER].update(running=True),
-            'the vhost naming the old web': lambda w: setattr(w, 'vhost_text', w.confs[9150]['https']),
+            # (the vhost naming the old web is the 'back' layout rollback-app now finishes: refute-r3 D-3,
+            # test_install_r3.HalfWayRecoveryTests)
+            'the vhost naming neither port\'s rendering': lambda w: setattr(w, 'vhost_text',
+                                                                         w.confs[9151]['https'] + '# edited\n'),
             'a parked web too': lambda w: w.add(WEB + '-previous', 'web', OLD_IMAGE, OLD, port=9150, running=False),
             'the incoming web another revision': lambda w: w.containers[NEXT].update(revision=OLD),
         }
@@ -794,7 +810,7 @@ class InstallDocR2Tests(unittest.TestCase):
         for phrase in ('Run `preflight` again right before `switch-back`',
                        'a reload that was asked for is treated as applied, whatever its call answered',
                        'In the S4 keep layout `rollback-app` acts on the right containers',
-                       'only this revision\'s web writes',
+                       'only a revision since the core repair writes',  # refute-r3 D-2: not "this revision's web"
                        'a unique index (`studio.models.UniqueIndex`) only when it is partial over rows whose column',
                        'nginx must also be seen loading the switched file',
                        'closed again once it has stopped taking traffic'):

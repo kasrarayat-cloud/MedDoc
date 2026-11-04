@@ -93,6 +93,7 @@ class BlueGreenWorld:
         self.nginx_port = live
         self.generation = 1         # the configuration nginx runs: an applied reload starts new workers (refute-r2 L6-1)
         self.ingress_answers = []   # the next ingress_checks answers, in order (then: none)
+        self.baseline_failure = None  # an exception rollback-app's own baseline read raises (refute-r3 D-1), else none
         self.inflight = {}          # port -> requests old nginx workers still hold to it
         self.availability = None    # the recorder's model: every invariant point it saw, served or not
         self.next_id = 0
@@ -286,6 +287,13 @@ class BlueGreenWorld:
         self.act('ingress')
         return self.done(list(self.ingress_answers.pop(0)) if self.ingress_answers else [])
 
+    def own_baseline(self):
+        self.act('baseline')
+        if self.baseline_failure is not None:
+            raise self.baseline_failure
+        return self.done({'phase': 'rollback-app', 'read_at': '2026-11-04T10:00:00.000Z',
+                          'details': {'routing': {}, 'app_health': {'status': 200}}})
+
     def drain_web(self, port):
         self.act('drain', port)
         assert port != self.nginx_port, f'drained {port} while nginx still routes to it'
@@ -357,7 +365,8 @@ class BlueGreenWorld:
             install, inspect=self.inspect, docker=self.docker, wait_service=self.wait_service,
             smoke_web=self.smoke_web, vhost_state=self.vhost_state, live_vhost_bytes=self.live_vhost_bytes,
             vhost_operation=self.vhost_operation, nginx_test=self.nginx_test, nginx_reload=self.nginx_reload,
-            https_checks=self.https_checks, ingress_checks=self.ingress_checks, drain_web=self.drain_web,
+            https_checks=self.https_checks, ingress_checks=self.ingress_checks, own_baseline=self.own_baseline,
+            drain_web=self.drain_web,
             nginx_generation=self.nginx_generation, public_health=self.public_health, RELOAD_SEEN_ATTEMPTS=1,
             RELOAD_SEEN_INTERVAL=0,
             host_listening_ports=self.host_listening_ports, close_undone_stages=self.close,
@@ -676,16 +685,18 @@ class FailureArmTests(TemporaryDirectoryTest):
         # the restore's reload, then the undo's own (refute-r2 L6-1): nginx proven back on the old web before anything
         self.assertEqual(world.acts('reload'), [('reload', 9151), ('reload', 9150), ('reload', 9150)])
         proven = world.events.index(('health', 9150, OLD))
-        drain, remove = world.events.index(('drain', 9151)), world.events.index(('stop', NEXT, '30'))
+        drain, stop = world.events.index(('drain', 9151)), world.events.index(('stop', NEXT, '30'))
+        remove = world.events.index(('rm', NEXT))
         self.assertLess(proven, drain)
-        self.assertLess(drain, remove)
+        self.assertLess(drain, stop)
         self.assertTrue(details['settle']['proven'])
-        # closed when the file was put back, and again once the incoming web was drained (refute-r2 L6-3)
+        # closed when the file was put back, and again once the incoming web was drained (refute-r2 L6-3) AND stopped
+        # (refute-r3 D-6: a request still held to it could queue a stage after a close that came before its stop)
         self.assertEqual(len(world.closes), 2)
         closes = [index for index, event in enumerate(world.events) if event[0] == 'close']
         self.assertLess(proven, closes[0])
         self.assertLess(closes[0], drain)
-        self.assertLess(drain, closes[1])
+        self.assertLess(stop, closes[1])
         self.assertLess(closes[1], remove)
         self.assertGreaterEqual(world.closes[0]['since'], dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
         self.assertGreaterEqual(world.closes[1]['since'], world.closes[0]['since'])
@@ -757,7 +768,9 @@ class FailureArmTests(TemporaryDirectoryTest):
         world.fail[('close',)] = install.InstallError('Closing the stages failed (exit 1).')
         message, details = self.failed(world)
         self.assertEqual((world.nginx_port, world.file_port()), (9151, 9151))
-        self.assertIn('could not be closed', message)
+        # refute-r3 D-5: a close that raised may have committed first - never reported as having closed nothing
+        self.assertIn('the close of the stages the new pair left open did not finish', message)
+        self.assertIn('it may have closed some or all of them before it stopped', message)
         self.assertFalse(world.containers[WORKER]['running'])
 
     def test_s4_a_switch_back_that_fails_leaves_the_new_web_serving(self):
