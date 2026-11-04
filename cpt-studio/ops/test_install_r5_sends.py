@@ -46,9 +46,18 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import TemporaryDirectoryTest  # noqa: E402
+from test_install import TemporaryDirectoryTest, guard_host, release_host  # noqa: E402
 from test_install_harness import OPENAI_VALUE, OTHER, REVISION, RULING, AppWorld, app_args  # noqa: E402
 from test_install_harness2 import module_constants  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
+
+def tearDownModule():
+    release_host()
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 COMMAND = APP_ROOT / 'studio' / 'management' / 'commands' / 'participant_access_check.py'

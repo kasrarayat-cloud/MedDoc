@@ -23,7 +23,16 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import FakeOwnership, TemporaryDirectoryTest, run_body  # noqa: E402
+from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
+
+def tearDownModule():
+    release_host()
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40

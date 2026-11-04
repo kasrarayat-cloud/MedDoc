@@ -14,6 +14,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -31,6 +32,63 @@ import install  # noqa: E402
 DEPLOY = Path(__file__).resolve().parents[1] / 'deploy'
 REVISION = 'a' * 40
 OTHER = 'b' * 40
+
+
+# --- the host guard: no installer test reaches Docker, sudo, nginx or a live port ------------------------------------
+# Every module's setUpModule starts it and its tearDownModule stops it, failing the run when a test tried. The installer
+# runs on the live host, and a function newly reading the host through a path a test did not replace would otherwise run
+# the real command (blue/green made replace_services read the vhost and the containers).
+_REAL_SUBPROCESS_RUN = subprocess.run
+_REAL_CREATE_CONNECTION = socket.create_connection
+HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot')
+# The host's live ports, as literals (the guard must not depend on the installer it guards): nginx, the database,
+# both web ports, and the disposable test databases.
+SERVICE_PORTS = frozenset({80, 443, 55451, 9150, 9151, 55452, 55461})
+HOST_GUARD_ATTEMPTS = []
+
+
+def _guarded_run(argv, *args, **kwargs):
+    words = list(argv) if isinstance(argv, (list, tuple)) else [argv]
+    if words and Path(str(words[0])).name in HOST_COMMANDS:
+        HOST_GUARD_ATTEMPTS.append(' '.join(map(str, words))[:160])
+        raise AssertionError(f'a test tried to run {Path(str(words[0])).name} on this host')
+    return _REAL_SUBPROCESS_RUN(argv, *args, **kwargs)
+
+
+def _guarded_connect(address, *args, **kwargs):
+    host, port = address[0], address[1]
+    if host not in ('127.0.0.1', '::1', 'localhost') or port in SERVICE_PORTS:
+        HOST_GUARD_ATTEMPTS.append(f'connect {host}:{port}')
+        raise AssertionError(f'a test tried to connect to {host}:{port}')
+    return _REAL_CREATE_CONNECTION(address, *args, **kwargs)
+
+
+_HOST_GUARDS = []
+
+
+def guard_host():
+    patches = [mock.patch.object(subprocess, 'run', _guarded_run),
+               mock.patch.object(socket, 'create_connection', _guarded_connect)]
+    for patcher in patches:
+        patcher.start()
+    _HOST_GUARDS.append(patches)
+
+
+def release_host():
+    for patcher in reversed(_HOST_GUARDS.pop()):
+        patcher.stop()
+    if HOST_GUARD_ATTEMPTS:
+        attempts = list(HOST_GUARD_ATTEMPTS)
+        HOST_GUARD_ATTEMPTS.clear()
+        raise AssertionError(f'{len(attempts)} host command(s) or connection(s) were attempted: {attempts[:5]}')
+
+
+def setUpModule():
+    guard_host()
+
+
+def tearDownModule():
+    release_host()
 
 
 def template(kind):

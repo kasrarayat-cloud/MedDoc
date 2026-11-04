@@ -25,7 +25,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import TemporaryDirectoryTest  # noqa: E402
+from test_install import TemporaryDirectoryTest, guard_host, release_host  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40
@@ -510,9 +515,12 @@ def database():
 
 
 def tearDownModule():
-    if 'connection' in _DATABASE:
-        connection = _DATABASE.pop('connection')
-        connection.creation.destroy_test_db(_DATABASE.pop('old_name'), verbosity=0)
+    try:
+        if 'connection' in _DATABASE:
+            connection = _DATABASE.pop('connection')
+            connection.creation.destroy_test_db(_DATABASE.pop('old_name'), verbosity=0)
+    finally:
+        release_host()
 
 
 def run_in_image(body, params):
