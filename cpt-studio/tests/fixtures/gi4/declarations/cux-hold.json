@@ -888,5 +888,40 @@
     ]
    }
   }
+ },
+ "after_measurement_20261104T0125Z": {
+  "written": "2026-11-04T01:25Z, AFTER the code and its measurement (head c1ddc0b07, the sealed export tree-c1ddc0b0789a); everything above is kept as written",
+  "battery": "ops.gi4.battery --base c9f20a148 --head c1ddc0b07 --declare cux-hold.json: 39 movements, exactly the 39 declared, 0 undeclared, 0 new violations; 91 rows (50 + 41 register rows), 130 codes; violations base 39 -> head 2 (the two known S2/S3 exclusions); the 50 round-4 rows do not move.",
+  "replay": "ops.gi4.replay --fixtures --base c9f20a148 --head c1ddc0b07: EQUAL (8.0 s); --controls: base against itself EQUAL, the 3 planted mutants differ (98, 30, 54 paths).",
+  "h2": "ops.gi4.freeze full: GATE HOLDS - 324/324 cue patterns unchanged, sections.layout identical over 5,723 texts, 44,014 text x member states with NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, 19,780 requests unchanged, 5,723 mention counts unchanged (17 s); --quick (427 texts) the same.",
+  "h3": "ops.gi4.corpus judge: no movement (5,664 documents; every MUST and SHOULD cell equal on both trees; 45 s).",
+  "h7": "ops.gi4.cost exits 1 on BOTH trees, on doubling ratios only, at load average 7-17 on a shared host: base 27 ratio overages, head 18, no shape over on the head that is not over on the base; no absolute limit hit (worst head assess child 19.23 s against 60 s, worst analyze child 7.72 s against 30 s; memory as the base). At 399k the head's assess child is 0.84-1.32x the base's per shape (worst: one long title line 2.00 -> 2.64 s, heading-like lines 5.78 -> 7.46 s, blank lines before the head 12.79 -> 15.67 s). The package's own doubling probes (C4 fold, clause forms, stop statement, narrow hold; 25k-200k) are linear on the head (ratios <= 2.19); the fold costs about 1.75x the base routing on a text that holds no-break spaces, nothing on one that does not.",
+  "register": "probes/R8-history-defects/defects_probe.py on the head: every D1-D6, D8-D10, D12 (fold and regex), D13, D15 row and R3 1.8's history-cited and wrong-procedure shapes held; not moved: H1 (D7, the helper is not wired: wired in a scratch copy only H1's 45380 moves, H1 replay EQUAL, battery 0), release-7 x2, the D12 tele health / Pt FTA / entered in error / teaching physician wordings, D14 (P3's). Controls unchanged.",
+  "mara": "tests/fixtures/cux/mara through jobs._assess_child with the retained Corti response: byte-identical on base and head (statuses, holds, every check with its detail, fingerprints, questions, conflicts): 43239 and 45385 held by the false conflicts, 45380 READY, the three gi.office_em questions. With the binding corrected by hand (R3's mara_counterfactual inventory, a stand-in for P1): identical on both trees, 43239, 45380 and 45385 all READY (45385 with support warn, not held by the narrow hold: its passages are its colonoscopy's).",
+  "tests": "DB-free: the 81 DB-free modules + tests.test_cux_hold, 1,905 tests, 2 failures - the two parity digest tests (declared; the lead re-pins). DB-backed on 127.0.0.1:55461 (suffixes cuxhold5/cuxhold6): the 58 modules that import the changed readers or the battery, 828 + 1,000 tests, OK. Mutation proofs: 24 of 24 guards' mutants killed, application and restoration checked by sha256 in a scratch copy.",
+  "unit_pins_moved": {
+   "tests/test_gi4_battery.py": "the round-4 row count and the minimal-row filter leave the 'R8 ' rows out (structural)",
+   "tests/test_gi4_po.py": "the offer battery leaves the 'R8 ' rows to this declaration (tests/test_cux_hold.py checks them)",
+   "tests/test_harness2_r6_meaning.py, tests/test_harness2_r11.py": "D4's declared fail-closed cost holds C6's and F7N's unplaceable biopsy lines, which three label tests used to draw an own-passage release; they read the same labels on the same combined reports through a passage whose anatomy places its act (C6_PLACED, F7N_PLACED)",
+   "tests/test_harness_engine_parity.py": "'two-codes-a-plan-code-and-hcpcs' moves (its 45378 cites only a plan line dated by its own clause and adds a performed_status hold beside base_included); the digest is the lead's to re-pin"
+  },
+  "corrections": [
+   "amendment_20261104T0033Z_after_code_narrow_hold.unit_pins_moved said tests/test_repairs_r3_validation_b3.py was updated to held. SUPERSEDED (c1ddc0b07): the narrow hold now counts a passage as another time only by a cue of its own, so that control (an HPI line read historical by its section) is READY again and the file is back to the base's bytes. The reason was measured: the section-only count held a 45385 whose passage is today's act, made planned by a numbered plan label (tests/test_repairs_r4_sections.Release2PlanLabelsTests, passing on the base).",
+   "The D3 box row tie first read 'Not performed ☒' in a box-first row as a checked denial (tests/test_repairs_r4d_boxes3.Declared11TwoDenialOptionsTests failed); it now reads the row's own convention (services._row_marks_a_denial). The declared rows and movements are unchanged.",
+   "The D13 battery rows are derived from the committed h4-03 fixture with its EGD named in the title (the R8 probe's batch2b K02 text, which the register probe still reads, is not in the repository); both move the same way. The control keeps its declared name 'R8 D13 named EGD control, h4-03 as written' (h4-03 as written, EGD named)."
+  ],
+  "false_hold_costs_measured": [
+   "D4 (declared): the correct code on an unplaceable sentence of a combined report is held - F7N 43239, F1 43251, and C6's 45380 and 43251 (E1/C6 of meaning-r6).",
+   "D9: a clause-dated passage that is today's act by context but carries no 'today' word ('The polyp from the last colonoscopy was removed with a hot snare.') is held; with 'today' in it, it stays READY.",
+   "D13: a stop statement shallower than the reach holds [extent] even where an author meant a pause he did not mark as one (the pause words, 'on withdrawal', 'to take biopsies', are not held).",
+   "Narrow hold: a procedure code whose every passage is another documented service's or dated by its own clause is held even where the inventory documents the act done today (R3 1.8's history-cited shape - the intended movement).",
+   "Mara: none (byte-identical on both trees, as is and with the corrected binding)."
+  ],
+  "for_the_lead": [
+   "P3 extracts the engine's base rule into one callable for the engine and the review overlay: engine._base_within (D15) is part of that rule; an overlay that recomputes the base rule without it would release the D15 holds.",
+   "P1's parts() calls services.labelled_service_heading (D7) - the wiring is in that function's docstring - and the battery row for H1 is added with it: ('R8 D7 H1 separate same-day note', 45385 done READY->READY, 45380 not_done READY -> selected/needs_clarification).",
+   "D6's title branch in services._on_procedure_line (P1's): use it only for part.role == 'physician', as _studies_reported does.",
+   "Re-pin at integration: tests/fixtures/gi4/pins (battery.json gains the 41 'R8 ' rows; replay.json, cues.json, freeze.json and tables.json do not move) and the one parity digest."
+  ]
  }
 }
