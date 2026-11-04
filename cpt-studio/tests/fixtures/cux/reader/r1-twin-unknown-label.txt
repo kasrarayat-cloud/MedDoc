@@ -1,0 +1,10 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Riverside Endoscopy Unit (fictional)
+Colonoscopy Report
+Date of service: 2026-10-30
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the ileocecal valve was identified.
+Polyp A - transverse colon: a 4 mm sessile polyp was removed with cold forceps.
+No biopsies were taken from Polyp C.

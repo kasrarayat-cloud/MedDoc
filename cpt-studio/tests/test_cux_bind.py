@@ -174,3 +174,74 @@ class GenuineConflictTests(SimpleTestCase):
         self.assertTrue(conflicts(inventory(text), 'gi.colonoscopy', 'snare'))
         result = run(text, [('45385', 'A 7 mm polyp in the sigmoid colon was removed with a cold snare.')])
         self.assertEqual(outcomes(result)['45385'], held('conflict:snare'))
+
+
+# --- rule 1: lesion labels and specimen labels bind the act to the lesion, its service and its region ---------------
+
+class LesionLabelTests(SimpleTestCase):
+    CODES = [('43239', 'Cold forceps biopsies were taken from the gastric antrum'),
+             ('45380', 'a 4 mm sessile polyp was removed with cold forceps and sent as specimen 2.'),
+             ('45385', 'a 9 mm pedunculated polyp was removed with a hot snare and sent as specimen 3.')]
+
+    def lesion(self, inv, size):
+        return next(les for s in inv.services for les in s.lesions if les.size == size)
+
+    def test_each_statement_binds_to_the_labelled_lesion(self):
+        text = document('r1-labels-positive')
+        inv = inventory(text)
+        a, b = self.lesion(inv, '4 mm'), self.lesion(inv, '9 mm')
+        colon = service(inv, 'gi.colonoscopy')
+        self.assertEqual({a.service, b.service}, {colon.id})
+        denied = {(x.kind, x.lesion) for x in acts(inv, 'gi.colonoscopy', status='negated')}
+        self.assertEqual(denied, {('snare', a.id), ('biopsy', b.id)})
+        self.assertEqual([(x.kind, x.lesion) for x in acts(inv, 'gi.colonoscopy', 'clip')], [('clip', b.id)])
+        self.assertEqual([x.kind for x in acts(inv, 'gi.egd')], ['biopsy'])
+        self.assertEqual(conflicts(inv), [])
+        result = run(text, self.CODES)
+        self.assertEqual(outcomes(result), {'43239': READY, '45380': READY, '45385': READY})
+        self.assertEqual(bundled(result), [('gi.colonoscopy', 'clip')])
+
+    def test_twin_a_denial_of_the_same_labelled_lesion_stays_a_conflict(self):
+        text = document('r1-twin-same-lesion')
+        inv = inventory(text)
+        found = conflicts(inv, 'gi.colonoscopy', 'snare')
+        self.assertEqual([c.lesion for c in found], [self.lesion(inv, '9 mm').id])
+        self.assertEqual(outcomes(run(text, self.CODES))['45385'], held('conflict:snare'))
+
+    def test_twin_an_ambiguous_label_binds_nothing(self):
+        text = document('r1-twin-ambiguous')
+        self.assertEqual(services._unique_labels(services._label_definitions(text)), frozenset())
+        inv = inventory(text)
+        # read as installed: the denial stays in the colonoscopy's own section, at the lesion its noun "Lesion" names
+        # last there - never moved by the label to the gastric lesion it also names
+        colon = service(inv, 'gi.colonoscopy')
+        self.assertEqual([(x.service, x.lesion) for x in acts(inv, kind='biopsy', status='negated')],
+                         [(colon.id, colon.lesions[-1].id)])
+        self.assertEqual(conflicts(inv), [])
+
+    def test_twin_an_unknown_label_reads_as_before(self):
+        text = document('r1-twin-unknown-label')
+        inv = inventory(text)
+        self.assertTrue(conflicts(inv, 'gi.colonoscopy', 'biopsy'))  # the blanket denial still pairs (rule 7)
+        self.assertEqual(outcomes(run(text, [('45380', 'a 4 mm sessile polyp was removed with cold forceps.')]))['45380'],
+                         held('conflict:biopsy'))
+
+    def test_labels_are_exact_tokens_defined_over_a_site_or_a_lesion(self):
+        defs = services._label_definitions('COL-1 - ascending colon: a 2 mm polyp\nP2: 6 mm polyp\nD2: normal\n'
+                                           'Polyp  3 - rectum\nPage 2\nCOL-1\n')
+        self.assertEqual(sorted(defs), ['COL-1', 'P2', 'Polyp 3'])
+        index = {'COL-1': object()}
+        self.assertEqual(len(services._labels_in('on COL-1.', 0, 9, index)), 1)
+        for other in ('on COL-10.', 'on col-1.', 'on XCOL-1.'):
+            with self.subTest(other):
+                self.assertEqual(services._labels_in(other, 0, len(other), index), set())
+
+    def test_a_specimen_reference_binds_only_a_clause_with_no_site_of_its_own(self):
+        text = (HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\nA 6 mm polyp in the transverse colon '
+                       'was removed with a cold snare and retrieved as specimen 3.\nA hemoclip was placed at the site of '
+                       'specimen 3.\nCold forceps biopsies of the rectum were also placed in specimen 3.\n')
+        inv = inventory(text)
+        polyp = self.lesion(inv, '6 mm')
+        self.assertEqual([x.lesion for x in acts(inv, 'gi.colonoscopy', 'clip')], [polyp.id])
+        rectal = [x for x in acts(inv, 'gi.colonoscopy', 'biopsy') if 'rectum' in x.anatomy]
+        self.assertEqual([x.lesion for x in rectal], [''])  # its own site places it, as before

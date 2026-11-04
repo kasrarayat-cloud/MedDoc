@@ -3742,6 +3742,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # the encounter's denials: no service named for them, each with the one service its part's heading names, if any
         # (see below)
         unplaced: list[tuple[Act, str]] = []
+        # rule 1 (core repair 2026-11-03): the document's lesion label definitions, the labels that resolve (one place
+        # each), and the index of the labels bound to a recorded lesion (None once two lesions would take one label)
+        label_defs = _label_definitions(text)
+        unique_labels = _unique_labels(label_defs)
+        def_rows = sorted((ls, sep_end, label) for label, defs in label_defs.items() for ls, sep_end, _ in defs)
+        def_starts = [row[0] for row in def_rows]
+        label_index: dict[str, Optional[Lesion]] = {}
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -3797,6 +3804,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
+                # rule 1: the label whose definition heads this mention; a lesion restated under a label it is bound to
+                # (a specimen table's "COL-1: ascending colon" over "2 mm polyp") is that lesion, never a new one -
+                # only in its own service and only where its size and its site agree with it
+                label = _heading_label(def_rows, def_starts, ss, lm.start()) if def_rows else None
+                under = label_index.get(label) if label else None
+                if existing is None and under is not None and under.service == d.id \
+                        and (not size or not under.size or size.replace(' ', '') == under.size.replace(' ', '')) \
+                        and (not anat or _regions_compatible(anat[0][1], under.region)):
+                    existing = under
                 creatable = (size or lead in ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several',
                                               'multiple', 'a separate', 'another') or lead.isdigit())
                 if existing is None and creatable and anat and (status or lesion_status(clause, lm, part)) not in (
@@ -3820,6 +3836,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     own_lesions.add(lesion.id)
                     last_named[lesion.id] = lm.start()
                     placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
+                    if label:  # rule 1: a label resolves to the one lesion it heads, never to two
+                        label_index[label] = lesion if label in unique_labels and label not in label_index else None
                 elif existing is not None:
                     sentence_lesions.append(existing)
                     if size or anat or (_noun_key(lm.group('noun')) == _noun_key(existing.noun)
@@ -3840,9 +3858,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # Acts in this sentence.
             for kind, ms, me in mentions:
                 clause = _clause_for(cls, ms)
-                anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
+                own_anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]]
+                anat = own_anat or anatomy_all
                 region = anat[0][1] if anat else ''
-                fam = _family_for_act(kind, region, part_family, present_families, binding_families)
+                # rule 1: a lesion label (or one lesion's specimen) named in the act's own clause binds the act to that
+                # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
+                # or a site of the clause's own that the lesion's tract cannot hold, leave it to the rules below
+                bound = _bound_lesion(text, clause, own_anat, label_index, drafts)
+                if bound is not None:
+                    anat = own_anat
+                    region = (own_anat[0][1] if own_anat else '') or bound.region
+                    fam = next(f for f, dd in drafts.items() if dd.id == bound.service)
+                else:
+                    fam = _family_for_act(kind, region, part_family, present_families, binding_families)
                 if not fam or fam not in drafts:
                     # Neither its part, its sentence nor its site tells which of the documented services the statement
                     # is about. A checklist item's own field or check box that denies it today is then the encounter's
@@ -3913,7 +3941,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d = drafts[fam]
                     d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam
                                     else (ss, se))
-                lesion = _lesion_for(sentence_lesions, ms) if fam else None
+                lesion = bound if bound is not None else (_lesion_for(sentence_lesions, ms) if fam else None)
+                if lesion is not None and fam and lesion.service != drafts[fam].id:
+                    lesion = None  # an act and its lesion are bound together: never at another service's lesion (rule 1)
                 role = part.role
                 labelled = next((r for r, pattern in ROLE_LABEL if pattern.match(text[ss:se])), None)
                 if labelled:
@@ -3937,8 +3967,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                           anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
                           technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
                           evidence=(_span(text, *bc),), cues=reading.cues, detail=_detail(text, *bc, kind))
-                placements.note(act, _covers_of(text, anat),
-                                lesion is not None and lesion.id in own_lesions and one_place)
+                placements.note(act, _covers_of(text, anat), bound is not None
+                                or (lesion is not None and lesion.id in own_lesions and one_place))
                 if not fam:
                     unplaced.append((act, _heading_service(part, drafts)))
                     continue
@@ -4242,6 +4272,110 @@ def _lesion_for(lesions: Sequence[Lesion], pos: int) -> Optional[Lesion]:
         if any(ev.start <= pos for ev in lesion.evidence):
             best = lesion
     return best or lesions[0]
+
+
+# --- core repair 2026-11-03 (P1, rule 1; R1-services-binding section 9): lesion labels and specimen labels -----------
+# A lesion introduced under a label - "COL-1 - ascending colon: A 2 mm sessile polyp ...", "P1: transverse colon, 6 mm
+# polyp", "Polyp 2 - sigmoid colon: ...", "Lesion A: a 10 mm ulcer ..." - keeps the label, and a later mention of the same
+# label in an act's clause ("No snare resection was performed on COL-1.", "One clip was placed at the COL-2 resection
+# site.") is about that lesion: the act binds to it, to its service and to its region, before any other rule places the
+# act (Mara: the denials and the clip written against COL-1 and COL-2 had gone to the upper endoscopy through a
+# section's lapse, and "No biopsy forceps were used on COL-2." contradicted the gastric biopsies). So does a specimen
+# reference equal to exactly one lesion's specimen ("specimen D", "(container C)"). Fail-closed: a label is one exact,
+# case-sensitive token (COL-1 is never COL-10 or col-1); a definition must head a lesion description (the label at the
+# start of its line, a separator, then a site or a lesion noun in its clause); a label whose definitions name disjoint
+# sites, or that two different lesions would take, resolves to nothing; an act whose own clause names two labels, a
+# label and another lesion's specimen, or a site the lesion's tract cannot hold, is read exactly as before. The index is
+# the reader's own (never part of the inventory: no record changes shape for a document without labels).
+_LABEL_TOKEN = (r'(?:[A-Z]{1,5}-\d{1,2}|[A-Z]{1,2}\d{1,2}|(?:Polyp|POLYP|Lesion|LESION|Site|SITE|Mass|MASS|Nodule|NODULE|'
+                r'Ulcer|ULCER)[ \t]+#?[ \t]*(?:\d{1,2}|[A-Z])|#[ \t]?\d{1,2})')
+LESION_LABEL_DEF = re.compile(r'[ \t\-*•]*(?P<label>' + _LABEL_TOKEN + r')(?:[ \t]*:[ \t]*|[ \t]+[-–—][ \t]+'
+                              r'|[ \t]*[–—][ \t]*)', re.A)
+LESION_LABEL_REF = re.compile(r'(?<![\w#-])(?P<label>' + _LABEL_TOKEN + r')(?![\w-])', re.A)
+LESION_NOUN_RX = _rx(r'\b' + LESION_NOUN + r'\b')
+LABEL_DEF_CHARS = 300  # a definition line is read in its first part (bounded work per line)
+_DEF_CLAUSE_END = re.compile(r'[.;]')  # where a definition's clause ends
+
+
+def _label_key(token: str) -> str:
+    """A label token with its inner spacing normalised ("Polyp  2" is "Polyp 2"); the case is kept (labels are exact)."""
+    return ' '.join(token.replace('#', '# ').split()).replace('# ', '#')
+
+
+def _label_definitions(text: str) -> dict[str, list[tuple[int, int, frozenset]]]:
+    """{label: [(line start, end of the label's separator, the regions its clause names)]} for every line that opens
+    with a lesion label, a separator and, in the clause after it, a site or a lesion noun (rule 1). One pass over the
+    lines, each read in its first LABEL_DEF_CHARS characters."""
+    out: dict[str, list[tuple[int, int, frozenset]]] = {}
+    for ls, le in _lines(text):
+        m = LESION_LABEL_DEF.match(text, ls, min(le, ls + LABEL_DEF_CHARS))
+        if m is None:
+            continue
+        stop = _DEF_CLAUSE_END.search(text, m.end(), min(le, ls + LABEL_DEF_CHARS))
+        ce = stop.start() if stop else min(le, ls + LABEL_DEF_CHARS)
+        sites = _anatomy_in(text, m.end(), ce)
+        if not sites and LESION_NOUN_RX.search(text, m.end(), ce) is None:
+            continue
+        out.setdefault(_label_key(m.group('label')), []).append(
+            (ls, m.end(), frozenset(region for _, region, _, _ in sites)))
+    return out
+
+
+def _regions_compatible(a: str, b: str) -> bool:
+    """Whether two regions can be one place for a lesion label's purpose: the same region, or both in one tract."""
+    return not a or not b or a == b or (a in UPPER and b in UPPER) or (a in LOWER and b in LOWER)
+
+
+def _unique_labels(definitions: dict) -> frozenset:
+    """The labels whose every definition names sites of one place (_regions_compatible, pairwise): a label defined over
+    disjoint sites is ambiguous and resolves to nothing."""
+    out = set()
+    for label, defs in definitions.items():
+        regions = set().union(*(r for _, _, r in defs))
+        if all(_regions_compatible(a, b) for a in regions for b in regions):
+            out.add(label)
+    return frozenset(out)
+
+
+def _heading_label(definitions_by_start: list, starts: list, ss: int, pos: int) -> Optional[str]:
+    """The label whose definition heads the lesion mentioned at ``pos`` in the sentence starting at ``ss``: the last
+    definition line that starts in the sentence at or before the mention (its separator ending before it)."""
+    i = bisect.bisect_right(starts, pos) - 1
+    if i < 0:
+        return None
+    ls, sep_end, label = definitions_by_start[i]
+    return label if ss <= ls and sep_end <= pos else None
+
+
+def _labels_in(text: str, start: int, end: int, index: dict) -> set:
+    """The lesions the bound labels named in [start, end) resolve to, and the ambiguous labels named there (None)."""
+    out = set()
+    for m in LESION_LABEL_REF.finditer(text, start, end):
+        key = _label_key(m.group('label'))
+        if key in index:
+            out.add(index[key])
+    return out
+
+
+def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index: dict, drafts) -> Optional[Lesion]:
+    """The one lesion an act's clause names by its label, or by a specimen reference that equals exactly one recorded
+    lesion's specimen (rule 1), else None: no such name, two different lesions named, an ambiguous label named, or a
+    site of the clause's own that the lesion's tract cannot hold. Bounded: the clause once per pattern, and the recorded
+    lesions only when the clause names a specimen. A specimen reference binds only a clause that names no site of its own
+    (the act is then placed by its site, as before): the label is the explicit name, the specimen the weaker one."""
+    named = _labels_in(text, clause[0], clause[1], index) if index else set()
+    specimens = set() if own_anat else {m.group('label') or m.group('label2')
+                                        for m in SPECIMEN.finditer(text, clause[0], clause[1])}
+    for specimen in specimens:
+        holders = [lesion for d in drafts.values() for lesion in d.lesions if lesion.specimen == specimen]
+        if len(holders) == 1:
+            named.add(holders[0])
+    if len(named) != 1 or None in named:
+        return None
+    lesion = next(iter(named))
+    if any(not _regions_compatible(region, lesion.region) for _, region, _, _ in own_anat):
+        return None
+    return lesion
 
 
 def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_intents) -> Optional[DocumentedService]:

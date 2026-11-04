@@ -1,0 +1,14 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Riverside Endoscopy Unit (fictional)
+Upper Endoscopy and Colonoscopy Report
+Date of service: 2026-10-30
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+UPPER ENDOSCOPY
+The gastroscope was advanced to the second part of the duodenum.
+Lesion 1 - gastric body: a 5 mm sessile polyp was removed with cold forceps.
+COLONOSCOPY
+The colonoscope was advanced to the cecum and the ileocecal valve was identified.
+Lesion 1 - sigmoid colon: an 8 mm sessile polyp was removed with a cold snare.
+No forceps biopsy was taken from Lesion 1.
+Impression: one gastric polyp and one sigmoid polyp removed.

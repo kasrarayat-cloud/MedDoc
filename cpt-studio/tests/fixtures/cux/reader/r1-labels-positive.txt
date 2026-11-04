@@ -1,0 +1,20 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Riverside Endoscopy Unit (fictional)
+Upper Endoscopy and Colonoscopy Report
+Date of service: 2026-10-30
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+UPPER ENDOSCOPY
+The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the gastric antrum
+and sent as specimen 1.
+COLONOSCOPY
+The colonoscope was advanced to the cecum and the ileocecal valve was identified.
+Bowel preparation
+Good
+FINDINGS AND THERAPY
+Polyp A - transverse colon: a 4 mm sessile polyp was removed with cold forceps and sent as specimen 2.
+Polyp B - rectum: a 9 mm pedunculated polyp was removed with a hot snare and sent as specimen 3.
+No snare was used on Polyp A.
+No forceps biopsy was taken from Polyp B.
+Two hemoclips were placed at the Polyp B polypectomy site to prevent delayed bleeding.
+Impression: antral biopsies; two colon polyps removed.
