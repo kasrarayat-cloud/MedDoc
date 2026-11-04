@@ -340,7 +340,8 @@ def _evidence_spans(proposal, view, text, pages):
 def approved_items(assessment):
     """The approved export's items (CORE-UX-DESIGN.md 4): the APPROVED proposals of ``assessment`` only - never an
     unresolved, undecided, rejected or excluded one, nor an approval the review overlay no longer supports (its view
-    carries a readiness blocker, or a member answer excluded it) - in stored order. Each a dict: proposal_id, key, code,
+    carries a readiness blocker, a member answer excluded it, or a reinstated same-day procedure holds the E/M) - in
+    stored order. Not a readiness check: the approved export renders these only once readiness(encounter)['reviewed']. Each a dict: proposal_id, key, code,
     units, modifiers (the reviewer's chosen modifier), approved_by (the approver's label), approver_kind ('human' |
     'agent'), decided_at (ISO, when the approver decided; a carried approval keeps its root's time), note, evidence
     (_evidence_spans: exact spans with page and character offsets), summary (one sentence of CPT Studio's own reading),
@@ -358,8 +359,8 @@ def approved_items(assessment):
         decision, view = current.get(proposal.pk), views.get(proposal.key)
         if decision is None or decision.action != APPROVE or proposal.bucket == ALTERNATIVE:
             continue
-        if view is not None and (view.blocker or view.reason == DETAIL_UNAVAILABLE):
-            continue
+        if view is not None and (view.blocker or view.reason == DETAIL_UNAVAILABLE or view.same_day_held):
+            continue  # an approval readiness blocks (the overlay's, a member answer's, the same-day E/M gate's)
         root = decision_root(decision)
         items.append({
             'proposal_id': str(proposal.pk), 'key': proposal.key, 'code': proposal.code, 'units': proposal.units,

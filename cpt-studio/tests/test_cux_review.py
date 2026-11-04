@@ -807,6 +807,23 @@ class OverlayHooksTests(TestCase):
             'acknowledgement': review.ACKNOWLEDGEMENTS['human'], 'modifiers': ['XS']}), content_type='application/json')
         self.assertEqual(reply.status_code, 409, reply.content)
 
+    def test_an_approval_the_same_day_gate_holds_is_no_approved_item(self):
+        em_gate = pf.check('em.same_day_if_reinstated', 'warn', 'Separately identifiable E/M if a procedure is reinstated')
+        marker = pf.check('review.same_day_em', 'warn', 'Same-day E/M after reinstatement')
+        reinstatement = pf.check('review.reinstatement', 'pass', 'Approval after reinstatement')
+        s = pf.scenario()
+        pf.assess(s.encounter, pf.result(
+            pf.proposal('sel:0', '99213', [pf.DATE_PASSAGE], checks=pf.standard_checks() + (em_gate,)),
+            pf.proposal('exc:0', '46221', [pf.PLAN_PASSAGE], bucket='excluded', reinstatable=True,
+                        checks=pf.standard_checks() + (reinstatement, marker))))
+        s.decide('sel:0', 'approve')
+        self.assertEqual([i['code'] for i in review.approved_items(s.encounter.current_assessment)], ['99213'])
+        s.decide('exc:0', 'reinstate')
+        s.decide('exc:0', 'approve')
+        self.assertIn('99213 needs a separately identifiable E/M: 46221 was reinstated as a same-day procedure',
+                      review.readiness(s.encounter)['blockers'])
+        self.assertEqual([i['code'] for i in review.approved_items(s.encounter.current_assessment)], ['46221'])
+
     def test_member_answers_reach_every_gate(self):
         s = persist('selected')
         answers = [{'code': '45378', 'family': 'gi.colonoscopy', 'fact': 'base_included', 'value': 'not_documented'}]
