@@ -1,0 +1,369 @@
+{
+ "package": "READER REPAIR, ROUND 3 (cux-r3-reader): refutation round 3's lens A findings against the round-2 reader repairs (cux-r2-bind.json L1c, L1d/L1f, L1e, R1a, R1b, R1c; cux-r2-em.json R8b-2), each repaired so the head reads no document worse than the installed revision and keeps the round-2 repairs' declared improvements; A8 measured and recorded as a residual (its repair needs routing's layout, which is frozen)",
+ "summary": "Findings A1-A8 of /home/claude/cpt-studio-ux-20261103/refute-r3/results.json (lens A), each REPRODUCED by a verifier (verdicts verify3:A:<id>) and reproduced again on this branch's base e020145e1 (scratch-r3-reader/out/rows-base.json: every finding input in the 'R8 R3 ' rows below reads as the finding says). A1, A2, A6 and A7 were introduced by the round-2 repairs (de78c63e8); A3, A4 and A5 are pre-existing on c47d71a34 and worse than installed; A8 is pre-existing on the installed revision too. Each rule below reads structure the document already gives (a note label, a label's own definitions, the examination an instrument tells, the lesion a sentence refers back to) and holds where the document does not settle the reading; where a repair gives an act back to the service the document gives it (the installed reading, or c47d71a34's for the round-2 repairs' own regressions), the release is named here, row by row.",
+ "base": "e020145e188494707073dec458b674324e95237c (the integrated feature branch after the round-2 repairs)",
+ "installed": "41e03656df617d5fab4a551ba7a0d7aea5ca3380",
+ "declared_before_code": true,
+ "declared_at": "2026-11-04, written before any code change and committed alone, first; the commit that adds this file is its time (the battery rows, their offers and the code follow it)",
+ "standard": "Refutation round 3's brief: the head must never read a document worse than the installed revision 41e03656d does (a code READY that installed holds, a supported code held or excluded that installed made READY, an E/M question dropped that installed asked), and must keep the round-2 repairs' declared improvements; where a narrower rule cannot do both, the shape reads as installed does. Round-4 (ruling 2026-11-03 (g); R8 section 4): when the document does not settle a reading, hold or ask - never release, never exclude a supported code. Every earlier repair stays (Mara's acceptance; every declared row of cux-bind.json, cux-hold.json, cux-lead.json, cux-r2-bind.json, cux-r2-em.json and cux-r2-variants.json). Any movement not declared below is a finding, measured and amended (dated, after code) before it is accepted.",
+ "findings": {
+  "A1": "blocking against this branch's own repair (de78c63e8, L1c; equal to installed): 'Procedure 2:', 'Subsequent procedure:' and 'Follow-on procedure:' over R8 D7's same-day flexible sigmoidoscopy note open no note part, so the note's rectal biopsy is the colonoscopy's: 45380 READY, 45331 held (c47d71a34: 45380 held, 45331 READY).",
+  "A2": "blocking against this branch's own repair (R1c; equal to installed): 'No snare was used on COL-2, just above the rectosigmoid junction.' (also '... in the left colon.', 'No forceps were used on COL-1 near the hepatic flexure.') unbinds the label, so the genuine same-lesion conflict is lost: 45385 READY (c47d71a34: held [conflict:snare]).",
+  "A3": "blocking, worse than installed (pre-existing on c47d71a34): in a combined report's one narrative, '(specimen 1)' (and 'the same cold forceps used to retrieve COL-1') after 'The gastroscope was advanced ...' binds the upper endoscopy's biopsy to the colon lesion: 45380 READY on a gastric biopsy (installed: held).",
+  "A4": "blocking, worse than installed (pre-existing on c47d71a34): after a separate flexible sigmoidoscopy note, 'A 5 mm polyp was seen in the cecum. It was removed with a cold snare.' leaves the snare the note's: 45338 READY beside 45378, 45385 held (installed: 45385 READY, 45338 held).",
+  "A5": "major, worse than installed (pre-existing on c47d71a34): 'An evaluation for new-onset jaundice was performed today.' (and its postmodified kin) beside Mara's absence sentence misses cues.EM_EVALUATION_STATED, so the visit reads negated and 99213 is EXCLUDED (installed: the E/M questions asked, 99213 held).",
+  "A6": "major, introduced by de78c63e8 (L1d; and the same class through L1f): a colonoscopy report's header line 'Additional procedure: EGD performed today (separate report)' ends the colonoscopy's claim on its own narrative after it, so its snare and biopsy are held act_missing (installed and c47d71a34: READY).",
+  "A7": "major, introduced by de78c63e8 (R1b): a specimen row restating 'COL-2: 8 mm polyp' without its site leaves COL-2 unresolved, so 'No biopsy forceps were used on COL-2.' becomes a site-less denial and holds 45380 (and the COL-1 form holds 45385); c47d71a34: READY.",
+  "A8": "pre-existing on installed, re-graded blocking by its verifier: R8 D8's indication line written with a dash ('Indication - surveillance after a sigmoid polyp was removed with a hot snare') is no indication section of routing's layout (sections._heading reads no colon-less line over 60 characters), so V05 never reads it and 45385 is READY. Its repair needs sections.layout (H2-frozen: gi-context@4): measured and recorded as a residual, not changed (the brief)."
+ },
+ "rules": {
+  "L1c-r3": "services.LABELLED_NOTE (A1): 'subsequent' and 'follow-on' modifiers and a numbered 'Procedure N' label are note labels again, as on c47d71a34, beside R10b's 'Separate same-day note:'. The round-2 shapes they were narrowed for stay held by the rules that already read them: F01's plan and history lines by L1a, F01's heading line by L1b (no title reading, no act on a procedure line), F03's numbered lists by the list rule (a labelled line beside another one naming a service opens no part), and one numbered line over a combined report's shared findings by L1f. A same-day note under 'Procedure 2:', 'Subsequent procedure:' or 'Follow-on procedure:' owns its acts as one under 'Separate note:' does (R8 D7).",
+  "L1d-r3": "services.parts() (A6): a part of no family that a note label line began - L1d's after a refused label, and L1f's where a labelled part's text turns to the examination of the part the label interrupted - ends at a line that tells the interrupted (running) part's own examination by its instrument: that family's instrument and no other family's (INSTRUMENTS / INSTRUMENT_FAMILY, as L1f reads them; a bare 'endoscope' names none), on a line with no negation, hedge, cancellation, plan or history word. From that line the running part goes on (its family and kind), as before the label. A note's own instrument (R10's sigmoidoscope), two families on one line, a denial of the running instrument ('The colonoscope was not reinserted.') and a combined report's labelled part (no running family) change nothing.",
+  "L1e-r3": "services._build pass 3 (A4): in a part a note label opened, a sentence that names no lesion of its own and refers back to one (ANAPHORA: 'It was removed ...', 'The polyp was removed ...') refers to the last lesion named in that part; where that lesion was placed beyond the note's reach (L1e: by the part the label interrupted), the sentence's acts that name no site are placed with it - by that part's service, at that lesion - as installed reads them. Elsewhere the reference reads as before (the last lesion of the part's family). An act naming a site keeps L1e's own reading.",
+  "R1a-r3": "services._build pass 3 (A3, P1 rule 1): where an act's part, its sentence's named service and the one procedure give it no family, a label or specimen reference binds an act its own clause does not deny only where the last instrument told before the act (INSTRUMENTS / INSTRUMENT_FAMILY; a bare 'endoscope' names none) is not one of another service told after the bound lesion's own passage: otherwise the act reads as before rule 1 (placed by its own site, or, in a combined report's part, by none - rule 4's reading). A denial bound by its label keeps the binding: the label names the lesion it denies (Mara's 'No biopsy forceps were used on COL-2.'), whatever examination was told before it.",
+  "R1b-r3": "services._label_definitions / _unique_labels (A7, P1 rule 1): a label defined on more than one line, some naming no site, resolves (to the place its sited definitions name, by the existing compatibility check) where every site-less definition restates the lesion: no two definitions give different sizes, and the site-less definition is told in no context of another tract - the report part it lies in (that family's reach, FAMILY_REGIONS), the heading of routing's layout section it lies in (a site of an incompatible region) and, for a definition giving no size, the last instrument told before it (that family's reach; a family of unknown reach contradicts). Otherwise, as R1b: the label resolves to nothing (F04c's 'P1: a 9 mm sessile polyp.' under 'Stomach:'). A specimen table's 'COL-2: 8 mm polyp' after 'COL-2 - sigmoid colon: An 8 mm ...' restates COL-2.",
+  "R1c-r3": "services._bound_lesion / _build pass 3 (A2, P1 rule 1): where R1c unbinds a label because the act's clause names a site of the lesion's own tract that is neither its site nor its region's whole, and the clause denies or cancels the act, the denial is read both ways: placed by its own site as R1c reads it (F06's conflict at that site kept), and also bound to the labelled lesion as c47d71a34 read it (a second statement of the same denial at that lesion, in the lesion's own service, subject to R1a and rule 1's own checks), so a genuine same-lesion conflict is kept as well. An act the clause states done stays unbound (R1c, as installed); services._same_subject is unchanged (rule 7).",
+  "R8b-r3": "cues.EM_EVALUATION_STATED (A5; R8b-2's declared form): a history, history and physical or examination, H&P, evaluation, assessment, consultation or consult performed, obtained, taken, done, completed, conducted, carried out, elicited, held, provided, undertaken or documented is also read with a postmodifier between the noun and its verb, where the noun heads its sentence (an optional opener 'Today,', 'Separately,', 'Also,', 'Additionally,'; an optional 'a' or 'an'; at most three adjectives of a closed list) and the postmodifier is 'for', 'regarding', 'concerning', 'about' or 'addressing' <...>, or 'of her|his|their|the patient's|this patient's <...>', up to 80 characters with no sentence break ('An evaluation for new-onset jaundice was performed today.', 'An assessment of her new-onset jaundice, a separate problem, was documented today.'). Read only by detect._em_evaluation_stated, only to hold the absence statement (a closed list that only adds holds). 'Biopsies for evaluation of ...' (the noun heads no sentence), 'An assessment of the gastric mucosa ...' ('of' an organ) and 'will be performed' are not read."
+ },
+ "cues_changed": [
+  "cues.EM_EVALUATION_STATED (R8b-r3: one alternative added; read only by detect._em_evaluation_stated; neither context.py nor sections.py reads it, so H2 (a) cannot move)"
+ ],
+ "cues_added": [],
+ "services_changed": [
+  "services.LABELLED_NOTE (L1c-r3)",
+  "services.parts() and a new helper (L1d-r3)",
+  "services._label_definitions (a size per definition) and services._unique_labels (R1b-r3)",
+  "services._bound_lesion (an optional out-list: R1c-r3)",
+  "services._build pass 3 (R1a-r3, R1c-r3, L1e-r3)"
+ ],
+ "detect_changed": "none",
+ "engine_changed": "none",
+ "battery_rows_added": [
+  "R8 R3 A1 control, a numbered procedure line naming an EGD performed today",
+  "R8 R3 A1 control, one numbered procedure line over shared findings",
+  "R8 R3 A1a numbered procedure heading over a same-day note",
+  "R8 R3 A1b subsequent procedure heading over a same-day note",
+  "R8 R3 A1c follow-on procedure heading over a same-day note",
+  "R8 R3 A1d numbered procedure heading, the note's own biopsy code",
+  "R8 R3 A1e subsequent procedure heading, the note's own biopsy code",
+  "R8 R3 A2 control, a denial on a label at its own site",
+  "R8 R3 A2a snare denial on a label, a landmark of its own segment",
+  "R8 R3 A2b snare denial on a label, the left colon",
+  "R8 R3 A2c forceps denial on a label, near the hepatic flexure",
+  "R8 R3 A3 control, a labelled clip and denial in a combined narrative",
+  "R8 R3 A3 control, the colonoscope told again before the labelled act",
+  "R8 R3 A3a specimen number restarted in a combined narrative",
+  "R8 R3 A3b specimen number restarted in a combined narrative, 43239 only",
+  "R8 R3 A3c colon label named in passing in a combined narrative",
+  "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence",
+  "R8 R3 A4a cecal polyp, its snare in the next sentence",
+  "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only",
+  "R8 R3 A4c cecal polyp found, the polyp removed on the next line",
+  "R8 R3 A5 control, an assessment of the mucosa beside the absence statement",
+  "R8 R3 A5 control, an evaluation for a problem planned in clinic",
+  "R8 R3 A5 control, an evaluation word inside a biopsy statement",
+  "R8 R3 A5a evaluation for a problem beside the absence statement",
+  "R8 R3 A5b history and examination for a problem",
+  "R8 R3 A5c consultation regarding a problem",
+  "R8 R3 A5d assessment of a problem, an appositive",
+  "R8 R3 A5e focused history and physical for a problem",
+  "R8 R3 A5f a GI consultation for a problem",
+  "R8 R3 A5g the absence statement before the evaluation",
+  "R8 R3 A6 control, a refused note label whose text denies the running instrument",
+  "R8 R3 A6a header cross-reference to a same-day EGD, a lesion and its snare",
+  "R8 R3 A6b header cross-reference to a same-day EGD, a site-less biopsy",
+  "R8 R3 A6c header line naming a same-day EGD, a site-less snare",
+  "R8 R3 A6d an upper endoscopy report's cross-reference to a same-day colonoscopy",
+  "R8 R3 A6e a labelled line naming an EGD performed today, the colonoscopy narrative after it",
+  "R8 R3 A6f a labelled line naming an EGD performed today, a site-less biopsy",
+  "R8 R3 A7 control, a label restated by its size under a stomach heading",
+  "R8 R3 A7 control, a label restated by its size under another examination",
+  "R8 R3 A7 control, the specimen rows with their sites",
+  "R8 R3 A7a specimen row restating COL-2 by its size",
+  "R8 R3 A7b specimen row restating COL-1 by its size"
+ ],
+ "battery": [
+  [
+   "R8 R3 A1a numbered procedure heading over a same-day note",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A1b subsequent procedure heading over a same-day note",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A1c follow-on procedure heading over a same-day note",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A1d numbered procedure heading, the note's own biopsy code",
+   "45331",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A1e subsequent procedure heading, the note's own biopsy code",
+   "45331",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A2a snare denial on a label, a landmark of its own segment",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A2b snare denial on a label, the left colon",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A2c forceps denial on a label, near the hepatic flexure",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A3a specimen number restarted in a combined narrative",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A3c colon label named in passing in a combined narrative",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A4a cecal polyp, its snare in the next sentence",
+   "45338",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A4a cecal polyp, its snare in the next sentence",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only",
+   "45338",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only",
+   "45378",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A4c cecal polyp found, the polyp removed on the next line",
+   "45338",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A4c cecal polyp found, the polyp removed on the next line",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A5a evaluation for a problem beside the absence statement",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5b history and examination for a problem",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5c consultation regarding a problem",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5d assessment of a problem, an appositive",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5e focused history and physical for a problem",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5f a GI consultation for a problem",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A5g the absence statement before the evaluation",
+   "99213",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R3 A6a header cross-reference to a same-day EGD, a lesion and its snare",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A6b header cross-reference to a same-day EGD, a site-less biopsy",
+   "45380",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A6c header line naming a same-day EGD, a site-less snare",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A6d an upper endoscopy report's cross-reference to a same-day colonoscopy",
+   "43251",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A6e a labelled line naming an EGD performed today, the colonoscopy narrative after it",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A6f a labelled line naming an EGD performed today, a site-less biopsy",
+   "45380",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A7a specimen row restating COL-2 by its size",
+   "45380",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R3 A7b specimen row restating COL-1 by its size",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ]
+ ],
+ "battery_note": "The 42 rows are new (prefix 'R8 R3 ': register rows, which the round-4 counts of tests/test_gi4_battery.py and tests/test_gi4_po.py leave out). Their 'from' cells were measured on e020145e1's code with the rows added (python -m ops.gi4.battery --tree <this worktree before any code change> --only 'R8 R3 ': 42 rows, 79 codes, 18 violations - every finding input reads as its finding says; scratch-r3-reader/out/rows-base.json). Declared 'to' cells: each finding input's code reads as the installed revision reads it, or - for the round-2 repairs' own regressions - as c47d71a34 reads it; the controls do not move (unmoved, below). Releases against this base (releases_against_base) each give an act back to the service the document gives it. A3's 43239 stays held (the declared rule-4 cost of cux-bind.json: a combined title binds no family, and the act names no site; installed READY). Every other row of the battery: 0 movements, 0 new violations.",
+ "releases_against_base": "A1d and A1e 45331 (the note's own rectal biopsy, as under 'Separate note:' and on c47d71a34; installed holds it by R8 D7's recorded defect); A4a and A4c 45385 (the cecal polyp's snare is the colonoscopy's, as installed); A6a-A6f 45385, 45380 and 43251 (the running report's own acts, as installed and c47d71a34); A7a 45380 and A7b 45385 (Mara's class: the labelled denial bound to its lesion, as c47d71a34; installed holds them by Mara's recorded defects). Declared before code.",
+ "unmoved": {
+  "R8 R3 A1 control, a numbered procedure line naming an EGD performed today | 45385": "selected/ready",
+  "R8 R3 A1 control, one numbered procedure line over shared findings | 43239": "selected/needs_clarification",
+  "R8 R3 A1 control, one numbered procedure line over shared findings | 45380": "selected/needs_clarification",
+  "R8 R3 A1a numbered procedure heading over a same-day note | 45385": "selected/ready",
+  "R8 R3 A1b subsequent procedure heading over a same-day note | 45385": "selected/ready",
+  "R8 R3 A1c follow-on procedure heading over a same-day note | 45385": "selected/ready",
+  "R8 R3 A1d numbered procedure heading, the note's own biopsy code | 45385": "selected/ready",
+  "R8 R3 A1e subsequent procedure heading, the note's own biopsy code | 45385": "selected/ready",
+  "R8 R3 A2 control, a denial on a label at its own site | 45385": "selected/ready",
+  "R8 R3 A2a snare denial on a label, a landmark of its own segment | 45380": "selected/ready",
+  "R8 R3 A2c forceps denial on a label, near the hepatic flexure | 45385": "selected/ready",
+  "R8 R3 A3 control, a labelled clip and denial in a combined narrative | 43239": "selected/ready",
+  "R8 R3 A3 control, a labelled clip and denial in a combined narrative | 45385": "selected/ready",
+  "R8 R3 A3 control, the colonoscope told again before the labelled act | 45385": "selected/ready",
+  "R8 R3 A3a specimen number restarted in a combined narrative | 43239": "selected/needs_clarification",
+  "R8 R3 A3b specimen number restarted in a combined narrative, 43239 only | 43239": "selected/needs_clarification",
+  "R8 R3 A3c colon label named in passing in a combined narrative | 43239": "selected/needs_clarification",
+  "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence | 45338": "selected/ready",
+  "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence | 45378": "selected/needs_clarification",
+  "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence | 45385": "selected/needs_clarification",
+  "R8 R3 A4a cecal polyp, its snare in the next sentence | 45378": "selected/needs_clarification",
+  "R8 R3 A4c cecal polyp found, the polyp removed on the next line | 45378": "selected/needs_clarification",
+  "R8 R3 A5 control, an assessment of the mucosa beside the absence statement | 43239": "selected/ready",
+  "R8 R3 A5 control, an assessment of the mucosa beside the absence statement | 99213": "excluded/excluded",
+  "R8 R3 A5 control, an evaluation for a problem planned in clinic | 43239": "selected/ready",
+  "R8 R3 A5 control, an evaluation for a problem planned in clinic | 99213": "excluded/excluded",
+  "R8 R3 A5 control, an evaluation word inside a biopsy statement | 43239": "selected/ready",
+  "R8 R3 A5 control, an evaluation word inside a biopsy statement | 99213": "excluded/excluded",
+  "R8 R3 A5a evaluation for a problem beside the absence statement | 43239": "selected/ready",
+  "R8 R3 A5b history and examination for a problem | 43239": "selected/ready",
+  "R8 R3 A5c consultation regarding a problem | 43239": "selected/ready",
+  "R8 R3 A5d assessment of a problem, an appositive | 43239": "selected/ready",
+  "R8 R3 A5e focused history and physical for a problem | 43239": "selected/ready",
+  "R8 R3 A5f a GI consultation for a problem | 43239": "selected/ready",
+  "R8 R3 A5g the absence statement before the evaluation | 43239": "selected/ready",
+  "R8 R3 A6 control, a refused note label whose text denies the running instrument | 45380": "selected/needs_clarification",
+  "R8 R3 A6 control, a refused note label whose text denies the running instrument | 45385": "selected/ready",
+  "R8 R3 A7 control, a label restated by its size under a stomach heading | 43251": "selected/needs_clarification",
+  "R8 R3 A7 control, a label restated by its size under a stomach heading | 45385": "selected/needs_clarification",
+  "R8 R3 A7 control, a label restated by its size under another examination | 43251": "selected/needs_clarification",
+  "R8 R3 A7 control, a label restated by its size under another examination | 45385": "selected/needs_clarification",
+  "R8 R3 A7 control, the specimen rows with their sites | 43239": "selected/ready",
+  "R8 R3 A7 control, the specimen rows with their sites | 45380": "selected/ready",
+  "R8 R3 A7 control, the specimen rows with their sites | 45385": "selected/ready",
+  "R8 R3 A7a specimen row restating COL-2 by its size | 43239": "selected/ready",
+  "R8 R3 A7a specimen row restating COL-2 by its size | 45385": "selected/ready",
+  "R8 R3 A7b specimen row restating COL-1 by its size | 43239": "selected/ready",
+  "R8 R3 A7b specimen row restating COL-1 by its size | 45380": "selected/ready"
+ },
+ "residuals_measured": {
+  "note": "A8 (ops.gi4.battery.R3_RESIDUALS, kept out of CASES because its honest truth makes it a violation, and a register row carries none): measured on e020145e1 and declared unchanged after code; tests/test_cux_r3_reader.py reads it with run_row.",
+  "rows": {
+   "R8 R3 residual A8, an indication heading written with a dash": {
+    "45380": "selected/ready",
+    "45385": "selected/ready"
+   }
+  },
+  "why": {
+   "R8 R3 residual A8, an indication heading written with a dash": "sections.layout reads no indication section for a colon-less dash heading over 60 characters (sections._heading), and V05 (cux-r2-variants.json) reads the layout's indication sections only; reading the line as the indication's needs the layout's heading reader, which is frozen (H2, gi-context@4). A services-only reader of the dash form would be a second heading reader that routing does not share. Pre-existing on installed (READY there too)."
+  }
+ },
+ "offers": "The rows' second-review offers (tests/test_gi4_po.offers_of: the row's own answer and an empty one) are measured on e020145e1's code with the rows added and recorded here in the commit that adds the rows, before code ('offers_before_code_20261104'); tests/test_cux_hold.RegisterOfferTests reads them. Re-measured after code over every 'R8 ' row and recorded in a dated after-code amendment, which RegisterOfferTests then reads; a moved offer of an earlier row is named there.",
+ "replay": "EQUAL predicted for the 8 regression documents (h2-08, h2-10, h4-01..h4-06) in every member state (python -m ops.gi4.replay --fixtures, base e020145e1): a shape scan of their texts finds none of the shapes these rules read (checked after code by the replay itself).",
+ "h2": "No movement of any class (GATE HOLDS): context.py and sections.py read none of the changed names (cues.EM_EVALUATION_STATED is read by detect._em_evaluation_stated alone); sections.layout is read, never changed; services.ACTS, BARE_PARTICIPLE and SERVICES are unchanged, so services.mention_count and H2 (d) cannot move; the date channel and the requests read context.py's facts.",
+ "mara": "tests/fixtures/cux/mara unchanged: 43239, 45380 and 45385 READY, 0 proposal questions, 0 office E/M questions, 0 conflicts, the clip bundled under the colonoscopy, the distinct-lesion consideration (tests/test_cux_bind.MaraEndToEndTests). Its labelled acts follow the colonoscope's last mention (R1a-r3), its label definitions all name a site (R1b-r3), no labelled denial names another site (R1c-r3), it has no note label line (L1c-r3, L1d-r3, L1e-r3), and no evaluation noun heads a sentence with a postmodifier (R8b-r3). The A7 Mara variants ('COL-2: 8 mm polyp' / 'cold-snare removal', and the COL-1 form) read as Mara does.",
+ "must_hold": [
+  "every must_hold item of cux-bind.json, cux-hold.json, cux-lead.json, cux-r2-bind.json, cux-r2-em.json and cux-r2-variants.json",
+  "F01 (plan, recommendations, a subsequent procedure line, impression and recommendations) and F03 (numbered procedure lines, dashes, a list of labelled lines) held: the R8 R2 F01* and F03* rows and tests/test_cux_r2_bind's PlanAndLaterProcedureLabelTests and ProcedureListTests (but for the LABELLED_NOTE pin, unit_pins)",
+  "R10's refused separate notes held (the note's sigmoidoscope keeps its part); H1 unchanged",
+  "F06 (a denial on a label naming another segment): its conflict at that segment kept; a label alone or with its own site still binds the denial to its lesion alone (no second statement)",
+  "F04 (a), (b) and (c) held; a label reused under another examination with the same size still resolves to nothing ('R8 R3 A7 control' rows)",
+  "R07's rows unchanged; a sigmoid polyp's snare in the next sentence inside the note stays the note's",
+  "R8 R2 EM rows unchanged: the absence statement alone and beside a future clinic visit still negate the visit",
+  "Mara as above"
+ ],
+ "unit_pins": "Expected to move: tests/test_cux_r2_bind.ProcedureListTests.test_the_helper_refuses_a_numbered_procedure_field, which pins the L1c narrowing this round reverts ('Procedure 2: Colonoscopy', 'Procedure 1 - EGD', 'Subsequent procedure: colonoscopy' and 'Follow-on procedure: colonoscopy' as no note labels): rewritten to read them as note labels, beside the parts() tests that show they open no part where F01 and F03 put them. No other existing test or pin is expected to move. tests/test_cux_hold.RegisterOfferTests reads this declaration's offers beside the six others. tests/test_harness_engine_parity.py, tests/test_harness2_r2_parity.py and tests/test_harness_pipeline.py are expected unchanged; if a pin moves, the rows that moved and why are recorded before it is re-pinned.",
+ "not_changed": [
+  "services.ACTS",
+  "services.BARE_PARTICIPLE",
+  "services.SERVICES",
+  "services.HEDGE_WORDS",
+  "services._same_subject",
+  "services._conflicts",
+  "services.labelled_service_heading",
+  "services.NOTE_REACH",
+  "studio/gi/sections.py",
+  "studio/gi/context.py",
+  "studio/gi/detect.py",
+  "studio/validation/engine.py",
+  "studio/validation/reconcile.py",
+  "the request side"
+ ],
+ "cost": "Linear, bounded: L1c-r3 is the pattern c47d71a34 ran; L1d-r3 one instrument pass over a line's first SENTENCE_READ_CHARS characters per line of a part of no family a note label began; R1a-r3 one INSTRUMENTS pass over the text (once per inventory) and one bisection per bound act, plus one read_clause per bound act it would unbind; R1b-r3 one sized-lesion scan per definition clause (LABEL_DEF_CHARS-bounded) and per multi-line label one part lookup, one section lookup and one bisection per site-less definition; R1c-r3 one extra act per denial R1c unbinds; L1e-r3 one dictionary read per anaphoric sentence of a note's part; R8b-r3 one alternative of one pattern, its postmodifier bounded at 80 characters and anchored at a sentence start. Probed with ops.gi4.cost if time allows; otherwise recorded as not measured."
+}
