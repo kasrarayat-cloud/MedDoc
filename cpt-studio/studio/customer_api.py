@@ -495,12 +495,16 @@ def _qualifications(proposal, status, view, code):
         out.append(f'The document has conflicting statements about the {_act_label(kinds[0] if kinds else "")}; '
                    'a detail is needed before this code can be approved.')
     if status in ('needs_detail', 'ready'):
+        same_day = view is not None and view.same_day_held
         for question in questions:
             fact = question.get('fact') if isinstance(question, dict) else ''
             if fact == 'base_included':
                 out.append(f'{code} may be included in another code reported for this examination; a detail is '
                            'needed before it can be approved.' if code else
                            'This code may be included in another code reported for this examination.')
+            elif fact == 'separate_em' and same_day:
+                # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
+                out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:
