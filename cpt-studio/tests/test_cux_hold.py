@@ -146,6 +146,7 @@ UNMOVED = {
     ('R8 D13 named EGD control, h4-03 as written', '43244'): READY,
     ('R8 D13 named EGD control, two passages', '43244'): READY,
     ('R8 D15 EGD with EUS, base EGD coded', '43242'): READY,
+    ('R8 D3 N9 considered but not performed', '45378'): HELD,
 }
 
 
@@ -583,4 +584,48 @@ class BaseInsideAnIncludingServiceTests(SimpleTestCase):
     def test_control_an_egd_of_its_own_stays_ready(self):
         text = EGD_HEAD + 'The stomach and duodenum were normal.\n'
         item = proposal(run(text, [sel('43235', span(text, EGD_BASE))]), '43235')
+        self.assertEqual(item.status, 'ready')
+
+
+PROC_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\n'
+             'Date of service: 2026-11-03\nPlace of service: Ambulatory surgery center\n')
+SNARED = 'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+HISTORY_LINE = 'History: a hot snare polypectomy of a rectal polyp was performed at an outside colonoscopy in 2023.'
+COMBINED = (PROC_HEAD + 'Procedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to the '
+            'second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nCOLONOSCOPY: The '
+            'colonoscope was advanced to the cecum.\n' + SNARED + '\n')
+GASTRIC_BX = 'Cold forceps biopsies were obtained from the gastric antrum.'
+
+
+class NarrowEvidenceHoldTests(SimpleTestCase):
+    """R3 7.5.1, the narrow evidence hold (engine._select, _passages_elsewhere): a code the documented service reads as
+    performed, whose evidence support is warn or fail, is held when EVERY passage it cites lies in another documented
+    service's evidence or acts, or in another service's scope and outside the matched one's, or is read by the
+    routing-era reader as planned, historical, negated or cancelled - the wrong-procedure and history-cited shapes R3
+    1.8 measured READY. Otherwise it stays as it is: a procedure-level passage of the matched service stays READY (R3
+    open question 1, the narrow choice), and Mara's 45385, whose passages are its colonoscopy's own, is not held."""
+
+    def test_narrow_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 E')
+        RegisterRowsTests.assert_rows(self, 'R8 D3 N9 ')
+
+    def test_wrong_procedure_and_history_passages_hold(self):
+        for text, code, passage in (
+                (COMBINED, '45385', GASTRIC_BX),
+                (COMBINED, '43239', SNARED),
+                (PROC_HEAD + 'Procedure: Colonoscopy\n' + CECUM + '\n' + SNARED + '\n' + HISTORY_LINE + '\n', '45385',
+                 HISTORY_LINE)):
+            with self.subTest(code=code, passage=passage[:40]):
+                item = proposal(run(text, [sel(code, span(text, passage))]), code)
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                self.assertEqual(check(item, 'evidence.support').status, 'warn')
+
+    def test_controls_a_supporting_or_own_service_passage_stays_ready(self):
+        text = PROC_HEAD + 'Procedure: Colonoscopy\n' + CECUM + '\n' + SNARED + '\n' + HISTORY_LINE + '\n'
+        for passages in ((SNARED,), (SNARED, HISTORY_LINE), (CECUM,)):
+            with self.subTest(passages=[p[:30] for p in passages]):
+                item = proposal(run(text, [sel('45385', *(span(text, p) for p in passages))]), '45385')
+                self.assertEqual(item.status, 'ready')
+        # the combined report's own colonoscopy passages for its own code
+        item = proposal(run(COMBINED, [sel('45385', span(COMBINED, SNARED))]), '45385')
         self.assertEqual(item.status, 'ready')

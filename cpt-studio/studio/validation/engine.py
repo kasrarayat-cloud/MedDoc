@@ -1052,6 +1052,19 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         supported = reconcile.support(found, kept, current=lambda span: (span.start, span.end) not in another_time
                                       and gi_services.current_statement(text, span.start, span.end, day),
                                       today=today, report_family=report_family)
+        if found.state in checks.POSITIVE and supported.status in ('warn', 'fail') and found.reason != 'own_passage' \
+                and legacy not in checks.EM_FAMILIES:
+            # P2 READ-HOLD, R3 7.5.1: the narrow evidence hold (_passages_elsewhere), for a procedure code. Never over
+            # the own-passage release, whose passage the inventory reads no act in by definition and which its own gates
+            # already placed (_own_passage_may_stand: D1, D4, D5); never for an office visit, whose own plan and history
+            # sentences are documentation of that visit ("Return in three months.": validation:6's pinned reading)
+            elsewhere = _passages_elsewhere(kept, another_time, found, inventory)
+            if elsewhere:
+                found = replace(found, state='uncertain', reason='readings_disagree', question=(
+                    f'Confirm whether {code} is supported: none of the passages it cites shows what was done on the date '
+                    'of service.'),
+                    detail=f'{found.detail} But none of the passages the code cites shows it: {elsewhere} Held for the '
+                           'reviewer, not excluded.')
         note = _undecided(outcome, found, supported, kept)
         outcome = _service_outcome(found)
     elif unmatched and inventory is not None:
@@ -1065,6 +1078,35 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     row = reference.lookup(code, day if dated else None)
     return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
                                                      (row if dated else reference.lookup(code, day)).pfs))
+
+
+def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory) -> str:
+    """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
+    than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
+    another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
+    historical, negated or cancelled (``another_time``) - or '' when one is not. Read only where the documented service
+    reads the code as performed and the passages' support is warn or fail; the code is then held, never excluded. A
+    passage of the matched service's own (its procedure-level statement) is never elsewhere: such a code stays as it is
+    (R3 open question 1, the narrow choice). Bounded: one pass over the inventory's services per passage."""
+    if inventory is None or not kept:
+        return ''
+    own = found.service
+    why = []
+    for span in kept:
+        if (span.start, span.end) in another_time:
+            why.append(f'{reconcile.quote(span, 80)} reads as another time or a denial')
+            continue
+        stand_in = checks.Reading('performed', (), 'evidence', span.text, span.start, span.end)
+        if _elsewhere(stand_in, found, inventory):
+            why.append(f'{reconcile.quote(span, 80)} is another documented service\'s')
+            continue
+        inside_own = own.scope_end > own.scope_start and own.scope_start <= span.start and span.end <= own.scope_end
+        if not inside_own and any(s.id != own.id and s.scope_end > s.scope_start and s.scope_start <= span.start
+                                  and span.end <= s.scope_end for s in inventory.services):
+            why.append(f'{reconcile.quote(span, 80)} lies in another documented service')
+            continue
+        return ''
+    return '; '.join(why) + '.'
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:

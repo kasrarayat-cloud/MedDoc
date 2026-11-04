@@ -62,6 +62,12 @@ R8_L40 = ('Complexity of decision making: moderate. One new problem with an unce
           'outside note reviewed; tests ordered.')
 R8_TWIN = R8_L39.replace(' the orders,', '', 1)  # h4-01's time statement, orders-free (R8 D12's chassis)
 R8_CC = 'Loose stools, bloating and tiredness for about four months.'
+R8_PROC = B + 'Procedure report (fictional)\nDate of service: 2026-11-03\nPlace of service: Ambulatory surgery center\n'
+R8_SNARED = 'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+R8_HISTORY = 'History: a hot snare polypectomy of a rectal polyp was performed at an outside colonoscopy in 2023.'
+R8_COMBINED = (R8_PROC + 'Procedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to '
+               'the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\n'
+               'COLONOSCOPY: The colonoscope was advanced to the cecum.\n' + R8_SNARED + '\n')
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -494,6 +500,17 @@ CASES = {
             'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.'),
         [('43242', 'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.', 'done'),
          ('43235', 'The echoendoscope was advanced to the second part of the duodenum.', 'no_ready')]),
+    # R3 7.5.1, the narrow evidence hold: every cited passage another service's, another time's or a denial
+    'R8 D3 N9 considered but not performed': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'Snare removal was considered but not performed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Snare removal was considered but not performed.', 'no_ready')]),
+    'R8 E1 history sentence cited, snare also done today': (
+        R8_PROC + 'Procedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_SNARED + '\n' + R8_HISTORY + '\n',
+        [('45385', R8_HISTORY, 'unsupported')]),
+    'R8 E2 EGD biopsy sentence cited for a colon snare': (
+        R8_COMBINED, [('45385', 'Cold forceps biopsies were obtained from the gastric antrum.', 'unsupported')]),
+    'R8 E3 colon snare sentence cited for an EGD biopsy': (
+        R8_COMBINED, [('43239', R8_SNARED, 'unsupported')]),
     # D10: an attached prior report's title
     'R8 D10 attached prior EGD report title': (
         R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'

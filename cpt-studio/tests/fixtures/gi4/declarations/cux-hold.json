@@ -352,5 +352,14 @@
   "services.parts() and _on_procedure_line (P1's)",
   "HEDGE_WORDS",
   "the request side"
- ]
+ ],
+ "amendment_20261104T0033Z_after_code_narrow_hold": {
+  "written": "2026-11-04T00:33Z, AFTER the narrow evidence hold's code (commit following 50f52f7e1); everything above is kept as written",
+  "scope": "The narrow evidence hold applies to procedure codes only, and never over the own-passage release. Measured on the full DB-free set: with E/M codes in scope it held an office visit citing its own plan sentence ('Return in three months.', 'Follow-up office visit.', 'Office visit next spring.'), which validation:6 and round 3's b3 pin READY as the visit's own documentation (test_repairs_r4_validation.EmNegativeAboutOtherServicesTests, test_repairs_r3_validation_b3, test_repairs_status_r2_validation.Review1PlanDiscussionTests, test_gi4_pv1_cycle1.EMR3Tests); over the own-passage release it contradicted D4's own placement (an anatomy-placed 'Antral biopsies x2.' lies outside the EGD's scope). Both are excluded; the register rows and the 39 battery movements are unchanged.",
+  "unit_pins_moved": {
+   "tests/test_repairs_r3_validation_b3.py Validation3EmSectionDefaultTests.test_controls_a_procedure_code_citing_history_never_takes_it_as_its_evidence": "pinned 45380 READY citing only the HPI line 'Rectal bleeding for two weeks.' (support warn): the R3 1.8 history-cited shape the narrow hold is declared to hold; updated to needs_clarification [performed_status], its support (warn, unrelated [0]) and CPT Studio's selected passage unchanged.",
+   "tests/test_harness_engine_parity.py PinnedParityTests (both digest tests)": "the case 'two-codes-a-plan-code-and-hcpcs' moves: its 45378 cites only 'Surveillance colonoscopy in three years.' (a plan line) and was held [base_included]; it is now held [base_included, performed_status] (the narrow hold; status unchanged). The other 10 cases are unchanged. The digest is the lead's to re-pin at integration (design section 2); it is NOT re-pinned here, so these two tests fail on this branch until then."
+  },
+  "replay": "EQUAL (8 documents, every member state) after the restriction."
+ }
 }

@@ -70,13 +70,17 @@ class Validation3EmSectionDefaultTests(Case):
     def test_controls_a_procedure_code_citing_history_never_takes_it_as_its_evidence(self):
         # The rule is the E/M's alone: a colonoscopy code citing the HPI of a colonoscopy routing reads as performed
         # never takes the HPI as showing its act. Engine @4: the documented biopsy decides the code (interpretation 9),
-        # and CPT Studio selects the passage that shows it.
+        # and CPT Studio selects the passage that shows it. P2 READ-HOLD (2026-11-03, R3 7.5.1, the narrow evidence
+        # hold; tests/fixtures/gi4/declarations/cux-hold.json): with EVERY cited passage read as another time the code is
+        # held (the owner directive's "historical ... evidence allowing a code to become ready"), never READY; its
+        # support and the passage CPT Studio selects are unchanged.
         text = (HEAD + 'History of present illness: Rectal bleeding for two weeks.\nProcedure: Colonoscopy\n'
                 'Findings: The colonoscope was advanced to the cecum. A 5 mm polyp was biopsied with cold forceps.\n')
         self.assertEqual(route(text, date(2026, 10, 21)).finding('gi.colonoscopy').status, 'performed')
         proposals, _ = real(text, ('45380', 'Rectal bleeding for two weeks.'))
         biopsy = proposals['45380']
-        self.assertReady(biopsy)
+        self.assertEqual((biopsy.bucket, biopsy.status, [c.fact for c in biopsy.clarifications]),
+                         ('selected', 'needs_clarification', ['performed_status']))
         self.assertEqual((check_of(biopsy, 'evidence.support').status, biopsy.support['unrelated']), ('warn', [0]))
         self.assertEqual([s['text'] for s in biopsy.support['source']], ['A 5 mm polyp was biopsied with cold forceps.'])
 
