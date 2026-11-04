@@ -808,6 +808,11 @@ class Attribution:
     evidence: tuple[Span, ...]
 
 
+# R1a-r5 (hold-only): the cue of a performed act whose service only a lesion's name gives, in a document of several
+# performed procedures (_build pass 3); reconcile.match supports no code by such acts alone
+NAME_ONLY_CUE = 'bound: by a lesion name alone, in a document of several procedures'
+
+
 @dataclass(frozen=True)
 class ServiceInventory:
     version: str
@@ -4267,8 +4272,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # is read performed it takes it, as before
         binding_families = [f for f in performed_families if f not in reach_only] \
             if len([f for f in performed_families if f != 'gi.office_em']) > 1 else performed_families
-        # R1a-r5 (below): more than one procedure read performed, the office visit not counted
-        several_performed = len([f for f in performed_families if f != 'gi.office_em']) > 1
+        several_performed = len([f for f in performed_families if f != 'gi.office_em']) > 1  # R1a-r5 (below)
         from studio.gi.catalogue import NOT_REPORTED as never_reported  # local: catalogue reads this module
         # where each lesion was last named as itself, and where each service's text last named a lesion this reader did
         # not record: "the polyp" after an unrecorded polyp may be that one, not the last one recorded (status-1, below)
@@ -4493,8 +4497,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # then taken with the same cold forceps used to retrieve COL-1." inside UPPER ENDOSCOPY)
                     bound = None
                 if bound is not None and not act_part_family \
-                        and (_told_after(instrument_marks, instrument_starts, bound, ms, drafts)
-                             or (several_performed and not own_anat and kind not in never_reported)) \
+                        and _told_after(instrument_marks, instrument_starts, bound, ms, drafts) \
                         and read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                         in_today_report=part.kind == 'report').status not in ('negated', 'cancelled'):
                     # R1a-r3 (reader repair, round 3; refutation A3): where nothing but the binding would give the act
@@ -4504,18 +4507,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # report's narrative is never the colon polyp's biopsy. A denial keeps its label (the lesion it
                     # denies is named), Mara's "No biopsy forceps were used on COL-2." among them
                     bound = None
-                    # R1a-r5 (reader repair, round 5, 2026-11-04; the lead's verification of 20a64b86 and refutation rounds
-                    # 4 and 4b): where more than one procedure is read performed, a lesion's name is never the only thing
-                    # that gives a performed act its service. An act whose own clause names no site and whose part names
-                    # no service is unbound as R1a-r3 unbinds it, whatever was or was not told since, and it takes no site
-                    # from another clause of its sentence: it is placed by what it says itself, or left unplaced, and the
-                    # code it alone supports is held. No telling is detected and no word is listed (the instrument,
-                    # service-name and prophylaxis lists of rounds 4 and 4b leaked false READYs and false holds alike). A
-                    # clip or a cannulation (catalogue.NOT_REPORTED) never needs a code of its own and keeps its label, as
-                    # Mara's "One prophylactic clip was placed at the COL-2 resection site." does; a denial keeps its
-                    # label, as before.
-                    if several_performed and not own_anat and kind not in never_reported:
-                        anat, region = [], ''
+                # R1a-r5 (hold-only): the binding stands, as before, but where more than one procedure is read performed
+                # and nothing but a lesion's name gives the act its service (no site of its own clause, no part naming a
+                # service; never a clip or a cannulation, which need no code of their own), the act is marked: it stays
+                # documented for every rule that reads it (a base code beside it, a conflict, an unresolved act), and no
+                # code is supported by it alone (reconcile.match: 'named_only', held, never released or excluded)
+                name_only = bound is not None and not act_part_family and several_performed and not own_anat \
+                    and kind not in never_reported
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
@@ -4650,7 +4648,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if not fam:
                     unplaced.append((act, _heading_service(part, drafts)))
                     continue
-                d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id))
+                d.acts.append(replace(act, id=f'{d.id}-A{len(d.acts) + 1}', service=d.id,
+                                      cues=act.cues + ((NAME_ONLY_CUE,) if name_only and act.status == 'performed'
+                                                       else ())))
                 if kind == 'stent' and reading.status == 'performed' and _pi_indwelling_state(text, bc[0], ms, me):
                     indwelling.append((fam, d.acts[-1].id))  # GI round 4 (W1): weighed once every act is read
             if sentence_lesions:
