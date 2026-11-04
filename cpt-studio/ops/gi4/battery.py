@@ -44,6 +44,11 @@ R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPl
 R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
 R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
 R8_SNARE_HEAD = R8_COLON.replace('Procedure: Colonoscopy', 'Procedure: Colonoscopy with hot snare polypectomy')
+R8_TOP = B + 'Procedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+R8_COLON7N = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
+              'normal. No biopsies were taken.')
+R8_COLON1 = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
+             'normal. No polyps were seen.')
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -373,6 +378,18 @@ CASES = {
     'R8 D3 declared:1 period-ended row, No checked': (
         _r8(R8_COLON, 'Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612'),
         [('45378', R8_CECUM, 'done'), ('45380', 'Biopsy of the sigmoid colon.', 'no_ready')]),
+    # D4: another procedure's sentence in a combined report (the correct code on it is held too: fail-closed)
+    'R8 D4 F7N EGD biopsy line, colonoscopy denies': (
+        R8_TOP + 'Procedures: EGD and colonoscopy\nEGD: The gastroscope was advanced to the second portion of the '
+        'duodenum. Erythema was seen in the gastric antrum.\nBiopsies were taken with cold forceps.\n' + R8_COLON7N + '\n',
+        [('43239', 'Biopsies were taken with cold forceps.', 'done'), ('45378', R8_COLON7N, 'done'),
+         ('45380', 'Biopsies were taken with cold forceps.', 'not_done')]),
+    'R8 D4 F1 EGD snare line, colonoscopy normal': (
+        R8_TOP + 'Procedures: EGD and colonoscopy\nEGD: The gastroscope was advanced to the second portion of the '
+        'duodenum. A 6 mm sessile polyp was seen in the gastric body.\nThe polyp was removed with a hot snare.\n'
+        + R8_COLON1 + '\n',
+        [('43251', 'The polyp was removed with a hot snare.', 'done'), ('45378', R8_COLON1, 'done'),
+         ('45385', 'The polyp was removed with a hot snare.', 'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}

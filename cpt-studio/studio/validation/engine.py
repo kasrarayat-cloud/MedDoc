@@ -1667,12 +1667,35 @@ def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code
       release had turned into the service's 'performed') - and never a passage that states the act failed, was abandoned
       or only attempted, or yielded nothing (cues.UNDONE_ACT: "Hot snare polypectomy failed.", "no tissue was
       obtained"). Never a worded reading only (candidate_ra): the pinned "Cecal biopsies x2." is read by its section
-      alone and still stands."""
+      alone and still stands.
+    - D4: only where the documented-service reader's own placement rule (services._family_for_act, with no report
+      part) puts every act kind of the code the passage names, at every anatomy it names, in the matched service's
+      family alone among the services documented as done or in doubt today. Fail-closed: an act no one service owns
+      ("Biopsies were taken with cold forceps." in a combined EGD and colonoscopy report) is held for every family's
+      code, the correct one too."""
     if reading.status != 'performed':
         return False
     if gi_cues.UNDONE_ACT.search(text, reading.start, reading.end):
         return False
-    return True
+    return _placed_in_matched_family(reading, found, code, text, inventory)
+
+
+def _placed_in_matched_family(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:
+    """D4: whether services._family_for_act places each act kind of ``code`` that the passage names, at each anatomy
+    region the passage names (none named: no region), in found.service.family alone; the candidate owners are the
+    documented non-E/M services read as performed, incomplete or uncertain (a planned or earlier procedure owns no act
+    of today's report). Bounded: the passage's acts and anatomy, once each."""
+    if inventory is None:
+        return True
+    profile = reconcile.catalogue.code_profile(code)
+    covers = set(profile.covers) if profile is not None else set()
+    passage = text[reading.start:reading.end]
+    kinds = [kind for kind, pattern in gi_services.ACTS if kind in covers and pattern.search(passage)]
+    regions = {region for _, region, _, _ in gi_services._anatomy_in(text, reading.start, reading.end)} or {''}
+    present = list(dict.fromkeys(s.family for s in inventory.services if s.family != 'gi.office_em'
+                                 and s.status in ('performed', 'incomplete', 'uncertain')))
+    return bool(kinds) and all(gi_services._family_for_act(kind, region, '', present) == found.service.family
+                               for kind in kinds for region in regions)
 
 
 def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bool:

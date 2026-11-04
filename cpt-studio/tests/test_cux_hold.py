@@ -129,6 +129,8 @@ UNMOVED = {
     ('R8 D3 release-0 without resection', '45378'): HELD,
     ('R8 D3 negtime-0 biopsies not obtained (whether)', '43235'): HELD,
     ('R8 D3 declared:1 period-ended row, No checked', '45378'): HELD,
+    ('R8 D4 F7N EGD biopsy line, colonoscopy denies', '45378'): HELD,
+    ('R8 D4 F1 EGD snare line, colonoscopy normal', '45378'): HELD,
 }
 
 
@@ -300,3 +302,33 @@ class DenialTiedToItsActTests(SimpleTestCase):
                                                                                              'colon.'))]), '45380')
         self.assertEqual(item.status, 'ready')
 
+
+TOP = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\n'
+       'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedures: EGD and colonoscopy\n')
+
+
+class AnotherProceduresSentenceTests(SimpleTestCase):
+    """D4 (R8 1.3): the own-passage release stands only where the documented-service reader's own act-placement rule
+    (services._family_for_act: the act's kind, the passage's anatomy, no report part, the services documented as done or
+    in doubt today) places the act in the matched service's family alone. Fail-closed: an act no one service owns
+    (F7N's "Biopsies were taken with cold forceps." in a combined EGD and colonoscopy report) is held for every family's
+    code, the correct one too (its recorded cost)."""
+
+    def test_d4_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D4 ')
+
+    def test_an_act_placed_by_its_anatomy_still_stands_for_its_own_service(self):
+        text = (TOP + 'EGD: The gastroscope was advanced to the second portion of the duodenum.\nAntral biopsies x2.\n'
+                'Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
+                'normal.\n')
+        result = run(text, [sel('43239', span(text, 'Antral biopsies x2.')),
+                            sel('45380', span(text, 'Antral biopsies x2.'))])
+        self.assertEqual(proposal(result, '43239').status, 'ready')
+        self.assertEqual(proposal(result, '45380').status, 'needs_clarification')
+
+    def test_control_a_single_service_report_still_releases(self):
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-14\n'
+                'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Biopsies x2.\n'
+                'Plan: EGD next month.\n')
+        item = proposal(run(text, [sel('45380', span(text, 'Biopsies x2.'))]), '45380')
+        self.assertEqual(item.status, 'ready')  # a planned EGD owns no act of today's report
