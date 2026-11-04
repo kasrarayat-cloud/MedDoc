@@ -1602,6 +1602,72 @@ R5_XY_SOURCES = {
     'R8 R5 Y5 control, no specimen number':
         "verify-r4/refuter-cases3.json '2196 Y/work/cases/final.json/F5 control, no specimen number'",
 }
+# --- round 5's hold-only form, refutation round 5b (2026-11-04; cux-r5-binding.json amendment_20261104_hold_only_r5b):
+# the lead's three fixes (verify-r4/apply_z21.py) - the bounded second review adds a named_only code as a proposal, held,
+# never an informational alternative; a merged act keeps services.NAME_ONLY_CUE only when every statement of it carries
+# it; the named_only hold carries its acts - and the inputs of refute-r5b they move, verbatim with their codes and
+# truths (R5_Z_SOURCES names each source; the declaration records each text's sha256): Y-F1's impression restating the
+# label-only snare with its size and site, the site-bearing addendum of Y-F2's customer flow, and X-R5B-2's three codes
+# (the label-only snare beside a second polyp's forceps removal, the separate-lesion modifier review's shape)
+CASES.update({
+    'R8 R5 Z1 an impression restating the label-only snare with its size and site': (
+        B + 'EGD and colonoscopy report (fictional)\n'
+        'Date of service: 2026-11-03\n'
+        'Place of service: Ambulatory surgery center\n'
+        'Procedures performed: EGD with biopsy; colonoscopy with polypectomy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum. The ileocecal valve and appendiceal orifice were identified.\n'
+        'Findings:\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare and retrieved.\n'
+        'IMPRESSION\n'
+        '1. Antral biopsies taken.\n'
+        '2. 8 mm sigmoid colon polyp removed with a cold snare.\n',
+        [('45385', '8 mm sigmoid colon polyp removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Z2 an addendum restating the label-only snare with its site and service': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Findings:\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        '\n'
+        '\n'
+        'ADDENDUM (revision 2, added 2026-11-04 15:30 UTC)\n'
+        'Polyp A was removed with a cold snare during the colonoscopy, in the sigmoid colon, on the date of service.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Z3 a label-only snare beside a forceps removal on its own line': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'PROCEDURE 2: COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'Polyp B - descending colon: a 4 mm polyp was removed with cold biopsy forceps.\n',
+        [('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done'),
+         ('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('45380', 'a 4 mm polyp was removed with cold biopsy forceps.', 'done')]),
+})
+R5_Z_SOURCES = {
+    'R8 R5 Z1 an impression restating the label-only snare with its size and site':
+        "refute-r5b/Y/cases/c7.json 'R1 realistic: findings by label, impression restates with size and site'",
+    'R8 R5 Z2 an addendum restating the label-only snare with its site and service':
+        "refute-r5b/verify-Y/Y-F2/out/off/cases.json 'battery | W0 the finding | 2026-11-04 | cite orig'",
+    'R8 R5 Z3 a label-only snare beside a forceps removal on its own line':
+        "refute-r5b/X/work/cases2.json 'MR2 Y3 with a second polyp on its own line'",
+}
 # Measured and recorded, never repaired here (cux-r5-binding.json residuals_measured; ACCURACY-RESIDUALS.md round 5):
 # each reads READY where its truth says not done today on main, installed and this head, so its honest truth makes it a
 # violation and it stays out of CASES (a register row carries none); tests/test_cux_r5_binding.py reads them with

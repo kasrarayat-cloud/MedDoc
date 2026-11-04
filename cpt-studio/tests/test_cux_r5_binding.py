@@ -18,28 +18,53 @@ performed_status), after the conflict check, and no release or exclusion path re
 - the hold class pinned: every declared cost is a done code held [performed_status] for reason named_only;
 - Mara unchanged and carrying no cue.
 
-Every document is synthetic. No database, nothing sent.
+Refutation round 5b's three fixes (the lead's verify-r4/apply_z21.py, declared before code in amendment_20261104_hold_only_r5b,
+which governs wherever the hold-only amendment disagrees), each through the path its finding used:
+- (a) X-R5B-1: a code the bounded second review selects for a service left without a proposal, whose match is
+  named_only, is added as a second-review proposal and held - never an informational alternative - and the approved
+  export waits for its decision (engine.assess with a second-review response; the customer API to the approved export);
+- (b) Y-F1, Y-F2: a merged act keeps the cue only when every statement of it carries it, so an impression restating the
+  act with its site, or an addendum posted from the detail row naming its site and service, lifts the hold;
+- (c) X-R5B-2: the named_only hold carries its acts, so the partner code offers its separate-lesion modifier review and
+  an approval with XS succeeds.
+
+Every document is synthetic and nothing is sent. The second review, addendum and modifier-review classes run through the
+real endpoints and pipeline on the test database, with in-process fakes for every provider and participant.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from ops.gi4 import battery
+from studio import review
 from studio.gi import catalogue, services
-from studio.types import PageSpan
+from studio.types import NormalizedResponse, PageSpan
+from tests import test_customer_surface as tcs
+from tests import test_repairs_gi2_present as gi2
+from tests import test_services_reconcile as rec
+from tests.test_customer_fixtures import CitingCorti
 from tests.test_cux_bind import MARA, acts, bundled, conflicts, inventory, outcomes, run, service
 from tests.test_cux_hold import state
+from tests.test_harness2_pipeline import install_reference_store
+from tests.test_harness_pipeline import FakeParticipant
+from tests.test_pipeline_api import drain
+from tests.test_services_second_review import TwoPassProvider
 
 DECLARATION = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations'
                           / 'cux-r5-binding.json').read_text(encoding='utf-8'))
 # the hold-only form's amendment, declared before its code: it governs wherever the refuted form's keys above disagree
 HOLD_ONLY = DECLARATION['amendment_20261104_hold_only']
-DECLARED = {(name, code): (before, after) for name, code, before, after in HOLD_ONLY['battery']}
-READINGS = {tuple(key.split(' | ')): reading for key, reading in HOLD_ONLY['readings'].items()}
+# round 5b's three fixes, declared before their code: the hold-only rule's latest record, which governs wherever the
+# hold-only amendment disagrees (its rows, readings, movements, inventory acts, cost cells and offers)
+R5B = DECLARATION['amendment_20261104_hold_only_r5b']
+DECLARED = {(name, code): (before, after) for name, code, before, after in R5B['battery']}
+READINGS = {tuple(key.split(' | ')): reading for key, reading in R5B['readings'].items()}
 PREFIX = 'R8 R5 '
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
@@ -47,10 +72,78 @@ CUE = services.NAME_ONLY_CUE
 R1_SHAPES = ('R8 R5 R1 dash', 'R8 R5 R1b dash upper endoscopy named', 'R8 R5 R3 dash')
 A3_CONTROL = 'R8 R3 A3 control, the colonoscope told again before the labelled act'
 G1_GASTROSCOPE = 'R8 R5 residual G1 impression act by label, the gastroscope named (R1a-r3 path)'
+# round 5b's rows (R5_Z_SOURCES) and the round-5b findings' own inputs
+Z1 = 'R8 R5 Z1 an impression restating the label-only snare with its size and site'
+Z2 = 'R8 R5 Z2 an addendum restating the label-only snare with its site and service'
+Z3 = 'R8 R5 Z3 a label-only snare beside a forceps removal on its own line'
+Y1 = 'R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading'
+Y3 = 'R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading'
+H1146 = 'R8 R5 hold 1146 a procedures-performed line, the label acted on by name'
+BY_NAME = 'Polyp A was removed with a cold snare.'
+# Y-F2's addendum, as the physician posts it from the detail row (refute-r5b-results.json r5brefute:Y)
+ADDENDUM = 'Polyp A was removed with a cold snare during the colonoscopy, in the sigmoid colon, on the date of service.'
+# the X-R5B-1 verifier's second-review shapes (refute-r5b/verify-X/X-R5B-1): the extra passages its codes cite
+CECUM_Q = 'The colonoscope was advanced to the cecum.'
+GASTRO_Q = 'The gastroscope was then passed to the second part of the duodenum.'
 
 
 def text_of(name):
     return battery.CASES[name][0]
+
+
+def quotes(name):
+    return {code: quote for code, quote, _ in battery.CASES[name][1]}
+
+
+def second_reviewed(name, primary, second):
+    """(the primary-only result, the result with the bounded second review) of row ``name`` as engine.assess reads it
+    (tests.test_services_reconcile.run): the primary's codes ``primary`` [(code, quote)], then the second review's
+    ``second`` over the scope items the primary-only assessment flags for it, as jobs.stage_review2 builds them."""
+    text = text_of(name)
+    first = [rec.sel(code, rec.span(text, quote)) for code, quote in primary]
+    alone = rec.run(text, first)
+    items = [u['label'] for u in alone.completeness['unresolved_items'] if u['second_review']][:8]
+    response = NormalizedResponse('replay', 'test@1', tuple(rec.sel(code, rec.span(text, quote))
+                                                            for code, quote in second))
+    return alone, rec.run(text, first, second=response, second_scope={'items': items})
+
+
+def second_review_case(name):
+    """The primary's and the second review's codes of a declared second-review case (R5B['second_review']), as the
+    X-R5B-1 verifier's cases cite them: 'SR' the primary's biopsy (an EGD base for the 1406 row) then 45385; 'SR3' the
+    biopsy, then 45378 and 45385; 'SR4' the biopsy and 45378, then 45385; 'SR0' nothing, then 45385."""
+    kind, row = name.split(' | ', 1)
+    q = quotes(row)
+    biopsy = [('43239', q['43239'])] if '43239' in q else [('43235', GASTRO_Q)]
+    return row, {'SR': (biopsy, [('45385', q['45385'])]),
+                 'SR3 base+snare': (biopsy, [('45378', CECUM_Q), ('45385', q['45385'])]),
+                 'SR4 act item': (biopsy + [('45378', CECUM_Q)], [('45385', q['45385'])]),
+                 'SR0 nothing primary': ([], [('45385', q['45385'])])}[kind]
+
+
+def merged_cells(result):
+    """The second review's merge as the declaration records it: each proposal's cell (an alternative by its key), each
+    unresolved item, the provider.second_review check's status."""
+    cells = []
+    for p in result.proposals:
+        if p.bucket == 'alternative':
+            cells.append(f'{p.code} alternative ({p.key})')
+        else:
+            support = p.support or {}
+            cells.append(f"{p.code} {p.bucket}/{p.status} [{', '.join(c.fact for c in p.clarifications)}] "
+                         f"{support.get('reason')}" + (' (second review)' if support.get('origin') == 'second_review'
+                                                       else ''))
+    check = next((c for c in result.encounter_checks if c.id == 'provider.second_review'), None)
+    return {'cells': cells, 'unresolved': [f"{u['family']} {u['act'] or '(service)'} {u['reason']}"
+                                           for u in result.completeness['unresolved_items']],
+            'check': check.status if check is not None else None}
+
+
+def support_acts(name):
+    """{code: the act ids its support record names} of row ``name``, read as the stages read it."""
+    text, codes = battery.CASES[name]
+    return {p.code: [a['id'] for a in (p.support or {}).get('acts', [])]
+            for p in run(text, [(code, quote) for code, quote, _ in codes]).proposals if p.bucket != 'alternative'}
 
 
 def read(name, text=None, codes=None):
@@ -91,7 +184,7 @@ class HoldOnlyRowsTests(SimpleTestCase):
     violation; the rows are the declared texts and sources; the residuals read as recorded."""
 
     def test_the_rows(self):
-        names = HOLD_ONLY['battery_rows']
+        names = R5B['battery_rows']
         self.assertEqual(sorted(names), sorted(n for n in battery.CASES if n.startswith(PREFIX)))
         self.assertEqual(sorted({name for name, _ in READINGS}), sorted(names))
         for name in names:
@@ -110,6 +203,7 @@ class HoldOnlyRowsTests(SimpleTestCase):
         declared = {name: digest for name, digest in DECLARATION['texts_sha256'].items()
                     if name not in HOLD_ONLY['battery_rows_moved_to_residuals']}
         declared.update(HOLD_ONLY['texts_sha256'])
+        declared.update(R5B['texts_sha256'])
         texts = {name: text for name, (text, _) in battery.CASES.items() if name.startswith(PREFIX)}
         texts.update({name: text for name, (text, _) in battery.R5_RESIDUALS.items()})
         self.assertEqual({name: hashlib.sha256(text.encode('utf-8')).hexdigest() for name, text in texts.items()},
@@ -117,12 +211,18 @@ class HoldOnlyRowsTests(SimpleTestCase):
         self.assertEqual(battery.R5_XY_SOURCES, HOLD_ONLY['battery_rows_sources'])
         self.assertEqual(sorted(battery.R5_XY_SOURCES), sorted(HOLD_ONLY['battery_rows_added']))
         self.assertTrue(all(name.startswith(('R8 R5 X', 'R8 R5 Y')) for name in battery.R5_XY_SOURCES))
+        # round 5b's rows, verbatim from refute-r5b (each source named; each text's sha256 declared above)
+        self.assertEqual(battery.R5_Z_SOURCES, R5B['battery_rows_sources'])
+        self.assertEqual(sorted(battery.R5_Z_SOURCES), sorted(R5B['battery_rows_added']))
+        self.assertTrue(all(name.startswith('R8 R5 Z') and source.startswith('refute-r5b/')
+                            for name, source in battery.R5_Z_SOURCES.items()))
         self.assertEqual(sorted(battery.R5_SOURCES), sorted(n for n in DECLARATION['battery_rows_added']
                                                             if DECLARATION['battery_rows_sources'][n].startswith(
                                                                 'verify-r4/refuter-cases.json')))
 
     def test_the_residuals_read_as_recorded(self):
-        recorded = HOLD_ONLY['residuals_measured']['rows']
+        recorded = R5B['residuals_measured']['rows']
+        self.assertEqual(recorded, HOLD_ONLY['residuals_measured']['rows'])
         self.assertEqual(sorted(recorded), sorted(battery.R5_RESIDUALS))
         for name, (text, codes) in battery.R5_RESIDUALS.items():
             result = read(name, text, codes)
@@ -139,7 +239,7 @@ class PlacementTests(SimpleTestCase):
     puts it (family, kind, status, lesion), and carries the cue exactly where the amendment says."""
 
     def test_every_act_is_where_main_puts_it_with_its_declared_cue(self):
-        declared = HOLD_ONLY['inventory_acts']
+        declared = R5B['inventory_acts']
         texts = {name: text for name, (text, _) in battery.CASES.items() if name in declared}
         texts.update({name: text for name, (text, _) in battery.R5_RESIDUALS.items()})
         self.assertEqual(sorted(texts) + ['mara rev1'], sorted(declared))
@@ -149,7 +249,7 @@ class PlacementTests(SimpleTestCase):
         self.assertEqual(act_rows(inventory(*mara())), declared['mara rev1'])
 
     def test_only_a_performed_reported_act_carries_the_cue(self):
-        cued = [act for rows in HOLD_ONLY['inventory_acts'].values() for act in rows if act[4]]
+        cued = [act for rows in R5B['inventory_acts'].values() for act in rows if act[4]]
         self.assertTrue(cued)
         for family, kind, status, lesion, _ in cued:
             self.assertEqual(status, 'performed')
@@ -298,13 +398,17 @@ class DeclaredCostTests(SimpleTestCase):
     visible. The fixes are the false READYs held. Together they are every declared movement."""
 
     def test_the_costs_and_fixes_are_exactly_the_declared_movements(self):
-        costs = [tuple(cell) for cell in HOLD_ONLY['declared_costs']['hold_class']['cost_cells']]
-        fixes = [tuple(cell) for cell in HOLD_ONLY['fixes_against_base']]
-        self.assertEqual(sorted(costs + fixes), sorted(tuple(m) for m in HOLD_ONLY['battery']))
-        self.assertEqual((len(costs), len(fixes)), (21, 4))
+        costs = [tuple(cell) for cell in R5B['declared_costs']['hold_class']['cost_cells']]
+        fixes = [tuple(cell) for cell in R5B['fixes_against_base']]
+        self.assertEqual(sorted(costs + fixes), sorted(tuple(m) for m in R5B['battery']))
+        self.assertEqual((len(costs), len(fixes)), (22, 4))
+        # round 5b adds one cost (the Z3 row's 45385, a Y3 shape) and moves none of the hold-only form's movements
+        self.assertEqual(sorted(set(costs) - {tuple(c) for c in HOLD_ONLY['declared_costs']['hold_class']['cost_cells']}),
+                         [(Z3, '45385', READY, HELD)])
+        self.assertEqual(fixes, [tuple(cell) for cell in HOLD_ONLY['fixes_against_base']])
         self.assertIn(A3_CONTROL, [name for name, _, _, _ in costs])
         # the realistic shapes the class names each have a row among its costs
-        for shape in HOLD_ONLY['declared_costs']['hold_class']['realistic_shapes']:
+        for shape in R5B['declared_costs']['hold_class']['realistic_shapes']:
             self.assertTrue(any(name.startswith(f'{PREFIX}{shape} ') for name, _, _, _ in costs), shape)
         for name, code, before, after in costs:
             with self.subTest(name, code=code):
@@ -315,8 +419,8 @@ class DeclaredCostTests(SimpleTestCase):
             with self.subTest(name, code=code):
                 self.assertEqual({c: t for c, _, t in battery.CASES[name][1]}[code], 'not_done')
         # a named_only hold is exactly a declared movement, or X1's two cells main already holds [extent]
-        moved = {(name, code) for name, code, _, _ in HOLD_ONLY['battery'] if name.startswith(PREFIX)}
-        self.assertEqual({tuple(key.split(' | ')) for key in HOLD_ONLY['named_only_cells']} - moved,
+        moved = {(name, code) for name, code, _, _ in R5B['battery'] if name.startswith(PREFIX)}
+        self.assertEqual({tuple(key.split(' | ')) for key in R5B['named_only_cells']} - moved,
                          {('R8 R5 X1 snare by label, the EGD titled first', '45385'),
                           ('R8 R5 X1 biopsy by label, the EGD titled first', '45380')})
 
@@ -361,3 +465,259 @@ class MaraUnchangedTests(SimpleTestCase):
         self.assertEqual({code: o[:2] for code, o in outcomes(result).items()},
                          {'43239': ('selected', 'ready'), '45380': ('selected', 'ready'), '45385': ('selected', 'ready')})
         self.assertEqual(bundled(result), [('gi.colonoscopy', 'clip')])
+
+
+# --- refutation round 5b's three fixes (amendment_20261104_hold_only_r5b), each through the path its finding used ------
+
+class SecondReviewAddsTheHeldCodeTests(SimpleTestCase):
+    """Fix (a), X-R5B-1 through engine.assess with the bounded second review's response: a code the re-check selects for
+    the unproposed service of a hold-class document is added as a proposal from the second review and held
+    [performed_status] (named_only) - never an informational alternative that leaves the service silently uncoded."""
+
+    def test_the_named_only_code_is_added_held_and_the_service_is_accounted_for(self):
+        for name in (Y3, H1146, Y1):
+            with self.subTest(name):
+                q = quotes(name)
+                alone, result = second_reviewed(name, [('43239', q['43239'])], [('45385', q['45385'])])
+                self.assertIn('colonoscopy (documented as performed) has no supported proposal',
+                              [u['label'] for u in alone.completeness['unresolved_items'] if u['second_review']])
+                (p,) = [p for p in result.proposals if p.code == '45385']
+                self.assertEqual((p.bucket, p.status, [c.fact for c in p.clarifications], p.support['origin'],
+                                  p.support['reason'], p.support['state']),
+                                 ('selected', 'needs_clarification', ['performed_status'], 'second_review',
+                                  'named_only', 'uncertain'))
+                self.assertEqual([u for u in result.completeness['unresolved_items'] if u['family'] == 'gi.colonoscopy'],
+                                 [])
+                check = next(c for c in result.encounter_checks if c.id == 'provider.second_review')
+                self.assertEqual(check.status, 'info')
+                self.assertIn('selected 45385, added as a proposal for review', check.detail)
+
+    def test_every_declared_second_review_case_merges_as_declared(self):
+        declared = R5B['second_review']['cases']
+        self.assertEqual(len(declared), 21)
+        for name, expected in declared.items():
+            with self.subTest(name):
+                row, (primary, second) = second_review_case(name)
+                _, result = second_reviewed(row, primary, second)
+                self.assertEqual(merged_cells(result), expected)
+                self.assertFalse(any(cell.startswith('45385 alternative') for cell in expected['cells']))
+
+    def test_control_a_colonoscopy_only_note_adds_it_ready(self):
+        name = 'R8 R5 control, a colonoscopy-only note with a label-only act'
+        _, result = second_reviewed(name, [], [('45385', quotes(name)['45385'])])
+        (p,) = [p for p in result.proposals if p.code == '45385']
+        self.assertEqual((p.bucket, p.status, p.support['origin'], p.support['reason']),
+                         ('selected', 'ready', 'second_review', 'service'))
+
+
+class MergedCueTests(SimpleTestCase):
+    """Fix (b), Y-F1 and Y-F2 through the inventory and the stages: a merged act keeps services.NAME_ONLY_CUE only when
+    every statement of it carries it, so an impression restating the label-only snare with its size and site (Z1), or an
+    addendum naming its site and service (Z2), lifts the hold in whichever order the statements come."""
+
+    def test_a_sited_restatement_or_addendum_lifts_the_hold(self):
+        for name, restatement in ((Z1, '2. 8 mm sigmoid colon polyp removed with a cold snare.'), (Z2, ADDENDUM)):
+            with self.subTest(name):
+                inv = inventory(text_of(name))
+                (snare,) = acts(inv, 'gi.colonoscopy', 'snare')
+                self.assertEqual([ev.text for ev in snare.evidence][1:], [restatement])
+                self.assertEqual((snare.status, snare.lesion, CUE in snare.cues),
+                                 ('performed', lesion_id(inv, 'gi.colonoscopy', '8 mm'), False))
+                self.assertEqual(read(name)['45385'], (READY, [], 'service', []))
+                self.assertEqual(DECLARED.get((name, '45385')), None)  # main reads it READY too: no movement
+
+    def test_the_cue_survives_a_merge_only_when_every_statement_carries_it(self):
+        inv = inventory(text_of(Y1))
+        (named,) = acts(inv, 'gi.colonoscopy', 'snare')  # the label-only statement: the cue
+        self.assertIn(CUE, named.cues)
+        sited = replace(named, cues=tuple(c for c in named.cues if c != CUE),
+                        evidence=named.evidence + named.evidence)  # a statement of the same act with no cue
+        for order in ((named, sited), (sited, named)):
+            with self.subTest(first_has_cue=order[0] is named):
+                (merged,) = services._merge_acts(list(order))
+                self.assertNotIn(CUE, merged.cues)
+                self.assertEqual([c for c in merged.cues if c != CUE], [c for c in named.cues if c != CUE])
+        (merged,) = services._merge_acts([named, replace(named, evidence=named.evidence)])
+        self.assertIn(CUE, merged.cues)  # every statement label-only: the mark stays
+
+    def test_a_label_only_act_with_no_restatement_stays_held(self):
+        # the declared class: no statement of the act names its site, so the code stays held
+        for name in (Y1, Y3, H1146):
+            with self.subTest(name):
+                self.assertEqual(read(name)['45385'], (HELD, ['performed_status'], 'named_only', []))
+
+
+class HeldCodeCarriesItsActsTests(SimpleTestCase):
+    """Fix (c), X-R5B-2 through the stages and the review overlay: the named_only hold carries its acts, so the support
+    record names them and the separate-lesion modifier review and considerations read them as main does; the code stays
+    held."""
+
+    def test_every_named_only_cell_names_its_acts(self):
+        declared = R5B['named_only_support_acts']
+        self.assertEqual(sorted(declared), sorted(R5B['named_only_cells']))
+        by_row = {}
+        for key, ids in declared.items():
+            name, code = key.split(' | ')
+            by_row.setdefault(name, {})[code] = ids
+        for name, codes in by_row.items():
+            with self.subTest(name):
+                found = support_acts(name)
+                for code, ids in codes.items():
+                    self.assertTrue(ids, key)
+                    self.assertEqual(found[code], ids)
+
+    def test_the_held_snare_keeps_its_modifier_review_and_considerations(self):
+        from studio.validation import review_view
+        text, codes = battery.CASES[Z3]
+        result = run(text, [(code, quote) for code, quote, _ in codes])
+        by_code = {p.code: p for p in result.proposals if p.bucket != 'alternative'}
+        snare, biopsy = by_code['45385'], by_code['45380']
+        self.assertEqual((snare.status, snare.support['reason'], [c.fact for c in snare.clarifications]),
+                         ('needs_clarification', 'named_only', ['performed_status']))
+        self.assertTrue(any('59 or XS' in m for m in snare.modifier_considerations), snare.modifier_considerations)
+        self.assertTrue(any('59 or XS' in m for m in biopsy.modifier_considerations), biopsy.modifier_considerations)
+        stored = [review_view.stored_from(p) for p in result.proposals]
+        views = review_view.review_view(stored, {}, services=result.services,
+                                        reference_sources=result.reference_sources)
+        reviews = {v.code: (v.modifier_review or {}) for v in views.values() if v.bucket != 'alternative'}
+        self.assertEqual((reviews['45385'].get('codes'), reviews['45385'].get('options')), (['45385', '45380'], ['59', 'XS']))
+        self.assertEqual((reviews['45380'].get('codes'), reviews['45380'].get('options')), (['45380', '45385'], ['59', 'XS']))
+        self.assertEqual(reviews['43239'], {})
+
+
+@override_settings(**gi2.LIVE)
+class SecondReviewApprovedExportTests(gi2.Harness):
+    """Fix (a), X-R5B-1 through the customer API: after the bounded second review the snare code is a code that needs a
+    detail - nothing is listed as an alternative only - and the approved export waits until it is decided."""
+
+    def customer(self, encounter_id):
+        reply = self.client.get(f'/api/encounters/{encounter_id}')
+        self.assertEqual(reply.status_code, 200, reply.content)
+        return reply.json()
+
+    def approved_export(self, encounter_id):
+        return self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'approved', 'fmt': 'txt'})
+
+    def walk(self, name):
+        q = quotes(name)
+        self.use(TwoPassProvider(first=[('43239', q['43239'])], later=[('45385', q['45385'])]))
+        encounter_id = self.create(text_of(name))
+        drain()
+        self.assertEqual([c['code'] for c in self.customer(encounter_id)['codes']], ['43239'])
+        asked = self.post(f'/api/encounters/{encounter_id}/second-review')
+        self.assertEqual(asked.status_code, 201, asked.content)
+        drain()
+        doc = self.customer(encounter_id)
+        (held,) = [c for c in doc['codes'] if c['code'] == '45385']
+        self.assertEqual((held['status'], held['allowed_actions']), ('needs_detail', ['reject']))
+        self.assertEqual(doc['other_codes'], [])
+        self.assertEqual(doc['unresolved'], [])
+        self.approve(encounter_id, '43239')
+        refused = self.approved_export(encounter_id)
+        self.assertEqual(refused.status_code, 409, refused.content)
+        self.assertEqual(refused.json()['details']['blockers'], ['45385 needs a detail.'])
+        reply = self.post(f'/api/encounters/{encounter_id}/decisions', {'proposal_id': held['id'], 'action': 'reject'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        done = self.approved_export(encounter_id)
+        self.assertEqual(done.status_code, 201, done.content)
+        report = self.client.get(done.json()['download_url']).content.decode('utf-8')
+        self.assertIn('1. 43239', report)
+        self.assertNotIn('45385', report)
+
+    def test_y3_the_approved_export_waits_for_the_added_code(self):
+        self.walk(Y3)
+
+    def test_1146_the_approved_export_waits_for_the_added_code(self):
+        self.walk(H1146)
+
+
+class AddendumLiftsTheHoldTests(tcs.SurfaceCase):
+    """Fix (b), Y-F2 through the customer API: the physician's addendum, posted from the held code's detail row and
+    naming the act's site and service, is assessed as revision 2 and lifts the hold; the code can then be approved.
+    Corti is tests.test_customer_fixtures.CitingCorti and both participants agree; nothing is sent."""
+
+    SELECTIONS = [('45385', (BY_NAME,)), ('43239', ('Cold forceps biopsies were taken from the gastric antrum.',))]
+
+    def setUp(self):
+        super().setUp()
+        install_reference_store()
+        self.text = text_of(Y1)
+        self.inputs += [self.text, ADDENDUM, 'Synthetic round 5b addendum']
+
+    def agreeing(self):
+        for name in ('astra', 'fable'):
+            self.adapters[name] = FakeParticipant(name, codes=[(code, cited[0]) for code, cited in self.SELECTIONS])
+
+    def sent(self):
+        self.agreeing()
+        with mock.patch('studio.jobs.get_provider', return_value=CitingCorti(self.SELECTIONS)):
+            encounter_id = self.create(text=self.text, title='Synthetic round 5b addendum')
+            drain()
+        return encounter_id
+
+    def code(self, encounter_id, code):
+        doc = self.detail(encounter_id)
+        tcs.assert_contract(self, doc)
+        (row,) = [c for c in doc['codes'] if c['code'] == code]
+        return doc, row
+
+    def approve(self, encounter_id, row):
+        return self.signed_in(self.reviewer).post(
+            f'/api/encounters/{encounter_id}/decisions', content_type='application/json',
+            data=json.dumps({'proposal_id': row['id'], 'action': 'approve',
+                             'acknowledgement': review.ACKNOWLEDGEMENTS[self.reviewer.actor_kind]}))
+
+    def test_an_addendum_naming_the_site_and_service_lifts_the_hold(self):
+        encounter_id = self.sent()
+        doc, held = self.code(encounter_id, '45385')
+        self.assertEqual((held['status'], held['allowed_actions']), ('needs_detail', ['reject']))
+        (row,) = [r for r in doc['details_needed'] if r['fact'] == 'performed_status']
+        self.assertTrue(row['addendum_allowed'])
+        self.agreeing()
+        with mock.patch('studio.jobs.get_provider', return_value=CitingCorti(self.SELECTIONS)):
+            reply = self.signed_in(self.reviewer).post(
+                f'/api/encounters/{encounter_id}/addenda', content_type='application/json',
+                data=json.dumps({'text': ADDENDUM, 'clarification_id': row['id'], 'synthetic_attestation': 'yes'}))
+            self.assertEqual(reply.status_code, 201, reply.content)
+            drain()
+        encounter = self.encounter(encounter_id)
+        self.assertEqual((encounter.current_revision.number, encounter.current_revision.kind), (2, 'addendum'))
+        doc, ready = self.code(encounter_id, '45385')
+        self.assertEqual((ready['status'], ready['allowed_actions']), ('ready', ['approve', 'reject']))
+        self.assertEqual([r for r in doc['details_needed'] if r['fact'] == 'performed_status'], [])
+        snares = [a for s in encounter.current_assessment.services['services'] for a in s['acts'] if a['kind'] == 'snare']
+        self.assertEqual([([e['text'] for e in a['evidence']], CUE in a['cues']) for a in snares],
+                         [([BY_NAME, ADDENDUM], False)])
+        reply = self.approve(encounter_id, ready)
+        self.assertEqual(reply.status_code, 201, reply.content)
+
+    def test_control_with_no_addendum_the_code_stays_held(self):
+        encounter_id = self.sent()
+        _, held = self.code(encounter_id, '45385')
+        self.assertEqual(held['status'], 'needs_detail')
+        reply = self.approve(encounter_id, held)
+        self.assertEqual(reply.status_code, 409, reply.content)
+
+
+@override_settings(**gi2.LIVE)
+class ModifierReviewTests(gi2.Harness):
+    """Fix (c), X-R5B-2 through the customer API: beside the held label-only snare (45385), the ready forceps removal
+    of a second polyp (45380) keeps the separate-lesion modifier review, and approving it with XS succeeds."""
+
+    def test_the_partner_code_offers_its_modifier_review_and_an_xs_approval_succeeds(self):
+        q = quotes(Z3)
+        self.use(TwoPassProvider(first=[(code, q[code]) for code in ('43239', '45385', '45380')], later=[]))
+        encounter_id = self.create(text_of(Z3))
+        drain()
+        doc = self.client.get(f'/api/encounters/{encounter_id}').json()
+        rows = {c['code']: c for c in doc['codes']}
+        self.assertEqual((rows['45385']['status'], rows['45380']['status']), ('needs_detail', 'ready'))
+        for code in ('45385', '45380'):
+            with self.subTest(code):
+                self.assertEqual(rows[code]['modifier_review']['options'], ['59', 'XS'])
+        acknowledgement = self.client.get('/api/session').json()['acknowledgement']
+        reply = self.post(f'/api/encounters/{encounter_id}/decisions',
+                          {'proposal_id': rows['45380']['id'], 'action': 'approve',
+                           'acknowledgement': acknowledgement, 'modifiers': ['XS']})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        self.assertEqual(reply.json()['decision']['modifiers'], ['XS'])
