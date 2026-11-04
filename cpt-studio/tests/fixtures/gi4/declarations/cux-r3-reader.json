@@ -2379,5 +2379,1024 @@
    "unit_pins": "Moved, as declared: tests.test_cux_r2_bind.ProcedureListTests' LABELLED_NOTE pin (rewritten as test_the_helper_reads_a_numbered_procedure_line_as_a_note_label). No other pin moved: the parity digests, tests/test_harness_pipeline and tests/test_gi4_battery's pins pass."
   },
   "cost": "Not measured with ops.gi4.cost (none of its 12 shapes carries these rules' shapes); probed instead (scratch-r3-reader/probes/cost_r3.py, offline, routing and the inventory read cold at 4 doubling sizes up to 324,149 characters, the final head's export and base): a refused label over 2,000 negated colonoscope lines, over 2,000 sigmoidoscope lines, 2,000 site-less label restatements after the gastroscope, 2,000 labelled acts after the gastroscope, 2,000 cecal polyps with anaphoric and site-less acts in a note's part, 2,000 evaluation nouns with 160-character postmodifiers: every doubling ratio 1.58-2.43 on the head (base 1.35-2.27); each step over 2.3 is followed by one under 1.7, and every shape is linear end to end. At the largest size the head took 3.077, 3.246, 2.087, 2.706, 6.070 and 2.923 s against the base's 3.154, 3.872, 2.193, 2.980, 5.927 and 3.684 s - each run beside two test runs, so the timings are noisy (scratch-r3-reader/logs/cost-final.log)."
+ },
+ "amendment_20261104_integration_combined_head": {
+  "declared_before_code": true,
+  "declared_at": "2026-11-04 (integration, lead session a12d8fb3), before the code commit",
+  "base": "17c1ef1b4d16b84e9bcc3763c4cb19a9ffae4775",
+  "rule": "L1-h (integration): a note label line opens a note part only where it interrupts a report of one service (the running part has a family: R8 D7's shape). In a combined report's head, or any part of no family, a label line ('Note 2: Colonoscopy', 'Part 2: Colonoscopy', 'Second procedure: Colonoscopy') lists or names today's procedures and opens no part, so the shared findings under it read as installed reads them. It extends L1c-r3, which the reader-r3 owner applied to the restored spellings only, to every label. This closes the owner's recorded limit (its after-code limits: 'Note 2: Colonoscopy' ... over shared findings, 45380 READY; held on installed).",
+  "measured_before_code": {
+   "head": "45380 selected/ready on all three rows (3 violations)",
+   "installed 41e03656df61": "every code held"
+  },
+  "battery_rows_added": [
+   "R8 R3 H note label alone in a combined head, Note 2",
+   "R8 R3 H note label alone in a combined head, Part 2",
+   "R8 R3 H note label alone in a combined head, second procedure"
+  ],
+  "battery": [
+   [
+    "R8 R3 H note label alone in a combined head, Note 2",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R3 H note label alone in a combined head, Part 2",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R3 H note label alone in a combined head, second procedure",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ]
+  ],
+  "must_hold": "R8 D7 and the A1 rows (a dated note label after a single-service report) still open the note's part; every other round-2 and round-3 row unmoved",
+  "offer_battery": {
+   "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, a numbered procedure line naming an EGD performed today": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, one numbered procedure line over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1a numbered procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1b subsequent procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1c follow-on procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1d numbered procedure heading, the note's own biopsy code": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1e subsequent procedure heading, the note's own biopsy code": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A2 control, a denial on a label at its own site": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A2a snare denial on a label, a landmark of its own segment": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A2b snare denial on a label, the left colon": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A2c forceps denial on a label, near the hepatic flexure": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A3 control, a labelled clip and denial in a combined narrative": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A3 control, the colonoscope told again before the labelled act": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3a specimen number restarted in a combined narrative": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3b specimen number restarted in a combined narrative, 43239 only": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3c colon label named in passing in a combined narrative": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4a cecal polyp, its snare in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A4c cecal polyp found, the polyp removed on the next line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A5 control, an assessment of the mucosa beside the absence statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5 control, an evaluation for a problem planned in clinic": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5 control, an evaluation word inside a biopsy statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5a evaluation for a problem beside the absence statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5b history and examination for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5c consultation regarding a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5d assessment of a problem, an appositive": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5e focused history and physical for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5f a GI consultation for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5g the absence statement before the evaluation": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A6 control, a refused note label whose text denies the running instrument": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A6a header cross-reference to a same-day EGD, a lesion and its snare": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6b header cross-reference to a same-day EGD, a site-less biopsy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6c header line naming a same-day EGD, a site-less snare": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6d an upper endoscopy report's cross-reference to a same-day colonoscopy": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6e a labelled line naming an EGD performed today, the colonoscopy narrative after it": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6f a labelled line naming an EGD performed today, a site-less biopsy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6g header cross-reference, the colonoscope advanced without difficulty": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, a label restated by its size under a stomach heading": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, a label restated by its size under another examination": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, the specimen rows with their sites": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A7a specimen row restating COL-2 by its size": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A7b specimen row restating COL-1 by its size": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 H note label alone in a combined head, Note 2": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 H note label alone in a combined head, Part 2": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 H note label alone in a combined head, second procedure": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   }
+  },
+  "unmoved": {
+   "R8 R3 H note label alone in a combined head, Note 2 | 43239": "selected/needs_clarification",
+   "R8 R3 H note label alone in a combined head, Part 2 | 43239": "selected/needs_clarification",
+   "R8 R3 H note label alone in a combined head, second procedure | 43239": "selected/needs_clarification"
+  }
  }
 }

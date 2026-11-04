@@ -1030,6 +1030,23 @@ CASES.update({
             R8_CECUM, 'The colonoscope was advanced to the cecum and no polyps were seen in the rectum.'),
             R3_SIGMOID_POLYP, R3_IT), [('45385', R3_IT, 'done')]),
 })
+# --- integration, round 3 (2026-11-04; cux-r3-reader.json amendment_integration_combined_head): the reader-r3 owner's
+# recorded limit, closed - a note label line alone in a combined report's head (a part of no family), over shared
+# findings that tell no instrument, opens no note part: the shared biopsy reads as installed reads it (held)
+R3H_SHARED = ('Findings:\nBiopsies were taken with cold forceps. A clip was placed at the biopsy site.\nThe colonoscope was '
+              'advanced to the cecum. The colon was normal.\n')
+R3H_BIOPSY = 'Biopsies were taken with cold forceps.'
+CASES.update({
+    'R8 R3 H note label alone in a combined head, Note 2': (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nNote 2: Colonoscopy\n' + R3H_SHARED,
+        [('43239', R3H_BIOPSY, 'MAY'), ('45380', R3H_BIOPSY, 'not_done')]),
+    'R8 R3 H note label alone in a combined head, Part 2': (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nPart 2: Colonoscopy\n' + R3H_SHARED,
+        [('43239', R3H_BIOPSY, 'MAY'), ('45380', R3H_BIOPSY, 'not_done')]),
+    'R8 R3 H note label alone in a combined head, second procedure': (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nSecond procedure: Colonoscopy\n' + R3H_SHARED,
+        [('43239', R3H_BIOPSY, 'MAY'), ('45380', R3H_BIOPSY, 'not_done')]),
+})
 # Measured and recorded, never repaired here (cux-r3-reader.json residuals_measured): A8, R8 D8's indication line with
 # its heading written with a dash ('Indication - ...'). Routing's layout (sections.layout, H2-frozen: gi-context@4) reads
 # no indication section there, and V05 reads the layout's indication sections only. Its honest truth makes it a

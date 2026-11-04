@@ -36,11 +36,16 @@ DECLARATION = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' /
                          .read_text(encoding='utf-8'))
 # the rows declared before code, and those its after-code amendment adds (dated, measured: never a key above it changed)
 AFTER_CODE = DECLARATION.get('after_code_20261104', {})
-DECLARED_ROWS = DECLARATION['battery_rows_added'] + AFTER_CODE.get('battery_rows_added', [])
+# the integration's amendment (the lead, 2026-11-04): the combined-head rows, declared before its code
+COMBINED_HEAD = DECLARATION.get('amendment_20261104_integration_combined_head', {})
+DECLARED_ROWS = (DECLARATION['battery_rows_added'] + AFTER_CODE.get('battery_rows_added', [])
+                 + COMBINED_HEAD.get('battery_rows_added', []))
 DECLARED = {(name, code): (before, after)
-            for name, code, before, after in DECLARATION['battery'] + AFTER_CODE.get('battery', [])}
+            for name, code, before, after in DECLARATION['battery'] + AFTER_CODE.get('battery', [])
+            + COMBINED_HEAD.get('battery', [])}
 UNMOVED = {tuple(key.split(' | ')): cell
-           for key, cell in list(DECLARATION['unmoved'].items()) + list(AFTER_CODE.get('unmoved', {}).items())}
+           for key, cell in list(DECLARATION['unmoved'].items()) + list(AFTER_CODE.get('unmoved', {}).items())
+           + list(COMBINED_HEAD.get('unmoved', {}).items())}
 HELD = 'selected/needs_clarification'
 EM = {'setting', 'patient_status', 'em_basis'}
 
