@@ -34,6 +34,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import traceback
 from pathlib import Path, PurePosixPath
@@ -44,9 +45,13 @@ SELF = Path(__file__).resolve()
 
 DOMAIN = 'cpt.quillmd.com'
 PUBLIC_IPV4 = '147.189.172.8'
-WEB_PORT = 9150
+WEB_PORT = 9150  # the web's port on a fresh host, where nothing is served through the vhost yet
+# Blue/green (ops/INSTALL.md, app): an install starts the incoming web on the other of these two loopback ports beside
+# the serving one, switches the vhost's upstream to it with a graceful nginx reload, and stops the old web only once it
+# is drained. The port therefore alternates from install to install.
+WEB_PORTS = (9150, 9151)
 DB_PORT = 55451
-UPSTREAM = f'127.0.0.1:{WEB_PORT}'
+UPSTREAM = f'127.0.0.1:{WEB_PORT}'  # upstream(WEB_PORT): the fresh-host rendering
 APP_HEALTH_HOST = 'app.quillmd.com'
 
 NETWORK = 'cpt-studio-net'
@@ -60,6 +65,16 @@ SERVICES = {'web': 'cpt-studio-web', 'worker': 'cpt-studio-worker'}
 # 'sending' (HARNESS.md 8, 11.2). 600 s is settings.STALE_RUNNING_SECONDS, the stale-stage sweep's bound: a stage still
 # running when the stop timeout passes is one that sweep settles as cut short anyway, so waiting longer buys nothing.
 STOP_SECONDS = {'web': 30, 'worker': 600}
+# The incoming web of a blue/green install, renamed to SERVICES['web'] once the old web is drained and stopped.
+INCOMING_WEB = SERVICES['web'] + '-next'
+# The old web's drain after the switch (drain_web): at least DRAIN_MIN_SECONDS, above gunicorn's 120 s request timeout
+# (deploy/gunicorn.conf.py), so every request it accepted before the switch has ended; then until DRAIN_QUIET_SECONDS
+# consecutive one-second samples show no connection to its port and no nginx worker still shutting down from the
+# reload; never longer than DRAIN_MAX_SECONDS (a co-tenant's long-lived connection keeps an old nginx worker alive).
+DRAIN_MIN_SECONDS, DRAIN_QUIET_SECONDS, DRAIN_MAX_SECONDS = 130, 10, 600
+# The availability record of a blue/green switch: https://cpt.quillmd.com/health/ through the public path, this often.
+AVAILABILITY_INTERVAL_SECONDS = 0.5
+AVAILABILITY_KEPT = 200  # non-200 samples kept in the receipt (all are counted)
 DB_NAME = DB_USER = 'cptstudio'
 APP_UID = 10150  # must equal the Dockerfile's USER; unique on this host (10001 is a co-tenant's)
 POSTGRES_UID = 70
@@ -112,6 +127,15 @@ PASSAGE_DATA = f'{APP}/studio/reference/data'
 PASSAGE_DATA_IN_IMAGE = '/app/studio/reference/data'
 INITIAL_CREDENTIALS = 'initial-credentials.json'
 AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/agent-credentials.json')
+# The operators phase's two platform-operator accounts (ops/INSTALL.md, operators): no workspace membership, a grant
+# from `manage grant_operator`. The agent's login is a user file like AGENT_CREDENTIALS; the human's is root-only.
+OPERATOR_ACCOUNTS_SPEC = (('ops-agent', 'agent', 'CPT Studio operations agent'),
+                          ('platform-operator', 'human', 'CPT Studio platform operator'))
+OPERATOR_CREDENTIALS = 'operator-credentials.json'
+OPS_AGENT_CREDENTIALS = Path('/home/claude/.cpt-studio/ops-agent-credentials.json')
+REASSESS_LIMIT = 20  # encounters per reassess phase
+REASSESS_SECONDS = 300
+UUID_RE = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 
 NGINX_AVAILABLE = Path('/etc/nginx/sites-available')
 NGINX_ENABLED = Path('/etc/nginx/sites-enabled')
@@ -183,6 +207,10 @@ def sha256(data: bytes) -> str:
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def utc_now_ms() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
 
 
 def stamp() -> str:
@@ -321,10 +349,12 @@ def check_tree(revision, declaration_commit) -> dict:
 PHASE_ARGUMENTS = {
     'pfs_zip': {'reference'}, 'mue_zip': {'reference'},
     'pfs_retrieved_at': {'reference'}, 'mue_retrieved_at': {'reference'},
-    'provider_mode': {'app'}, 'authorization_ref': {'app'},
-    'astra_mode': {'app'}, 'fable_mode': {'app'}, 'access_check': {'app'},
+    'provider_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
+    'astra_mode': {'app', 'switch-back'}, 'fable_mode': {'app', 'switch-back'}, 'access_check': {'app'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
-    'agent_display_name': {'provision'}, 'workspace_name': {'provision'}, 'reset_passwords': {'provision'},
+    'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
+    'reset_passwords': {'provision', 'operators'},
+    'encounter': {'reassess'}, 'dry_run': {'reassess'},
 }
 
 
@@ -351,6 +381,10 @@ def parse_args(argv=None):
     parser.add_argument('--agent-display-name')
     parser.add_argument('--workspace-name')
     parser.add_argument('--reset-passwords', action='store_true', default=None)
+    parser.add_argument('--encounter', action='append',
+                        help='reassess: an encounter id to re-assess from its retained responses (repeatable)')
+    parser.add_argument('--dry-run', action='store_true', default=None,
+                        help='reassess: pass --dry-run to reassess_retained (nothing is queued)')
     args = parser.parse_args(argv)
     problem = argument_problem(args)
     if problem:
@@ -377,9 +411,20 @@ def argument_problem(args) -> str:
             problem = retrieved_at_problem(value)
             if problem:
                 return problem
-    if args.phase == 'app':
+    if args.phase == 'reassess':
+        encounters = args.encounter or []
+        if not encounters:
+            return '--phase reassess needs at least one --encounter <id>.'
+        if len(encounters) > REASSESS_LIMIT:
+            return f'--phase reassess takes at most {REASSESS_LIMIT} --encounter ids per run.'
+        if len(set(encounters)) != len(encounters):
+            return '--encounter ids must not repeat.'
+        for value in encounters:
+            if not UUID_RE.fullmatch(value):
+                return f'--encounter {value!r} is not a lowercase encounter id (UUID).'
+    if args.phase in ('app', 'switch-back'):
         if args.provider_mode is None:
-            return '--phase app needs an explicit --provider-mode (disabled or live).'
+            return f'--phase {args.phase} needs an explicit --provider-mode (disabled or live).'
         if args.provider_mode == 'live' and not args.authorization_ref:
             return '--provider-mode live needs --authorization-ref (a ruling file tracked at the revision).'
         # A live participant sends under the same recorded authority as Corti (HARNESS.md 8; jobs._live_gate).
@@ -1137,11 +1182,18 @@ def render(template: str, values: dict) -> str:
     return rendered
 
 
-def rendered_vhosts(revision) -> dict:
+def upstream(port) -> str:
+    if port not in WEB_PORTS:
+        raise InstallError(f'The web port must be one of {", ".join(map(str, WEB_PORTS))}, not {port!r}.')
+    return f'127.0.0.1:{port}'
+
+
+def rendered_vhosts(revision, port=WEB_PORT) -> dict:
+    """The revision's two vhost stages: HTTP (no upstream) and HTTPS proxying to 127.0.0.1:``port``."""
     texts = {kind: run(['git', '-C', str(ROOT), 'show', f'{revision}:{path}']).stdout.decode('utf-8')
              for kind, path in TEMPLATES.items()}
     http_conf = render(texts['http'], {'DOMAIN': DOMAIN})
-    https_conf = render(texts['https'], {'DOMAIN': DOMAIN, 'UPSTREAM': UPSTREAM})
+    https_conf = render(texts['https'], {'DOMAIN': DOMAIN, 'UPSTREAM': upstream(port)})
     if not https_conf.startswith(http_conf):
         raise InstallError('The HTTPS vhost must begin with the HTTP stage byte-for-byte (renewals depend on it).')
     for conf in (http_conf, https_conf):
@@ -1149,6 +1201,41 @@ def rendered_vhosts(revision) -> dict:
                for args in block['listen']):
             raise InstallError('The vhost must never claim default_server.')
     return {'http': http_conf, 'https': https_conf}
+
+
+def vhost_renderings(revision) -> dict:
+    """{sha256: {'kind', 'port', 'text'}} of every stage this installer writes for ``revision``: the HTTP stage (port
+    None; it names no upstream, so one rendering serves both ports) and the HTTPS stage for each of WEB_PORTS."""
+    found = {}
+    for port in WEB_PORTS:
+        confs = rendered_vhosts(revision, port)
+        found.setdefault(sha256(confs['http'].encode()), {'kind': 'http', 'port': None, 'text': confs['http']})
+        found[sha256(confs['https'].encode())] = {'kind': 'https', 'port': port, 'text': confs['https']}
+    return found
+
+
+def nginx_statements(text):
+    """Every directive as its word list, in order (comments and quoted strings as nginx_tokens reads them)."""
+    statements, words = [], []
+    for kind, value in nginx_tokens(text):
+        if kind == 'punct':
+            if words:
+                statements.append(words)
+            words = []
+        else:
+            words.append(value)
+    return statements
+
+
+def proxied_port(text):
+    """The port of the single ``proxy_pass http://127.0.0.1:<port>;`` in ``text`` when it is one of WEB_PORTS, else
+    None: no proxy_pass (the HTTP stage), more than one, another host, another form or another port."""
+    passes = [words[1:] for words in nginx_statements(text or '') if words and words[0] == 'proxy_pass']
+    if len(passes) != 1 or len(passes[0]) != 1:
+        return None
+    match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{1,5})', passes[0][0])
+    port = int(match.group(1)) if match else None
+    return port if port in WEB_PORTS else None
 
 
 def nginx_tokens(text):
@@ -1332,8 +1419,9 @@ PROBE_HEADERS = ('location', 'content-type', 'strict-transport-security', 'x-con
 
 
 def probe(scheme, host, path='/', *, port=None, connect_ip=None, verify=True, method='GET', headers=None,
-          timeout=5.0):
-    """One request with SNI/Host = ``host``; never follows redirects. Errors become data."""
+          timeout=5.0, keep_body=False):
+    """One request with SNI/Host = ``host``; never follows redirects. Errors become data. ``keep_body`` also returns
+    the body read (at most 64 KiB + 1 byte) under 'body'."""
     port = port or (443 if scheme == 'https' else 80)
     target = connect_ip or host
     if scheme == 'https':
@@ -1355,6 +1443,8 @@ def probe(scheme, host, path='/', *, port=None, connect_ip=None, verify=True, me
         result['status'] = response.status
         result['headers'] = {name: response.headers.get_all(name) for name in PROBE_HEADERS
                              if response.headers.get_all(name)}
+        if keep_body:
+            result['body'] = body
         if body and (response.headers.get('content-type') or '').startswith('application/json') and len(body) <= 65536:
             result['json'] = json.loads(body)
         elif body:
@@ -1464,19 +1554,71 @@ def networks() -> list:
     return sorted(row['Name'] for row in list_json('network', 'ls'))
 
 
-def listening_ports(proc_texts) -> set:
-    ports = set()
+def tcp_entries(proc_texts):
+    """(local port, remote port, state) of every socket line of /proc/net/tcp and tcp6 texts (header line skipped)."""
     for text in proc_texts:
         for line in text.splitlines()[1:]:
             fields = line.split()
-            if len(fields) > 3 and fields[3] == '0A':
-                ports.add(int(fields[1].rsplit(':', 1)[1], 16))
-    return ports
+            if len(fields) > 3:
+                yield int(fields[1].rsplit(':', 1)[1], 16), int(fields[2].rsplit(':', 1)[1], 16), fields[3]
+
+
+def listening_ports(proc_texts) -> set:
+    return {local for local, _, state in tcp_entries(proc_texts) if state == '0A'}
+
+
+# A request can be in flight on a connection only in these states: established, or opening (SYN sent / received).
+TCP_ACTIVE_STATES = ('01', '02', '03')
+
+
+def active_connections(port, proc_texts) -> int:
+    """Sockets with ``port`` at either end in a state a request can be in flight on: nginx's side of a proxied
+    request (remote port) and the publishing proxy's side (local port) both count."""
+    return sum(1 for local, remote, state in tcp_entries(proc_texts)
+               if state in TCP_ACTIVE_STATES and port in (local, remote))
+
+
+def proc_net_texts() -> list:
+    return [Path(f'/proc/net/{name}').read_text() for name in ('tcp', 'tcp6') if Path(f'/proc/net/{name}').exists()]
 
 
 def host_listening_ports() -> set:
-    return listening_ports(Path(f'/proc/net/{name}').read_text() for name in ('tcp', 'tcp6')
-                           if Path(f'/proc/net/{name}').exists())
+    return listening_ports(proc_net_texts())
+
+
+def established_to(port) -> int:
+    return active_connections(port, proc_net_texts())
+
+
+NGINX_PID_FILE = Path('/run/nginx.pid')
+
+
+def nginx_processes(proc_root=Path('/proc'), pid_file=NGINX_PID_FILE) -> dict:
+    """{'visible', 'shutting_down'}: the host nginx's processes this user can see, and how many are workers still
+    'shutting down' from a reload (each finishes the requests it accepted under its old configuration). The host
+    master is read from its pid file and only its children count; without a readable pid file every nginx process
+    on the host counts (a co-tenant's too), which can only lengthen a drain. Seeing none at all is not read as 'none
+    shutting down': the caller cannot tell."""
+    try:
+        master = int(Path(pid_file).read_text().strip())
+    except (OSError, ValueError):
+        master = None
+    visible = shutting = 0
+    for entry in os.scandir(proc_root):
+        if not entry.name.isdigit():
+            continue
+        try:
+            cmdline = (Path(proc_root) / entry.name / 'cmdline').read_bytes()
+            if master is not None and int(entry.name) != master:
+                parent = (Path(proc_root) / entry.name / 'stat').read_text().rsplit(')', 1)[1].split()[1]
+                if int(parent) != master:
+                    continue
+        except (OSError, ValueError, IndexError):  # the process ended mid-scan
+            continue
+        if cmdline.startswith(b'nginx: '):
+            visible += 1
+            shutting += b'shutting down' in cmdline
+    return {'visible': visible, 'shutting_down': shutting, 'master': master}
 
 
 def published_by(port) -> list:
@@ -1501,9 +1643,31 @@ def foreign_uid_tasks(uid, own_container_ids, proc_root=Path('/proc')) -> int:
     return count
 
 
+def service_names(role) -> tuple:
+    """Every name a CPT Studio container of ``role`` can carry: its own, the parked '-previous' and, for the web, the
+    incoming '-next' of a blue/green install."""
+    name = SERVICES[role]
+    return (name, name + '-previous') + ((INCOMING_WEB,) if role == 'web' else ())
+
+
 def own_service_ids() -> list:
-    return [container['Id'] for role, name in SERVICES.items()
+    return [container['Id'] for role in SERVICES for name in service_names(role)
             if (container := inspect('container', name)) is not None and owned(container, role)]
+
+
+def published_port(container):
+    """The one 127.0.0.1 host port ``container`` publishes for 8000/tcp when it is one of WEB_PORTS, else None."""
+    bindings = ((container or {}).get('HostConfig') or {}).get('PortBindings') or {}
+    entries = bindings.get('8000/tcp') or []
+    if len(bindings) != 1 or len(entries) != 1 or entries[0].get('HostIp') != '127.0.0.1':
+        return None
+    port = str(entries[0].get('HostPort') or '')
+    return int(port) if port.isdigit() and int(port) in WEB_PORTS else None
+
+
+def other_port(port) -> int:
+    (idle,) = [candidate for candidate in WEB_PORTS if candidate != port]
+    return idle
 
 
 def port_problem(port, owner) -> str:
@@ -1591,12 +1755,18 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
     return flags
 
 
-def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None):
+def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None, *, name=None,
+                 port=WEB_PORT):
     """docker run arguments for a long-running role; secrets arrive on stdin as an env-file. ``participants`` maps each
-    harness participant to its mode (disabled when not given)."""
+    harness participant to its mode (disabled when not given). A web is named ``name`` (the incoming web of a
+    blue/green install: INCOMING_WEB) and publishes 127.0.0.1:``port``; every other argument is the same."""
     live = provider_mode == 'live'
     modes = {name: (participants or {}).get(name) or 'disabled' for name in PARTICIPANTS}
-    common = ['--name', SERVICES[role], '--pull=never', '--restart', 'unless-stopped', '--network', NETWORK,
+    container = name or SERVICES[role]
+    if container not in ((SERVICES['web'], INCOMING_WEB) if role == 'web' else (SERVICES['worker'],)):
+        raise InstallError(f'{container} is not a name a CPT Studio {role} is started under.')
+    upstream(port)  # one of WEB_PORTS, or refused
+    common = ['--name', container, '--pull=never', '--restart', 'unless-stopped', '--network', NETWORK,
               '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}={role}', '--label', f'{REVISION_LABEL}={revision}',
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
@@ -1607,7 +1777,7 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
         # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8).
-        return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{WEB_PORT}:8000', *environment,
+        return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
     for name, mode in modes.items():
@@ -2018,11 +2188,15 @@ print(ANSWER + json.dumps(answer))
 '''
 
 
-def app_script(image_id, env_bytes, body, params, *, what, timeout=180) -> dict:
-    """Run ``body`` in a one-shot container of ``image_id`` (provider disabled) and return its ANSWER line's JSON."""
+def app_script(image_id, env_bytes, body, params, *, what, timeout=180, mounts=(), user=None) -> dict:
+    """Run ``body`` in a one-shot container of ``image_id`` (provider disabled) and return its ANSWER line's JSON.
+    ``mounts`` and ``user`` are the one-shot's (the operators phase mounts RAM-only password files it owns)."""
     payload = base64.b64encode(json.dumps(params).encode()).decode()
     source = APP_SCRIPT_PRELUDE.format(payload=payload, answer=APP_SCRIPT_ANSWER) + body
-    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout)
+    extra = {'mounts': list(mounts)} if mounts else {}
+    if user:
+        extra['user'] = user
+    result = oneshot(image_id, ['manage', 'shell', '-c', source], env_bytes, timeout=timeout, **extra)
     answers = [line for line in result.stdout.decode('utf-8', 'replace').splitlines()
                if line.startswith(APP_SCRIPT_ANSWER)]
     if result.returncode or len(answers) != 1:
@@ -2066,7 +2240,9 @@ def db_container_problems(container, postgres_image_id) -> list:
     return problems
 
 
-def service_problems(container, role, image_id) -> list:
+def service_problems(container, role, image_id, port=None) -> list:
+    """What makes ``container`` not the hardened ``role`` of ``image_id``; a web must publish exactly 127.0.0.1:
+    ``port`` (any one of WEB_PORTS when ``port`` is None)."""
     host = container.get('HostConfig') or {}
     problems = []
     if not owned(container, role) or container.get('Image') != image_id:
@@ -2078,8 +2254,10 @@ def service_problems(container, role, image_id) -> list:
     if (container.get('Config') or {}).get('User') != f'{APP_UID}:{APP_UID}':
         problems.append('not running as the application user')
     bindings = host.get('PortBindings') or {}
-    expected = {'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(WEB_PORT)}]} if role == 'web' else {}
-    if bindings != expected:
+    ports = (port,) if port is not None else WEB_PORTS
+    expected = ([{'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(each)}]} for each in ports] if role == 'web'
+                else [{}])
+    if bindings not in expected:
         problems.append('unexpected published ports')
     # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's and a live participant's.
     binds = [(mount.get('Source'), mount.get('Destination'), mount.get('RW'))
@@ -2094,14 +2272,16 @@ def service_problems(container, role, image_id) -> list:
     return problems
 
 
-def wait_service(role, revision, image_id) -> dict:
-    name = SERVICES[role]
+def wait_service(role, revision, image_id, *, name=None, port=WEB_PORT) -> dict:
+    """Readiness of the ``role`` container ``name`` (its canonical name unless given) of ``image_id``: a web answers
+    health_ok for ``revision`` on 127.0.0.1:``port``; a worker stays up. Either must pass service_problems."""
+    name = name or SERVICES[role]
     if role == 'web':
         def check():
             container = inspect('container', name)
             if container is None or not container['State'].get('Running'):
                 return False, {'running': False}
-            result = probe('http', DOMAIN, '/health/', port=WEB_PORT, connect_ip='127.0.0.1',
+            result = probe('http', DOMAIN, '/health/', port=port, connect_ip='127.0.0.1',
                            headers={'X-Forwarded-Proto': 'https'}, timeout=3)
             return result.get('status') == 200 and health_ok(result.get('json'), revision), {
                 'status': result.get('status'), 'error': result.get('error')}
@@ -2116,7 +2296,8 @@ def wait_service(role, revision, image_id) -> dict:
             return len(stable) >= 10 and all(stable[-10:]), {'running': bool(state.get('Running'))}
         passed, observations = poll(check, attempts=20, interval=1.0)
     container = inspect('container', name) or {}
-    problems = service_problems(container, role, image_id) if container else ['container vanished']
+    problems = (service_problems(container, role, image_id, port=port if role == 'web' else None) if container
+                else ['container vanished'])
     if not passed or problems or container.get('RestartCount'):
         raise InstallError(f'{name} did not become ready: {problems or "readiness not observed"}.',
                            details={'observations': observations[-5:]})
@@ -2127,6 +2308,9 @@ def park(role):
     name, parked = SERVICES[role], SERVICES[role] + '-previous'
     if inspect('container', parked) is not None:
         raise InstallError(f'{parked} is left from an interrupted replacement; resolve it before reinstalling.')
+    if role == 'web' and inspect('container', INCOMING_WEB) is not None:
+        raise InstallError(f'{INCOMING_WEB} is left from an interrupted blue/green install; resolve it before '
+                           'reinstalling (ops/INSTALL.md, Recovery notes).')
     container = inspect('container', name)
     if container is None:
         return None
@@ -2266,8 +2450,29 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
 
 
 def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None) -> dict:
-    """Park the old pair, start the new pair (``participants``: each harness participant's mode, disabled when not
-    given); on any failure stop what was started, close every stage it left open
+    """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given) the way
+    replacement_plan reads the host - after migrate, as before, and right before anything is started or stopped (a
+    refusal starts and stops nothing; preflight has refused the same states before the install began): a served site
+    is switched blue/green (switch_services, which never stops its web; it needs this install's preflight receipt, the
+    baseline the switch is verified against); a host where nothing is served through the vhost is swapped as it always
+    was (swap_services). The receipt's 'replacement' says which, and why."""
+    plan = replacement_plan(ctx)
+    summary = {key: plan[key] for key in ('mode', 'why', 'vhost', 'vhost_sha256', 'live', 'idle', 'port') if key in plan}
+    if plan['mode'] == 'blue-green':
+        preflight = require_receipt(ctx, 'preflight')
+        services = switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
+                                   preflight=preflight, plan=plan)
+    else:
+        services = swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
+                                 port=plan['port'])
+    return {**services, 'replacement': summary}
+
+
+def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
+                  port=WEB_PORT) -> dict:
+    """The swap of a host where nothing is served through the vhost (replacement_plan's 'fresh'). Park
+    the old pair, start the new pair, its web on 127.0.0.1:``port`` (``participants``: each harness participant's
+    mode, disabled when not given); on any failure stop what was started, close every stage it left open
     and every open stage of a kind the old worker does not run (close_undone_stages), put back the list states the old
     revision labels otherwise (put_back_states, with the old pair's own image), and only then restore exactly the old
     pair - its worker left stopped while the close names records it would act on wrongly. A pair whose stages cannot be
@@ -2284,9 +2489,10 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref,
         for role in ('web', 'worker'):
             launched.append(role)
             docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref,
-                                              participants),
+                                              participants, port=port),
                    input=env_bytes, quiet=True)
-            started[role] = wait_service(role, ctx.revision, image_id)
+            # WEB_PORT is wait_service's own default, and is left to it (callers' stand-ins keep its three arguments)
+            started[role] = wait_service(role, ctx.revision, image_id, **({'port': port} if port != WEB_PORT else {}))
     except BaseException as failure:
         for role in reversed(launched):
             name = SERVICES[role]
@@ -2370,6 +2576,645 @@ def retire_parked(parked):
             docker('rm', '--force', previous['id'], timeout=60)
 
 
+# --- blue/green: the switch that never stops the serving web (ops/INSTALL.md, app) --------------------------------------
+#
+# Invariants (each asserted after every fake call by ops/test_install_bluegreen.py):
+#   I-web    after every step the vhost's proxy_pass port - the file's and the one nginx routes to - is published by a
+#            running web that answered health_ok for its revision; the old web is never stopped before the switch is
+#            verified, nor while a verified switch could still be undone.
+#   I-worker at most one worker runs; the old one is stopped before any new-revision web takes traffic, and the new one
+#            starts only after the old one has exited (no stale-stage sweep races a live stage).
+#   I-jobs   the old worker's current stage finishes (docker stop --time 600); queued stages wait for the new worker.
+#   I-state  the stored list states are recomputed only once both old containers have stopped (phase_app).
+#   I-undo   every failure leaves the site served by a healthy web; today's hazard semantics are kept, and switching
+#            back replaces restarting a stopped web.
+
+def replacement_plan(ctx) -> dict:
+    """How replace_services replaces the pair, read right before anything is started or stopped. A state it cannot
+    read as one of these is refused, and nothing is started or stopped.
+
+    'blue-green': the running cpt-studio-web publishes one of WEB_PORTS and quillmd-cpt is this revision's HTTPS stage
+        proxying to it - the site is served - so switch_services starts the incoming web on the other port and stops
+        the serving one only after the switch and its drain.
+    'fresh': nothing is served through the vhost - there is no quillmd-cpt, it is the HTTP stage (which proxies
+        nothing), it is an HTTPS stage no running web answers now, or the running web publishes neither web port (no
+        web this installer started: the vhost cannot reach it) - so swap_services swaps the pair on <port>: the port
+        that HTTPS stage proxies to, else WEB_PORT. The containers are read first, and the vhost only when it can
+        decide the mode or the port."""
+    web = inspect('container', SERVICES['web'])
+    if web is not None and not owned(web, 'web'):
+        raise InstallError(f'{SERVICES["web"]} exists but is not a CPT Studio web container; nothing was started or '
+                           'stopped.')
+    running = bool(web is not None and (web.get('State') or {}).get('Running'))
+    facts = {'vhost': None, 'vhost_sha256': None, 'web': None}
+    if web is not None:
+        facts['web'] = {'id': web['Id'], 'image': web.get('Image'), 'running': running, 'port': published_port(web),
+                        'revision': labels_of(web).get(REVISION_LABEL)}
+    if running and facts['web']['port'] is None:
+        return {**facts, 'mode': 'fresh', 'port': WEB_PORT,
+                'why': f'the running {SERVICES["web"]} publishes neither web port, so nothing reaches it through the '
+                       'vhost'}
+    state = vhost_state()
+    facts['vhost_sha256'] = state['file_sha256']
+    if not state['file_exists'] and not state['link_exists']:
+        return {**facts, 'mode': 'fresh', 'port': WEB_PORT, 'vhost': 'absent',
+                'why': 'there is no quillmd-cpt vhost, so nothing is served through it'}
+    if not (state['file_exists'] and state['file_sha256'] and state['link_target'] == VHOST_LINK_TARGET):
+        raise InstallError('quillmd-cpt is not the regular file and sites-enabled link this installer writes; nothing '
+                           'was started or stopped. Resolve it by hand (ops/INSTALL.md, Recovery notes).')
+    live_bytes = live_vhost_bytes()
+    if live_bytes is None or sha256(live_bytes) != state['file_sha256']:
+        raise InstallError('quillmd-cpt changed while it was being read; nothing was started or stopped.')
+    known = vhost_renderings(ctx.revision).get(state['file_sha256'])
+    recorded = recorded_vhosts(ctx).get(state['file_sha256']) if known is None else None
+    if known is not None:
+        kind, port = known['kind'], known['port']
+    elif recorded is not None:
+        kind = recorded[1]
+        port = proxied_port(live_bytes.decode('utf-8', 'replace')) if kind == 'https' else None
+        if kind == 'https' and port is None:
+            raise InstallError('quillmd-cpt is a recorded HTTPS stage whose upstream is not 127.0.0.1:9150 or 9151; '
+                               'nothing was started or stopped.')
+    else:
+        raise InstallError('quillmd-cpt holds content this installer did not write and no successful receipt here '
+                           'records; nothing was started or stopped.')
+    facts['vhost'] = kind
+    if kind == 'http':
+        return {**facts, 'mode': 'fresh', 'port': WEB_PORT, 'why': 'quillmd-cpt is the HTTP stage, which proxies nothing'}
+    facts['proxied_port'] = port
+    if not running:
+        return {**facts, 'mode': 'fresh', 'port': port,
+                'why': f'no running {SERVICES["web"]} answers the HTTPS stage on {port} now, so nothing is interrupted'}
+    if facts['web']['port'] != port:
+        raise InstallError(f'quillmd-cpt proxies to 127.0.0.1:{port} but the running {SERVICES["web"]} publishes '
+                           f'{facts["web"]["port"]}; nothing was started or stopped. Resolve it by hand '
+                           '(ops/INSTALL.md, Recovery notes).')
+    if known is None:
+        raise InstallError(f'quillmd-cpt is the HTTPS stage an earlier revision ({recorded[0][:12]}) wrote, which this '
+                           'revision does not render for its port (deploy/nginx changed): the switch would change more '
+                           'than its upstream, so nothing was started or stopped. Republish the vhost under this '
+                           'revision first (ops/INSTALL.md, Reinstalling a new revision).')
+    if not SHA_RE.fullmatch(str(facts['web']['revision'] or '')):
+        raise InstallError(f'The running {SERVICES["web"]} carries no revision label, so its health cannot be told '
+                           'apart from the incoming one\'s; nothing was started or stopped.')
+    plan = {**facts, 'mode': 'blue-green', 'live': port, 'idle': other_port(port),
+            'why': f'the site is served by {SERVICES["web"]} on {port}: the incoming web starts on {other_port(port)}'}
+    problems = switch_problems(plan)
+    if problems:
+        raise InstallError('A blue/green switch cannot start, so nothing was started or stopped: '
+                           + '; '.join(problems) + '.', details={'plan': plan})
+    return plan
+
+
+def switch_problems(plan) -> list:
+    """What keeps a blue/green switch from starting: read when it is planned and again right before it starts."""
+    problems = []
+    if plan['idle'] in host_listening_ports():
+        problems.append(f'port {plan["idle"]}, the incoming web\'s, is already in use')
+    for name in (INCOMING_WEB, SERVICES['web'] + '-previous', SERVICES['worker'] + '-previous'):
+        if inspect('container', name) is not None:
+            problems.append(f'{name} is left from an interrupted install (ops/INSTALL.md, Recovery notes)')
+    web = inspect('container', SERVICES['web'])
+    if (web is None or web['Id'] != plan['web']['id'] or not (web.get('State') or {}).get('Running')
+            or published_port(web) != plan['live']):
+        problems.append(f'{SERVICES["web"]} is no longer the running web on {plan["live"]} that was read')
+    worker = inspect('container', SERVICES['worker'])
+    if worker is not None and not owned(worker, 'worker'):
+        problems.append(f'{SERVICES["worker"]} exists but is not a CPT Studio worker container')
+    return problems
+
+
+def live_web_port() -> int:
+    """The port the live HTTPS stage proxies to, which the running cpt-studio-web must publish; refused otherwise."""
+    live = live_vhost_bytes()
+    port = proxied_port(live.decode('utf-8', 'replace')) if live is not None else None
+    if port is None:
+        raise InstallError('quillmd-cpt is not an HTTPS stage proxying to 127.0.0.1:9150 or 9151.')
+    web = inspect('container', SERVICES['web'])
+    if (web is None or not owned(web, 'web') or not (web.get('State') or {}).get('Running')
+            or published_port(web) != port):
+        raise InstallError(f'quillmd-cpt proxies to 127.0.0.1:{port}, which the running {SERVICES["web"]} does not '
+                           'publish.')
+    return port
+
+
+def serving_web_port() -> int:
+    """The port the running cpt-studio-web publishes (one of WEB_PORTS), else WEB_PORT (a fresh host)."""
+    web = inspect('container', SERVICES['web'])
+    if web is not None and owned(web, 'web') and (web.get('State') or {}).get('Running'):
+        return published_port(web) or WEB_PORT
+    return WEB_PORT
+
+
+def web_port_layout() -> dict:
+    """Preflight's view of the two web ports. The active one - the port cpt-studio-web publishes, else the one the
+    live HTTPS stage proxies to, else WEB_PORT - may be held by cpt-studio-web alone; the other must be free, since the
+    next app starts the incoming web there; and no incoming web may be left from an interrupted app."""
+    web = inspect('container', SERVICES['web'])
+    active = published_port(web) if web is not None else None
+    if active is None:
+        live = live_vhost_bytes()
+        active = (proxied_port(live.decode('utf-8', 'replace')) if live is not None else None) or WEB_PORT
+    problems = []
+    for port in WEB_PORTS:
+        problem = port_problem(port, SERVICES['web'] if port == active else None)
+        if problem:
+            problems.append(problem + ('' if port == active else ' (the incoming web\'s port must be free)'))
+    if inspect('container', INCOMING_WEB) is not None:
+        problems.append(f'{INCOMING_WEB} is left from an interrupted app (ops/INSTALL.md, Recovery notes)')
+    return {'active': active, 'idle': other_port(active), 'problems': problems}
+
+
+STATIC_REFERENCE_RE = re.compile(r'''(?:href|src)=["'](/static/[^"'?#\s]+)["']''')
+
+
+def smoke_web(port) -> dict:
+    """Before the incoming web takes traffic: its sign-in page answers 200 text/html on 127.0.0.1:``port``, and every
+    static file that page names (hashed names, from the web's own manifest) answers 200 from the same web. Read-only (a
+    GET of the sign-in page writes nothing). Refused when the page names no static file: nothing would be checked."""
+    headers = {'X-Forwarded-Proto': 'https'}
+    login = probe('http', DOMAIN, '/login/', port=port, connect_ip='127.0.0.1', headers=headers, timeout=5,
+                  keep_body=True)
+    content_type = (login.get('headers', {}).get('content-type') or [''])[0]
+    record = {'login': {'status': login.get('status'), 'content_type': content_type, 'error': login.get('error')},
+              'assets': {}}
+    problems = []
+    if login.get('status') != 200 or not content_type.startswith('text/html'):
+        problems.append(f'/login/ answered {login.get("status") or login.get("error")} {content_type}'.strip())
+    else:
+        paths = sorted(set(STATIC_REFERENCE_RE.findall((login.get('body') or b'').decode('utf-8', 'replace'))))
+        if not paths:
+            problems.append('the sign-in page names no static file, so none could be checked')
+        for path in paths[:20]:
+            asset = probe('http', DOMAIN, path, port=port, connect_ip='127.0.0.1', headers=headers, timeout=5)
+            record['assets'][path] = asset.get('status') or asset.get('error')
+            if asset.get('status') != 200:
+                problems.append(f'{path} answered {asset.get("status") or asset.get("error")}')
+    if problems:
+        raise InstallError('The incoming web did not serve its own pages: ' + '; '.join(problems) + '.',
+                           details={'smoke': record})
+    return record
+
+
+class AvailabilityRecorder:
+    """https://cpt.quillmd.com/health/ through the public path - DNS, this host's nginx and whichever web it routes to,
+    as a customer reaches it - every AVAILABILITY_INTERVAL_SECONDS in a daemon thread, from start() to stop(), which
+    returns {'samples', 'statuses' (count per status, 'error' for no answer), 'releases_seen' (in the order first
+    seen), 'non_200' (the first AVAILABILITY_KEPT, each {at, status, error}), 'non_200_count', 'started_at',
+    'finished_at', 'interval_seconds'}. One request per sample (Connection: close), so each lands on the configuration
+    nginx holds at that moment. A sample that raises is recorded as an error; nothing here raises into the phase."""
+
+    def __init__(self, *, interval=AVAILABILITY_INTERVAL_SECONDS, check=None):
+        self.interval = interval
+        self.check = check or (lambda: probe('https', DOMAIN, '/health/', timeout=3))
+        self.record = {'samples': 0, 'statuses': {}, 'releases_seen': [], 'non_200': [], 'non_200_count': 0,
+                       'started_at': None, 'finished_at': None, 'interval_seconds': interval}
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._thread = None
+
+    def sample(self):
+        at = utc_now_ms()
+        try:
+            result = self.check()
+        except Exception as error:  # noqa: BLE001 — a sample that cannot be taken is a non-200, never a crash
+            result = {'error': type(error).__name__}
+        status = result.get('status') if isinstance(result, dict) else None
+        body = result.get('json') if isinstance(result, dict) and isinstance(result.get('json'), dict) else {}
+        with self._lock:
+            record = self.record
+            record['samples'] += 1
+            key = str(status) if status is not None else 'error'
+            record['statuses'][key] = record['statuses'].get(key, 0) + 1
+            release = body.get('release')
+            if isinstance(release, str) and release not in record['releases_seen']:
+                record['releases_seen'].append(release)
+            if status != 200:
+                record['non_200_count'] += 1
+                if len(record['non_200']) < AVAILABILITY_KEPT:
+                    record['non_200'].append({'at': at, 'status': status,
+                                              'error': result.get('error') if isinstance(result, dict) else None})
+
+    def _run(self):
+        due = time.monotonic()
+        while not self._stop.is_set():
+            self.sample()
+            due = max(due + self.interval, time.monotonic())
+            self._stop.wait(max(0.0, due - time.monotonic()))
+
+    def start(self):
+        self.record['started_at'] = utc_now_ms()
+        self._thread = threading.Thread(target=self._run, name='cpt-studio-availability', daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> dict:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=10)
+        with self._lock:
+            self.record['finished_at'] = utc_now_ms()
+            return json.loads(json.dumps(self.record))
+
+
+def drain_web(port, *, clock=time.monotonic, sleep=time.sleep, sample=None, nginx=None,
+              minimum=DRAIN_MIN_SECONDS, quiet=DRAIN_QUIET_SECONDS, maximum=DRAIN_MAX_SECONDS) -> dict:
+    """Wait, once nginx routes elsewhere, until the web on ``port`` can stop without cutting a request: at least
+    ``minimum`` seconds (above gunicorn's request timeout, so every request it accepted before the switch has ended),
+    then until ``quiet`` consecutive one-second samples see no connection to ``port`` a request can be in flight on
+    (active_connections, /proc/net/tcp and tcp6) and no host nginx worker still shutting down from the reload
+    (nginx_processes) - never longer than ``maximum``, after which it returns bounded_out (ops/INSTALL.md, Known limits:
+    an upload an old nginx worker is still reading from its client reaches the stopped port). A sample that cannot be
+    read, or no nginx process seen at all, counts as busy: it can only lengthen the drain."""
+    sample = sample or (lambda: established_to(port))
+    nginx = nginx or nginx_processes
+    start, samples, run = clock(), 0, 0
+    most = {'connections': 0, 'shutting_down': 0, 'unreadable': 0, 'nginx_unseen': 0}
+    while True:
+        try:
+            connections = int(sample())
+        except Exception:  # noqa: BLE001 — cannot tell: busy
+            connections = None
+            most['unreadable'] += 1
+        try:
+            workers = nginx()
+            shutting = int(workers['shutting_down']) if workers.get('visible') else None
+        except Exception:  # noqa: BLE001 — cannot tell: busy
+            shutting = None
+        if shutting is None:
+            most['nginx_unseen'] += 1
+        samples += 1
+        most['connections'] = max(most['connections'], connections or 0)
+        most['shutting_down'] = max(most['shutting_down'], shutting or 0)
+        busy = connections is None or connections > 0 or shutting is None or shutting > 0
+        run = 0 if busy else run + 1
+        elapsed = clock() - start
+        if elapsed >= minimum and run >= quiet:
+            return {'port': port, 'seconds': round(elapsed, 1), 'samples': samples, 'bounded_out': False, **most}
+        if elapsed >= maximum:
+            return {'port': port, 'seconds': round(elapsed, 1), 'samples': samples, 'bounded_out': True,
+                    'last': {'connections': connections, 'shutting_down': shutting}, **most}
+        sleep(1)
+
+
+def switch_upstream(ctx, preflight, from_port, to_port, *, revision, progress) -> dict:
+    """The vhost's upstream from 127.0.0.1:``from_port`` to ``to_port``, through publish_vhost. The live file must be
+    this revision's HTTPS rendering for ``from_port`` (refused otherwise, before anything changes); it is replaced
+    atomically by the rendering for ``to_port`` - the two differ in their proxy_pass line alone - validated (nginx -t,
+    no new warning), reloaded gracefully (old nginx workers finish what they accepted), and verified through the
+    public path: /health/ serves ``revision``, and the co-tenants and app.quillmd.com answer as the preflight baseline
+    recorded. On any failure publish_vhost puts the exact previous bytes back and reloads again. ``progress`` gets
+    'applied_at' (a UTC datetime) once the file is being replaced and 'reloaded' once nginx runs with it: an undo closes
+    what the incoming side may have started from that moment, and drains it only when it took traffic."""
+    before = rendered_vhosts(ctx.revision, from_port)['https'].encode()
+    after = rendered_vhosts(ctx.revision, to_port)['https'].encode()
+    sha_before, sha_after = sha256(before), sha256(after)
+    state = vhost_state()
+    if state['file_sha256'] != sha_before or state['link_target'] != VHOST_LINK_TARGET:
+        raise InstallError(f'quillmd-cpt is not this revision\'s HTTPS stage for port {from_port}; the upstream was '
+                           'not switched.')
+
+    def apply():
+        progress['applied_at'] = dt.datetime.now(dt.timezone.utc)
+        vhost_operation('replace', expected_sha256=sha_before, content=base64.b64encode(after).decode())
+
+    def undo():
+        if vhost_state()['file_sha256'] == sha_after:
+            vhost_operation('replace', expected_sha256=sha_after, content=base64.b64encode(before).decode())
+
+    def verify():
+        problems, evidence = https_checks(ctx, revision)
+        problems += ingress_checks(ctx, preflight)
+        if problems:
+            raise InstallError('; '.join(problems) + '.', details=evidence)
+        return {'https': evidence}
+    result = publish_vhost(ctx, apply, undo, verify, progress=progress)
+    return {'from': from_port, 'to': to_port, 'vhost_sha_before': sha_before, 'vhost_sha_after': sha_after,
+            'applied_at': progress['applied_at'].isoformat(), 'nginx_t_log': result.get('nginx_t_log'),
+            'https_observations': (result.get('https') or {}).get('observations'),
+            'https_final_status': ((result.get('https') or {}).get('final') or {}).get('status')}
+
+
+def serving_summary() -> dict:
+    """What serves the site now, for a receipt (never raises): the port quillmd-cpt names and each CPT Studio service
+    container's state, port and image."""
+    summary = {}
+    try:
+        live = live_vhost_bytes()
+        summary['vhost_port'] = proxied_port(live.decode('utf-8', 'replace')) if live is not None else None
+    except Exception as error:  # noqa: BLE001
+        summary['vhost_port'] = f'unreadable ({type(error).__name__})'
+    found = {}
+    for role in SERVICES:
+        for name in service_names(role):
+            try:
+                container = inspect('container', name)
+            except Exception as error:  # noqa: BLE001
+                found[name] = f'unreadable ({type(error).__name__})'
+                continue
+            if container is not None:
+                found[name] = {'id': str(container.get('Id'))[:12], 'image': str(container.get('Image'))[:19],
+                               'running': bool((container.get('State') or {}).get('Running')),
+                               'port': published_port(container)}
+    summary['containers'] = found
+    return summary
+
+
+def log_tail(ctx, name, role, label):
+    container = inspect('container', name)
+    if container is not None and owned(container, role):
+        tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
+        ctx.log(label, tail.stdout[-8192:] + tail.stderr[-8192:])
+
+
+def retire_live_web(old_id) -> dict:
+    """S5, once the old web is drained: stop it (graceful, 30 s), park it as cpt-studio-web-previous, and give the
+    incoming web the canonical name - Docker renames a running container in place, nothing restarts."""
+    name, parked = SERVICES['web'], SERVICES['web'] + '-previous'
+    container = inspect('container', name)
+    if container is None or container['Id'] != old_id or not owned(container, 'web'):
+        raise InstallError(f'{name} is not the web the switch moved traffic from; it was left as it is.')
+    if inspect('container', parked) is not None:
+        raise InstallError(f'{parked} exists, so the old web was left running under its name.')
+    docker('stop', '--time', str(STOP_SECONDS['web']), name, timeout=STOP_SECONDS['web'] + 60)
+    docker('rename', name, parked)
+    docker('rename', INCOMING_WEB, name)
+    return {'id': container['Id'], 'image': container['Image'], 'revision': labels_of(container).get(REVISION_LABEL)}
+
+
+def worker_after_failed_park() -> str:
+    """After park('worker') failed or was interrupted: the old worker back under its own name and running again
+    (park restarts it itself when only its rename failed; a '-previous' here is park's own, none being left before S1)."""
+    name, parked = SERVICES['worker'], SERVICES['worker'] + '-previous'
+    current, renamed = inspect('container', name), inspect('container', parked)
+    if current is None and renamed is not None and owned(renamed, 'worker'):
+        docker('rename', parked, name)
+        current = inspect('container', name)
+    if current is None:
+        return 'not there (there was no worker)'
+    if not owned(current, 'worker'):
+        return f'{name}, which is not a CPT Studio worker, so it was left as it is'
+    if (current.get('State') or {}).get('Running'):
+        return f'still running (its stop did not finish; if it exits, start it again: docker start {name})'
+    docker('start', name)
+    return 'started again'
+
+
+def restore_parked_worker(previous, *, start=True) -> str:
+    """The worker park() parked (``previous``, park's answer) back under its name; started unless held."""
+    name, parked = SERVICES['worker'], SERVICES['worker'] + '-previous'
+    if not previous:
+        return 'there was no worker to put back'
+    if inspect('container', name) is not None:
+        raise InstallError(f'{name} exists, so the parked worker was left parked ({parked}).')
+    docker('rename', parked, name)
+    if not start:
+        return f'put back under its name and left stopped ({name})'
+    docker('start', name)
+    return 'put back and started'
+
+
+def remove_incoming_web() -> str:
+    try:
+        remove_service_container(INCOMING_WEB, 'web')
+    except BaseException as error:  # noqa: BLE001 — reported: the site does not depend on it
+        return f'could not be removed ({error}); remove it by hand'
+    return 'was removed'
+
+
+def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *, preflight,
+                    plan) -> dict:
+    """The blue/green replacement (replacement_plan's 'blue-green'): the serving web is never stopped before the switch
+    is verified and drained.
+
+      S1  start the incoming web, INCOMING_WEB, on the idle port; it must answer health_ok for this revision and serve
+          its own sign-in page and static files (smoke_web) - the old web still serves everything
+      S2  park the old worker (docker stop --time 600: its current stage finishes; nothing new is claimed) - the old web
+          still serves, and what members start waits in the queue
+      S3  switch the vhost's upstream to the idle port (switch_upstream: atomic replace, nginx -t, graceful reload,
+          /health/ = this revision through the public path, co-tenants unchanged)
+      S4  start the new worker - processing resumes under the new rules
+      S5  drain the old web (drain_web), stop it, park it as cpt-studio-web-previous and rename the incoming web to
+          cpt-studio-web
+    An AvailabilityRecorder probes the public /health/ from before S1 to the end (an undo included). Any failure is
+    undone by undo_switch without interrupting the site; the InstallError it raises says what is left. phase_app then
+    recomputes the stored list states and removes the parked pair (S6)."""
+    live, idle = plan['live'], plan['idle']
+    problems = switch_problems(plan)
+    if problems:
+        raise InstallError('The blue/green switch cannot start, so nothing was started or stopped: '
+                           + '; '.join(problems) + '.', details={'plan': plan})
+    steps, parked, started, progress = {}, {}, {}, {}
+    record = {'mode': 'blue-green', 'ports': {'from': live, 'to': idle}, 'steps': steps}
+    reached = [None]
+
+    def step(name):
+        reached[0] = name
+        steps[name] = utc_now_ms()
+    recorder = AvailabilityRecorder().start()
+    try:
+        step('S1')
+        docker('run', '-d', *service_args('web', image_id, ctx.revision, provider_mode, authorization_ref, participants,
+                                          name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+        started['web'] = wait_service('web', ctx.revision, image_id, name=INCOMING_WEB, port=idle)
+        record['smoke'] = smoke_web(idle)
+        step('S2')
+        parked['worker'] = park('worker')
+        step('S3')
+        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=ctx.revision, progress=progress)
+        step('S4')
+        docker('run', '-d', *service_args('worker', image_id, ctx.revision, provider_mode, authorization_ref,
+                                          participants), input=env_bytes, quiet=True)
+        started['worker'] = wait_service('worker', ctx.revision, image_id)
+        step('S5')
+        record['drain'] = drain_web(live)
+        parked['web'] = retire_live_web(plan['web']['id'])
+        step('done')
+        record['availability'] = recorder.stop()
+    except BaseException as failure:
+        try:
+            message, details = undo_switch(ctx, failure, reached[0], image_id=image_id, env_bytes=env_bytes, plan=plan,
+                                           preflight=preflight, parked=parked, progress=progress)
+        except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
+            message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
+                       f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
+                       'Recovery notes')
+            details = {}
+        raise InstallError(message, details={**record, **details, 'failed_at': reached[0], 'started': started,
+                                             'replaced': parked, 'availability': stop_recorder(recorder),
+                                             'left': left_summary()}) from failure
+    return {'started': started, 'replaced': parked, **record}
+
+
+def stop_recorder(recorder) -> dict:
+    """The availability record, even when the stop itself is interrupted (a second Ctrl-C)."""
+    try:
+        return recorder.stop()
+    except BaseException as error:  # noqa: BLE001 — the receipt says so rather than losing the undo's message
+        return {'error': f'the availability record could not be read ({type(error).__name__})'}
+
+
+def left_summary() -> dict:
+    try:
+        return serving_summary()
+    except BaseException as error:  # noqa: BLE001 — as stop_recorder
+        return {'error': f'what is left could not be read ({type(error).__name__})'}
+
+
+def undo_switch(ctx, failure, reached, *, image_id, env_bytes, plan, preflight, parked, progress) -> tuple:
+    """(message, details) after a blue/green step failed, with the site kept served (the failure matrix, ops/INSTALL.md
+    app). S1, S2: the incoming web is removed and the old worker runs again - nothing reached the new pair. S3: the vhost
+    is already back (publish_vhost); what the incoming web may have started since the file changed is closed, the list
+    states the old revision labels otherwise are put back, the incoming web is drained when it took traffic and removed,
+    and the old worker is put back - held while the close names records it would act on (today's rule). S4: the new
+    worker is stopped and what the new pair started is closed; when the close names a state the old web would SHOW
+    wrongly (and the pair is another revision) the NEW web keeps serving, with the old worker parked and the new one
+    stopped; otherwise the states are put back, the vhost is switched back (a graceful reload, /health/ = the old
+    revision), the incoming web is drained and removed and the old worker put back (or held). S5: the new pair serves
+    and nothing is undone."""
+    cause = str(failure) or type(failure).__name__
+    live, idle = plan['live'], plan['idle']
+    web, worker = SERVICES['web'], SERVICES['worker']
+    old_revision = plan['web']['revision']
+    previous = parked.get('worker') or {'image': plan['web']['image'], 'revision': old_revision}
+    details = {}
+    if reached in (None, 'S1'):
+        log_tail(ctx, INCOMING_WEB, 'web', 'incoming-web-failed')
+        removed = remove_incoming_web()
+        return (f'{cause}; the incoming web ({INCOMING_WEB}, port {idle}) {removed}, and nothing else changed: {web} '
+                f'kept serving on {live} and the worker kept running. Migrations already applied are not reversed.',
+                details)
+    if reached == 'S2':
+        state = worker_after_failed_park()
+        removed = remove_incoming_web()
+        return (f'{cause}; the old worker is {state}, the incoming web ({INCOMING_WEB}) {removed}, and nothing else '
+                f'changed: {web} kept serving on {live}. Migrations already applied are not reversed.', details)
+    if reached == 'done':
+        return (f'{cause}; the switch had finished - the incoming pair serves on {idle} and the old pair is parked - '
+                'but its availability record could not be read and the stored list states were not recomputed: '
+                f'remove {web}-previous and {worker}-previous by hand, then rerun --phase app, which recomputes them.',
+                details)
+    if reached == 'S5':
+        return (f'{cause}; the incoming pair serves (the vhost names {idle}, the new worker runs) and nothing was '
+                'undone, but the old web was not retired and the stored list states were not recomputed: read "left" in '
+                'this receipt, stop and remove what is left of the old web by hand (once it has no connection), rename '
+                f'{INCOMING_WEB} to {web} if it still carries that name, remove {worker}-previous, then rerun --phase '
+                'app, which recomputes them (ops/INSTALL.md, Recovery notes).', details)
+    kinds = stage_kinds_of(previous.get('image'), env_bytes)
+    reason = (f'its switch to revision {ctx.revision[:12]} failed and revision {old_revision[:12]} kept serving'
+              if reached == 'S3' else
+              f'the new worker of revision {ctx.revision[:12]} failed and revision {old_revision[:12]} was switched back')
+    if reached == 'S3':
+        return undo_switch_s3(ctx, cause, image_id=image_id, env_bytes=env_bytes, plan=plan, parked=parked,
+                              progress=progress, previous=previous, kinds=kinds, reason=reason)
+    return undo_switch_s4(ctx, cause, image_id=image_id, env_bytes=env_bytes, plan=plan, preflight=preflight,
+                          parked=parked, progress=progress, previous=previous, kinds=kinds, reason=reason)
+
+
+def close_and_put_back(image_id, env_bytes, since, revision, reason, kinds, previous) -> dict:
+    """The undo's close (close_undone_stages, with the old worker's kinds) and put-back (put_back_states, with the old
+    pair's own image), each failure recorded rather than raised: {'closed', 'put_back', 'shown', 'acting',
+    'problems'}. A close that did not answer, or answered no hazard list it read, holds the old worker (never read as
+    'none')."""
+    out = {'closed': None, 'put_back': None, 'shown': None, 'acting': None, 'problems': []}
+    try:
+        out['closed'] = close_undone_stages(image_id, env_bytes, since, revision, reason, kinds)
+    except BaseException as error:  # noqa: BLE001
+        out['problems'].append(f'the stages the new pair may have left open could not be closed ({error})')
+        return out
+    out['shown'], out['acting'] = hazards_by_kind(out['closed'].get('hazards'))
+    try:
+        out['put_back'] = put_back_states(out['closed'], previous.get('image'), image_id, env_bytes)
+    except BaseException as error:  # noqa: BLE001
+        out['problems'].append(f'the list states the old revision labels otherwise could not be put back ({error})')
+    return out
+
+
+def undo_switch_s3(ctx, cause, *, image_id, env_bytes, plan, parked, progress, previous, kinds, reason) -> tuple:
+    live, idle = plan['live'], plan['idle']
+    web = SERVICES['web']
+    incoming_sha = sha256(rendered_vhosts(ctx.revision, idle)['https'].encode())
+    if (vhost_state()['file_sha256'] == incoming_sha
+            or (progress.get('reloaded') and not progress.get('restore_reloaded'))):
+        # publish_vhost could not put the previous vhost back, or not reload nginx with it: the file or nginx may still
+        # name the incoming web, so both webs stay up and the old worker parked until a person looks.
+        return (f'{cause}; quillmd-cpt or nginx may still name the incoming web ({INCOMING_WEB}, port {idle}), so both '
+                f'webs were left running and the old worker parked ({SERVICES["worker"]}-previous): read "left" in '
+                'this receipt, then ops/INSTALL.md, Recovery notes (a switch that stopped half way).', {})
+    details, notes, hold = {}, [], False
+    if progress.get('applied_at') is not None:
+        undone = close_and_put_back(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds, previous)
+        details.update(stages_closed=undone['closed'], states_put_back=undone['put_back'])
+        notes += undone['problems']
+        acting = undone['acting']
+        if undone['closed'] is not None and (acting is None or acting):
+            notes.append((hazard_summary(acting) if acting is not None else 'the close did not say which encounters')
+                         + ' hold records the old revision would act on under its own rules')
+        hold = bool(undone['problems']) or acting is None or bool(acting)
+        if undone['shown']:
+            notes.append(f'{hazard_summary(undone["shown"])} hold states an older revision shows wrongly; the old web '
+                         'never stopped showing them and no new worker ran, so the receipt names them only')
+    if progress.get('reloaded'):
+        details['incoming_drain'] = drain_web(idle)
+    removed = remove_incoming_web()
+    worker_note = restore_parked_worker(parked.get('worker'), start=not hold)
+    held = (' It is held - nothing can be sent - because ' + '; '.join(notes) + ': install this revision again once '
+            'its failure is fixed (its worker reads them under its own rules), or start the old worker by hand once '
+            'they are cleared (ops/INSTALL.md, Reinstalling an older revision).') if hold else (
+        (' ' + '; '.join(notes) + '.') if notes else '')
+    return (f'{cause}; the vhost was put back, so {web} kept serving on {live}; the incoming web ({INCOMING_WEB}) '
+            f'{removed}; the old worker was {worker_note}.{held} Migrations already applied are not reversed.',
+            details)
+
+
+def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, progress, previous, kinds,
+                   reason) -> tuple:
+    live, idle = plan['live'], plan['idle']
+    web, worker = SERVICES['web'], SERVICES['worker']
+    old_revision = plan['web']['revision']
+    log_tail(ctx, worker, 'worker', 'worker-failed')
+    stop_service_container(worker, 'worker')  # its current stage finishes (600 s)
+    keep = (f'the new web keeps serving on {idle} ({INCOMING_WEB}); its worker ({worker}) is stopped and the old '
+            f'worker parked ({worker}-previous), so nothing is processed until a person decides; the old web is still '
+            f'running on {live} with no traffic. Read "left" in this receipt, then ops/INSTALL.md, Recovery notes')
+    details = {}
+    try:
+        closed = close_undone_stages(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds)
+    except BaseException as error:  # noqa: BLE001
+        return (f'{cause}; the stages the new pair left open could not be closed ({error}), so {keep}.', details)
+    details['stages_closed'] = closed
+    shown, acting = hazards_by_kind(closed.get('hazards'))
+    if (shown is None or shown) and not same_revision(previous, ctx.revision):
+        named = hazard_summary(shown) if shown is not None else 'the close did not say which encounters'
+        return (f'{cause}; {named} hold states the old revision would show wrongly whatever it is handed (a bounded '
+                'second review refused whole or not read, or a code only a harness participant proposed), and this '
+                f'revision shows them as they are: {keep}.', details)
+    try:
+        details['states_put_back'] = put_back_states(closed, previous.get('image'), image_id, env_bytes)
+    except BaseException as error:  # noqa: BLE001
+        return (f'{cause}; the list states the old revision labels otherwise could not be put back ({error}), so '
+                f'{keep}.', details)
+    back = {}
+    try:
+        details['switch_back'] = switch_upstream(ctx, preflight, idle, live, revision=old_revision, progress=back)
+    except BaseException as error:  # noqa: BLE001
+        return (f'{cause}; the switch back to the old web failed ({error}) and the vhost was left on the new one, so '
+                f'{keep}. The list states were put back to the old revision\'s: rerun --phase app, which recomputes '
+                'them.', details)
+    details['incoming_drain'] = drain_web(idle)
+    remove_service_container(worker, 'worker')
+    removed = remove_incoming_web()
+    hold = acting is None or bool(acting)
+    worker_note = restore_parked_worker(parked.get('worker'), start=not hold)
+    held = (f' It is held - nothing can be sent - because '
+            f'{hazard_summary(acting) if acting is not None else "the close did not say which encounters"} hold '
+            'records it would act on under its own rules: install this revision again once its failure is fixed '
+            '(ops/INSTALL.md, Reinstalling an older revision).') if hold else ''
+    return (f'{cause}; the vhost was switched back, so {web} (revision {old_revision[:12]}) serves on {live} again; '
+            f'the new worker was removed and the incoming web {removed}; the old worker was {worker_note}.{held} '
+            'Migrations already applied are not reversed.', details)
+
+
 # --- phases ------------------------------------------------------------------------
 
 def participant_source_problems(paths) -> list:
@@ -2410,10 +3255,12 @@ def phase_preflight(ctx) -> dict:
     details['containers'] = containers()
     details['volumes'] = volumes()
     details['networks'] = networks()
-    for port, owner in ((WEB_PORT, SERVICES['web']), (DB_PORT, DB_CONTAINER)):
-        problem = port_problem(port, owner)
-        if problem:
-            problems.append(problem)
+    # The web's two ports: the active one held by cpt-studio-web alone, the other free for the next incoming web.
+    details['web_ports'] = web_port_layout()
+    problems += details['web_ports']['problems']
+    problem = port_problem(DB_PORT, DB_CONTAINER)
+    if problem:
+        problems.append(problem)
     details['foreign_app_uid_tasks'] = foreign_uid_tasks(APP_UID, own_service_ids())
     if details['foreign_app_uid_tasks']:
         problems.append(f'uid {APP_UID} already runs {details["foreign_app_uid_tasks"]} task(s) outside CPT Studio')
@@ -2833,18 +3680,9 @@ def access_check_failure(image_id, mode, participants, states, checks, error=Non
               'that participant disabled.')
 
 
-def phase_app(ctx) -> dict:
-    mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
-    modes = participant_modes(ctx.args)
-    live = [name for name in PARTICIPANTS if modes[name] == 'live']
-    access = bool(getattr(ctx.args, 'access_check', None))
-    if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
-                         check=False).returncode:
-        raise InstallError('--authorization-ref is not a file tracked at the revision.')
-    image_id = installed_image(ctx)
-    require_db()
-    # Every credentials file a live provider or participant needs, before anything changes: a missing participant
-    # source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8).
+def check_credential_files(mode, live):
+    """Every credentials file a live provider or participant needs, before anything changes: a missing participant
+    source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8)."""
     wanted = ([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
     found = helper_stat(wanted) if wanted else {}
     if mode == 'live':
@@ -2857,7 +3695,11 @@ def phase_app(ctx) -> dict:
             raise InstallError(f'--{name}-mode live: {spec["target"]} is not the {APP_UID}:{APP_UID} 0400 file the '
                                f'secrets phase copies from {spec["source"]}; nothing was changed. Place the source and '
                                f'run --phase secrets, or install with --{name}-mode disabled.')
-    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+
+
+def check_credential_parsing(image_id, env, mode, live):
+    """The application's own loaders read each live credentials file in ``image_id``, in the worker's mount layout,
+    with no network: format and permissions only, before anything changes."""
     if mode == 'live':
         # The application's own loader, in the worker's mount layout, with no network: format only.
         parsed = oneshot(image_id, ['manage', 'shell', '-c', CREDENTIALS_CHECK], env, network='none',
@@ -2875,6 +3717,21 @@ def phase_app(ctx) -> dict:
             raise InstallError(f'The application cannot load {PARTICIPANTS[name]["target"]} as mounted for the worker '
                                f'(--{name}-mode live; format and permissions only; nothing was sent or changed).',
                                output=output if credential_free([output], [name]) else b'')
+
+
+def phase_app(ctx) -> dict:
+    mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
+    modes = participant_modes(ctx.args)
+    live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    access = bool(getattr(ctx.args, 'access_check', None))
+    if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
+                         check=False).returncode:
+        raise InstallError('--authorization-ref is not a file tracked at the revision.')
+    image_id = installed_image(ctx)
+    require_db()
+    check_credential_files(mode, live)
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    check_credential_parsing(image_id, env, mode, live)
     migrate = oneshot(image_id, ['migrate'], env)
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
@@ -2892,7 +3749,7 @@ def phase_app(ctx) -> dict:
     services = replace_services(ctx, image_id, env, mode, reference, modes)
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
-    # it derived. Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
+    # it derived. Blue/green (I-state): only once the drained old web has stopped too (switch_services' S5). Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
     # a same-revision re-run - a provider-mode switch during an incident - and the reinstall the failure path's receipt
     # asks for, until a member reconciled on the running web: a released, paid send, and on a restored older web one
     # its own rules make). Nothing is sent.
@@ -2901,6 +3758,8 @@ def phase_app(ctx) -> dict:
     # stops this phase once the new pair runs - the recompute, the removal, a Ctrl-C - leaves a receipt that says
     # whether they were, and what is left to do.
     states, parked = None, services.get('replaced')
+    if isinstance(services.get('steps'), dict):
+        services['steps']['S6'] = utc_now_ms()  # blue/green: the recompute and the removal of the parked pair
     try:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         retire_parked(parked)
@@ -2926,7 +3785,202 @@ def phase_app(ctx) -> dict:
             'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
             **services,
             'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes)})'
+                       + switched_summary(services)
                        + (f'; access checked: {", ".join(checked)}' if access else '')}
+
+
+def switched_summary(services) -> str:
+    """'; switched blue/green 9150 -> 9151: 812 availability samples, 0 not 200' for a blue/green replacement."""
+    if services.get('mode') != 'blue-green':
+        return ''
+    availability = services.get('availability') or {}
+    return (f'; switched blue/green {services["ports"]["from"]} -> {services["ports"]["to"]}: '
+            f'{availability.get("samples", 0)} availability samples, {availability.get("non_200_count", 0)} not 200')
+
+
+def phase_switch_back(ctx) -> dict:
+    """Post-success rollback without interruption (ops/INSTALL.md, switch-back): back to the pair this revision's last
+    successful app phase replaced (its receipt's 'replaced': the previous web's image and revision - images are never
+    removed), by the blue/green switch in reverse. rollback-app's checks run first and refuse, stopping nothing, while
+    this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``
+    and the participant modes are the previous pair's, as its own app phase was given them."""
+    mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
+    modes = participant_modes(ctx.args)
+    live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    app = require_receipt(ctx, 'app')
+    previous = ((app.get('details') or {}).get('replaced') or {}).get('web') or {}
+    prev_image, prev_revision = previous.get('image'), previous.get('revision')
+    if not (isinstance(prev_image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', prev_image)
+            and isinstance(prev_revision, str) and SHA_RE.fullmatch(prev_revision)):
+        raise InstallError("This revision's app receipt names no previous web (image and revision) to switch back to; "
+                           'nothing was changed.')
+    if prev_revision == ctx.revision:
+        raise InstallError('The pair the app phase replaced is this same revision: there is nothing to switch back to.')
+    if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{prev_revision}:{reference}'],
+                         check=False).returncode:
+        raise InstallError('--authorization-ref is not a file tracked at the previous revision.')
+    image = inspect('image', prev_image)
+    if image is None or labels_of(image).get(REVISION_LABEL) != prev_revision or not owned(image, 'app-image'):
+        raise InstallError(f'The previous image {prev_image[:19]} is not present with revision {prev_revision[:12]} and '
+                           'the CPT Studio label; nothing was changed.')
+    image_id = installed_image(ctx)
+    require_db()
+    plan = replacement_plan(ctx)
+    if plan['mode'] != 'blue-green' or plan['web']['revision'] != ctx.revision or plan['web']['image'] != image_id:
+        raise InstallError(f'The site is not served by this revision\'s web through its HTTPS stage, so there is '
+                           'nothing to switch back from; nothing was changed.', details={'plan': plan})
+    preflight = require_receipt(ctx, 'preflight')
+    check_credential_files(mode, live)
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    check_credential_parsing(prev_image, env, mode, live)
+    hazards = undo_hazards(image_id, env, ctx.revision)
+    if hazards:
+        raise InstallError(f'{hazard_summary(hazards)} hold records an older revision would act on, or show, wrongly '
+                           'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
+                           '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
+                           details={'hazards': hazards})
+    services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
+                                    preflight=preflight, plan=plan)
+    availability = services.get('availability') or {}
+    return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
+            'provider_mode': mode, 'authorization_ref': reference, 'participants': modes, **services,
+            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes)}) on {plan["idle"]}: '
+                       f'{availability.get("samples", 0)} availability samples, '
+                       f'{availability.get("non_200_count", 0)} not 200'}
+
+
+def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
+                         participants, *, preflight, plan) -> dict:
+    """The switch in reverse, never stopping the serving web first:
+
+      B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
+      B3  park this revision's worker (its current stage finishes)
+      B4  close every stage this revision's pair queued, ran or left resumable since it was created, and every open
+          stage of a kind the previous worker does not run (close_undone_stages, rollback-app's rule); refuse to go on
+          while the close names a record; put back the list states the previous revision labels otherwise
+      B5  switch the vhost's upstream to the idle port (/health/ = the previous revision through the public path)
+      B6  drain this revision's web, stop it and park it; the previous web takes the canonical name
+      B7  close again what this revision's web started between B4 and the end of its drain (requests it accepted
+          before the switch); this also closes what a member started on the previous web during that window
+          (ops/INSTALL.md, Known limits); put back again; hold the previous worker while the close names a record
+      B8  start the previous worker
+      B9  remove this revision's parked pair (its image is kept)
+    Before B5 every failure resumes this revision's pair; from B5 on the previous web serves and the receipt says what
+    is left."""
+    live, idle = plan['live'], plan['idle']
+    current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
+    since = min(created_at(container) for container in current.values() if container is not None)
+    kinds = stage_kinds_of(prev_image, env_bytes)
+    reason = f'revision {ctx.revision[:12]} was switched back to {prev_revision[:12]} (switch-back)'
+    steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
+    record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
+              'states_put_back': put_back, 'since': since.isoformat()}
+    reached = [None]
+
+    def step(name):
+        reached[0] = name
+        steps[name] = utc_now_ms()
+
+    def refuse_on_hazards(closed, when):
+        hazards = closed.get('hazards') if isinstance(closed, dict) else None
+        if not isinstance(hazards, dict) or hazards:
+            named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
+            raise InstallError(f'{when}, {named} hold records the previous revision would act on, or show, wrongly '
+                               'under its own rules', details={'hazards': hazards})
+    recorder = AvailabilityRecorder().start()
+    try:
+        step('B2')
+        docker('run', '-d', *service_args('web', prev_image, prev_revision, provider_mode, authorization_ref,
+                                          participants, name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+        started['web'] = wait_service('web', prev_revision, prev_image, name=INCOMING_WEB, port=idle)
+        record['smoke'] = smoke_web(idle)
+        step('B3')
+        parked['worker'] = park('worker')
+        step('B4')
+        first = dt.datetime.now(dt.timezone.utc)
+        closes['first'] = close_undone_stages(image_id, env_bytes, since, ctx.revision, reason, kinds)
+        refuse_on_hazards(closes['first'], 'after this revision\'s worker stopped and its stages were closed')
+        put_back.append(put_back_states(closes['first'], prev_image, image_id, env_bytes))
+        step('B5')
+        record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress)
+        step('B6')
+        record['drain'] = drain_web(live)
+        parked['web'] = retire_live_web(plan['web']['id'])
+        step('B7')
+        closes['second'] = close_undone_stages(image_id, env_bytes, first, ctx.revision, reason, kinds)
+        refuse_on_hazards(closes['second'], 'after the switch')
+        put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
+        step('B8')
+        docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
+                                          participants), input=env_bytes, quiet=True)
+        started['worker'] = wait_service('worker', prev_revision, prev_image)
+        step('B9')
+        retire_parked(parked)
+        step('done')
+        record['availability'] = recorder.stop()
+    except BaseException as failure:
+        try:
+            message = undo_switch_back(ctx, failure, reached[0], image_id=image_id, env_bytes=env_bytes, plan=plan,
+                                       parked=parked, progress=progress, put_back=put_back)
+        except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
+            message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
+                       f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
+                       'Recovery notes')
+        raise InstallError(message, details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
+                                             'availability': stop_recorder(recorder),
+                                             'left': left_summary()}) from failure
+    return {'started': started, 'replaced': parked, **record}
+
+
+def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked, progress, put_back) -> str:
+    """What a failed switch-back step leaves (ops/INSTALL.md, switch-back): before the switch, this revision's pair
+    resumes (its worker put back and started, its list states recomputed with its own derivation when the previous
+    ones were put back, the previous web drained when it took traffic and removed); from the switch on the previous web
+    serves and nothing is undone."""
+    cause = str(failure) or type(failure).__name__
+    live, idle = plan['live'], plan['idle']
+    web, worker = SERVICES['web'], SERVICES['worker']
+    if reached in (None, 'B2'):
+        log_tail(ctx, INCOMING_WEB, 'web', 'incoming-web-failed')
+        return (f'{cause}; the previous revision\'s web ({INCOMING_WEB}, port {idle}) {remove_incoming_web()}, and '
+                f'nothing else changed: {web} kept serving on {live} and its worker kept running.')
+    if reached == 'B3':
+        state = worker_after_failed_park()
+        return (f'{cause}; this revision\'s worker is {state} and the previous revision\'s web ({INCOMING_WEB}) '
+                f'{remove_incoming_web()}; {web} kept serving on {live}.')
+    if reached in ('B4', 'B5'):
+        if reached == 'B5' and (vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https']
+                                                                     .encode())
+                                or (progress.get('reloaded') and not progress.get('restore_reloaded'))):
+            return (f'{cause}; quillmd-cpt or nginx may still name the previous revision\'s web ({INCOMING_WEB}, port '
+                    f'{idle}), so both webs were left running and this revision\'s worker parked ({worker}-previous): '
+                    'read "left" in this receipt, then ops/INSTALL.md, Recovery notes.')
+        notes = []
+        if progress.get('reloaded'):
+            drain_web(idle)
+        removed = remove_incoming_web()
+        if put_back:  # once no previous-revision container runs (I-state), before this revision's worker resumes
+            try:
+                app_script(image_id, env_bytes, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
+                notes.append('the list states were recomputed with this revision\'s derivation')
+            except BaseException as error:  # noqa: BLE001
+                notes.append(f'the list states put back to the previous revision\'s could not be recomputed ({error}): '
+                             'rerun --phase app, which recomputes them')
+        worker_note = restore_parked_worker(parked.get('worker'))
+        return (f'{cause}; nothing was switched: {web} kept serving on {live}, this revision\'s worker was '
+                f'{worker_note} and the previous revision\'s web ({INCOMING_WEB}) {removed}'
+                + (f'; {"; ".join(notes)}' if notes else '')
+                + '. A stage the close already closed stays closed (failed, with the installer\'s note).')
+    if reached == 'B8':
+        log_tail(ctx, worker, 'worker', 'worker-failed')
+        stop_service_container(worker, 'worker')
+    return (f'{cause}; the previous revision\'s web serves on {idle} and nothing was undone, but '
+            + {'B6': 'this revision\'s web was not retired and no worker runs',
+               'B7': 'the previous revision\'s worker was not started, so nothing is processed',
+               'B8': 'the previous revision\'s worker did not become ready and was stopped, so nothing is processed',
+               'B9': 'this revision\'s parked pair could not be removed',
+               'done': 'its availability record could not be read'}.get(reached, 'the switch-back did not finish')
+            + ': read "left" in this receipt, then ops/INSTALL.md, Recovery notes.')
 
 
 def reference_command(kind, path, retrieved_at) -> list:
@@ -3068,8 +4122,10 @@ def credentials_document(ctx, accounts) -> dict:
             'accounts': accounts}
 
 
-def root_file(op, **params) -> dict:
-    params.update(op=op, final=INITIAL_CREDENTIALS, staged=f'.{INITIAL_CREDENTIALS}.new')
+def root_file(op, *, final=INITIAL_CREDENTIALS, staged=None, **params) -> dict:
+    """H_ROOT_FILE on /etc/cpt-studio/``final`` (staged as '.<final>.new'): the initial credentials, or the operators
+    phase's operator-credentials.json."""
+    params.update(op=op, final=final, staged=staged or f'.{final}.new')
     params.setdefault('replace', False)
     return run_helper(H_ROOT_FILE, params, mounts=[f'type=bind,src={ETC_DIR},dst=/target'], sensitive=True)
 
@@ -3154,6 +4210,236 @@ def phase_provision(ctx) -> dict:
             'summary': 'accounts ' + ', '.join(f'{user} {state}' for user, state in outcome.items())}
 
 
+# The operators phase's in-image scripts (run by `manage shell -c` in this revision's image, as app_script runs them).
+# OPERATOR_ACCOUNTS creates each platform-operator account with NO workspace membership - an operator's access is the
+# grant alone (studio.operator), never a workspace role - or keeps it; it refuses, changing nothing, an account that
+# exists with another actor kind or holds any membership (a member account is never made an operator by the installer).
+# A password is set from its mounted RAM-only file when the account is created, or for every account with reset; no
+# value is printed. One transaction: a refusal leaves every account as it was.
+OPERATOR_ACCOUNTS = '''
+from pathlib import Path
+from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
+from studio import models
+done = {}
+with transaction.atomic():
+    for spec in P['accounts']:
+        user = models.User.objects.select_for_update().filter(username=spec['username']).first()
+        created = user is None
+        if created:
+            user = models.User(username=spec['username'], actor_kind=spec['kind'], display_name=spec['display_name'])
+        elif user.actor_kind != spec['kind']:
+            raise SystemExit('account ' + spec['username'] + ' exists with another actor kind; nothing was changed')
+        elif user.memberships.exists():
+            raise SystemExit('account ' + spec['username'] + ' holds a workspace membership, so the installer does '
+                             'not make it an operator; nothing was changed')
+        if created or P['reset']:
+            password = Path(spec['password_file']).read_text(encoding='utf-8').strip()
+            if not password:
+                raise SystemExit('a password file is empty; nothing was changed')
+            validate_password(password, user)
+            user.set_password(password)
+            user.save()
+        done[spec['username']] = 'created' if created else ('reset' if P['reset'] else 'kept')
+print(ANSWER + json.dumps({'accounts': done}))
+'''
+# Read back after the grants: each account an operator by studio.operator.is_operator (the grant, never a membership),
+# with no membership, of its actor kind.
+OPERATOR_CHECK = '''
+from studio import models
+from studio.operator import is_operator
+found = {}
+for username in P['usernames']:
+    user = models.User.objects.get(username=username)
+    found[username] = {'operator': bool(is_operator(user)), 'memberships': user.memberships.count(),
+                       'actor_kind': user.actor_kind, 'active': user.is_active}
+print(ANSWER + json.dumps({'accounts': found}))
+'''
+# The reassess phase's read of each named encounter's jobs, before and after `manage reassess_retained`.
+REASSESS_JOBS = '''
+from studio import models
+found = {}
+for pk in P['encounters']:
+    encounter = models.Encounter.objects.filter(pk=pk).first()
+    if encounter is None:
+        found[pk] = None
+        continue
+    found[pk] = {'state': encounter.state,
+                 'jobs': [[str(job.pk), job.kind, job.state, job.idempotency_key]
+                          for job in models.Job.objects.filter(encounter_id=pk).order_by('created_at', 'pk')]}
+print(ANSWER + json.dumps({'encounters': found}))
+'''
+
+
+def operator_document(ctx, username, kind, password) -> dict:
+    """One operator account's login: top-level username and password (what the verification tools read)."""
+    return {'service': 'cpt-studio', 'url': f'https://{DOMAIN}/', 'operator_url': f'https://{DOMAIN}/ops/',
+            'synthetic_only': True, 'revision': ctx.revision, 'created_at': utc_now(), 'username': username,
+            'password': password, 'actor_kind': kind, 'access': 'platform operator: an operator grant, no workspace '
+                                                                'membership'}
+
+
+def operator_reason(ctx, username, kind) -> str:
+    return (f'Platform-operator diagnostics access for the CPT Studio {kind} account {username} (owner directive '
+            '2026-11-03, section 2: operator diagnostics stay available to authenticated platform operators and are '
+            'never conferred by a workspace role). Granted by ops/install.py --phase operators for revision '
+            f'{ctx.revision} under the ruled-mutation declaration '
+            f'{os.environ.get("RULED_MUTATION_DECLARATION", "")} ({os.environ.get("RULED_MUTATION_DECL_COMMIT", "")}).'
+            '\n')
+
+
+def phase_operators(ctx) -> dict:
+    """The two platform-operator accounts (ops/INSTALL.md, operators): ops-agent, an automated agent (the verification
+    tools' operator session), and platform-operator, a human - each with no workspace membership and an operator grant.
+    Passwords are made and kept as the initial credentials are (phase_provision): generated here, travelling only as
+    RAM-only files under /dev/shm into one-shots of this revision's image, never in argv, output or receipts. The agent's
+    login is this user's 0600 OPS_AGENT_CREDENTIALS (top-level username and password); the human's is the root-only 0600
+    /etc/cpt-studio/operator-credentials.json, written through the root helper. Both files are committed once the
+    accounts hold their passwords; each account is then granted by the application's own command, `manage
+    grant_operator --username U --reason-file F`, and read back (OPERATOR_CHECK): an operator, with no membership."""
+    reset = bool(ctx.args.reset_passwords)
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    names = {'final': OPERATOR_CREDENTIALS, 'staged': f'.{OPERATOR_CREDENTIALS}.new'}
+    state = root_file('state', **names)
+    agent_staged = OPS_AGENT_CREDENTIALS.with_name(f'.{OPS_AGENT_CREDENTIALS.name}.new')
+    if state['staged_exists'] or agent_staged.exists():
+        raise InstallError('Staged operator credentials from an interrupted run exist; resolve them by hand first.')
+    if not reset and (state['final_exists'] or OPS_AGENT_CREDENTIALS.exists()):
+        raise InstallError('Operator credentials files already exist; use --reset-passwords to rotate them.')
+    spec = {username: (kind, display) for username, kind, display in OPERATOR_ACCOUNTS_SPEC}
+    passwords = {username: secrets.token_urlsafe(24) for username in spec}
+    documents = {username: json.dumps(operator_document(ctx, username, kind, passwords[username]), indent=2).encode()
+                 for username, (kind, _) in spec.items()}
+    agent = next(username for username, (kind, _) in spec.items() if kind == 'agent')
+    human = next(username for username, (kind, _) in spec.items() if kind == 'human')
+    OPS_AGENT_CREDENTIALS.parent.mkdir(mode=0o700, exist_ok=True)
+    folder = OPS_AGENT_CREDENTIALS.parent.lstat()
+    if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != os.getuid() or stat.S_IMODE(folder.st_mode) != 0o700:
+        raise InstallError(f'{OPS_AGENT_CREDENTIALS.parent} must be a directory owned by this user with mode 0700.')
+    user = f'{os.getuid()}:{os.getgid()}'
+    committed = False
+    # Password and reason files live in RAM only (/dev/shm) and are wiped whatever happens.
+    scratch = Path(tempfile.mkdtemp(prefix='cpt-studio-operators-', dir='/dev/shm'))
+    try:
+        root_file('stage', content=base64.b64encode(documents[human]).decode(), **names)
+        write_private(agent_staged.parent, agent_staged.name, documents[agent])
+        mounts, accounts = [], []
+        for username, (kind, display) in spec.items():
+            write_private(scratch, f'{username}.pw', passwords[username].encode())
+            mounts.append(f'type=bind,src={scratch / (username + ".pw")},dst=/run/cpt-operators/{username}.pw,readonly')
+            accounts.append({'username': username, 'kind': kind, 'display_name': display,
+                             'password_file': f'/run/cpt-operators/{username}.pw'})
+        try:
+            answer = app_script(image_id, env, OPERATOR_ACCOUNTS, {'accounts': accounts, 'reset': reset},
+                                what='Creating the operator accounts', mounts=mounts, user=user)
+        except InstallError as error:
+            assert_no_secret([error.output, str(error).encode()], passwords.values())
+            raise
+        outcome = answer.get('accounts') if isinstance(answer, dict) else None
+        if not isinstance(outcome, dict) or sorted(outcome) != sorted(spec):
+            raise InstallError('The operator accounts script did not name both accounts; nothing was saved.')
+        if not reset and set(outcome.values()) != {'created'}:
+            raise InstallError('An operator account already existed, so its password was not set; nothing was saved. '
+                               'Rerun with --reset-passwords to rotate.', details={'accounts': outcome})
+        root_file('commit', replace=reset, **names)
+        if reset:
+            os.replace(agent_staged, OPS_AGENT_CREDENTIALS)
+        else:
+            os.link(agent_staged, OPS_AGENT_CREDENTIALS)
+            agent_staged.unlink()
+        committed = True
+        grants = {}
+        for username, (kind, _) in spec.items():
+            write_private(scratch, f'{username}.reason', operator_reason(ctx, username, kind).encode())
+            result = oneshot(image_id, ['manage', 'grant_operator', '--username', username, '--reason-file',
+                                        f'/run/cpt-operators/{username}.reason'], env, user=user,
+                             mounts=[f'type=bind,src={scratch / (username + ".reason")},'
+                                     f'dst=/run/cpt-operators/{username}.reason,readonly'])
+            assert_no_secret([result.stdout, result.stderr], passwords.values())
+            grants[username] = {'exit': result.returncode, 'log': ctx.log(f'grant-{username}',
+                                                                          result.stdout + result.stderr)}
+        failed = [username for username, grant in grants.items() if grant['exit']]
+        if failed:
+            raise InstallError(f'manage grant_operator failed for {", ".join(failed)} (see the logs); the accounts and '
+                               'their credentials files are in place, so rerun --phase operators --reset-passwords '
+                               'once it is fixed.', details={'accounts': outcome, 'grants': grants})
+        check = app_script(image_id, env, OPERATOR_CHECK, {'usernames': sorted(spec)},
+                           what='Reading the operator accounts back')
+        found = check.get('accounts') if isinstance(check, dict) else None
+        problems = [username for username, (kind, _) in spec.items()
+                    if not isinstance(found, dict) or not isinstance(found.get(username), dict)
+                    or found[username].get('operator') is not True or found[username].get('memberships') != 0
+                    or found[username].get('actor_kind') != kind or found[username].get('active') is not True]
+        if problems:
+            raise InstallError(f'{", ".join(problems)} did not read back as an active operator with no membership; '
+                               'the accounts and their credentials files are in place.',
+                               details={'accounts': outcome, 'grants': grants, 'check': found})
+    except BaseException:
+        if not committed:
+            root_file('discard', sha256=sha256(documents[human]), **names)
+            agent_staged.unlink(missing_ok=True)
+        raise
+    finally:
+        for path in scratch.iterdir():
+            path.write_bytes(b'\0' * 64)
+            path.unlink()
+        scratch.rmdir()
+    return {'accounts': outcome, 'grants': grants, 'check': found, 'reset_passwords': reset,
+            'operator_credentials': f'{ETC_DIR}/{OPERATOR_CREDENTIALS}', 'agent_credentials': str(OPS_AGENT_CREDENTIALS),
+            'summary': 'operator accounts ' + ', '.join(f'{username} {state}' for username, state in outcome.items())
+                       + '; granted and read back as operators with no membership'}
+
+
+def phase_reassess(ctx) -> dict:
+    """Re-assess the named encounters from what is already recorded (ops/INSTALL.md, reassess): for each, in its own
+    one-shot of this revision's image (provider disabled), the application's command `manage reassess_retained
+    --encounter <id> --tag <revision>`, which queues the re-assessment of the retained responses and never sends;
+    `--dry-run` is passed through. Each encounter's jobs are read before and after (REASSESS_JOBS), so the receipt
+    names the jobs that appeared as measured, not as said; a dry run after which one appeared fails the phase."""
+    encounters, dry = list(ctx.args.encounter), bool(ctx.args.dry_run)
+    image_id = installed_image(ctx)
+    require_db()
+    env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+    pending = oneshot(image_id, ['manage', 'migrate', '--check'], env, timeout=120)
+    if pending.returncode:
+        raise InstallError(f'This revision\'s migrations are not all applied (manage migrate --check exited '
+                           f'{pending.returncode}): run --phase app first. Nothing was re-assessed.')
+    before = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
+                        what='Reading the named encounters\' jobs')['encounters']
+    missing = [pk for pk in encounters if before.get(pk) is None]
+    if missing:
+        raise InstallError(f'{len(missing)} named encounter(s) do not exist ({", ".join(missing)}); nothing was '
+                           're-assessed.')
+    results = {}
+    for number, pk in enumerate(encounters, start=1):
+        command = ['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision] + (['--dry-run'] if dry
+                                                                                              else [])
+        result = oneshot(image_id, command, env, timeout=REASSESS_SECONDS)
+        log = ctx.log(f'reassess-{number:02d}', result.stdout + result.stderr)
+        results[pk] = {'exit': result.returncode, 'log': log, 'receipt': access_receipt(result.stdout),
+                       'output': result.stdout.decode('utf-8', 'replace').strip()[-2000:]}
+        if result.returncode:
+            done = [key for key in results if key != pk]
+            raise InstallError(f'reassess_retained for {pk} failed (exit {result.returncode}); see {log}. '
+                               + (f'It ran before for {", ".join(done)}.' if done else 'It ran for no encounter before.'),
+                               details={'encounters': results})
+    after = app_script(image_id, env, REASSESS_JOBS, {'encounters': encounters},
+                       what='Reading the named encounters\' jobs again')['encounters']
+    for pk in encounters:
+        known = {job[0] for job in before[pk]['jobs']}
+        results[pk].update(jobs_appeared=[job for job in (after.get(pk) or {}).get('jobs', []) if job[0] not in known],
+                           state_before=before[pk]['state'], state_after=(after.get(pk) or {}).get('state'))
+    appeared = sum(len(entry['jobs_appeared']) for entry in results.values())
+    if dry and appeared:
+        raise InstallError(f'A dry run was followed by {appeared} new job(s) on the named encounters; read them in '
+                           'this receipt.', details={'encounters': results})
+    return {'tag': ctx.revision, 'dry_run': dry, 'encounters': results,
+            'summary': f'reassess_retained {"(dry run) " if dry else ""}for {len(encounters)} encounter(s): '
+                       f'{appeared} job(s) appeared'}
+
+
 def acme_probe(ctx, label) -> dict:
     """Prove the ACME path for the domain is served by this host's nginx, then remove the probe."""
     token, content = secrets.token_urlsafe(24), secrets.token_hex(16)
@@ -3182,12 +4468,15 @@ def ingress_checks(ctx, preflight) -> list:
     return problems
 
 
-def publish_vhost(ctx, apply, undo, verify) -> dict:
-    """Apply a vhost change, validate, reload, verify; restore exactly on any failure."""
+def publish_vhost(ctx, apply, undo, verify, progress=None) -> dict:
+    """Apply a vhost change, validate, reload, verify; restore exactly on any failure. ``progress`` (a dict, when
+    given) records 'reloaded' once nginx was reloaded with the change and 'restore_reloaded' once it was reloaded
+    again with the restored file, for a caller that must know which configuration nginx runs."""
+    progress = {} if progress is None else progress
     before = nginx_test()
     if not before['ok']:
         raise InstallError('nginx -t does not pass before the change; refusing.')
-    reloaded = False
+    reloaded, log = False, None
     try:
         apply()
         after = nginx_test()
@@ -3196,7 +4485,7 @@ def publish_vhost(ctx, apply, undo, verify) -> dict:
         if not after['ok'] or new_warnings:
             raise InstallError(f'nginx -t after the change failed or added warnings {new_warnings}; see {log}.')
         nginx_reload()
-        reloaded = True
+        reloaded = progress['reloaded'] = True
         result = verify()
     except BaseException as failure:
         try:
@@ -3208,10 +4497,11 @@ def publish_vhost(ctx, apply, undo, verify) -> dict:
         ctx.log('nginx-t-restored', restored['output'].encode())
         if reloaded and restored['ok']:
             nginx_reload()
+            progress['restore_reloaded'] = True
         if not restored['ok']:
             raise InstallError('The restored nginx configuration does not pass nginx -t; investigate now.')
         raise
-    return {**result, 'nginx_warnings_unchanged': True}
+    return {**result, 'nginx_warnings_unchanged': True, 'nginx_t_log': log}
 
 
 def phase_http_vhost(ctx) -> dict:
@@ -3246,8 +4536,8 @@ def phase_http_vhost(ctx) -> dict:
 
 def phase_cert(ctx) -> dict:
     require_receipt(ctx, 'http-vhost')
-    confs = rendered_vhosts(ctx.revision)
-    if vhost_state()['file_sha256'] not in {sha256(confs['http'].encode()), sha256(confs['https'].encode())}:
+    # Any stage this revision renders: the HTTP stage, or the HTTPS stage for either web port (blue/green).
+    if vhost_state()['file_sha256'] not in vhost_renderings(ctx.revision):
         raise InstallError('quillmd-cpt is not a stage this installer wrote; refusing to request a certificate.')
     infos = socket.getaddrinfo(DOMAIN, 80, type=socket.SOCK_STREAM)
     if {info[4][0] for info in infos} != {PUBLIC_IPV4}:
@@ -3279,15 +4569,19 @@ def phase_cert(ctx) -> dict:
             'summary': f'lineage {DOMAIN} present (paths only recorded)'}
 
 
-def https_checks(ctx) -> tuple:
+def https_checks(ctx, revision=None) -> tuple:
+    """Through the public path: /health/ serves ``revision`` (this phase's revision unless given: a switch-back
+    expects the previous one), the four policy headers once each, and a mismatched SNI is closed."""
+    expected = revision or ctx.revision
+
     def check():
         result = probe('https', DOMAIN, '/health/', timeout=3)
-        return result.get('status') == 200 and health_ok(result.get('json'), ctx.revision), {
+        return result.get('status') == 200 and health_ok(result.get('json'), expected), {
             'status': result.get('status'), 'error': result.get('error')}
     passed, observations = poll(check, attempts=30, interval=0.25)
     final = probe('https', DOMAIN, '/health/', timeout=5)
     headers = final.get('headers', {})
-    problems = [] if passed else [f'https://{DOMAIN}/health/ did not serve the installed revision']
+    problems = [] if passed else [f'https://{DOMAIN}/health/ did not serve revision {expected[:12]}']
     for name, value in (('strict-transport-security', 'max-age=31536000'), ('x-content-type-options', 'nosniff'),
                         ('referrer-policy', 'same-origin'), ('x-robots-tag', 'noindex, nofollow')):
         if headers.get(name) != [value]:
@@ -3303,11 +4597,16 @@ def https_checks(ctx) -> tuple:
 def phase_https_vhost(ctx) -> dict:
     preflight = require_receipt(ctx, 'preflight')
     require_receipt(ctx, 'cert')
-    confs = rendered_vhosts(ctx.revision)
-    http_sha, https_sha = sha256(confs['http'].encode()), sha256(confs['https'].encode())
     state = vhost_state()
-    if state['link_target'] != VHOST_LINK_TARGET or state['file_sha256'] not in (http_sha, https_sha):
+    if state['link_target'] != VHOST_LINK_TARGET or state['file_sha256'] not in vhost_renderings(ctx.revision):
         raise InstallError('quillmd-cpt is not the HTTP stage this installer wrote; refusing.')
+    # The HTTPS stage proxies to the port the running web publishes (it alternates with each blue/green install).
+    port = serving_web_port()
+    confs = rendered_vhosts(ctx.revision, port)
+    http_sha, https_sha = sha256(confs['http'].encode()), sha256(confs['https'].encode())
+    if state['file_sha256'] not in (http_sha, https_sha):
+        raise InstallError(f'quillmd-cpt holds the HTTPS stage for another port than {port}, the one '
+                           f'{SERVICES["web"]} publishes; refusing.')
     lineage = le_state()['live'].get(DOMAIN) or {}
     if not (lineage.get('fullchain.pem') and lineage.get('privkey.pem')):
         raise InstallError(f'The {DOMAIN} lineage is not present.')
@@ -3335,7 +4634,7 @@ def phase_https_vhost(ctx) -> dict:
         return {**evidence, 'redirect': redirect, 'acme': acme}
     already = state['file_sha256'] == https_sha
     result = verify() if already else publish_vhost(ctx, apply, undo, verify)
-    return {**result, 'vhost_sha256': https_sha, 'already_installed': already,
+    return {**result, 'vhost_sha256': https_sha, 'upstream_port': port, 'already_installed': already,
             'summary': f'https://{DOMAIN}/ serves {ctx.revision[:12]}'}
 
 
@@ -3353,8 +4652,14 @@ def phase_verify(ctx) -> dict:
     files = nginx_file_state()
     if files['available'].get('quillmd') != QUILLMD_VHOST_SHA256:
         problems.append('the quillmd vhost sha256 changed')
+    # quillmd-cpt must be this revision's HTTPS stage for the port the running web publishes (blue/green alternates it).
+    try:
+        port = live_web_port()
+    except InstallError as error:
+        port = None
+        problems.append(str(error))
     expected_available = {**preflight['nginx_files']['available'],
-                          VHOST_NAME: sha256(rendered_vhosts(ctx.revision)['https'].encode())}
+                          VHOST_NAME: sha256(rendered_vhosts(ctx.revision, port or WEB_PORT)['https'].encode())}
     if files['available'] != expected_available:
         problems.append('sites-available differs from the baseline plus quillmd-cpt')
     if files['enabled'] != {**preflight['nginx_files']['enabled'], VHOST_NAME: VHOST_LINK_TARGET}:
@@ -3386,14 +4691,20 @@ def phase_verify(ctx) -> dict:
         if container is None or not container['State'].get('Running'):
             problems.append(f'{name} is not running')
         else:
-            problems += [f'{name}: {problem}' for problem in service_problems(container, role, image_id)]
+            problems += [f'{name}: {problem}' for problem in service_problems(
+                container, role, image_id, port=port if role == 'web' else None)]
+    # What an app phase parks or starts beside the pair is gone once it succeeded.
+    for name in (INCOMING_WEB, SERVICES['web'] + '-previous', SERVICES['worker'] + '-previous'):
+        if inspect('container', name) is not None:
+            problems.append(f'{name} is left beside the installed pair')
     https_problems, evidence = https_checks(ctx)
     problems += https_problems
     foreign = foreign_uid_tasks(APP_UID, own_service_ids())
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
-    details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id}
+    details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
+               'web_port': port}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
@@ -3495,12 +4806,15 @@ def phase_rollback_app(ctx) -> dict:
 
 
 def recorded_vhosts(ctx) -> dict:
-    """sha256 -> (revision, kind) of every vhost stage an earlier successful vhost phase installed, any revision."""
+    """sha256 -> (revision, kind) of every vhost stage an earlier successful phase installed, any revision: the vhost
+    phases' stages, and the HTTPS stage a blue/green app or switch-back phase switched the upstream to."""
     found = {}
-    for phase, kind in (('http-vhost', 'http'), ('https-vhost', 'https')):
+    for phase, kind, field in (('http-vhost', 'http', None), ('https-vhost', 'https', None),
+                               ('app', 'https', 'switch'), ('switch-back', 'https', 'switch')):
         for path in sorted(ctx.receipts.glob(f'{phase}-*.json')):
             record = json.loads(path.read_text(encoding='utf-8'))
-            digest = (record.get('details') or {}).get('vhost_sha256')
+            details = record.get('details') or {}
+            digest = ((details.get(field) or {}).get('vhost_sha_after') if field else details.get('vhost_sha256'))
             if (record.get('phase') == phase and record.get('ok') and isinstance(digest, str)
                     and re.fullmatch(r'[0-9a-f]{64}', digest) and SHA_RE.fullmatch(str(record.get('revision')))):
                 found.setdefault(digest, (record['revision'], kind))
@@ -3512,12 +4826,11 @@ def phase_rollback_vhost(ctx) -> dict:
     successful vhost receipt recorded (the documented republish after deploy/nginx changed). The removal is
     undone with the exact bytes it removed, re-rendered from the revision that installed them."""
     preflight = require_receipt(ctx, 'preflight')
-    confs = rendered_vhosts(ctx.revision)
     state = vhost_state()
     if not state['file_exists'] and not state['link_exists']:
         return {'state': state, 'summary': 'quillmd-cpt already absent'}
-    restorable = {sha256(confs['http'].encode()): confs['http'].encode(),
-                  sha256(confs['https'].encode()): confs['https'].encode()}
+    # Every stage this revision renders: HTTP, and HTTPS for either web port (blue/green alternates it).
+    restorable = {digest: info['text'].encode() for digest, info in vhost_renderings(ctx.revision).items()}
     if state['file_exists'] and state['file_sha256'] not in restorable:
         if state['file_sha256'] not in recorded_vhosts(ctx):
             raise InstallError('quillmd-cpt holds content this installer did not write; refusing to remove it.')
@@ -3557,9 +4870,10 @@ def phase_rollback_vhost(ctx) -> dict:
 PHASES = {
     'preflight': phase_preflight, 'secrets': phase_secrets, 'image': phase_image, 'db': phase_db,
     'app': phase_app, 'reference': phase_reference, 'passages': phase_passages, 'license-note': phase_license_note,
-    'provision': phase_provision,
+    'provision': phase_provision, 'operators': phase_operators, 'reassess': phase_reassess,
     'http-vhost': phase_http_vhost, 'cert': phase_cert, 'https-vhost': phase_https_vhost,
-    'verify': phase_verify, 'rollback-app': phase_rollback_app, 'rollback-vhost': phase_rollback_vhost,
+    'verify': phase_verify, 'switch-back': phase_switch_back, 'rollback-app': phase_rollback_app,
+    'rollback-vhost': phase_rollback_vhost,
 }
 
 

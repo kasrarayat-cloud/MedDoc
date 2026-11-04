@@ -46,9 +46,18 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import TemporaryDirectoryTest  # noqa: E402
+from test_install import TemporaryDirectoryTest, guard_host, release_host  # noqa: E402
 from test_install_harness import OPENAI_VALUE, OTHER, REVISION, RULING, AppWorld, app_args  # noqa: E402
 from test_install_harness2 import module_constants  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
+
+def tearDownModule():
+    release_host()
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 COMMAND = APP_ROOT / 'studio' / 'management' / 'commands' / 'participant_access_check.py'
@@ -454,7 +463,8 @@ class TheAccessCheckRequestCountTests(unittest.TestCase):
             'the opt-in access check (for each live participant: one real, paid coding request for Corti, and for '
             'Astra and for Fable one run of the tool loop, one real, paid request per exchange and at most '
             f'`PARTICIPANT_MAX_EXCHANGES` ({self.exchanges()})), or from the first live send. A check that fails '
-            'leaves the pair installed: retrying it means running `app` again, which parks and replaces the pair.'))
+            'leaves the pair installed: retrying it means running `app` again, which switches to a new pair beside '
+            'the running one.'))
 
     def test_install_md_s_app_phase_gives_the_count(self):
         """Refutation round 7, parity-2: the app phase's own paragraph, which R6-SENDS named, still said "one request
