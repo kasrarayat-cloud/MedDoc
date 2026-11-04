@@ -1058,6 +1058,635 @@ R3_RESIDUALS = {
          ('45385', ('Indication - surveillance after a sigmoid polyp was removed with a hot snare', R8_CECUM),
           'not_done')]),
 }
+# --- reader repair, round 5 (2026-11-04; tests/fixtures/gi4/declarations/cux-r5-binding.json): R1a-r5, the lead's
+# structural binding rule in its hold-only form (amendment_20261104_hold_only; the unbinding form it replaces was
+# refuted): every act keeps main's binding and placement, and where more than one procedure is read performed, a
+# performed act whose service only a lesion's name gives carries services.NAME_ONLY_CUE, and a code whose supporting
+# performed acts all carry it is held ('named_only'). Prefix 'R8 R5 ' (a register row: the round-4 counts leave it out;
+# tests/test_cux_hold.RegisterOfferTests reads its offers from cux-r5-binding.json). Every case of the lead's
+# verification of 20a64b860 (verify-r4/cases.json: the four shapes main reads worse than installed - R1, R1b and R3 dash,
+# 45380 READY on the upper endoscopy's biopsy, and R2 dash combined, 45382 READY on a prophylactic clip - with their
+# paren, unlabelled and colonoscopy-only forms and the R4, H1 and H3 rows) and of its base-code probes
+# (verify-r4/base-probes.json) is here verbatim with its codes and truths (the declaration records each text's sha256);
+# then rows of the declared hold class taken verbatim from the refutation rounds' cases (verify-r4/refuter-cases.json:
+# R5_SOURCES names each key) and one constructed, the G1-type rows (refutation round 4b's G1: an impression naming the
+# label beside a clause with another tract's site), the controls the rule must keep, the first fresh walk document's
+# two gaps in minimal form (recorded, not repaired), and the inputs of round 5's refutation of the unbinding form
+# (R5_XY_SOURCES).
+R5_COLON_EGD = R2_HEAD + 'Colonoscopy and EGD report\nThe colonoscope was advanced to the cecum.\n'
+R5_ENDOSCOPE = 'The endoscope was then passed into the esophagus and advanced to the second part of the duodenum.'
+R5_UPPER = 'Upper endoscopy was then performed to the second part of the duodenum.'
+R5_WITHDRAWN = 'The gastroscope was then passed to the second part of the duodenum after withdrawal of the colonoscope.'
+R5_GASTRO = 'The gastroscope was then passed into the esophagus and advanced to the second part of the duodenum.'
+R5_SNARED = 'Polyp A - sigmoid colon: an 8 mm polyp was removed with a cold snare.\n'
+R5_SNARED_Q = 'an 8 mm polyp was removed with a cold snare.'
+R5_PASSING = 'Biopsies were then taken with the same cold forceps used to retrieve Polyp A.'
+R5_PASSING_CODES = [('43239', R5_PASSING, 'done'), ('45380', R5_PASSING, 'not_done')]
+R5_THAT_POLYP = 'Biopsies were then taken with the same cold forceps used to retrieve that polyp.'
+R5_EGD_NOTE = ('EGD and Colonoscopy Procedure Note\nPROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY\nThe gastroscope was advanced to '
+               'the second part of the duodenum. Cold forceps biopsies were taken from the antrum.\nPROCEDURE 2: '
+               'COLONOSCOPY\nThe colonoscope was advanced to the cecum.\n')
+R5_COLON = R2_HEAD + 'Colonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+R5_POLYP_B = 'Polyp B - descending colon: a 12 mm pedunculated polyp was removed en bloc with a hot snare.\n'
+R5_POLYP_B_Q = 'a 12 mm pedunculated polyp was removed en bloc with a hot snare.'
+R5_CLIP = 'A hemostatic clip was placed prophylactically at the Polyp B stalk site.'
+R5_ANTRUM_Q = 'Cold forceps biopsies were taken from the antrum.'
+R5_R4 = ('Polyp 1 - cecum: a 4 mm sessile polyp was removed with cold biopsy forceps.\nPolyp 2 - ascending colon: a 10 mm '
+         'polyp was removed with a hot snare.\nPolyp 1 was not snared.\nPolyp 1 - sigmoid colon: a 6 mm polyp was removed '
+         'with a hot snare.\n')
+R5_R4_CODES = [('45380', 'a 4 mm sessile polyp was removed with cold biopsy forceps.', 'done'),
+               ('45385', 'a 10 mm polyp was removed with a hot snare.', 'done')]
+R5_HOT15 = 'a 15 mm pedunculated polyp was removed en bloc with a hot snare and retrieved as jar 1.'
+R5_COLD3 = 'a 3 mm sessile polyp was completely removed with cold biopsy forceps and retrieved as jar 2.'
+R5_SEEN = 'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+R5_BY_NAME = 'Polyp A was removed with a cold snare.'
+R5_TOLD_THEN = 'The gastroscope was then passed to the second part of the duodenum. The stomach was normal.\n'
+R5_LESION_1 = ('EGD and colonoscopy report\nThe gastroscope was advanced to the second part of the duodenum.\nLesion 1 - '
+               'gastric antrum: a 6 mm nodule was seen.\nThe colonoscope was then advanced to the cecum. The colon was '
+               'normal.\nLesion 1 was biopsied with cold forceps.\n')
+R5_LESION_1_CODES = [('43235', 'The gastroscope was advanced to the second part of the duodenum.', 'not_done'),
+                     ('43239', 'Lesion 1 was biopsied with cold forceps.', 'done')]
+R5_COLON_BASE = [('45378', 'The colonoscope was advanced to the cecum.', 'not_done'), ('45385', R5_BY_NAME, 'done')]
+R5_GASTRO_FIRST = ('The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken '
+                   'from the antrum.\nThe gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n')
+R5_HOLD_CODES = [('45385', R5_BY_NAME, 'done'), ('43239', R5_ANTRUM_Q, 'done')]
+R5_BIOPSIED = 'Polyp A - sigmoid colon: an 8 mm polyp was biopsied with cold forceps.\n'
+R5_IMPRESSION = 'Impression: Polyp A was biopsied with cold forceps; the antrum was normal.\n'
+R5_G1_CODES = [('45380', 'an 8 mm polyp was biopsied with cold forceps.', 'done'),
+               ('43239', 'Polyp A was biopsied with cold forceps', 'not_done')]
+R5_GASTRIC_ANTRUM = 'Cold forceps biopsies were taken from the gastric antrum.'
+R5_KEPT_CODES = [('45385', R5_SNARED_Q, 'done'), ('43239', R5_GASTRIC_ANTRUM, 'done')]
+R5_INDICATIONS = ('Indications: Iron-deficiency anemia with intermittent epigastric pain; positive fecal immunochemical '
+                  'test.\n')  # the first fresh walk document's indication line, verbatim
+R5_NUMBERED = ('PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY\nThe gastroscope was advanced to the second part of the duodenum. '
+               'Cold forceps biopsies were taken from the antrum.\nPROCEDURE 2: COLONOSCOPY\nThe colonoscope was advanced '
+               'to the cecum.\nA 12 mm pedunculated polyp in the descending colon was removed en bloc with a hot snare.\n')
+R5_NUMBERED_CODES = [('43239', R5_ANTRUM_Q, 'done'),
+                     ('45385', 'A 12 mm pedunculated polyp in the descending colon was removed en bloc with a hot snare.',
+                      'done')]
+R5_F1_A_Q = 'a 3 mm sessile polyp was completely removed with cold biopsy forceps and sent as jar 3.'
+R5_F1_B_Q = 'a 12 mm pedunculated polyp was removed en bloc with a hot snare and sent as jar 4.'
+R5_F1_LABELS = ('Polyp A (transverse colon): ' + R5_F1_A_Q + '\nPolyp B (descending colon): ' + R5_F1_B_Q + '\nPolyp A was '
+                'not snared, and forceps were not used on Polyp B.\n')  # the first fresh walk document's label form
+R5_F1_CODES = [('45380', R5_F1_A_Q, 'done'), ('45385', R5_F1_B_Q, 'done')]
+
+
+def _r5_paren(text, *labels):
+    """``text`` with each 'Label - site:' of ``labels`` ((label, site), ...) written 'Label (site):'."""
+    return _r8_edit(text, *((f'{label} - {site}:', f'{label} ({site}):') for label, site in labels))
+
+
+def _r5_r1(told, lesion=R5_SNARED, act=R5_PASSING):
+    """The lead's R1 shape: a combined narrative's colon polyp introduced by ``lesion``, the upper examination told by
+    ``told``, then ``act`` naming the polyp's label."""
+    return R5_COLON_EGD + lesion + told + ' The antrum showed patchy erythema. ' + act + '\n'
+
+
+def _r5_g1(told, lesion=R5_BIOPSIED):
+    """Refutation 4b's G1 shape: the colon polyp's biopsy, the upper examination told by ``told``, then an impression
+    naming the polyp's label in one clause and another tract's site in the next."""
+    return R5_COLON_EGD + lesion + told + ' The esophagus, stomach and duodenum were normal.\n' + R5_IMPRESSION
+
+
+R5_A = (('Polyp A', 'sigmoid colon'),)
+R5_B = (('Polyp B', 'descending colon'),)
+R5_TWO = (('Polyp A', 'ascending colon'), ('Polyp B', 'sigmoid colon'))
+R5_H1 = R5_COLON + ('Polyp A - ascending colon: ' + R5_HOT15 + '\nPolyp B - sigmoid colon: ' + R5_COLD3 + '\nPolyp A could '
+                    'not be snared on the first attempt because of its position behind a fold.\n')
+R5_H3 = R5_COLON + ('Polyp A - ascending colon: ' + R5_COLD3 + '\nPolyp B - sigmoid colon: ' + R5_HOT15 + '\nPolyp A could '
+                    'not be removed with forceps in one bite; a second bite completed the removal.\n')
+R5_H1_CODES = [('45385', R5_HOT15, 'done'), ('45380', R5_COLD3, 'done')]
+R5_H3_CODES = [('45380', R5_COLD3, 'done'), ('45385', R5_HOT15, 'done')]
+R5_R2_COMBINED = R2_HEAD + R5_EGD_NOTE + R5_POLYP_B + R5_CLIP + '\n'
+R5_R2_CODES = [('43239', R5_ANTRUM_Q, 'done'), ('45385', R5_POLYP_B_Q, 'done'), ('45382', R5_CLIP, 'not_done')]
+R5_B1 = R5_COLON_EGD + R5_SEEN + R5_TOLD_THEN + R5_BY_NAME + '\n'
+R5_B2 = R5_COLON_EGD + R5_SEEN + R5_BY_NAME + '\n' + R5_TOLD_THEN
+R5_B3 = R2_HEAD + R5_LESION_1
+CASES.update({
+    # the lead's cases (verify-r4/cases.json), verbatim: the four shapes main reads worse than installed, then their
+    # paren and unlabelled forms (no label is read: as on main), the combined R2 forms, R4, H1 and H3
+    'R8 R5 R1 dash': (_r5_r1(R5_ENDOSCOPE), R5_PASSING_CODES),
+    'R8 R5 R1b dash upper endoscopy named': (_r5_r1(R5_UPPER), R5_PASSING_CODES),
+    'R8 R5 R3 dash': (_r5_r1(R5_WITHDRAWN), R5_PASSING_CODES),
+    'R8 R5 R1 paren': (_r5_paren(_r5_r1(R5_ENDOSCOPE), *R5_A), R5_PASSING_CODES),
+    'R8 R5 R1b paren upper endoscopy named': (_r5_paren(_r5_r1(R5_UPPER), *R5_A), R5_PASSING_CODES),
+    'R8 R5 R3 paren': (_r5_paren(_r5_r1(R5_WITHDRAWN), *R5_A), R5_PASSING_CODES),
+    'R8 R5 R1 control unlabelled': (
+        _r5_r1(R5_ENDOSCOPE, 'An 8 mm polyp in the sigmoid colon was removed with a cold snare.\n', R5_THAT_POLYP),
+        [('43239', R5_THAT_POLYP, 'done'), ('45380', R5_THAT_POLYP, 'not_done')]),
+    'R8 R5 R2 dash combined': (R5_R2_COMBINED, R5_R2_CODES),
+    'R8 R5 R2 paren combined': (_r5_paren(R5_R2_COMBINED, *R5_B), R5_R2_CODES),
+    'R8 R5 R4 dash': (R8_COLON + R5_R4, R5_R4_CODES),
+    'R8 R5 R4 paren': (_r5_paren(R8_COLON + R5_R4.replace('Polyp 1 - sigmoid colon:', 'Polyp 1 (sigmoid colon):'),
+                                 ('Polyp 1', 'cecum'), ('Polyp 2', 'ascending colon')), R5_R4_CODES),
+    'R8 R5 H1 dash first snare attempt': (R5_H1, R5_H1_CODES),
+    'R8 R5 H3 dash one bite': (R5_H3, R5_H3_CODES),
+    'R8 R5 H1 paren first snare attempt': (_r5_paren(R5_H1, *R5_TWO), R5_H1_CODES),
+    'R8 R5 H3 paren one bite': (_r5_paren(R5_H3, *R5_TWO), R5_H3_CODES),
+    # the lead's base-code probes (verify-r4/base-probes.json), verbatim: no diagnostic base code is released
+    'R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD': (R5_B1, R5_COLON_BASE),
+    'R8 R5 B2 dash base code: label-only line before the EGD': (R5_B2, R5_COLON_BASE),
+    'R8 R5 B3 dash EGD base code: label-only biopsy after the colon': (R5_B3, R5_LESION_1_CODES),
+    'R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD': (
+        _r5_paren(R5_B1, *R5_A), R5_COLON_BASE),
+    'R8 R5 B2 paren base code: label-only line before the EGD': (_r5_paren(R5_B2, *R5_A), R5_COLON_BASE),
+    'R8 R5 B3 paren EGD base code: label-only biopsy after the colon': (
+        _r5_paren(R5_B3, ('Lesion 1', 'gastric antrum')), R5_LESION_1_CODES),
+    # the declared hold class (a combined note with no section heading naming a service; a lesion defined in one
+    # sentence, acted on by its name alone in another): main and installed READY, held here - the refutation rounds'
+    # cases verbatim (R5_SOURCES), then a combined title whose second service the note itself denies
+    'R8 R5 hold 1277 findings first, the label acted on after the colonoscope': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\nFindings:\nPolyp A - sigmoid colon: an 8 mm sessile '
+        'polyp.\nNarrative:\n' + R5_GASTRO_FIRST + R5_BY_NAME + '\n', R5_HOLD_CODES),
+    'R8 R5 hold 1146 a procedures-performed line, the label acted on by name': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\n' + R5_GASTRO_FIRST + R5_SEEN + R5_BY_NAME + '\n',
+        R5_HOLD_CODES),
+    'R8 R5 hold 1406 the colonoscope reinserted to the identified polyp': (
+        R2_HEAD + 'Procedures: EGD, colonoscopy\nThe colonoscope was advanced to the cecum.\n' + R5_SEEN + 'The '
+        'colonoscope was withdrawn.\nThe gastroscope was then passed to the second part of the duodenum. The antrum was '
+        'normal.\nThe gastroscope was withdrawn.\nThe colonoscope was then reinserted to the identified polyp.\n'
+        + R5_BY_NAME + '\n', [('45385', R5_BY_NAME, 'done')]),
+    'R8 R5 hold 1383 an upper lesion acted on by its label': (
+        R2_HEAD + 'Procedures: EGD, colonoscopy\nThe gastroscope was advanced to the second part of the duodenum.\nLesion '
+        '1 - gastric body: a 6 mm sessile polyp was seen.\nOxygen saturation was measured on the left hand.\nLesion 1 was '
+        'removed with a hot snare.\n', [('43251', 'Lesion 1 was removed with a hot snare.', 'done')]),
+    'R8 R5 hold, a combined title whose second service the note denies': (
+        R5_COLON_EGD + R5_SEEN + R5_BY_NAME + '\nThe EGD was not performed today.\n', [('45385', R5_BY_NAME, 'done')]),
+    # G1-type rows: the impression's restatement keeps main's binding to the colon polyp and carries the cue, so 43239
+    # stays held as on main and 45380 rests on the polyp's own line; told by the gastroscope (the R1a-r3 path) the act is
+    # unbound and placed as on main, a residual (R5_RESIDUALS)
+    'R8 R5 G1 impression act by label, a bare endoscope': (_r5_g1(R5_ENDOSCOPE), R5_G1_CODES),
+    'R8 R5 G1 impression act by label, the upper endoscopy named': (_r5_g1(R5_UPPER), R5_G1_CODES),
+    # controls: the gastroscope named (R1a-r3 unbinds, as on main), a single-service note's label-only act, a labelled
+    # clip (catalogue.NOT_REPORTED) and a labelled denial after the upper endoscopy (no cue), and one procedure
+    # performed beside one planned keeps each label's lesion (the distinct-lesion consideration)
+    'R8 R5 control, the gastroscope named (R1a-r3 path)': (_r5_r1(R5_GASTRO), R5_PASSING_CODES),
+    'R8 R5 control, a colonoscopy-only note with a label-only act': (
+        R5_COLON + R5_SEEN + R5_BY_NAME + '\n', [('45385', R5_BY_NAME, 'done')]),
+    'R8 R5 control, a labelled clip after the upper endoscopy': (
+        R5_COLON_EGD + R5_SNARED + R5_ENDOSCOPE + ' ' + R5_GASTRIC_ANTRUM + '\nOne clip was placed at the Polyp A '
+        'resection site.\n', R5_KEPT_CODES),
+    'R8 R5 control, a labelled denial after the upper endoscopy': (
+        R5_COLON_EGD + R5_SNARED + R5_ENDOSCOPE + ' ' + R5_GASTRIC_ANTRUM + '\nNo biopsy forceps were used on Polyp '
+        'A.\n', R5_KEPT_CODES),
+    'R8 R5 control, one procedure performed and one planned, acts by label': (
+        R8_TOP + 'Procedure: Colonoscopy\n' + R8_CECUM + '\nPolyp A - cecum: a 4 mm sessile polyp was seen.\nPolyp B - '
+        'sigmoid colon: an 8 mm sessile polyp was seen.\nPolyp A was removed with cold biopsy forceps.\nPolyp B was '
+        'removed with a cold snare.\nPlan: EGD next month.\n',
+        [('45380', 'Polyp A was removed with cold biopsy forceps.', 'done'),
+         ('45385', 'Polyp B was removed with a cold snare.', 'done')]),
+    # the first fresh walk document's two gaps, in minimal form (recorded, not repaired; ACCURACY-RESIDUALS.md round 5):
+    # numbered 'PROCEDURE N:' headings under an indication line (routing's layout, H2-frozen) and the 'Label (site):'
+    # form (read as unlabelled text), each beside the form that reads
+    'R8 R5 gap a, numbered procedure headings under an indication line': (
+        R2_HEAD + 'EGD and Colonoscopy Procedure Note\n' + R5_INDICATIONS + R5_NUMBERED, R5_NUMBERED_CODES),
+    'R8 R5 gap a control, the numbered headings without the indication line': (
+        R2_HEAD + 'EGD and Colonoscopy Procedure Note\n' + R5_NUMBERED, R5_NUMBERED_CODES),
+    'R8 R5 gap b, the Label (site) form with a denial naming each label': (R8_COLON + R5_F1_LABELS, R5_F1_CODES),
+    "R8 R5 gap b control, the 'Label - site:' form": (
+        R8_COLON + _r8_edit(R5_F1_LABELS, ('Polyp A (transverse colon):', 'Polyp A - transverse colon:'),
+                            ('Polyp B (descending colon):', 'Polyp B - descending colon:')), R5_F1_CODES),
+})
+# the refutation rounds' keys of the hold-class rows taken from verify-r4/refuter-cases.json (collect.py's names)
+R5_SOURCES = {
+    'R8 R5 hold 1277 findings first, the label acted on after the colonoscope':
+        '1277 verify-H/H2-R1a-r4-passing-mention/cases/h2.json/FF | performed | 45385+43239',
+    'R8 R5 hold 1146 a procedures-performed line, the label acted on by name': '1146 H/cases/v1.json/V pp ctrl',
+    'R8 R5 hold 1406 the colonoscope reinserted to the identified polyp':
+        '1406 verify-H/H5-R1a-r4-restore-history-word/cases/h5.json/procs | n1 identified, no history word',
+    'R8 R5 hold 1383 an upper lesion acted on by its label':
+        '1383 verify-H/H3-R1a-r4-non-service-words/cases/h3.json/U2 upper control, saturation on the left hand',
+}
+# --- round 5's hold-only form (2026-11-04; cux-r5-binding.json amendment_20261104_hold_only): the inputs of the
+# refutation of the unbinding form (refute-r5-results.json r5refute:X and r5refute:Y), verbatim with their codes and
+# truths - X1 to X4 from the X lens's own case file (refute-r5/X/out/final-cases.json: verify-r4/refuter-cases3.json does
+# not hold them, its collect.py skips 'out' directories), Y1 to Y5 and the Y lens's controls from
+# verify-r4/refuter-cases3.json; R5_XY_SOURCES names each source key and the declaration records each text's sha256
+CASES.update({
+    'R8 R5 X1 snare by label, the EGD titled first': (
+        B + 'EGD and colonoscopy report\n'
+        'Date of service: 2026-11-03\n'
+        'Endoscopist: Synthetic Endoscopist, MD (fictional)\n'
+        'Sedation: Propofol, monitored anesthesia care\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'The colonoscope reached the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43251', 'Polyp A was removed with a cold snare.', 'not_done')]),
+    'R8 R5 X1 biopsy by label, the EGD titled first': (
+        B + 'EGD and colonoscopy report\n'
+        'Date of service: 2026-11-03\n'
+        'Endoscopist: Synthetic Endoscopist, MD (fictional)\n'
+        'Sedation: Propofol, monitored anesthesia care\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'The colonoscope reached the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was biopsied with cold forceps.\n',
+        [('45380', 'Polyp A was biopsied with cold forceps.', 'done'),
+         ('43239', 'Polyp A was biopsied with cold forceps.', 'not_done')]),
+    'R8 R5 X2 colon base code beside a label-only snare': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare; the sigmoid colon was otherwise normal.\n',
+        [('45378', 'the colonoscope was advanced to the cecum.', 'not_done'),
+         ('43239', 'Cold forceps biopsies were taken from the antrum.', 'done')]),
+    'R8 R5 X2 upper base code beside a label-only snare': (
+        R2_HEAD + 'Procedures: EGD, colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'Lesion 1 - gastric body: a 6 mm sessile polyp was seen.\n'
+        'Lesion 1 was removed with a hot snare; the rest of the stomach was normal.\n'
+        'The colonoscope was advanced to the cecum. The colon was normal.\n',
+        [('43235', 'The gastroscope was advanced to the second part of the duodenum.', 'not_done'),
+         ('45378', 'The colonoscope was advanced to the cecum.', 'done')]),
+    'R8 R5 X2 colon base code, the R1a-r3 path': (
+        R2_HEAD + 'Colonoscopy and EGD report\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'COL-1 - sigmoid colon: an 8 mm polyp was seen.\n'
+        'The gastroscope was advanced to the second part of the duodenum. The antrum was normal.\n'
+        'COL-1 was removed with a cold snare; the sigmoid colon was otherwise normal.\n',
+        [('45378', 'The colonoscope was advanced to the cecum.', 'not_done')]),
+    'R8 R5 X3 the 1146 row text, its base code beside 43239': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45378', 'the colonoscope was advanced to the cecum.', 'not_done'),
+         ('43239', 'Cold forceps biopsies were taken from the antrum.', 'done')]),
+    'R8 R5 X3 the denied-title row text, its base code alone': (
+        R2_HEAD + 'Colonoscopy and EGD report\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'The EGD was not performed today.\n',
+        [('45378', 'The colonoscope was advanced to the cecum.', 'not_done')]),
+    'R8 R5 X3 the A3 control text, its base code alone': (
+        R2_HEAD + 'Colonoscopy and EGD report\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'COL-1 - sigmoid colon: an 8 mm polyp was seen.\n'
+        'The gastroscope was advanced to the second part of the duodenum. The antrum was normal.\n'
+        'The colonoscope was then reinserted.\n'
+        'COL-1 was removed with a cold snare.\n',
+        [('45378', 'The colonoscope was advanced to the cecum.', 'not_done')]),
+    'R8 R5 X3 an EGD by another provider, the base code alone': (
+        R8_TOP + 'Procedure: Colonoscopy\n'
+        'The colonoscope was advanced to the cecum and the examination was completed.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'EGD performed today by Dr. Other Endoscopist (fictional), reported separately.\n',
+        [('45378', 'The colonoscope was advanced to the cecum and the examination was completed.', 'not_done')]),
+    'R8 R5 X3 an EGD by another provider, the snare code': (
+        R8_TOP + 'Procedure: Colonoscopy\n'
+        'The colonoscope was advanced to the cecum and the examination was completed.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'EGD performed today by Dr. Other Endoscopist (fictional), reported separately.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done')]),
+    'R8 R5 X4 a performed snare and a sited denial at one polyp': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp B - descending colon: a 10 mm polyp was removed with a hot snare.\n'
+        'Polyp A was removed with a cold snare; the sigmoid colon was otherwise normal.\n'
+        'No snare was used in the sigmoid colon.\n',
+        [('45385', 'a 10 mm polyp was removed with a hot snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the antrum.', 'done')]),
+    'R8 R5 X4 a performed snare and a labelled denial at one polyp': (
+        R2_HEAD + 'Procedure(s) performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp B - descending colon: a 10 mm polyp was removed with a hot snare.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'No snare was used on Polyp A.\n',
+        [('45385', 'a 10 mm polyp was removed with a hot snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the antrum.', 'done')]),
+    'R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Findings:\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Interventions:\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY - PERFORMED TODAY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY - PERFORMED TODAY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'LESIONS AND INTERVENTIONS\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y1 control, no sub-heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y2 EGD with a Bravo pH capsule': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: EGD with wireless pH capsule placement\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'Lesion 1 - gastric antrum: a 5 mm nodule was seen.\n'
+        'Lesion 1 was biopsied with cold forceps.\n'
+        'A Bravo wireless pH capsule was attached 6 cm above the squamocolumnar junction.\n',
+        [('43239', 'Lesion 1 was biopsied with cold forceps.', 'done')]),
+    'R8 R5 Y2 EGD with a PillCam placement': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: EGD with endoscopic placement of a capsule\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'Lesion 1 - gastric antrum: a 5 mm nodule was seen.\n'
+        'Lesion 1 was biopsied with cold forceps.\n'
+        'A PillCam was then deployed into the duodenal bulb with a delivery device.\n',
+        [('43239', 'Lesion 1 was biopsied with cold forceps.', 'done')]),
+    'R8 R5 Y2 EGD with a gastrostomy tube exchange': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: EGD; PEG tube exchange\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'Lesion 1 - gastric antrum: a 5 mm nodule was seen.\n'
+        'Lesion 1 was biopsied with cold forceps.\n'
+        'The existing gastrostomy tube replacement was then performed over a wire.\n',
+        [('43239', 'Lesion 1 was biopsied with cold forceps.', 'done')]),
+    'R8 R5 Y2 control, EGD alone': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: EGD\n'
+        'The gastroscope was advanced to the second part of the duodenum.\n'
+        'Lesion 1 - gastric antrum: a 5 mm nodule was seen.\n'
+        'Lesion 1 was biopsied with cold forceps.\n',
+        [('43239', 'Lesion 1 was biopsied with cold forceps.', 'done')]),
+    'R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'PROCEDURE 2: COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y3 Part 2: Colonoscopy heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'Part 1: EGD\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'Part 2: Colonoscopy\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y3 2. Colonoscopy heading': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        '1. EGD\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        '2. Colonoscopy\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y3 Upper endoscopy and Lower endoscopy headings': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'Upper endoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'Lower endoscopy\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y4 a separately reported same-day EGD': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: Colonoscopy\n'
+        'EGD performed immediately before this procedure; see separate report.\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done')]),
+    'R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: Colonoscopy\n'
+        'Because of a fixed sigmoid angulation, a pediatric gastroscope was used.\n'
+        'The gastroscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done')]),
+    'R8 R5 Y4 control, no second family': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedure: Colonoscopy\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done')]),
+    'R8 R5 Y5 a specimen-numbered act': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'A 6 mm sessile polyp in the sigmoid colon was seen (specimen 2). It was removed with a cold snare and sent '
+        'as specimen 2.\n',
+        [('45385', 'It was removed with a cold snare and sent as specimen 2.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Y5 control, no specimen number': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'The gastroscope was withdrawn and the colonoscope was advanced to the cecum.\n'
+        'A 6 mm sessile polyp in the sigmoid colon was seen. It was removed with a cold snare.\n',
+        [('45385', 'It was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+})
+R5_XY_SOURCES = {
+    'R8 R5 X1 snare by label, the EGD titled first':
+        "refute-r5/X/out/final-cases.json 'FA1 snare'",
+    'R8 R5 X1 biopsy by label, the EGD titled first':
+        "refute-r5/X/out/final-cases.json 'FA2 biopsy'",
+    'R8 R5 X2 colon base code beside a label-only snare':
+        "refute-r5/X/out/final-cases.json 'FB1 colon'",
+    'R8 R5 X2 upper base code beside a label-only snare':
+        "refute-r5/X/out/final-cases.json 'FB2 upper'",
+    'R8 R5 X2 colon base code, the R1a-r3 path':
+        "refute-r5/X/out/final-cases.json 'FB3 R1a-r3 path'",
+    'R8 R5 X3 the 1146 row text, its base code beside 43239':
+        "refute-r5/X/out/final-cases.json 'FD1 1146 row text'",
+    'R8 R5 X3 the denied-title row text, its base code alone':
+        "refute-r5/X/out/final-cases.json 'FD2 denied-title row text'",
+    'R8 R5 X3 the A3 control text, its base code alone':
+        "refute-r5/X/out/final-cases.json 'FD3 A3 control text'",
+    'R8 R5 X3 an EGD by another provider, the base code alone':
+        "refute-r5/X/out/final-cases.json 'FD4 other provider EGD, 45378 alone'",
+    'R8 R5 X3 an EGD by another provider, the snare code':
+        "refute-r5/X/out/final-cases.json 'FD4b other provider EGD, 45385'",
+    'R8 R5 X4 a performed snare and a sited denial at one polyp':
+        "refute-r5/X/out/final-cases.json 'FC1 sited denial'",
+    'R8 R5 X4 a performed snare and a labelled denial at one polyp':
+        "refute-r5/X/out/final-cases.json 'FC2 labelled denial'",
+    'R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading':
+        "verify-r4/refuter-cases3.json '2185 Y/work/cases/final.json/F1 COLONOSCOPY heading, Findings: sub-heading'",
+    'R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading':
+        "verify-r4/refuter-cases3.json '2186 Y/work/cases/final.json/F1 COLONOSCOPY heading, Interventions: sub-heading'",
+    'R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS':
+        "verify-r4/refuter-cases3.json '2187 Y/work/cases/final.json/F1 Mara-style COLONOSCOPY - PERFORMED TODAY / LESIONS AND INTERVENTIONS'",
+    'R8 R5 Y1 control, no sub-heading':
+        "verify-r4/refuter-cases3.json '2188 Y/work/cases/final.json/F1 control, no sub-heading'",
+    'R8 R5 Y2 EGD with a Bravo pH capsule':
+        "verify-r4/refuter-cases3.json '1955 Y/work/cases/b6.json/U5c EGD + Bravo, untitled'",
+    'R8 R5 Y2 EGD with a PillCam placement':
+        "verify-r4/refuter-cases3.json '1953 Y/work/cases/b6.json/U5a EGD + PillCam placement'",
+    'R8 R5 Y2 EGD with a gastrostomy tube exchange':
+        "verify-r4/refuter-cases3.json '1956 Y/work/cases/b6.json/U5d EGD + feeding tube exchange'",
+    'R8 R5 Y2 control, EGD alone':
+        "verify-r4/refuter-cases3.json '2193 Y/work/cases/final.json/F3 control, EGD alone'",
+    'R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading':
+        "verify-r4/refuter-cases3.json '2189 Y/work/cases/final.json/F2 PROCEDURE 2: COLONOSCOPY'",
+    'R8 R5 Y3 Part 2: Colonoscopy heading':
+        "verify-r4/refuter-cases3.json '2190 Y/work/cases/final.json/F2 Part 2: Colonoscopy'",
+    'R8 R5 Y3 2. Colonoscopy heading':
+        "verify-r4/refuter-cases3.json '2191 Y/work/cases/final.json/F2 2. Colonoscopy'",
+    'R8 R5 Y3 Upper endoscopy and Lower endoscopy headings':
+        "verify-r4/refuter-cases3.json '2192 Y/work/cases/final.json/F2 Lower endoscopy'",
+    'R8 R5 Y4 a separately reported same-day EGD':
+        "verify-r4/refuter-cases3.json '1949 Y/work/cases/b6.json/U4a colonoscopy note, separately reported same-day EGD'",
+    'R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument':
+        "verify-r4/refuter-cases3.json '2194 Y/work/cases/final.json/F4 pediatric gastroscope as the colonoscopy instrument'",
+    'R8 R5 Y4 control, no second family':
+        "verify-r4/refuter-cases3.json '2195 Y/work/cases/final.json/F4 control, no second family'",
+    'R8 R5 Y5 a specimen-numbered act':
+        "verify-r4/refuter-cases3.json '1957 Y/work/cases/b6.json/SPf procedures field, specimen-numbered act'",
+    'R8 R5 Y5 control, no specimen number':
+        "verify-r4/refuter-cases3.json '2196 Y/work/cases/final.json/F5 control, no specimen number'",
+}
+# --- round 5's hold-only form, refutation round 5b (2026-11-04; cux-r5-binding.json amendment_20261104_hold_only_r5b):
+# the lead's three fixes (verify-r4/apply_z21.py) - the bounded second review adds a named_only code as a proposal, held,
+# never an informational alternative; a merged act keeps services.NAME_ONLY_CUE only when every statement of it carries
+# it; the named_only hold carries its acts - and the inputs of refute-r5b they move, verbatim with their codes and
+# truths (R5_Z_SOURCES names each source; the declaration records each text's sha256): Y-F1's impression restating the
+# label-only snare with its size and site, the site-bearing addendum of Y-F2's customer flow, and X-R5B-2's three codes
+# (the label-only snare beside a second polyp's forceps removal, the separate-lesion modifier review's shape)
+CASES.update({
+    'R8 R5 Z1 an impression restating the label-only snare with its size and site': (
+        B + 'EGD and colonoscopy report (fictional)\n'
+        'Date of service: 2026-11-03\n'
+        'Place of service: Ambulatory surgery center\n'
+        'Procedures performed: EGD with biopsy; colonoscopy with polypectomy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum. The ileocecal valve and appendiceal orifice were identified.\n'
+        'Findings:\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare and retrieved.\n'
+        'IMPRESSION\n'
+        '1. Antral biopsies taken.\n'
+        '2. 8 mm sigmoid colon polyp removed with a cold snare.\n',
+        [('45385', '8 mm sigmoid colon polyp removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Z2 an addendum restating the label-only snare with its site and service': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'UPPER ENDOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Findings:\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        '\n'
+        '\n'
+        'ADDENDUM (revision 2, added 2026-11-04 15:30 UTC)\n'
+        'Polyp A was removed with a cold snare during the colonoscopy, in the sigmoid colon, on the date of service.\n',
+        [('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done')]),
+    'R8 R5 Z3 a label-only snare beside a forceps removal on its own line': (
+        R2_HEAD + 'Procedure report (fictional)\n'
+        'Procedures performed: EGD and colonoscopy\n'
+        'PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY\n'
+        'The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the '
+        'gastric antrum.\n'
+        'PROCEDURE 2: COLONOSCOPY\n'
+        'The colonoscope was advanced to the cecum.\n'
+        'Polyp A - sigmoid colon: an 8 mm sessile polyp was seen.\n'
+        'Polyp A was removed with a cold snare.\n'
+        'Polyp B - descending colon: a 4 mm polyp was removed with cold biopsy forceps.\n',
+        [('43239', 'Cold forceps biopsies were taken from the gastric antrum.', 'done'),
+         ('45385', 'Polyp A was removed with a cold snare.', 'done'),
+         ('45380', 'a 4 mm polyp was removed with cold biopsy forceps.', 'done')]),
+})
+R5_Z_SOURCES = {
+    'R8 R5 Z1 an impression restating the label-only snare with its size and site':
+        "refute-r5b/Y/cases/c7.json 'R1 realistic: findings by label, impression restates with size and site'",
+    'R8 R5 Z2 an addendum restating the label-only snare with its site and service':
+        "refute-r5b/verify-Y/Y-F2/out/off/cases.json 'battery | W0 the finding | 2026-11-04 | cite orig'",
+    'R8 R5 Z3 a label-only snare beside a forceps removal on its own line':
+        "refute-r5b/X/work/cases2.json 'MR2 Y3 with a second polyp on its own line'",
+}
+# Measured and recorded, never repaired here (cux-r5-binding.json residuals_measured; ACCURACY-RESIDUALS.md round 5):
+# each reads READY where its truth says not done today on main, installed and this head, so its honest truth makes it a
+# violation and it stays out of CASES (a register row carries none); tests/test_cux_r5_binding.py reads them with
+# run_row. The three colonoscopy-only R2 cases (verify-r4/cases.json, verbatim): a prophylactic hemostatic clip read as
+# control of bleeding; the G1 shape with its label written 'Label (site):' (gap b: no label is read, so the act is
+# placed by the antrum its sentence names); and, under the hold-only form, the G1 shape told by the gastroscope (R1a-r3
+# unbinds the act as on main and it takes the antrum's site: 43239 READY; the unbinding form had held it).
+R5_RESIDUALS = {
+    'R8 R5 residual R2 dash colonoscopy only': (R5_COLON + R5_POLYP_B + R5_CLIP + '\n', R5_R2_CODES[1:]),
+    'R8 R5 residual R2 paren colonoscopy only': (_r5_paren(R5_COLON + R5_POLYP_B + R5_CLIP + '\n', *R5_B),
+                                                 R5_R2_CODES[1:]),
+    'R8 R5 residual R2 unlabelled colonoscopy only': (
+        R5_COLON + 'In the descending colon, ' + R5_POLYP_B_Q + '\nA hemostatic clip was placed prophylactically at the '
+        'stalk site.\n', [('45385', R5_POLYP_B_Q, 'done'),
+                         ('45382', 'A hemostatic clip was placed prophylactically at the stalk site.', 'not_done')]),
+    'R8 R5 residual gap b, the G1 impression act by a Label (site) label': (_r5_g1(R5_ENDOSCOPE, _r5_paren(
+        R5_BIOPSIED, *R5_A)), R5_G1_CODES),
+    'R8 R5 residual G1 impression act by label, the gastroscope named (R1a-r3 path)': (_r5_g1(R5_GASTRO), R5_G1_CODES),
+}
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')

@@ -126,6 +126,12 @@ def service_for(inventory: ServiceInventory, family: str) -> Optional[Documented
     return sorted(found, key=lambda s: rank.get(s.status, 5))[0]
 
 
+def gi_services_name_only(act) -> bool:
+    """R1a-r5: whether ``act`` carries services.NAME_ONLY_CUE."""
+    from studio.gi.services import NAME_ONLY_CUE
+    return NAME_ONLY_CUE in act.cues
+
+
 def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match]:
     """The inventory's reading of ``code`` (None when the inventory documents no service of its family: the code is
     then judged as before, by its own passages and routing)."""
@@ -177,6 +183,15 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      'chosen.', conflict=conflict,
                      question=f'The record states the {what} both as performed and as not performed. Which is correct '
                               'for this encounter?')
+    if done and all(gi_services_name_only(a) for a in done):
+        # R1a-r5 (hold-only): every act this code could rest on is tied to its service only by a lesion's name in a
+        # document of several procedures (services.NAME_ONLY_CUE): it stays documented, and the code is held for the
+        # reviewer - a reason no release or exclusion path reads
+        return Match('uncertain', service, done, 'named_only',
+                     f'The {name} is documented as {service.status}, but the {what} this code accounts for is tied to '
+                     f'it only by a lesion\'s name ({quote(done[0].evidence[0])}) in a document of several procedures.',
+                     question=f'The {what} ({quote(done[0].evidence[0], 120)}) is tied to the {name} only by a '
+                              f'lesion\'s name. Was a {what} performed in the {name} on the date of service?')
     if done:
         listed = '; '.join(describe_act(service, a) for a in done[:4])
         return Match(positive, service, done, 'service',
