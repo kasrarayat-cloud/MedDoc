@@ -1080,6 +1080,11 @@ corrected here where this changes them):
   `customer_api.in_queue`: one of the three customer states, or what `queue_reasons` holds waiting), the page's queue
   lists exactly the rows marked `in_queue: true`, and `counts.queue` counts exactly those rows. The rule is unchanged;
   the page now lists what it counts.
+- **`progress.phase` `paused`** (decision (j) of 2026-11-03, wired 2026-11-04): while the document is busy and the
+  worker's newest heartbeat (`WorkerBeat`, written every `jobs.HEARTBEAT_SECONDS` by a thread of the worker) is older
+  than `jobs.WORKER_SILENT_SECONDS` (120 s), the phase is `paused` and the message says processing is paused and the
+  document is saved, promising nothing more; `slow` is false and Stop is still offered. No beat ever recorded claims
+  nothing (the stage's own phase). The page draws it with no animated step and no running clock, and keeps polling.
 - **`recheck`** (session decision (n), 2026-11-04): `{"available": bool, "can_request": bool}` beside `unresolved`. The
   installed page offered the bounded second review ("Ask the provider once more"); the customer page keeps it, worded by
   function: "Check what is still open again" under "Still open", shown only while `can_request` is `true`, posting

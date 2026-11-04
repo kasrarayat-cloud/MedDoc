@@ -64,7 +64,7 @@
       "value": "date?", "source": {"enum": ["document", "member", "conflict", "missing"]}, "document_value": "date?",
       "document_quote": {"ref": "span"}, "entered_value": "date?", "conflict": "boolean", "can_use_document_date": "boolean"}},
     "progress": {"keys": {
-      "phase": {"enum": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed"]},
+      "phase": {"enum": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed", "paused"]},
       "busy": "boolean", "steps": {"items": {"ref": "step"}}, "active_detail": "string", "started_at": "iso?", "finished_at": "iso?",
       "server_time": "iso", "slow": "boolean", "message": "string", "can_stop": "boolean", "can_resume": "boolean", "can_leave": "boolean",
       "error": {"nullable": true, "keys": {"text": "string", "action": {"enum": ["resume", "new_document", "none"]}}}}},

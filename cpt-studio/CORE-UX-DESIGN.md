@@ -260,7 +260,8 @@ date_conflict, open_details, created_at, kind`.
 The contract gains two keys, and nothing else changes: `"recheck": {"available": bool, "can_request": bool}` after
 `unresolved` - the bounded second review the installed page offered, kept as "Check what is still open again" (R4's open
 question 1 answered by keeping the installed capability) - and `in_queue` (boolean) on each list row, the predicate the
-session's `counts.queue` counts, so the queue lists exactly what its badge counts.
+session's `counts.queue` counts, so the queue lists exactly what its badge counts. `progress.phase` also takes `paused` (decision (j)):
+busy while the worker's heartbeat is older than 120 s, drawn without animation.
 
 ## 8. P6 UI: DOM contract (P8's walk tool depends on these exact hooks)
 

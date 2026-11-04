@@ -170,7 +170,7 @@ LIST_ROW_KEYS = {'id', 'title', 'state', 'state_label', 'service_date', 'date_co
                  'kind'}
 STATES = set(customer_api.STATE_LABELS)
 STATUSES = set(customer_api.STATUS_LABELS)
-PHASES = {'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',
+PHASES = {'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'paused',
           'being_confirmed'}
 STEP_STATES = {'done', 'active', 'waiting', 'not_started', 'failed', 'stopped', 'skipped'}
 CHECK_STATES = {'done', 'running', 'waiting', 'unavailable', 'not_run'}

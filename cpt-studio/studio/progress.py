@@ -29,7 +29,7 @@ STEPS = ((READING, 'Reading your document'), (IDENTIFYING, 'Identifying procedur
 STEP_ORDER = tuple(key for key, _ in STEPS)
 STEP_STATES = ('done', 'active', 'waiting', 'not_started', 'failed', 'stopped', 'skipped')
 PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',
-          'being_confirmed')
+          'being_confirmed', 'paused')
 DOCUMENT_REVIEW, INDEPENDENT_CHECKS, CODING_VALIDATION = 'Document review', 'Independent checks', 'Coding validation'
 SENDING_KINDS = (Job.PREDICT, Job.REVIEW2)
 CHECK_KINDS = Job.PARTICIPANT_KINDS + Job.PEER_KINDS
@@ -59,6 +59,9 @@ MESSAGES = {
     'partial': 'Your results are ready, but some checks could not be completed. Each code shows what was checked.',
     'being_confirmed': ('We are confirming whether an earlier check completed. Nothing will be sent again until that '
                         'is settled.'),
+    # decision (j): the worker stopped beating (jobs.worker_responding is False) while the document waits on it
+    'paused': ('Processing is paused: the processing service is not responding right now. Your document is saved, and '
+               'this page shows the next step once the service is back.'),
 }
 TAKING_TURN = 'Waiting its turn: the coding service checks one document at a time.'
 SLOW_MESSAGES = {
@@ -376,6 +379,10 @@ def encounter_progress(encounter, now=None) -> dict:
     slow, slow_message, error = False, '', None
     if date_held(encounter):
         phase = 'action_needed'
+    elif busy and jobs.worker_responding(now=now) is False:
+        # decision (j): a worker whose newest beat is older than WORKER_SILENT_SECONDS is never drawn as working - no
+        # step animates and nothing is called slow; a worker that never beat (None) claims nothing either way
+        phase = 'paused'
     elif busy:
         phase = 'processing' if running is not None else 'queued'
         slow, slow_message = _slow(active, now)

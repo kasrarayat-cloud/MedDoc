@@ -52,17 +52,18 @@ const CHECK_KEYS = ['document_review', 'independent_checks', 'coding_validation'
 const CHECK_LABELS = { document_review: 'Document review', independent_checks: 'Independent checks', coding_validation: 'Coding validation' };
 const CHECK_STATES = { done: 'Done', running: 'In progress', waiting: 'Waiting', unavailable: 'Unavailable', not_run: 'Not run' };
 const CHECK_ICONS = { done: 'circle-check', running: 'clock', waiting: 'clock', unavailable: 'info', not_run: 'info' };
-const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed'];
+const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed', 'paused'];
 const PHASE_TITLES = {
   uploading: 'Uploading your document', queued: 'Waiting to start', processing: 'Processing your document', action_needed: 'Action needed',
   awaiting_detail: 'Results ready', completed: 'Results ready', partial: 'Results ready, with a limitation', failed: 'Processing could not finish',
-  stopped: 'Processing stopped', being_confirmed: 'An earlier check is being confirmed',
+  stopped: 'Processing stopped', being_confirmed: 'An earlier check is being confirmed', paused: 'Processing paused',
 };
 // Only these phases draw an animated step, and only while the server says the document is busy.
 const ANIMATED_PHASES = new Set(['uploading', 'queued', 'processing']);
 // These phases draw the whole progress panel; the others (results are ready) draw one compact line.
-const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed']);
-// The page polls the document while it is busy, and while an earlier check is being confirmed.
+const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused']);
+// The page polls the document while it is busy (a paused document is busy, so its panel moves on by itself once the
+// processing service answers again: decision (j)), and while an earlier check is being confirmed.
 const POLL_PHASES = new Set(['queued', 'processing', 'being_confirmed']);
 const STATE_PHASES = { processing: 'processing', action_needed: 'action_needed', awaiting_detail: 'awaiting_detail', failed: 'failed', stopped: 'stopped', being_confirmed: 'being_confirmed' };
 const LEAVE_NOTES = {
@@ -71,6 +72,7 @@ const LEAVE_NOTES = {
   processing: 'You can leave this page — processing continues, and the document stays in Documents.',
   action_needed: 'You can leave this page — the document waits in the Review queue until you choose.',
   being_confirmed: 'You can leave this page — the document stays in Documents while this is settled.',
+  paused: 'You can leave this page — your document is saved.',
 };
 const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
 const USE_DOCUMENT = 'use_document';
@@ -697,7 +699,7 @@ function progressPanel(doc, ui = {}) {
   const resume = canAct && progress.can_resume === true && !busy ? `<button type="button" class="button primary" data-action="resume">Resume processing ${icon('arrow')}</button>` : '';
   const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
   const slow = progress.slow === true && busy;
-  const headIcon = phase === 'action_needed' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
+  const headIcon = phase === 'action_needed' || phase === 'paused' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
   // the error says its own sentence below; the head does not repeat it
   const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
