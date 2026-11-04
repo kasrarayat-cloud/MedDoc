@@ -729,6 +729,12 @@ class RegisterOfferTests(SimpleTestCase):
                               / 'cux-r3-reader.json').read_text(encoding='utf-8'))
         declared.update(next(value['offer_battery'] for key, value in reversed(list(reader3.items()))
                              if isinstance(value, dict) and 'offer_battery' in value))
+        # the round-5 binding repair's (R8 R5) in cux-r5-binding.json: its latest record (before code, then the head's
+        # after code, which also names any earlier row whose offers its code moves)
+        binding5 = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations'
+                               / 'cux-r5-binding.json').read_text(encoding='utf-8'))
+        declared.update(next(value['offer_battery'] for key, value in reversed(list(binding5.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
         names = [n for n in battery.CASES if n.startswith('R8 ')]
         self.assertEqual(sorted(declared), sorted(names))
         for name in names:
