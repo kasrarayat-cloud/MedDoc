@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harbour Digestive Centre (fictional)
+Gastroscopy and Colonoscopy Procedure Note
+Date of service: 2026-10-29
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+UPPER ENDOSCOPY
+The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the gastric
+antrum.
+LOWER ENDOSCOPY FINDINGS
+The colonoscope was advanced to the cecum. A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare.
+A prophylactic clip was placed at the polypectomy site.
+Impression: antral biopsies; one sigmoid polyp removed.

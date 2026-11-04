@@ -785,10 +785,13 @@ class ServiceInventory:
 class _Part:
     start: int
     end: int
-    family: str  # the service a report part is about; '' outside a report
+    family: str  # the service a report part is about; '' outside a report, and in a combined report (below)
     role: str
     title: Optional[Span]
     kind: str  # report | history | plan | indication | other
+    # core repair 2026-11-03 (P1, rule 4): the part is inside a combined report - under a report title naming two or more
+    # separate services, which binds no single family (parts)
+    combined: bool = False
 
 
 def _lines(text: str) -> list[tuple[int, int]]:
@@ -957,7 +960,14 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     page 1]") interrupts a history or plan part as text of no time, its lines opening no part, until the blank line
     that ends the block, where the part resumes (routing reads both the same way: gi/sections layout). A sentence
     whose history words are its own subject ("Prior studies have been inconclusive.") opens a history part only where
-    the layout opens a section on its line: it is no heading of what follows (refutation 7c8, formats-5 a)."""
+    the layout opens a section on its line: it is no heading of what follows (refutation 7c8, formats-5 a).
+
+    Core repair 2026-11-03 (P1; R1-services-binding section 9). Rule 4: a report title naming two or more separate
+    services ("Upper endoscopy and colonoscopy | Outpatient professional record") is a combined title: it binds no single
+    family - its part, and every untitled part that falls back to it, is a report part of none (``combined``), whose acts
+    each service's own heading, an act's own site or its lesion's label places - never the first service named
+    (_family_named). A title naming an examination and the service that includes it (an EGD with its EUS: _included)
+    names one service, as before."""
     lay = _sections.layout(text)
     by_start = sorted(lay.sections, key=lambda section: section.start)
     layout_starts = [section.start for section in by_start]
@@ -968,6 +978,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     dates = gi_context.find_dates(text) if dates is None else dates
     date_starts = [d.start for d in dates]
     documented = _documented_today(text, lines, service_date, dates, date_starts)
+    title_marks: list[tuple[int, bool]] = []  # (start, combined) of each report title's cut (rule 4)
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
@@ -983,8 +994,9 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             cuts.append((ls, '', 'physician', None, 'other'))
             continue
         if cuts[-1][4] == 'history' and _opens_todays_report(text, lines, index):
-            # today's procedure line ends the history before it ("History:" ... "Procedure: Colonoscopy ...")
-            cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+            # today's procedure line ends the history before it ("History:" ... "Procedure: Colonoscopy ...");
+            # kind_now is 'other' until a report title, 'report' after one (a combined one too: rule 4)
+            cuts.append((ls, family, 'physician', None, kind_now))
         if PAGE_HEADER.match(stripped) and stripped.count('|') >= 2:
             continue
         role = next((r for r, p in ROLE_HEADINGS if p.match(line)), None)
@@ -998,9 +1010,11 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
         named, _ = _family_named(line) if m else ('', '')
         field_m = PROCEDURE_FIELD.match(line)
         if m and named and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line):
-            family = named
+            combined = _names_separate_services(line)  # rule 4: a combined title binds no single family
+            family = '' if combined else named
             s = ls + line.index(stripped)
             cuts.append((ls, family, 'physician', Span(s, s + len(stripped), stripped), 'report'))
+            title_marks.append((ls, combined))
             kind_now = 'report'
             continue
         if not m and GENERIC_HEADING.match(line) and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line) \
@@ -1018,7 +1032,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             if cuts[-1][4] == 'section':
                 # A bare service heading ("Colonoscopy") owns the lines up to the next heading; the encounter's shared
                 # sections after it (Complications, Impression, Plan) belong to no one service.
-                cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+                cuts.append((ls, family, 'physician', None, kind_now))
                 continue
         if HISTORY_HEADING.match(line):
             if stripped.endswith(('.', '!', '?')) and _sections._own_clause(stripped) \
@@ -1030,20 +1044,36 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                 continue
             cuts.append((ls, family, 'physician', None, 'history'))
             continue
-        if PLAN_HEADING.match(line) and not family:
+        if PLAN_HEADING.match(line) and kind_now != 'report':  # no report title above it, combined or not
             cuts.append((ls, family, 'physician', None, 'plan'))
             continue
         if GENERIC_HEADING.match(line) and cuts[-1][4] == 'role':
-            cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+            cuts.append((ls, family, 'physician', None, kind_now))
         del field_m
     out = []
+    mark_starts = [start for start, _ in title_marks]
     for i, (start, fam, role, title, kind) in enumerate(cuts):
         end = cuts[i + 1][0] if i + 1 < len(cuts) else len(text)
         if kind == 'section':
             kind = 'report'
+        # rule 4: a part of no family after a combined report title is that combined report's
+        at = bisect.bisect_right(mark_starts, start) - 1
+        combined = not fam and at >= 0 and title_marks[at][1]
         if end > start:
-            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind))
+            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind, combined))
     return _time_parts(text, out, lay)
+
+
+# Core repair 2026-11-03 (P1, rule 4): the services a title names, less the examination a service it also names
+# includes (an EGD with its EUS: _included reads the EGD as the EUS's endoscopic portion, one service).
+INCLUDED_EXAMINATION = {'gi.eus': frozenset(('gi.egd',))}
+
+
+def _names_separate_services(line: str) -> bool:
+    """Whether a report title line names two or more separate services (rule 4: a combined report title)."""
+    named = {family for family, _, pattern in SERVICES + TITLE_SERVICES if pattern.search(line)}
+    named -= {f for g in named for f in INCLUDED_EXAMINATION.get(g, ())}
+    return len(named) >= 2
 
 
 def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
@@ -1106,7 +1136,7 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
             if pieces and pieces[-1].kind == kind:
                 pieces[-1] = replace(pieces[-1], end=b)
             else:
-                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind))
+                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind, p.combined))
         out.extend(pieces)
     return tuple(out)
 
@@ -1179,7 +1209,8 @@ def _time_kind(p: _Part, pos: int, timed_kind, own_end: Optional[int]) -> str:
     if kind == 'indication' and p.kind == 'other':
         return 'indication'  # why the patient came (never inside a titled report, whose subsections are its own)
     if p.kind in ('history', 'plan') and own_end is not None and pos >= own_end:
-        return 'report' if p.family else 'other'  # the history or plan this module's heading opened has ended
+        # the history or plan this module's heading opened has ended: back to the report it is in (a combined one too)
+        return 'report' if p.family or p.combined else 'other'
     return p.kind
 
 
@@ -2684,6 +2715,9 @@ class _ServiceDraft:
     report_title: Optional[Span] = None
     scopes: list = field(default_factory=list)  # (start, end) of report parts and passages that document it
     kind_settled: bool = False  # the kind was set by the report title or a performed mention, not a passing one
+    # rule 4 (core repair 2026-11-03): the combined report titles that name this service (and others): they document it
+    # and are the scope of none of the services they name (_finish)
+    shared: list = field(default_factory=list)
 
 
 def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, int]]:
@@ -3575,7 +3609,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             part = _part_at(plist, starts, ss)
             cls = clauses_of(ss, se)
             clause = _clause_for(cls, ms)
-            title = part.title is not None and part.title.start <= ms < part.title.end and part.family == family
+            # rule 4: each service a combined report title names takes its title reading, as a title naming it alone does
+            title = part.title is not None and part.title.start <= ms < part.title.end and (
+                part.family == family or (part.combined and part.kind == 'report' and not part.family))
             in_report = part.kind == 'report' and part.family == family
             if title:
                 reading = Reading('performed', (f'section: report title "{part.title.text}"',))
@@ -3599,7 +3635,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 d.scopes.append((part.start, part.end))
             if title and d.report_title is None:
                 d.report_title = part.title
-            bounded_span = _span(text, *_bounded_clause(text, clause, ms, me))
+            if title and part.combined:
+                d.shared.append((part.title.start, part.title.end))
+            # rule 4: a combined title's reading is the title itself, never the text its sentence runs on into
+            bounded_span = part.title if title and part.combined else _span(text, *_bounded_clause(text, clause, ms, me))
             d.statuses.append((reading.status, reading.cues, bounded_span))
             if located is not None:
                 located.append(('service', family, kind, reading.status, ms, me))
@@ -3879,9 +3918,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # No - none used" under a report of an upper endoscopy and a colonoscopy had been dropped, and with
                     # it the conflict with the physician's tattoo). Anything else - prose, whose denial may be scoped
                     # to a site or a lesion the reader does not see - stays unattributed, as before, and so does a
-                    # history, plan or indication part (another occasion's).
+                    # history, plan or indication part (another occasion's). Rule 4 (core repair 2026-11-03): in a
+                    # combined report - a title naming several services binds none of them - a site-less, label-less
+                    # prose denial is the encounter's too ("No biopsies were taken." over an EGD and a colonoscopy, R1
+                    # probe 8c): set beside every service that documents the act done, never dropped, as the combined
+                    # title's first service once took it and its genuine conflict was kept.
                     if part.kind in ('history', 'plan', 'indication') or not drafts \
-                            or not _field_or_box_line(text, ms, me):
+                            or not (_field_or_box_line(text, ms, me) or (part.combined and part.kind == 'report')):
                         continue
                     fam = ''
                 if kind == 'snare' and re.match(r'[ \t]*site\b', text[me:me + 8], FLAGS):
@@ -3934,8 +3977,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
-                if not fam and (not _own_mark_denies(text, ms, me, reading, service_date) or _dates_in(dates, *bc)
-                                or HISTORY_WORDS.search(clause_text) or PLAN_WORDS.search(clause_text)):
+                combined_denial = part.combined and part.kind == 'report' and reading.status in ('negated', 'cancelled')
+                if not fam and (not (_own_mark_denies(text, ms, me, reading, service_date) or combined_denial)
+                                or _dates_in(dates, *bc) or HISTORY_WORDS.search(clause_text)
+                                or PLAN_WORDS.search(clause_text)):
                     continue  # no service named, and no item's own denial today (a date or time word: another's?)
                 if fam:
                     d = drafts[fam]
@@ -4498,7 +4543,10 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
     lesions = tuple(_disposition(lesion, d.acts) for lesion in d.lesions)
     evidence = tuple(_dedupe_spans(([d.report_title] if d.report_title else []) + [s[2] for s in positive]))[:6]
     completion_evidence = tuple(_dedupe_spans(completion_spans))[:4]
-    spans = list(d.scopes) + [(e.start, e.end) for e in evidence]
+    # rule 4: a combined report title (and its mention's clause) documents each service it names, and is the scope of
+    # none of them: a whole document under one running title is no one service's text
+    spans = list(d.scopes) + [(e.start, e.end) for e in evidence
+                              if not any(a <= e.start and e.end <= b for a, b in d.shared)]
     scope_start = min((a for a, _ in spans), default=0)
     scope_end = max((b for _, b in spans), default=0)
     return DocumentedService(

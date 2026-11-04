@@ -245,3 +245,49 @@ class LesionLabelTests(SimpleTestCase):
         self.assertEqual([x.lesion for x in acts(inv, 'gi.colonoscopy', 'clip')], [polyp.id])
         rectal = [x for x in acts(inv, 'gi.colonoscopy', 'biopsy') if 'rectum' in x.anatomy]
         self.assertEqual([x.lesion for x in rectal], [''])  # its own site places it, as before
+
+
+# --- rule 4: a report title naming several services binds no single family ---------------------------------------
+
+class CombinedTitleTests(SimpleTestCase):
+    def test_a_combined_title_binds_no_family_and_each_service_takes_its_reading(self):
+        self.assertTrue(services._names_separate_services('Upper endoscopy and colonoscopy | Outpatient professional '
+                                                          'record'))
+        self.assertFalse(services._names_separate_services('EGD with EUS report'))  # an examination its EUS includes
+        self.assertFalse(services._names_separate_services('Colonoscopy report'))
+        text = document('r4-combined-positive')
+        plist = services.parts(text, service_date=day_of(text))
+        title = next(p for p in plist if p.title is not None and 'Procedure Note' in p.title.text)
+        self.assertEqual((title.family, title.kind, title.combined), ('', 'report', True))
+        inv = inventory(text)
+        for family in ('gi.egd', 'gi.colonoscopy'):
+            with self.subTest(family):
+                self.assertEqual(service(inv, family).status, 'performed')
+
+    def test_a_section_s_tail_is_never_the_first_named_service_s(self):
+        text = document('r4-combined-positive')
+        inv = inventory(text)
+        self.assertEqual([x.kind for x in acts(inv, 'gi.egd')], ['biopsy'])  # base: the colon's clip on the EGD
+        egd = service(inv, 'gi.egd')
+        self.assertLess(egd.scope_end, text.index('The colonoscope was advanced'))
+        self.assertGreater(egd.scope_start, text.index('Gastroscopy and Colonoscopy Procedure Note'))
+        result = run(text, [('43239', 'Cold forceps biopsies were taken from the gastric'),
+                            ('45385', 'A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare.')])
+        self.assertEqual(outcomes(result), {'43239': READY, '45385': READY})
+        self.assertNotIn(('gi.egd', 'clip'), bundled(result))
+
+    def test_twin_a_site_less_denial_is_set_beside_every_service_that_documents_the_act(self):
+        text = document('r4-twin-blanket-denial')
+        inv = inventory(text)
+        self.assertTrue(conflicts(inv, 'gi.egd', 'biopsy'))
+        result = run(text, [('43239', 'Cold forceps biopsies were obtained from the gastric'),
+                            ('45385', 'A 7 mm polyp in the transverse colon was removed with a cold snare.')])
+        self.assertEqual(outcomes(result)['43239'], held('conflict:biopsy'))
+
+    def test_twin_r1_probe_8c_a_combined_report_with_an_unheaded_narrative_keeps_its_conflict(self):
+        text = (HEAD + 'EGD and colonoscopy report\nThe gastroscope was advanced to the second part of the duodenum. Cold '
+                       'forceps biopsies were taken from the gastric antrum. The colonoscope was advanced to the cecum. A '
+                       '6 mm polyp in the transverse colon was removed with a cold snare.\nNo biopsies were taken.\n')
+        self.assertTrue(conflicts(inventory(text), 'gi.egd', 'biopsy'))
+        result = run(text, [('43239', 'Cold forceps biopsies were taken from the gastric antrum.')])
+        self.assertEqual(outcomes(result)['43239'], held('conflict:biopsy'))

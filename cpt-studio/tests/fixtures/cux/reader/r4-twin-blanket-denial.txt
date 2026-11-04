@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Harbour Digestive Centre (fictional)
+Gastroscopy and Colonoscopy Procedure Note
+Date of service: 2026-10-29
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were obtained from the gastric
+antrum. The colonoscope was then advanced to the cecum. A 7 mm polyp in the transverse colon was removed with a cold snare.
+Biopsies were not obtained.
