@@ -1045,3 +1045,37 @@ typographic quotes and "page N" are drawn by CSS from `data-page`), and a quote 
 `awaiting_detail`; `[data-elapsed][data-since]` ticks while busy and carries `data-until` once finished. The edit-context
 dialog is gone (`#contextDialog`, `#contextServiceDate`, `#contextSetting`, `#contextBilling`, `#saveContext`,
 `button[data-action="edit-context"]`): context answers go through the details panel.
+
+## Core repair and customer interface (2026-11-03): integration wiring
+
+What changed when the packages' functions replaced P4's stand-ins (appended; the sections above stand as written,
+corrected here where this changes them):
+
+- **Every customer status, action and question reads the review overlay** (`review.effective_view`): a code's status,
+  its questions, the approve gate, a decision the overlay no longer supports (its readiness blocker, worded for the
+  member), the separate-lesion `modifier_review` (`sources`: the dated CMS source, title, release, effective date and
+  page) and the one-sentence `summary` (CPT Studio's own reading: structured fields and act labels, never a support
+  detail). A code whose needed detail a member answered `not_documented` or `cannot_confirm` is `excluded` ("A needed
+  detail is not documented" / "could not be confirmed"), offers no action and needs no decision until the answer is
+  withdrawn - in both APIs, readiness and the reports (`review._member_answers` reads `answers.saved_answers`).
+- **`details_needed`, `service_date`, `progress` and `checks`** are P5's (`answers.details_needed` over the overlay,
+  `answers.service_date_block`, `progress.encounter_progress`, `progress.checks_summary`); `can_stop`, `can_resume`,
+  `progress.error.action` and a row's `addendum_allowed` are offered only to a member whose role may take them. While a
+  member's date conflicts with the document, the date is the one detail asked; a save answering anything else is 409
+  ("That detail is no longer needed. ..."). `state` reads `action_needed` as soon as the phase does.
+- **`readiness.approved`** is `review.readiness` over the overlay (every suggested code approved, rejected, its exclusion
+  confirmed, or its detail answered as unavailable; nothing processing; a settled result) with an approved code to list
+  (session decision (f) of 2026-11-03: no partial approved export).
+- **An approved export is stale (download 409; `reports[].current` false) exactly when its decision marker moves**:
+  the live assessment, the current context, the current decisions (ids and sequence) and the standing member answers
+  (ids). A customer artifact's `snapshot_sha256` holds that marker's digest (`reports.customer_marker`), not a digest of
+  the report's content: a queued stage, a later run, an operator report or new wording never makes one stale. This
+  replaces the P4 section's "whose snapshot no longer matches".
+- **`counts.queue` in the customer session** counts the encounters in the customer queue's states (`action_needed`,
+  `awaiting_detail`, `ready`), the list the page shows; the operator session keeps the `queue_reasons` rule above.
+- **"Taking longer than usual"** (`progress.slow`) is past 60% of the bound each stage really has where it runs
+  (`progress.stage_bound`: extract 240 s, analyze 60 s, document review and its second review 150 s, assess 120 s, an
+  independent check's stage 580 s), a display threshold only; no sentence promises an automatic stop or start.
+- **Customer fixtures** (`tests/fixtures/customer/*.json`) are all generated from the serializer
+  (`CPT_STUDIO_WRITE_FIXTURES=1 manage.py test tests.test_customer_fixtures`), including Mara from Corti's retained
+  response, read in process.

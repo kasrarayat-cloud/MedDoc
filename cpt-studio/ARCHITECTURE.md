@@ -3378,3 +3378,25 @@ encounter's own document is never scanned.
 
 Not walked: the 409 a stale approved export answers once a decision changes (it needs a decision revoked on the walked
 encounter; the server tests hold it), and the operator page's own markup.
+
+## Core repair and customer interface (2026-11-03): integration wiring
+
+The seams between P3 REVIEW, P5 FLOW and P4 CUSTOMER-API, as wired (appended; corrections to the sections above):
+
+- `review._member_answers(assessment)` returns `answers.saved_answers(assessment)` - the revision's standing answers as
+  (code, family, fact, value) - so the overlay applies them wherever it is read (the P3 section's "returns `[]` here").
+  `answers.details_needed` reads the overlay's questions as the View holds them (dicts), asks only of codes in the
+  effective set (a rejected code's question returns with a revocation), keeps the answered rows of a code an answer
+  excluded (so the answer stays visible and withdrawable, also when the overlay asked the question), and asks the date
+  alone while a member's date is held against the document.
+- `studio/customer_api.py` builds no status, question, gate, readiness, date, progress or check of its own: it words
+  `review.effective_view`, `review.approved_items`, `review.readiness`, `answers.*` and `progress.*` for the member.
+- The approved customer export's staleness is a decision marker (`reports.customer_marker`: live assessment, current
+  context, current decisions' ids and sequence, standing answers' ids), stored as the artifact's `snapshot_sha256`
+  (critic C8; the P4 section's "its snapshot digest is re-checked at download").
+- `progress.stage_bound(kind)` is the bound enforced where each stage runs (the extraction child's
+  `EXTRACTION_TIMEOUT_SECONDS`, the routing child's and the assess child's `JOB_DEADLINE_SECONDS` entries, the coding
+  service's `PROVIDER_READ_TIMEOUT_SECONDS + 30`, a participant stage's budget); `JOB_DEADLINE_SECONDS`' extract,
+  predict and review2 entries are read nowhere and are not used (critic C4).
+- Tests: `tests/test_cux_wire.py` (the seams, end to end) and `tests/test_customer_fixtures.py` (every customer
+  fixture from the serializer).
