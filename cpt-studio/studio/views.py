@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET
 from .access import active_membership
 from .api import UNSTORABLE
 from .models import LoginAttempt
+from .operator import is_operator
 
 
 @require_GET
@@ -69,9 +70,12 @@ def login_view(request):
         else:
             user = authenticate(request, username=username, password=password) if username == submitted else None
             LoginAttempt.objects.create(username=username, client=client, succeeded=user is not None)
-            if user is not None and user.memberships.filter(active=True).exists():
+            member = user is not None and user.memberships.filter(active=True).exists()
+            # A platform operator may hold no membership (CORE-UX-DESIGN.md 5): they sign in on this same page and land
+            # on the operator diagnostics; a member - an operator who is one too - lands where they asked to go.
+            if user is not None and (member or is_operator(user)):
                 login(request, user)
-                return redirect(next_url)
+                return redirect(next_url if member or next_url != '/' else '/ops/')
             error = 'The username or password is not correct.'
     context = {'error': error, 'next': next_url,
                'username': UNSTORABLE.sub('\ufffd', request.POST.get('username', ''))[:150] if error else ''}
@@ -88,5 +92,7 @@ def logout_view(request):
 @ensure_csrf_cookie
 @login_required
 def index(request):
+    if is_operator(request.user) and not request.user.memberships.filter(active=True).exists():
+        return redirect('/ops/')  # an operator with no membership has no workspace here: the diagnostics are theirs
     active_membership(request.user)  # 404 for accounts without an active workspace
     return render(request, 'studio/index.html', {'release': settings.RELEASE_SHA})
