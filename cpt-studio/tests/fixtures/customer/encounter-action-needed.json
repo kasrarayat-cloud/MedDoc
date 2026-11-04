@@ -1,8 +1,8 @@
 {
  "id": "c4000000-0000-4000-8000-000000000001",
- "title": "Pasted note 2026-11-04 01:14",
- "created_at": "2026-11-01T09:00:35Z",
- "updated_at": "2026-11-01T09:00:45Z",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:01:47Z",
+ "updated_at": "2026-11-01T09:01:58Z",
  "state": "action_needed",
  "state_label": "Action needed",
  "permissions": {
@@ -33,15 +33,15 @@
  "service_date": {
   "value": null,
   "source": "conflict",
-  "document_value": null,
+  "document_value": "2026-10-20",
   "document_quote": {
+   "end": 134,
    "text": "Date of service: 2026-10-20",
-   "start": 107,
-   "end": 134
+   "start": 107
   },
   "entered_value": "2026-10-01",
   "conflict": true,
-  "can_use_document_date": false
+  "can_use_document_date": true
  },
  "progress": {
   "phase": "action_needed",
@@ -51,20 +51,20 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:00:37Z",
-    "finished_at": "2026-11-01T09:00:39Z"
+    "started_at": "2026-11-01T09:01:50Z",
+    "finished_at": "2026-11-01T09:01:52Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:00:40Z",
-    "finished_at": "2026-11-01T09:00:41Z"
+    "started_at": "2026-11-01T09:01:53Z",
+    "finished_at": "2026-11-01T09:01:54Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
-    "state": "not_started",
+    "state": "skipped",
     "started_at": null,
     "finished_at": null
    },
@@ -72,16 +72,16 @@
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:00:42Z",
-    "finished_at": "2026-11-01T09:00:44Z"
+    "started_at": "2026-11-01T09:01:55Z",
+    "finished_at": "2026-11-01T09:01:57Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:00:37Z",
-  "finished_at": "2026-11-01T09:00:44Z",
-  "server_time": "2026-11-01T09:00:46Z",
+  "started_at": "2026-11-01T09:01:49Z",
+  "finished_at": "2026-11-01T09:01:57Z",
+  "server_time": "2026-11-01T09:01:59Z",
   "slow": false,
-  "message": "The service date you entered differs from the document. Choose the date to use; nothing has been sent for checking yet.",
+  "message": "Action needed: the date of service entered for this document differs from the date in the document, so nothing has been sent for checking. Choose which date is right to continue.",
   "can_stop": false,
   "can_resume": false,
   "can_leave": true,
@@ -91,7 +91,7 @@
   {
    "key": "document_review",
    "label": "Document review",
-   "state": "unavailable"
+   "state": "not_run"
   },
   {
    "key": "independent_checks",
@@ -101,7 +101,7 @@
   {
    "key": "coding_validation",
    "label": "Coding validation",
-   "state": "done"
+   "state": "not_run"
   }
  ],
  "codes": [],
@@ -109,45 +109,32 @@
  "not_separately_coded": [],
  "details_needed": [
   {
-   "id": "c4000000-0000-4000-8000-000000000002",
+   "id": "d81db72ebf1dd97e",
    "fact": "service_date",
    "family_label": "",
-   "prompt": "Which date of service is right for this encounter?",
+   "prompt": "The date of service entered for this document differs from the date in the document.",
    "control": "date",
-   "choices": [],
+   "choices": [
+    {
+     "value": "use_document",
+     "label": "Use document date"
+    }
+   ],
    "allow": [],
-   "document_value": null,
+   "document_value": "2026-10-20",
    "entered_value": "2026-10-01",
    "quote": {
+    "end": 134,
     "text": "Date of service: 2026-10-20",
-    "start": 107,
-    "end": 134
+    "start": 107
    },
    "affects": [],
    "saved": null,
    "addendum_allowed": false
-  },
-  {
-   "id": "c4000000-0000-4000-8000-000000000003",
-   "fact": "extent",
-   "family_label": "Colonoscopy",
-   "prompt": "How far was the colonoscopy advanced?",
-   "control": "confirm",
-   "choices": [],
-   "allow": [
-    "not_documented",
-    "cannot_confirm"
-   ],
-   "document_value": null,
-   "entered_value": null,
-   "quote": null,
-   "affects": [],
-   "saved": null,
-   "addendum_allowed": true
   }
  ],
  "unresolved": [
-  "An office visit is mentioned but is not documented as a separate service."
+  "Office / outpatient evaluation and management: no supported code was found for it."
  ],
  "limitations": [
   "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
@@ -171,21 +158,21 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:00:36Z"
+   "at": "2026-11-01T09:01:48Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:00:38Z"
+   "at": "2026-11-01T09:01:51Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:00:43Z"
+   "at": "2026-11-01T09:01:56Z"
   }
  ]
 }

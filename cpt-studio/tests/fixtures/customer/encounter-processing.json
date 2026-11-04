@@ -1,8 +1,8 @@
 {
  "id": "c1000000-0000-4000-8000-000000000001",
- "title": "Pasted note 2026-11-04 01:14",
- "created_at": "2026-11-01T09:00:00Z",
- "updated_at": "2026-11-01T09:00:01Z",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:03:06Z",
+ "updated_at": "2026-11-01T09:03:13Z",
  "state": "processing",
  "state_label": "Processing",
  "permissions": {
@@ -13,65 +13,75 @@
   "name": "",
   "media_type": "text/plain",
   "size": 618,
-  "page_count": 0,
+  "page_count": 1,
   "revision": 1,
-  "text": "",
-  "pages": [],
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nRiverbend Digestive Health (fictional)\nDate of service: 2026-10-20\nPlace of service: Office, in-person outpatient visit\nPatient status: Established patient, last seen 2026-03-02.\n\nChief complaint\nFollow-up visit number 1.\nFollow-up of chronic constipation.\n\nAssessment and plan\nChronic idiopathic constipation, improved. Continue polyethylene glycol daily.\nA colonoscopy is scheduled for 2026-12-01.\n\nMedical decision making\nLow: one stable chronic illness; prescription drug management.\n\nTime\nTotal time on the date of the encounter was 24 minutes.\n",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 618
+   }
+  ],
   "reading": {
-   "status": "pending",
-   "label": "Reading your document",
+   "status": "ok",
+   "label": "Text read",
    "messages": []
   },
   "original_url": null
  },
  "service_date": {
-  "value": null,
-  "source": "missing",
-  "document_value": null,
-  "document_quote": null,
+  "value": "2026-10-20",
+  "source": "document",
+  "document_value": "2026-10-20",
+  "document_quote": {
+   "end": 134,
+   "text": "Date of service: 2026-10-20",
+   "start": 107
+  },
   "entered_value": null,
   "conflict": false,
   "can_use_document_date": false
  },
  "progress": {
-  "phase": "queued",
+  "phase": "processing",
   "busy": true,
   "steps": [
    {
     "key": "reading",
     "label": "Reading your document",
-    "state": "active",
-    "started_at": "2026-11-01T09:00:03Z",
-    "finished_at": null
+    "state": "done",
+    "started_at": "2026-11-01T09:03:09Z",
+    "finished_at": "2026-11-01T09:03:11Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
-    "state": "waiting",
-    "started_at": null,
-    "finished_at": null
+    "state": "done",
+    "started_at": "2026-11-01T09:03:12Z",
+    "finished_at": "2026-11-01T09:03:14Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
-    "state": "waiting",
-    "started_at": null,
+    "state": "active",
+    "started_at": "2026-11-01T09:03:15Z",
     "finished_at": null
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
-    "state": "waiting",
+    "state": "not_started",
     "started_at": null,
     "finished_at": null
    }
   ],
-  "active_detail": "",
-  "started_at": "2026-11-01T09:00:03Z",
+  "active_detail": "Document review",
+  "started_at": "2026-11-01T09:03:08Z",
   "finished_at": null,
-  "server_time": "2026-11-01T09:00:04Z",
+  "server_time": "2026-11-01T09:03:16Z",
   "slow": false,
-  "message": "Your document is in line to be processed. You can leave this page and come back.",
+  "message": "Working on your document. This page updates by itself.",
   "can_stop": true,
   "can_resume": false,
   "can_leave": true,
@@ -81,7 +91,7 @@
   {
    "key": "document_review",
    "label": "Document review",
-   "state": "waiting"
+   "state": "running"
   },
   {
    "key": "independent_checks",
@@ -119,7 +129,14 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:00:02Z"
+   "at": "2026-11-01T09:03:07Z"
+  },
+  {
+   "event": "text_read",
+   "summary": "Text read",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:03:10Z"
   }
  ]
 }

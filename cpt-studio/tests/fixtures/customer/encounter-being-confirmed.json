@@ -1,8 +1,8 @@
 {
  "id": "c8000000-0000-4000-8000-000000000001",
- "title": "Pasted note 2026-11-04 01:14",
- "created_at": "2026-11-01T09:01:30Z",
- "updated_at": "2026-11-01T09:01:42Z",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:02:45Z",
+ "updated_at": "2026-11-01T09:02:58Z",
  "state": "being_confirmed",
  "state_label": "Being confirmed",
  "permissions": {
@@ -35,9 +35,9 @@
   "source": "document",
   "document_value": "2026-10-20",
   "document_quote": {
+   "end": 134,
    "text": "Date of service: 2026-10-20",
-   "start": 107,
-   "end": 134
+   "start": 107
   },
   "entered_value": null,
   "conflict": false,
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:01:32Z",
-    "finished_at": "2026-11-01T09:01:34Z"
+    "started_at": "2026-11-01T09:02:48Z",
+    "finished_at": "2026-11-01T09:02:50Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:01:35Z",
-    "finished_at": "2026-11-01T09:01:36Z"
+    "started_at": "2026-11-01T09:02:51Z",
+    "finished_at": "2026-11-01T09:02:52Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-01T09:01:37Z",
-    "finished_at": "2026-11-01T09:01:38Z"
+    "started_at": "2026-11-01T09:02:53Z",
+    "finished_at": "2026-11-01T09:02:54Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:01:39Z",
-    "finished_at": "2026-11-01T09:01:41Z"
+    "started_at": "2026-11-01T09:02:55Z",
+    "finished_at": "2026-11-01T09:02:57Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:01:32Z",
-  "finished_at": "2026-11-01T09:01:41Z",
-  "server_time": "2026-11-01T09:01:43Z",
+  "started_at": "2026-11-01T09:02:47Z",
+  "finished_at": "2026-11-01T09:02:57Z",
+  "server_time": "2026-11-01T09:02:59Z",
   "slow": false,
   "message": "We are confirming whether an earlier check completed. Nothing will be sent again until that is settled.",
   "can_stop": false,
@@ -101,7 +101,7 @@
   {
    "key": "coding_validation",
    "label": "Coding validation",
-   "state": "done"
+   "state": "not_run"
   }
  ],
  "codes": [],
@@ -109,14 +109,13 @@
  "not_separately_coded": [],
  "details_needed": [],
  "unresolved": [
-  "An office visit is mentioned but is not documented as a separate service."
+  "Office / outpatient evaluation and management: no supported code was found for it."
  ],
  "limitations": [
   "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
   "CPT code-set membership for the date of service is not verified.",
   "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
-  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document.",
-  "No CMS fee-schedule file applies to the date of service, so those reference checks were not run."
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": true,
@@ -132,21 +131,21 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:31Z"
+   "at": "2026-11-01T09:02:46Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:33Z"
+   "at": "2026-11-01T09:02:49Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:40Z"
+   "at": "2026-11-01T09:02:56Z"
   }
  ]
 }

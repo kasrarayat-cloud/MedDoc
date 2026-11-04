@@ -1,8 +1,8 @@
 {
  "id": "c5000000-0000-4000-8000-000000000001",
- "title": "Pasted note 2026-11-04 01:14",
- "created_at": "2026-11-01T09:00:47Z",
- "updated_at": "2026-11-01T09:01:02Z",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:02:00Z",
+ "updated_at": "2026-11-01T09:02:16Z",
  "state": "reviewed",
  "state_label": "Reviewed",
  "permissions": {
@@ -35,9 +35,9 @@
   "source": "document",
   "document_value": "2026-10-20",
   "document_quote": {
+   "end": 134,
    "text": "Date of service: 2026-10-20",
-   "start": 107,
-   "end": 134
+   "start": 107
   },
   "entered_value": null,
   "conflict": false,
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:00:49Z",
-    "finished_at": "2026-11-01T09:00:51Z"
+    "started_at": "2026-11-01T09:02:03Z",
+    "finished_at": "2026-11-01T09:02:05Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:00:52Z",
-    "finished_at": "2026-11-01T09:00:53Z"
+    "started_at": "2026-11-01T09:02:06Z",
+    "finished_at": "2026-11-01T09:02:07Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-01T09:00:54Z",
-    "finished_at": "2026-11-01T09:00:56Z"
+    "started_at": "2026-11-01T09:02:08Z",
+    "finished_at": "2026-11-01T09:02:10Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:00:57Z",
-    "finished_at": "2026-11-01T09:00:59Z"
+    "started_at": "2026-11-01T09:02:11Z",
+    "finished_at": "2026-11-01T09:02:13Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:00:49Z",
-  "finished_at": "2026-11-01T09:00:59Z",
-  "server_time": "2026-11-01T09:01:07Z",
+  "started_at": "2026-11-01T09:02:02Z",
+  "finished_at": "2026-11-01T09:02:13Z",
+  "server_time": "2026-11-01T09:02:21Z",
   "slow": false,
   "message": "Your results are ready.",
   "can_stop": false,
@@ -115,7 +115,7 @@
    "status": "approved",
    "status_label": "Approved",
    "sub_label": "",
-   "summary": "Office / outpatient evaluation and management: documented as performed on the date of service.",
+   "summary": "The office / outpatient visit is documented on the date of service.",
    "why": {
     "quotes": [
      {
@@ -136,7 +136,7 @@
     "action": "approve",
     "by": "Reviewer",
     "by_kind": "human",
-    "at": "2026-11-01T09:01:00Z",
+    "at": "2026-11-01T09:02:14Z",
     "note": "",
     "modifiers": []
    }
@@ -150,8 +150,7 @@
   "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
   "CPT code-set membership for the date of service is not verified.",
   "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
-  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document.",
-  "No CMS fee-schedule file applies to the date of service, so those reference checks were not run."
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": true,
@@ -164,7 +163,7 @@
    "kind": "draft",
    "fmt": "csv",
    "filename": "CPT-Studio-draft-r1-20261101T090000.csv",
-   "generated_at": "2026-11-01T09:01:05Z",
+   "generated_at": "2026-11-01T09:02:19Z",
    "generated_by": "Reviewer",
    "download_url": "/api/reports/c5000000-0000-4000-8000-000000000003/download",
    "current": true
@@ -174,7 +173,7 @@
    "kind": "approved",
    "fmt": "txt",
    "filename": "CPT-Studio-approved-r1-20261101T090000.txt",
-   "generated_at": "2026-11-01T09:01:03Z",
+   "generated_at": "2026-11-01T09:02:17Z",
    "generated_by": "Reviewer",
    "download_url": "/api/reports/c5000000-0000-4000-8000-000000000004/download",
    "current": true
@@ -186,49 +185,49 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:00:48Z"
+   "at": "2026-11-01T09:02:01Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:00:50Z"
+   "at": "2026-11-01T09:02:04Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:00:55Z"
+   "at": "2026-11-01T09:02:09Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:00:58Z"
+   "at": "2026-11-01T09:02:12Z"
   },
   {
    "event": "decision_recorded",
    "summary": "Review decision recorded",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:01Z"
+   "at": "2026-11-01T09:02:15Z"
   },
   {
    "event": "report_created",
    "summary": "Export created",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:04Z"
+   "at": "2026-11-01T09:02:18Z"
   },
   {
    "event": "report_created",
    "summary": "Export created",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:06Z"
+   "at": "2026-11-01T09:02:20Z"
   }
  ]
 }

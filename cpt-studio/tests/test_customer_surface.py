@@ -101,8 +101,12 @@ def denied_values():
         values |= {assessment.sha256, assessment.engine_version, assessment.profiles_version}
         for check in assessment.encounter_checks or []:
             values |= {check.get('id') if '.' in str(check.get('id')) else None, check.get('source'), check.get('detail')}
+        # a retrieved CMS passage's release is the dated source a customer is shown: the modifier review cites it by
+        # design (CORE-UX-DESIGN.md 4, 7: "cites the dated CMS source"); every other retrieval string stays denied
+        cited = {str(passage.get('release')) for entry in assessment.retrieval or [] if isinstance(entry, dict)
+                 for passage in entry.get('passages') or [] if isinstance(passage, dict)}
         for item in _strings([assessment.participants, assessment.retrieval]):
-            if HEX.fullmatch(item) or len(item) >= 24:
+            if (HEX.fullmatch(item) or len(item) >= 24) and item not in cited:
                 values.add(item)
         for source in assessment.reference_sources or []:
             values |= {source.get('sha256'), source.get('url'), source.get('key')}

@@ -1,20 +1,20 @@
 {
  "user": {
-  "id": "b0000000-0000-4000-8000-000000000002",
-  "label": "CPT Studio review agent (automated agent)",
-  "initials": "RA",
+  "id": "ca100000-0000-4000-8000-000000000001",
+  "label": "Reviewbot (automated agent)",
+  "initials": "R",
   "actor_kind": "agent"
  },
  "workspace": {
-  "id": "a0000000-0000-4000-8000-000000000001",
+  "id": "ca000000-0000-4000-8000-000000000002",
   "name": "Gastroenterology"
  },
  "role": "reviewer",
  "can_review": true,
  "acknowledgement": "I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.",
  "counts": {
-  "documents": 11,
-  "queue": 5
+  "documents": 14,
+  "queue": 7
  },
  "synthetic_only": true
 }

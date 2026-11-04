@@ -664,9 +664,12 @@ function progressStep(step, active, animate, detail) {
   return `<li class="progress-step${active && animate ? ' is-animated' : ''}" data-step="${step.key}" data-state="${step.state}"><span class="step-mark" aria-hidden="true">${iconName ? icon(iconName) : ''}</span><span class="step-text"><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(stateText)}${showDetail ? ` · ${escapeHtml(detail)}` : ''}</small></span></li>`;
 }
 
-function progressError(error) {
+// The error's action is offered only to a member who may take it, and Resume only once (the panel's own Resume button
+// may already offer it).
+function progressError(error, { canAct = false, resumeShown = false } = {}) {
   if (!error || typeof error !== 'object' || !text(error.text)) return '';
-  const action = lookup(ERROR_ACTIONS, error.action, null);
+  const offered = lookup(ERROR_ACTIONS, error.action, null);
+  const action = canAct && offered && !(offered[0] === 'resume' && resumeShown) ? offered : null;
   return `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(error.text)}</p>${action ? `<button type="button" class="button secondary" data-action="${action[0]}">${escapeHtml(action[1])}</button>` : ''}</div></div>`;
 }
 
@@ -691,13 +694,15 @@ function progressPanel(doc, ui = {}) {
   const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
   const slow = progress.slow === true && busy;
   const headIcon = phase === 'action_needed' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
+  // the error says its own sentence below; the head does not repeat it
+  const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
-    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(PHASE_TITLES[phase])}</h2>${message ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(message)}</p>` : ''}</div></div>`
+    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(PHASE_TITLES[phase])}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
     + (showAck ? uploadAck(ui.ack, '', ['waiting', 'active', 'not_started'].includes(steps[0].state)) : '')
     + `<ol class="progress-steps">${steps.map((step, index) => progressStep(step, index === activeIndex, animate, detail)).join('')}</ol>`
     + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
     + `<p class="progress-reconnecting" role="status"${ui.reconnecting && shouldPoll(doc) ? '' : ' hidden'}>Reconnecting…</p>`
-    + progressError(progress.error)
+    + progressError(progress.error, { canAct, resumeShown: Boolean(resume) })
     + (leave ? `<p class="leave-note">${escapeHtml(leave)}</p>` : '')
     + (stop || resume ? `<div class="progress-actions">${stop}${resume}</div>` : '')
     + '</section>';
@@ -739,7 +744,10 @@ function dateControl(row, ui) {
   const pending = detailAnswer(row, ui);
   const documented = formatDate(row.document_value, true);
   const entered = formatDate(row.entered_value, true);
-  const useDocument = documented ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
+  // offered exactly where the server offers it (a choice of the row: the document states one date, and the member's
+  // entry contradicts it), so the save the button makes is one the server accepts; never for a date only asked
+  const offered = objects(row.choices).some(choice => choice.value === USE_DOCUMENT);
+  const useDocument = documented && offered ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
   const typed = parseIsoDate(pending) ? pending : '';
   return `<div class="detail-dates"><div class="detail-document-date"><span class="detail-date-label">Document</span><strong>${escapeHtml(documented || 'Not stated')}</strong>${quoteLine(row.quote)}</div><div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${escapeHtml(entered || 'Nothing entered')}</strong></div></div>`
     + `<div class="detail-controls">${useDocument}<label class="detail-date-input">Or enter the date of service<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${allowedAnswers(row, pending)}</div>`;

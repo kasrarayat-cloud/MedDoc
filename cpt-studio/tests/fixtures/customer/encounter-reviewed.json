@@ -1,43 +1,43 @@
 {
- "id": "c1000000-0000-4000-8000-000000000005",
- "title": "Colonoscopy, two lesions",
- "created_at": "2026-10-27T08:10:00Z",
- "updated_at": "2026-10-27T08:31:44Z",
+ "id": "cc000000-0000-4000-8000-000000000001",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:00:16Z",
+ "updated_at": "2026-11-01T09:00:38Z",
  "state": "reviewed",
  "state_label": "Reviewed",
  "permissions": {
   "can_review": true
  },
  "document": {
-  "kind": "upload",
-  "name": "synthetic-colonoscopy-two-lesions.pdf",
-  "media_type": "application/pdf",
-  "size": 47002,
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 419,
   "page_count": 1,
   "revision": 1,
-  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nHarbor Point GI - Colonoscopy report\nPatient: Ana Ruiz (fictional) | Date of service: 2026-10-27\nIndication: Evaluation of rectal bleeding.\n\nProcedure: The colonoscope was advanced to the cecum and the terminal ileum was entered.\nFindings: Lesion 1, ascending colon: a 3 mm polyp was removed with cold biopsy forceps. Lesion 2, rectum: a 10 mm polyp was removed with a cold snare. The two lesions are separate.\nImpression: Two polyps removed by different techniques.",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-11-03\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 3 mm sessile polyp in the ascending colon was biopsied with cold forceps.\nA 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.\n",
   "pages": [
    {
     "page": 1,
     "start": 0,
-    "end": 510
+    "end": 419
    }
   ],
   "reading": {
    "status": "ok",
-   "label": "PDF text layer",
+   "label": "Text read",
    "messages": []
   },
-  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000005/original"
+  "original_url": null
  },
  "service_date": {
-  "value": "2026-10-27",
+  "value": "2026-11-03",
   "source": "document",
-  "document_value": "2026-10-27",
+  "document_value": "2026-11-03",
   "document_quote": {
-   "text": "Date of service: 2026-10-27",
-   "start": 113,
-   "end": 140
+   "end": 125,
+   "text": "Date of service: 2026-11-03",
+   "start": 98
   },
   "entered_value": null,
   "conflict": false,
@@ -51,37 +51,37 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-10-27T08:10:04Z",
-    "finished_at": "2026-10-27T08:10:09Z"
+    "started_at": "2026-11-01T09:00:19Z",
+    "finished_at": "2026-11-01T09:00:21Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-10-27T08:10:09Z",
-    "finished_at": "2026-10-27T08:10:11Z"
+    "started_at": "2026-11-01T09:00:22Z",
+    "finished_at": "2026-11-01T09:00:23Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-10-27T08:10:11Z",
-    "finished_at": "2026-10-27T08:12:40Z"
+    "started_at": "2026-11-01T09:00:24Z",
+    "finished_at": "2026-11-01T09:00:26Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-10-27T08:12:40Z",
-    "finished_at": "2026-10-27T08:12:52Z"
+    "started_at": "2026-11-01T09:00:27Z",
+    "finished_at": "2026-11-01T09:00:29Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-10-27T08:10:04Z",
-  "finished_at": "2026-10-27T08:12:52Z",
-  "server_time": "2026-10-27T08:40:00Z",
+  "started_at": "2026-11-01T09:00:18Z",
+  "finished_at": "2026-11-01T09:00:29Z",
+  "server_time": "2026-11-01T09:00:41Z",
   "slow": false,
-  "message": "Results are ready.",
+  "message": "Your results are ready.",
   "can_stop": false,
   "can_resume": false,
   "can_leave": true,
@@ -106,60 +106,8 @@
  ],
  "codes": [
   {
-   "id": "c1a00000-0000-4000-8000-000000000006",
+   "id": "cc000000-0000-4000-8000-000000000002",
    "number": 1,
-   "code": "45385",
-   "units": 1,
-   "modifiers": [],
-   "modifier_review": {
-    "options": [
-     "59",
-     "XS"
-    ],
-    "text": "Lesion 1 (ascending colon) and lesion 2 (rectum) are documented as separate lesions. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
-    "sources": [
-     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
-    ]
-   },
-   "status": "approved",
-   "status_label": "Approved",
-   "sub_label": "Agent-executed synthetic review — not clinical approval",
-   "summary": "The colonoscopy reached the cecum and lesion 2, a 10 mm rectal polyp, was removed with a cold snare.",
-   "why": {
-    "quotes": [
-     {
-      "text": "Lesion 2, rectum: a 10 mm polyp was removed with a cold snare.",
-      "start": 362,
-      "end": 424,
-      "page": 1,
-      "exact": true
-     },
-     {
-      "text": "The colonoscope was advanced to the cecum",
-      "start": 196,
-      "end": 237,
-      "page": 1,
-      "exact": true
-     }
-    ],
-    "qualifications": []
-   },
-   "detail_ids": [],
-   "allowed_actions": [
-    "revoke"
-   ],
-   "decision": {
-    "action": "approve",
-    "by": "CPT Studio review agent (automated agent)",
-    "by_kind": "agent",
-    "at": "2026-10-27T08:29:10Z",
-    "note": "Agent-executed synthetic review: the snare removal of lesion 2 is documented.",
-    "modifiers": []
-   }
-  },
-  {
-   "id": "c1a00000-0000-4000-8000-000000000007",
-   "number": 2,
    "code": "45380",
    "units": 1,
    "modifiers": [
@@ -170,34 +118,27 @@
      "59",
      "XS"
     ],
-    "text": "Lesion 1 (ascending colon) and lesion 2 (rectum) are documented as separate lesions. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+    "text": "Separate lesions are documented: 45380 is for the forceps biopsy (cold forceps) of the 3 mm sessile polyp in the ascending colon; 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon. In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
     "sources": [
-     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+     "Medicare Claims Processing Manual (Pub. 100-04), Chapter 12: Physicians/Nonphysician Practitioners (Rev. 13753; Issued: 05-07-26; in effect from 2026-05-07), page 98"
     ]
    },
    "status": "approved",
    "status_label": "Approved",
    "sub_label": "Agent-executed synthetic review — not clinical approval",
-   "summary": "Lesion 1, a 3 mm polyp in the ascending colon, was removed with cold biopsy forceps.",
+   "summary": "The colonoscopy documents forceps biopsy (cold forceps) of the 3 mm sessile polyp in the ascending colon.",
    "why": {
     "quotes": [
      {
-      "text": "Lesion 1, ascending colon: a 3 mm polyp was removed with cold biopsy forceps.",
-      "start": 284,
-      "end": 361,
-      "page": 1,
-      "exact": true
-     },
-     {
-      "text": "The two lesions are separate.",
-      "start": 425,
-      "end": 454,
+      "text": "A 3 mm sessile polyp in the ascending colon was biopsied with cold forceps.",
+      "start": 270,
+      "end": 345,
       "page": 1,
       "exact": true
      }
     ],
     "qualifications": [
-     "Lesion 1 and lesion 2 are documented as separate lesions treated by different techniques."
+     "Separate lesions are documented: 45380 is for the forceps biopsy (cold forceps) of the 3 mm sessile polyp in the ascending colon; 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon. In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
     ]
    },
    "detail_ids": [],
@@ -206,48 +147,59 @@
    ],
    "decision": {
     "action": "approve",
-    "by": "CPT Studio review agent (automated agent)",
+    "by": "Reviewbot (automated agent)",
     "by_kind": "agent",
-    "at": "2026-10-27T08:30:02Z",
-    "note": "Agent-executed synthetic review: separate lesion, modifier XS chosen.",
+    "at": "2026-11-01T09:00:30Z",
+    "note": "",
     "modifiers": [
      "XS"
     ]
    }
   },
   {
-   "id": "c1a00000-0000-4000-8000-000000000008",
-   "number": 3,
-   "code": "45378",
+   "id": "cc000000-0000-4000-8000-000000000003",
+   "number": 2,
+   "code": "45385",
    "units": 1,
    "modifiers": [],
-   "modifier_review": null,
-   "status": "excluded",
-   "status_label": "Excluded",
-   "sub_label": "Exclusion confirmed in review.",
-   "summary": "A diagnostic colonoscopy is part of the removals already suggested, so it is not suggested on its own.",
+   "modifier_review": {
+    "options": [
+     "59",
+     "XS"
+    ],
+    "text": "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon; 45380 is for the forceps biopsy (cold forceps) of the 3 mm sessile polyp in the ascending colon. In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
+    "sources": [
+     "Medicare Claims Processing Manual (Pub. 100-04), Chapter 12: Physicians/Nonphysician Practitioners (Rev. 13753; Issued: 05-07-26; in effect from 2026-05-07), page 98"
+    ]
+   },
+   "status": "approved",
+   "status_label": "Approved",
+   "sub_label": "Agent-executed synthetic review — not clinical approval",
+   "summary": "The colonoscopy documents snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon.",
    "why": {
     "quotes": [
      {
-      "text": "The colonoscope was advanced to the cecum and the terminal ileum was entered.",
-      "start": 196,
-      "end": 273,
+      "text": "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.",
+      "start": 346,
+      "end": 418,
       "page": 1,
       "exact": true
      }
     ],
-    "qualifications": []
+    "qualifications": [
+     "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon; 45380 is for the forceps biopsy (cold forceps) of the 3 mm sessile polyp in the ascending colon. In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
+    ]
    },
    "detail_ids": [],
    "allowed_actions": [
     "revoke"
    ],
    "decision": {
-    "action": "confirm",
-    "by": "CPT Studio review agent (automated agent)",
+    "action": "approve",
+    "by": "Reviewbot (automated agent)",
     "by_kind": "agent",
-    "at": "2026-10-27T08:30:40Z",
-    "note": "Agent-executed synthetic review: the exclusion is right.",
+    "at": "2026-11-01T09:00:36Z",
+    "note": "",
     "modifiers": []
    }
   }
@@ -257,9 +209,10 @@
  "details_needed": [],
  "unresolved": [],
  "limitations": [
-  "CPT descriptors are not shown: no licensed CPT content is connected.",
-  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
-  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": true,
@@ -268,68 +221,96 @@
  },
  "reports": [
   {
-   "id": "c1e00000-0000-4000-8000-000000000001",
+   "id": "cc000000-0000-4000-8000-000000000004",
    "kind": "approved",
-   "fmt": "txt",
-   "filename": "cpt-studio-approved-colonoscopy-two-lesions.txt",
-   "generated_at": "2026-10-27T08:31:40Z",
-   "generated_by": "CPT Studio review agent (automated agent)",
-   "download_url": "/api/reports/c1e00000-0000-4000-8000-000000000001/download",
+   "fmt": "csv",
+   "filename": "CPT-Studio-approved-r1-20261101T090000.csv",
+   "generated_at": "2026-11-01T09:00:39Z",
+   "generated_by": "Reviewbot (automated agent)",
+   "download_url": "/api/reports/cc000000-0000-4000-8000-000000000004/download",
    "current": true
   },
   {
-   "id": "c1e00000-0000-4000-8000-000000000002",
-   "kind": "draft",
-   "fmt": "csv",
-   "filename": "cpt-studio-draft-colonoscopy-two-lesions.csv",
-   "generated_at": "2026-10-27T08:20:11Z",
-   "generated_by": "CPT Studio review agent (automated agent)",
-   "download_url": "/api/reports/c1e00000-0000-4000-8000-000000000002/download",
+   "id": "cc000000-0000-4000-8000-000000000005",
+   "kind": "approved",
+   "fmt": "txt",
+   "filename": "CPT-Studio-approved-r1-20261101T090000.txt",
+   "generated_at": "2026-11-01T09:00:33Z",
+   "generated_by": "Reviewbot (automated agent)",
+   "download_url": "/api/reports/cc000000-0000-4000-8000-000000000005/download",
    "current": false
   }
  ],
  "activity": [
   {
-   "event": "document.added",
+   "event": "document_added",
    "summary": "Document added",
-   "actor": "CPT Studio review agent (automated agent)",
-   "actor_kind": "agent",
-   "at": "2026-10-27T08:10:00Z"
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:00:17Z"
   },
   {
-   "event": "report.generated",
-   "summary": "Draft download created",
-   "actor": "CPT Studio review agent (automated agent)",
-   "actor_kind": "agent",
-   "at": "2026-10-27T08:20:11Z"
+   "event": "text_read",
+   "summary": "Text read",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:20Z"
   },
   {
-   "event": "decision.recorded",
-   "summary": "Decision recorded for 45385",
-   "actor": "CPT Studio review agent (automated agent)",
-   "actor_kind": "agent",
-   "at": "2026-10-27T08:29:10Z"
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:25Z"
   },
   {
-   "event": "decision.recorded",
-   "summary": "Decision recorded for 45380",
-   "actor": "CPT Studio review agent (automated agent)",
-   "actor_kind": "agent",
-   "at": "2026-10-27T08:30:02Z"
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:28Z"
   },
   {
-   "event": "decision.recorded",
-   "summary": "Decision recorded for 45378",
-   "actor": "CPT Studio review agent (automated agent)",
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewbot (automated agent)",
    "actor_kind": "agent",
-   "at": "2026-10-27T08:30:40Z"
+   "at": "2026-11-01T09:00:31Z"
   },
   {
-   "event": "report.generated",
-   "summary": "Approved download created",
-   "actor": "CPT Studio review agent (automated agent)",
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewbot (automated agent)",
    "actor_kind": "agent",
-   "at": "2026-10-27T08:31:40Z"
+   "at": "2026-11-01T09:00:32Z"
+  },
+  {
+   "event": "report_created",
+   "summary": "Export created",
+   "actor": "Reviewbot (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-11-01T09:00:34Z"
+  },
+  {
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewbot (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-11-01T09:00:35Z"
+  },
+  {
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewbot (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-11-01T09:00:37Z"
+  },
+  {
+   "event": "report_created",
+   "summary": "Export created",
+   "actor": "Reviewbot (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-11-01T09:00:40Z"
   }
  ]
 }

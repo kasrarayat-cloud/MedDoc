@@ -1,28 +1,28 @@
 {
- "id": "c1000000-0000-4000-8000-000000000011",
- "title": "Colonoscopy report, just uploaded",
- "created_at": "2026-11-02T14:20:00Z",
- "updated_at": "2026-11-02T14:20:00Z",
+ "id": "c0000000-0000-4000-8000-000000000001",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:03:17Z",
+ "updated_at": "2026-11-01T09:03:18Z",
  "state": "processing",
  "state_label": "Processing",
  "permissions": {
   "can_review": true
  },
  "document": {
-  "kind": "upload",
-  "name": "synthetic-colonoscopy-upload.pdf",
-  "media_type": "application/pdf",
-  "size": 41200,
-  "page_count": 1,
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 619,
+  "page_count": 0,
   "revision": 1,
   "text": "",
   "pages": [],
   "reading": {
    "status": "pending",
-   "label": "Not read yet",
+   "label": "Reading your document",
    "messages": []
   },
-  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000011/original"
+  "original_url": null
  },
  "service_date": {
   "value": null,
@@ -67,11 +67,11 @@
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-02T14:20:00Z",
+  "started_at": "2026-11-01T09:03:20Z",
   "finished_at": null,
-  "server_time": "2026-11-02T14:20:03Z",
+  "server_time": "2026-11-01T09:03:21Z",
   "slow": false,
-  "message": "Your document is in line to be read. It usually starts within a minute.",
+  "message": "Waiting to start. Documents are processed one at a time, in the order they arrive.",
   "can_stop": true,
   "can_resume": false,
   "can_leave": true,
@@ -100,9 +100,10 @@
  "details_needed": [],
  "unresolved": [],
  "limitations": [
-  "CPT descriptors are not shown: no licensed CPT content is connected.",
-  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
-  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": false,
@@ -114,11 +115,11 @@
  "reports": [],
  "activity": [
   {
-   "event": "document.added",
+   "event": "document_added",
    "summary": "Document added",
-   "actor": "Synthetic Reviewer",
+   "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-02T14:20:00Z"
+   "at": "2026-11-01T09:03:19Z"
   }
  ]
 }

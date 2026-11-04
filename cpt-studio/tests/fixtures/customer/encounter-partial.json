@@ -1,43 +1,43 @@
 {
- "id": "c1000000-0000-4000-8000-000000000006",
- "title": "Upper endoscopy with duodenal biopsies",
- "created_at": "2026-10-26T11:00:00Z",
- "updated_at": "2026-10-26T11:03:20Z",
+ "id": "cf000000-0000-4000-8000-000000000001",
+ "title": "Pasted note 2026-11-04 03:03",
+ "created_at": "2026-11-01T09:01:15Z",
+ "updated_at": "2026-11-01T09:01:29Z",
  "state": "ready",
  "state_label": "Ready for review",
  "permissions": {
   "can_review": true
  },
  "document": {
-  "kind": "upload",
-  "name": "synthetic-duodenal-biopsies.docx",
-  "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "size": 18733,
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 618,
   "page_count": 1,
   "revision": 1,
-  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nWillow Creek Endoscopy - Upper endoscopy report\nPatient: Ruth Ames (fictional) | Date of service: 2026-10-26\nIndication: Iron-deficiency anemia.\n\nProcedure: The endoscope was passed to the second part of the duodenum. Cold-forceps biopsies were taken from the duodenal bulb and the second portion.\nImpression: Normal-appearing duodenum. Biopsies taken.",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nRiverbend Digestive Health (fictional)\nDate of service: 2026-10-20\nPlace of service: Office, in-person outpatient visit\nPatient status: Established patient, last seen 2026-03-02.\n\nChief complaint\nFollow-up visit number 9.\nFollow-up of chronic constipation.\n\nAssessment and plan\nChronic idiopathic constipation, improved. Continue polyethylene glycol daily.\nA colonoscopy is scheduled for 2026-12-01.\n\nMedical decision making\nLow: one stable chronic illness; prescription drug management.\n\nTime\nTotal time on the date of the encounter was 24 minutes.\n",
   "pages": [
    {
     "page": 1,
     "start": 0,
-    "end": 396
+    "end": 618
    }
   ],
   "reading": {
    "status": "ok",
-   "label": "Word document",
+   "label": "Text read",
    "messages": []
   },
-  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000006/original"
+  "original_url": null
  },
  "service_date": {
-  "value": "2026-10-26",
+  "value": "2026-10-20",
   "source": "document",
-  "document_value": "2026-10-26",
+  "document_value": "2026-10-20",
   "document_quote": {
-   "text": "Date of service: 2026-10-26",
-   "start": 125,
-   "end": 152
+   "end": 134,
+   "text": "Date of service: 2026-10-20",
+   "start": 107
   },
   "entered_value": null,
   "conflict": false,
@@ -51,37 +51,37 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-10-26T11:00:04Z",
-    "finished_at": "2026-10-26T11:00:09Z"
+    "started_at": "2026-11-01T09:01:18Z",
+    "finished_at": "2026-11-01T09:01:20Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-10-26T11:00:09Z",
-    "finished_at": "2026-10-26T11:00:11Z"
+    "started_at": "2026-11-01T09:01:21Z",
+    "finished_at": "2026-11-01T09:01:22Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-10-26T11:00:11Z",
-    "finished_at": "2026-10-26T11:02:40Z"
+    "started_at": "2026-11-01T09:01:23Z",
+    "finished_at": "2026-11-01T09:01:25Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-10-26T11:02:40Z",
-    "finished_at": "2026-10-26T11:02:52Z"
+    "started_at": "2026-11-01T09:01:26Z",
+    "finished_at": "2026-11-01T09:01:28Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-10-26T11:00:04Z",
-  "finished_at": "2026-10-26T11:03:20Z",
-  "server_time": "2026-10-26T11:10:00Z",
+  "started_at": "2026-11-01T09:01:17Z",
+  "finished_at": "2026-11-01T09:01:28Z",
+  "server_time": "2026-11-01T09:01:30Z",
   "slow": false,
-  "message": "Results are ready, but one of the independent checks could not finish. The suggestions below were checked without it.",
+  "message": "Your results are ready, but some checks could not be completed. Each code shows what was checked.",
   "can_stop": false,
   "can_resume": false,
   "can_leave": true,
@@ -106,22 +106,22 @@
  ],
  "codes": [
   {
-   "id": "c1a00000-0000-4000-8000-000000000009",
+   "id": "cf000000-0000-4000-8000-000000000002",
    "number": 1,
-   "code": "43239",
+   "code": "99213",
    "units": 1,
    "modifiers": [],
    "modifier_review": null,
    "status": "ready",
    "status_label": "Ready for review",
    "sub_label": "",
-   "summary": "The upper endoscopy is documented with cold-forceps biopsies of the duodenal bulb and second portion.",
+   "summary": "The office / outpatient visit is documented on the date of service.",
    "why": {
     "quotes": [
      {
-      "text": "Cold-forceps biopsies were taken from the duodenal bulb and the second portion.",
-      "start": 262,
-      "end": 341,
+      "text": "Total time on the date of the encounter was 24 minutes.",
+      "start": 562,
+      "end": 617,
       "page": 1,
       "exact": true
      }
@@ -141,26 +141,47 @@
  "details_needed": [],
  "unresolved": [],
  "limitations": [
-  "CPT descriptors are not shown: no licensed CPT content is connected.",
-  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
-  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document.",
-  "One independent check could not finish for this document, so the suggestion was checked without it."
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": true,
   "approved": false,
   "blockers": [
-   "43239 is waiting for a review decision."
+   "99213 has no decision yet."
   ]
  },
  "reports": [],
  "activity": [
   {
-   "event": "document.added",
+   "event": "document_added",
    "summary": "Document added",
-   "actor": "Synthetic Reviewer",
+   "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-10-26T11:00:00Z"
+   "at": "2026-11-01T09:01:16Z"
+  },
+  {
+   "event": "text_read",
+   "summary": "Text read",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:01:19Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:01:24Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:01:27Z"
   }
  ]
 }

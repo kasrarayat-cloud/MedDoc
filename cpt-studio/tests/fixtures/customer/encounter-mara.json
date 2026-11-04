@@ -1,8 +1,8 @@
 {
- "id": "c1000000-0000-4000-8000-000000000010",
- "title": "Mara Ellison — upper endoscopy and colonoscopy",
- "created_at": "2026-11-03T11:02:00Z",
- "updated_at": "2026-11-03T23:40:00Z",
+ "id": "cd000000-0000-4000-8000-000000000001",
+ "title": "Mara Ellison (synthetic)",
+ "created_at": "2026-11-01T09:00:42Z",
+ "updated_at": "2026-11-01T09:00:55Z",
  "state": "ready",
  "state_label": "Ready for review",
  "permissions": {
@@ -10,44 +10,34 @@
  },
  "document": {
   "kind": "upload",
-  "name": "synthetic-mara-ellison-gi-report.pdf",
-  "media_type": "application/pdf",
-  "size": 61340,
-  "page_count": 3,
+  "name": "mara-ellison-synthetic.txt",
+  "media_type": "text/plain",
+  "size": 7185,
+  "page_count": 1,
   "revision": 1,
   "text": "SYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL\nCEDAR VALE  /  GASTROENTEROLOGY\nGI procedure report\nUpper endoscopy and colonoscopy | Outpatient professional record\nMara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03\nGI-DEMO-20261103-ME  |  Synthetic test only - not a medical record\nPage 1\nENCOUNTER AND PRE-PROCEDURE ASSESSMENT\nPatient\nMara Ellison | 68-year-old woman\nRecord / service date\nGI-DEMO-20261103-ME | 2026-11-03\nEndoscopist\nMaya Chen, MD (fictional clinician)\nSetting / billing context\nOutpatient endoscopy; Medicare Part B professional claim\nUpper procedure time\n09:12-09:24\nLower procedure time\n09:31-10:04\nIndications: Four months of intermittent solid-food dysphagia and post-meal epigastric discomfort; three months of\nintermittent bright-red blood per rectum and a change in bowel habits. No hematemesis, melena, unintentional weight loss\nor persistent vomiting. These examinations were ordered to evaluate active symptoms.\nPreparation: The history and examination were reviewed, informed consent was obtained, and a procedural time-out was\ncompleted. Stable hypertension is part of the medical history; no separate hypertension management was provided today.\nNo antiplatelet or anticoagulant use. No known drug allergies. ASA class II.\nSedation: Monitored anesthesia care was administered by a separate anesthesia team. Its medications, time and billing\nare documented in a separate record, not in this report.\nUPPER ENDOSCOPY - PERFORMED TODAY\nThe upper endoscope was introduced through the mouth and advanced to the second portion of the duodenum. The\nexamination was completed without limitation, with adequate visualization and no immediate complication.\nEsophagus: Normal caliber and mucosa. No obstructing lesion, stricture, varices or visible Barrett-type change. Biopsies\nwere obtained with cold forceps from the proximal and distal esophagus for histologic evaluation (specimen B).\nEsophageal dilation was considered before the procedure but was not performed because no narrowing was identified.\nStomach: Mild patchy antral erythema without ulceration or active bleeding. Cold-forceps biopsies were obtained from the\ngastric antrum and body for histology and Helicobacter pylori testing (specimen A). Retroflexion showed no additional\nlesion.\nDuodenum: Bulb and second portion appeared normal. No duodenal biopsy or therapy was performed. No endoscopic\nultrasound or biliary procedure was performed during this examination.\nCompletion: Specimens A and B were retrieved. Estimated blood loss was minimal. Histology is pending.\n\n\nSYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL\nCEDAR VALE  /  GASTROENTEROLOGY\nGI procedure report\nUpper endoscopy and colonoscopy | Outpatient professional record\nMara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03\nGI-DEMO-20261103-ME  |  Synthetic test only - not a medical record\nPage 2\nCOLONOSCOPY - PERFORMED TODAY\nAfter digital rectal examination, the colonoscope was advanced to the cecum. The appendiceal orifice and ileocecal valve\nwere identified and photographed. The terminal ileum was entered for approximately 5 cm and appeared normal; no ileal\nbiopsy was taken.\nExtent\nComplete to cecum and terminal ileum\nPreparation quality\nBBPS: right 2, transverse 3, left 3; total 8/9\nInspection\nWithdrawal inspection: 14 minutes, excluding treatment\nLimitations / complications\nNone; no immediate complication\nLESIONS AND INTERVENTIONS\nCOL-1 - ascending colon: A 2 mm sessile polyp was completely removed in one bite with jumbo cold biopsy forceps and\nretrieved as specimen C. Snare capture was technically difficult because of its position behind a fold. No snare resection\nwas performed on COL-1.\nCOL-2 - sigmoid colon: An 8 mm sessile polyp was removed en bloc by cold snare and retrieved as specimen D. Resection\nwas complete. No biopsy forceps were used on COL-2.\nResection-site care: One prophylactic clip was placed at the COL-2 resection site. There was no active bleeding and no\nseparate bleeding lesion was treated. Neither lesion required a lifting injection, cautery or ablation.\nLesion\nLocation / size\nTechnique actually performed\nSpecimen\nCOL-1\nAscending colon\n2 mm\nJumbo cold biopsy forceps; complete removal in one bite\nC\nCOL-2\nSigmoid colon\n8 mm\nCold snare; en bloc removal\nD\nCOL-1 and COL-2 are different lesions at separate colonic sites. The forceps removal was not a biopsy of, or a completion\nstep for, the snare-treated sigmoid lesion. Both specimens were placed in separate labelled containers.\nOther findings: Non-bleeding grade I internal hemorrhoids were seen on rectal retroflexion. The remaining colon appeared\nnormal. No additional lesion was sampled or treated. No colonic stricture, mass or active colitis was seen.\nCompletion: Both polyps were completely removed and retrieved. Estimated blood loss was minimal. The patient tolerated\nthe procedure and was transferred to recovery in stable condition.\n\n\nSYNTHETIC TEST CASE - ALL PEOPLE AND CLINICAL EVENTS ARE FICTIONAL\nCEDAR VALE  /  GASTROENTEROLOGY\nGI procedure report\nUpper endoscopy and colonoscopy | Outpatient professional record\nMara Ellison  |  DOB 1958-04-16  |  Date of service 2026-11-03\nGI-DEMO-20261103-ME  |  Synthetic test only - not a medical record\nPage 3\nSPECIMEN RECONCILIATION\nContainer\nSource\nMaterial / purpose\nA\nGastric antrum and body\nCold-forceps biopsies; histology and H. pylori testing\nB\nProximal and distal esophagus\nCold-forceps biopsies; evaluation of dysphagia\nC\nCOL-1: ascending colon\n2 mm polyp; jumbo cold biopsy forceps removal\nD\nCOL-2: sigmoid colon\n8 mm polyp; cold-snare removal\nPOST-PROCEDURE ASSESSMENT\n1. Intermittent solid-food dysphagia without a visible obstructing cause on today's examination; esophageal biopsies\npending.\n2. Mild antral erythema; gastric biopsies pending. H. pylori infection, atrophic gastritis and intestinal metaplasia are not\nestablished today.\n3. Two distinct colonic polyps, completely removed by different techniques. Adenoma, dysplasia and malignancy cannot be\nassigned from appearance alone; histology is pending.\n4. Non-bleeding grade I internal hemorrhoids. The source of the intermittent hematochezia has not been definitively\nestablished.\nHISTORICAL AND PLANNED CARE - NOT SERVICES PERFORMED TODAY\nHistorical: An outside upper endoscopy dated 2024-06-12 reportedly showed mild gastric erythema. That examination was\na prior service, not a second upper endoscopy on 2026-11-03.\nPlanned: An EUS appointment for a pancreatic cyst seen on an outside MRI was arranged before this encounter for\n2026-11-17. No EUS, cyst aspiration or ERCP was performed today. No separate cyst-management visit occurred today.\nFOLLOW-UP AND AUTHENTICATION\nDischarge after standard recovery criteria are met. Review pathology with the gastroenterologist in approximately two\nweeks. The surveillance interval will be determined after histology. The patient received routine post-endoscopy\nprecautions. No separate office evaluation and management encounter or office-visit time is documented on this date.\nAuthenticated: Maya Chen, MD | 2026-11-03 at 10:22\nSynthetic clinician attestation for this fictional test case only.\n",
   "pages": [
    {
     "page": 1,
     "start": 0,
-    "end": 2586
-   },
-   {
-    "page": 2,
-    "start": 2589,
-    "end": 4957
-   },
-   {
-    "page": 3,
-    "start": 4960,
-    "end": 7184
+    "end": 7185
    }
   ],
   "reading": {
    "status": "ok",
-   "label": "PDF text layer",
+   "label": "Text read",
    "messages": []
   },
-  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000010/original"
+  "original_url": "/api/encounters/cd000000-0000-4000-8000-000000000001/original"
  },
  "service_date": {
   "value": "2026-11-03",
   "source": "document",
   "document_value": "2026-11-03",
   "document_quote": {
+   "end": 246,
    "text": "Date of service 2026-11-03",
-   "start": 220,
-   "end": 246
+   "start": 220
   },
   "entered_value": null,
   "conflict": false,
@@ -61,37 +51,37 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-03T23:30:04Z",
-    "finished_at": "2026-11-03T23:30:09Z"
+    "started_at": "2026-11-01T09:00:45Z",
+    "finished_at": "2026-11-01T09:00:47Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-03T23:30:09Z",
-    "finished_at": "2026-11-03T23:30:11Z"
+    "started_at": "2026-11-01T09:00:48Z",
+    "finished_at": "2026-11-01T09:00:49Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-03T23:30:11Z",
-    "finished_at": "2026-11-03T23:32:40Z"
+    "started_at": "2026-11-01T09:00:50Z",
+    "finished_at": "2026-11-01T09:00:51Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-03T23:32:40Z",
-    "finished_at": "2026-11-03T23:32:52Z"
+    "started_at": "2026-11-01T09:00:52Z",
+    "finished_at": "2026-11-01T09:00:54Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-03T23:30:04Z",
-  "finished_at": "2026-11-03T23:32:52Z",
-  "server_time": "2026-11-03T23:45:00Z",
+  "started_at": "2026-11-01T09:00:44Z",
+  "finished_at": "2026-11-01T09:00:54Z",
+  "server_time": "2026-11-01T09:00:56Z",
   "slow": false,
-  "message": "Results are ready.",
+  "message": "Your results are ready.",
   "can_stop": false,
   "can_resume": false,
   "can_leave": true,
@@ -106,7 +96,7 @@
   {
    "key": "independent_checks",
    "label": "Independent checks",
-   "state": "done"
+   "state": "not_run"
   },
   {
    "key": "coding_validation",
@@ -116,7 +106,7 @@
  ],
  "codes": [
   {
-   "id": "c1a00000-0000-4000-8000-000000000010",
+   "id": "cd000000-0000-4000-8000-000000000002",
    "number": 1,
    "code": "43239",
    "units": 1,
@@ -125,7 +115,7 @@
    "status": "ready",
    "status_label": "Ready for review",
    "sub_label": "",
-   "summary": "The upper endoscopy is documented with cold-forceps biopsies of the esophagus (specimen B) and of the gastric antrum and body (specimen A).",
+   "summary": "The upper endoscopy documents forceps biopsy (cold forceps) at the distal esophagus and forceps biopsy at the gastric antrum and body.",
    "why": {
     "quotes": [
      {
@@ -153,7 +143,7 @@
    "decision": null
   },
   {
-   "id": "c1a00000-0000-4000-8000-000000000011",
+   "id": "cd000000-0000-4000-8000-000000000003",
    "number": 2,
    "code": "45380",
    "units": 1,
@@ -163,34 +153,27 @@
      "59",
      "XS"
     ],
-    "text": "COL-1 (ascending colon) and COL-2 (sigmoid colon) are documented as separate lesions removed by different techniques. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+    "text": "Separate lesions are documented: 45380 is for the forceps biopsy (cold forceps) of the 2 mm sessile polyp in the ascending colon (specimen C); 45385 is for the snare removal (cold snare) of the 8 mm sessile polyp in the sigmoid colon (specimen D). In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
     "sources": [
-     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+     "Medicare Claims Processing Manual (Pub. 100-04), Chapter 12: Physicians/Nonphysician Practitioners (Rev. 13753; Issued: 05-07-26; in effect from 2026-05-07), page 98"
     ]
    },
    "status": "ready",
    "status_label": "Ready for review",
    "sub_label": "",
-   "summary": "The colonoscopy is documented with removal of the 2 mm ascending-colon polyp (COL-1) by cold biopsy forceps (specimen C).",
+   "summary": "The colonoscopy documents forceps biopsy (cold forceps) of the 2 mm sessile polyp in the ascending colon (specimen C).",
    "why": {
     "quotes": [
      {
       "text": "COL-1 - ascending colon: A 2 mm sessile polyp was completely removed in one bite with jumbo cold biopsy forceps and\nretrieved as specimen C.",
       "start": 3460,
       "end": 3600,
-      "page": 2,
-      "exact": true
-     },
-     {
-      "text": "COL-1 and COL-2 are different lesions at separate colonic sites.",
-      "start": 4317,
-      "end": 4381,
-      "page": 2,
+      "page": 1,
       "exact": true
      }
     ],
     "qualifications": [
-     "COL-1 and COL-2 are documented as different lesions at separate colonic sites."
+     "Separate lesions are documented: 45380 is for the forceps biopsy (cold forceps) of the 2 mm sessile polyp in the ascending colon (specimen C); 45385 is for the snare removal (cold snare) of the 8 mm sessile polyp in the sigmoid colon (specimen D). In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
     ]
    },
    "detail_ids": [],
@@ -201,7 +184,7 @@
    "decision": null
   },
   {
-   "id": "c1a00000-0000-4000-8000-000000000012",
+   "id": "cd000000-0000-4000-8000-000000000004",
    "number": 3,
    "code": "45385",
    "units": 1,
@@ -211,33 +194,28 @@
      "59",
      "XS"
     ],
-    "text": "COL-1 (ascending colon) and COL-2 (sigmoid colon) are documented as separate lesions removed by different techniques. A distinct-lesion modifier may apply if a procedure-to-procedure edit pairs 45380 with 45385. NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+    "text": "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 8 mm sessile polyp in the sigmoid colon (specimen D); 45380 is for the forceps biopsy (cold forceps) of the 2 mm sessile polyp in the ascending colon (specimen C). In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
     "sources": [
-     "CMS claims manual Pub. 100-04 ch. 12 (Rev. 13753, 2026-05-07)"
+     "Medicare Claims Processing Manual (Pub. 100-04), Chapter 12: Physicians/Nonphysician Practitioners (Rev. 13753; Issued: 05-07-26; in effect from 2026-05-07), page 98"
     ]
    },
    "status": "ready",
    "status_label": "Ready for review",
    "sub_label": "",
-   "summary": "The colonoscopy reached the cecum and the 8 mm sigmoid polyp (COL-2) was removed en bloc by cold snare (specimen D).",
+   "summary": "The colonoscopy documents snare removal (cold snare) of the 8 mm sessile polyp in the sigmoid colon (specimen D).",
    "why": {
     "quotes": [
      {
       "text": "COL-2 - sigmoid colon: An 8 mm sessile polyp was removed en bloc by cold snare and retrieved as specimen D.",
       "start": 3723,
       "end": 3830,
-      "page": 2,
-      "exact": true
-     },
-     {
-      "text": "the colonoscope was advanced to the cecum",
-      "start": 2974,
-      "end": 3015,
-      "page": 2,
+      "page": 1,
       "exact": true
      }
     ],
-    "qualifications": []
+    "qualifications": [
+     "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 8 mm sessile polyp in the sigmoid colon (specimen D); 45380 is for the forceps biopsy (cold forceps) of the 2 mm sessile polyp in the ascending colon (specimen C). In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; Rev. 13753; Issued: 05-07-26), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon (45385) are billed together. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
+    ]
    },
    "detail_ids": [],
    "allowed_actions": [
@@ -249,68 +227,87 @@
  ],
  "other_codes": [
   {
-   "code": "99204",
-   "reason": "No separate office evaluation and management visit is documented on this date."
-  },
-  {
-   "code": "99213",
-   "reason": "No separate office evaluation and management visit is documented on this date."
+   "code": "31575",
+   "reason": "Listed as an alternative only; not suggested for approval."
   },
   {
    "code": "45381",
-   "reason": "No submucosal injection is documented."
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "99204",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "G8752",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "G8754",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "G8753",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "99213",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  },
+  {
+   "code": "99203",
+   "reason": "Listed as an alternative only; not suggested for approval."
   },
   {
    "code": "45331",
-   "reason": "The examination reached the cecum, so a sigmoidoscopy code does not apply."
+   "reason": "Listed as an alternative only; not suggested for approval."
   }
  ],
  "not_separately_coded": [
   {
-   "label": "Clip placement at the COL-2 resection site",
-   "reason": "A clip placed to prevent bleeding, with no bleeding treated, is not reported as a separate service."
-  },
-  {
-   "label": "Anesthesia care",
-   "reason": "The report states it was given and billed by a separate anesthesia team."
+   "label": "Clip placement of the 8 mm sessile polyp in the sigmoid colon (specimen D) (Colonoscopy)",
+   "reason": "A clip placed to prevent bleeding is not reported as a separate service."
   }
  ],
  "details_needed": [],
  "unresolved": [],
  "limitations": [
-  "CPT descriptors are not shown: no licensed CPT content is connected.",
-  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
-  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
  ],
  "readiness": {
   "draft": true,
   "approved": false,
   "blockers": [
-   "43239, 45380 and 45385 are waiting for a review decision."
+   "43239 has no decision yet.",
+   "45380 has no decision yet.",
+   "45385 has no decision yet."
   ]
  },
  "reports": [],
  "activity": [
   {
-   "event": "document.added",
+   "event": "document_added",
    "summary": "Document added",
-   "actor": "Synthetic Reviewer",
+   "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-03T11:02:00Z"
+   "at": "2026-11-01T09:00:43Z"
   },
   {
-   "event": "context.changed",
-   "summary": "The entered service date was cleared; the date in the document is used",
-   "actor": "Synthetic Reviewer",
-   "actor_kind": "human",
-   "at": "2026-11-03T20:14:00Z"
-  },
-  {
-   "event": "assessment.refreshed",
-   "summary": "Results were refreshed with updated software",
+   "event": "text_read",
+   "summary": "Text read",
    "actor": "CPT Studio",
-   "actor_kind": "agent",
-   "at": "2026-11-03T23:32:52Z"
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:46Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:00:53Z"
   }
  ]
 }

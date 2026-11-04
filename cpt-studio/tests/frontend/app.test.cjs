@@ -531,10 +531,13 @@ test('other codes sit behind a closed disclosure; "Not separately coded" and the
 // --- "Why this code?" --------------------------------------------------------------------------------------------------
 
 test('"Why this code?" is a closed disclosure holding the exact quotes with their offsets and pages, and the qualifications', () => {
-  const doc = fixture('encounter-mara.json');
+  // the first fixture holding a code with several quotes and a qualification (the serializer's Mara holds none: each of
+  // its codes has several quotes or a qualification, not both)
+  const rich = item => item.why.quotes.length >= 2 && item.why.qualifications.length;
+  const doc = ['encounter-mara.json', ...ENCOUNTERS].map(fixture).find(item => item.codes.some(rich));
+  assert.ok(doc, 'the scenario: a code with quotes and a qualification');
   const layout = app.documentLayout(doc);
-  const code = doc.codes.find(item => item.why.quotes.length >= 2 && item.why.qualifications.length);
-  assert.ok(code, 'the scenario: a code with quotes and a qualification');
+  const code = doc.codes.find(rich);
   const why = app.whyThisCode(code, layout, ui(doc));
   assert.ok(why.startsWith(`<details class="why-code" data-key="why:${code.id}"><summary>Why this code?</summary>`));
   const quotes = [...why.matchAll(/<button type="button" class="why-quote" data-evidence="([^"]+)" data-start="(\d+)" data-end="(\d+)" data-page="(\d+)" title="Show this passage in the document">([^<]*)<\/button>/g)];
