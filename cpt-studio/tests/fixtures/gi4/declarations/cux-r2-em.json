@@ -100,5 +100,113 @@
    "R8b-2 is a closed list: an evaluation stated in a wording outside its forms (for example an untitled name with \"seen\" and no \"for\", \"today\" or clinic) still reads as at the core repair.",
    "E7 changes no status and no code: the E/M code's own question already read the context; only the service question an answered member status re-raised is gone."
   ]
+ },
+ "amendment_20261104_integration_rows": {
+  "note": "Added by the lead at integration (2026-11-04), after code: the seven rows the reader-em owner proposed in its report (battery_rows_proposed_to_lead; ops/gi4/battery.py was the reader-bind owner's file), with the owner's truths. The owner measured them before the merge on c47d71a3 and on its own head: on c47d71a3 the four F07/F08 rows exclude the visit code (4 violations); on the head they ask (0 violations); the F09 row and the two controls do not move. The four movements below are those measurements, recorded here after code - not a before-code declaration.",
+  "battery": [
+   [
+    "R8 R2 EM F07 hedged absence, documented in the clinic note",
+    "99203",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F07 negator of another noun",
+    "99203",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F08 J1 evaluation beside the absence statement",
+    "99213",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F08 J2 evaluation beside the absence statement",
+    "99213",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ]
+  ],
+  "offer_battery": {
+   "R8 R2 EM F07 hedged absence, documented in the clinic note": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F07 negator of another noun": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F08 J1 evaluation beside the absence statement": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F08 J2 evaluation beside the absence statement": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F09 billed separately, by design": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM rule 8 control, the absence statement alone": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM rule 8 control, a future clinic visit": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   }
+  }
  }
 }

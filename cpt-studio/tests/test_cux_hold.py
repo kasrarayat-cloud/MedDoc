@@ -713,6 +713,11 @@ class RegisterOfferTests(SimpleTestCase):
                            .read_text(encoding='utf-8'))
         declared.update(next(value['offer_battery'] for key, value in reversed(list(bind2.items()))
                              if isinstance(value, dict) and 'offer_battery' in value))
+        # reader-em round 2's (R8 R2 EM), added at integration, in cux-r2-em.json's integration amendment
+        em2 = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-r2-em.json')
+                         .read_text(encoding='utf-8'))
+        declared.update(next(value['offer_battery'] for key, value in reversed(list(em2.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
         names = [n for n in battery.CASES if n.startswith('R8 ')]
         self.assertEqual(sorted(declared), sorted(names))
         for name in names:

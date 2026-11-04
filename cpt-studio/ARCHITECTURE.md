@@ -3400,3 +3400,21 @@ The seams between P3 REVIEW, P5 FLOW and P4 CUSTOMER-API, as wired (appended; co
   predict and review2 entries are read nowhere and are not used (critic C4).
 - Tests: `tests/test_cux_wire.py` (the seams, end to end) and `tests/test_customer_fixtures.py` (every customer
   fixture from the serializer).
+
+## Core repair and customer interface (2026-11-04): refutation round 2
+
+- Rule 8 (the explicit "no separate office E/M" statement, `cues.EM_ABSENCE`), round-2 repair (`cux-r2-em.json`): the
+  statement is read only when it is the whole of its sentence. An evaluation of the patient, a history, an examination
+  or a visit stated elsewhere (`cues.EM_EVALUATION_STATED`) outranks it, and a member's new or established status
+  closes the visit's status question as a member's setting does. Outside rule 8 the installed generic negation cue
+  still negates "no separate <visit>" whatever follows it; that predates P1 and is unchanged.
+- The reader's release-side rules fail closed on the round's inputs (`cux-r2-bind.json`):
+  - L1's labelled part never opens in a plan or history, at a numbered procedure field or a list of labels, nor
+    takes an act beyond its instrument's reach or another examination's;
+  - a lesion label never moves an act to another service's lesion;
+  - a compound with no noun after it is doubtful, never attributive;
+  - a combined report's dated prose denial is kept.
+- P3's overlay: a code a member answer excluded still counts wherever its presence holds another code (the base rule,
+  competing levels), so a member answer never makes another code approvable. Holds read the counted set, and
+  `View.active` means counted.
+

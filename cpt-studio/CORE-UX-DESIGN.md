@@ -263,6 +263,13 @@ question 1 answered by keeping the installed capability) - and `in_queue` (boole
 session's `counts.queue` counts, so the queue lists exactly what its badge counts. `progress.phase` also takes `paused` (decision (j)):
 busy while the worker's heartbeat is older than 120 s, drawn without animation.
 
+**Amended 2026-11-04 (refutation round 2).** Status mapping: a reinstated code whose approval waits on a question (the
+overlay's needs_clarification) maps to needs_detail, with the row that asks it; a reinstated code with nothing to wait
+on stays ready. Section 5's customer report: the TXT starts with the SYNTHETIC line, then the headline; the CSV gains a
+last column `review_label`, the agent-executed synthetic review label on each row of an agent's approval (the approver
+alone decides it). `why.quotes` and the approved export's evidence are one rule (`review.evidence_spans`): nothing
+unless the support reading records the act as shown ('pass' or 'warn').
+
 ## 8. P6 UI: DOM contract (P8's walk tool depends on these exact hooks)
 
 - Result list: `ol.result-list` > `li.result-row[data-proposal=<id>][data-code=<code>][data-status=<status>]` with `.result-number`,

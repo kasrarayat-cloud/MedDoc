@@ -64,7 +64,7 @@
    {
     "key": "checking",
     "label": "Checking suggested codes",
-    "state": "done",
+    "state": "stopped",
     "started_at": "2026-11-01T09:02:53Z",
     "finished_at": "2026-11-01T09:02:54Z"
    },

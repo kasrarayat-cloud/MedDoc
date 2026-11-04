@@ -664,6 +664,40 @@ CASES.update({
     'R8 R2 F06 control, a denial on a label alone': (
         R2_LABELS + 'No snare was used on COL-1.\n', [('45385', R2_LABELS_Q, 'done')]),
 })
+# --- reader-em round 2 (2026-11-04; tests/fixtures/gi4/declarations/cux-r2-em.json, its integration amendment): rule 8,
+# the explicit "no separate office E/M" statement, read only where the document settles it - a hedge or a same-day
+# evaluation stated elsewhere keeps the E/M questions (F07, F08); F09's billing wording stays as designed; Mara's
+# sentence alone and beside a future visit still negates the visit. Proposed by the reader-em owner with their truths;
+# added by the lead at integration (the owner measured them on c47d71a3 and on its head before the merge).
+R2_EM_BODY = (B + 'Upper Endoscopy Report\nDate of service: 2026-10-26\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+              'Sedation: propofol by a CRNA (fictional)\nProcedure: EGD\nThe gastroscope was advanced to the second part of '
+              'the duodenum. Cold forceps biopsies were taken from the gastric antrum.\n')
+R2_EM_BIOPSY = 'Cold forceps biopsies were taken from the gastric antrum.'
+R2_EM_MARA = 'No separate office evaluation and management encounter or office-visit time is documented on this date.'
+CASES.update({
+    'R8 R2 EM F07 hedged absence, documented in the clinic note': (
+        R2_EM_BODY + 'The office visit is not documented here; it is documented in the clinic note of today.\n',
+        [('43239', R2_EM_BIOPSY, 'done'), ('99203', 'The office visit is not documented here', 'unsupported')]),
+    'R8 R2 EM F07 negator of another noun': (
+        R2_EM_BODY + "No medication changes at today's office visit were documented.\n",
+        [('43239', R2_EM_BIOPSY, 'done'), ('99203', "No medication changes at today's office visit were documented", 'unsupported')]),
+    'R8 R2 EM F08 J1 evaluation beside the absence statement': (
+        R2_EM_BODY + 'She was also evaluated today for new-onset jaundice, a separate problem, with a history and '
+        'examination.\n' + R2_EM_MARA + '\n',
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', 'She was also evaluated today for new-onset jaundice', 'unsupported')]),
+    'R8 R2 EM F08 J2 evaluation beside the absence statement': (
+        R2_EM_BODY + 'Separately, she was seen and examined today for new-onset jaundice; labs and an MRCP were ordered.\n'
+        + R2_EM_MARA + '\n',
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', 'she was seen and examined today for new-onset jaundice', 'unsupported')]),
+    'R8 R2 EM F09 billed separately, by design': (
+        R2_EM_BODY + 'No office evaluation and management service was billed separately.\n',
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', 'No office evaluation and management service was billed separately', 'no_ready')]),
+    'R8 R2 EM rule 8 control, the absence statement alone': (
+        R2_EM_BODY + R2_EM_MARA + '\n', [('43239', R2_EM_BIOPSY, 'done'), ('99213', R2_EM_MARA[:-1], 'not_done')]),
+    'R8 R2 EM rule 8 control, a future clinic visit': (
+        R2_EM_BODY + 'She will be seen in clinic in two weeks to review the pathology.\n' + R2_EM_MARA + '\n',
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', R2_EM_MARA[:-1], 'not_done')]),
+})
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
     'R8 D12 E/M control, h4-01 time-only twin', 'R8 D12 E/M not seen in person, history, plain',

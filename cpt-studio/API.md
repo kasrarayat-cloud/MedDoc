@@ -1140,3 +1140,45 @@ Appended notes; nothing above is rewritten. Each names its finding (`refute-r2`)
   enforced. The CSRF check of an operator route runs after the operator gate (an operator's write still needs the
   token: 403 without it), the gate leaves a non-operator's session unread (no `Vary: Cookie`), and `/ops` (no slash) is
   an unknown URL for everyone, operators included (no redirect to `/ops/`).
+
+## Core repair and customer interface (2026-11-04): refutation round 2, integration
+
+What the round-2 repairs change in the contract beyond the overlay owner's section above, as the integrator merged
+them.
+
+- **Progress and state** (the progress owner):
+  - An unreconciled unknown outcome, or a run left 'sending', outranks extraction_failed, processing_failed and
+    provider_failed (`review.RESUBMIT_STATES`). The document reads provider_unknown / being_confirmed, with no
+    "upload again", until it is reconciled. Stop and provider_not_run read as before.
+  - `partial` also covers a document review that is unavailable: a re-check that did not complete (message
+    `progress.RECHECK_INCOMPLETE`) or a response refused whole. A blocked or skipped stage never reads done.
+  - A step queued after a finished one says `progress.NEXT_STEP_QUEUED`, and the page titles it "Waiting for the next
+    step".
+  - `run_worker` beats until its loop returns, `--once` included, never stopping on the SIGTERM drain flag.
+  - A reservation its stage left behind is settled not_sent (`jobs._send`, `jobs.mark_stale`), never shown as being
+    confirmed.
+- **Details** (the details owner):
+  - A date row may take the value `clear` (removes the entered date), offered only where the document gives no
+    single date of its own.
+  - A date row may carry `saved` with `answer_id` `''`: a member's date in effect, corrected or removed through the
+    same row, with no revoke.
+  - An upload date that chose between the document's own dates is asked back as a confirmation, with both documented
+    dates as choices. While it is open the approved export waits (`readiness.blockers`: 'Confirm the date of service
+    under "A few details needed".').
+  - A service fact's row has the id `detail_id(fact, family, '')`, lists every code holding on it in `affects`,
+    stores its answer per code, and a revoke withdraws it for all of them.
+  - `POST /addenda` accepts the date row's id where `addendum_allowed` is true.
+  - `detail.answered` audit rows for the date carry the revision and the value, plus `confirmed: true` for a
+    confirmation.
+  - "Action needed" names a conflict with the document's own date only where the document states one; otherwise it
+    says the date is not settled and where to settle it.
+- **Customer reports** (the tools owner): the customer TXT starts with the SYNTHETIC line, then the headline. The
+  customer CSV gains a last column, `review_label`: "Agent-executed synthetic review — not clinical approval" on each
+  row of an agent's approval, draft and approved, and empty otherwise. An approval is labelled exactly when its
+  approver is an agent (`customer_api.agent_approval`), so a person's approval of a code an agent reinstated carries
+  the human kind and no label.
+- **Activity**: a re-check whose request did not succeed adds `check_not_completed` ("The check of what is still open
+  could not be completed").
+- **Quotations**: "Why this code?" and the approved export's evidence are one rule (`review.evidence_spans`): nothing
+  unless the support reading is 'pass' or 'warn'; then CPT Studio's located passages, the matched acts' evidence and
+  the supporting provider passages. The walk and the download check accept exactly those.
