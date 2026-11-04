@@ -274,7 +274,7 @@ class LesionLabelTests(SimpleTestCase):
 # --- rule 4: a report title naming several services binds no single family ---------------------------------------
 
 class CombinedTitleTests(SimpleTestCase):
-    def test_a_combined_title_binds_no_family_and_each_service_takes_its_reading(self):
+    def test_a_combined_title_binds_no_family(self):
         self.assertTrue(services._names_separate_services('Upper endoscopy and colonoscopy | Outpatient professional '
                                                           'record'))
         self.assertFalse(services._names_separate_services('EGD with EUS report'))  # an examination its EUS includes
@@ -283,10 +283,35 @@ class CombinedTitleTests(SimpleTestCase):
         plist = services.parts(text, service_date=day_of(text))
         title = next(p for p in plist if p.title is not None and 'Procedure Note' in p.title.text)
         self.assertEqual((title.family, title.kind, title.combined), ('', 'report', True))
-        inv = inventory(text)
+        located = []
+        inv = services.build(text, service_date=day_of(text), routing=detect.route(text, day_of(text)),
+                             context_facts=gi_context.extract_context(text), located=located)
+        in_title = {family: status for what, family, _, status, start, _ in located
+                    if what == 'service' and title.title.start <= start < title.title.end}
+        # the title reading stays the one service it gave it before; the other is read by its own statements
+        self.assertEqual(in_title, {'gi.egd': 'performed', 'gi.colonoscopy': 'uncertain'})
         for family in ('gi.egd', 'gi.colonoscopy'):
             with self.subTest(family):
                 self.assertEqual(service(inv, family).status, 'performed')
+
+    def test_twin_a_combined_title_never_documents_a_service_the_body_does_not(self):
+        head = (B + 'EGD and Colonoscopy Report\nDate of service: 10/28/2026\nEndoscopist: Synthetic MD\nSedation: propofol '
+                'by CRNA\nThe gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were '
+                'taken from the antrum.\n')
+        excluded = ('excluded', 'excluded')
+        for body, want in (('The colonoscopy was not performed because of inadequate preparation.\n', excluded),
+                           ('Colonoscopy: cancelled, the patient had eaten breakfast.\n', excluded),
+                           ('No colonoscopy was done today.\n', excluded),
+                           ('Colonoscopy will be scheduled next week.\n', 'held'),
+                           ('The colonoscope could not be passed beyond the rectum and the examination was abandoned.\n',
+                            'held'), ('', 'held')):
+            with self.subTest(body):
+                p = outcomes(run(head + body, [('45378', 'EGD and Colonoscopy Report')]))['45378']
+                if want == 'held':
+                    self.assertEqual(p[:2], ('selected', 'needs_clarification'))
+                    self.assertIn('performed_status', p[2])
+                else:
+                    self.assertEqual(p[:2], want)
 
     def test_a_section_s_tail_is_never_the_first_named_service_s(self):
         text = document('r4-combined-positive')

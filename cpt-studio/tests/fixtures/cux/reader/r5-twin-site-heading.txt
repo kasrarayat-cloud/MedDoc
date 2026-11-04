@@ -4,6 +4,8 @@ Upper Endoscopy and Colonoscopy Report
 Date of service: 2026-10-29
 Endoscopist: Synthetic Endoscopist, MD (fictional)
 Sedation: propofol by a CRNA (fictional)
+COLONOSCOPY
+The colonoscope was advanced to the cecum and the ileocecal valve was photographed.
 UPPER ENDOSCOPY
 The gastroscope was advanced to the second part of the duodenum. The stomach was normal.
 Large Bowel

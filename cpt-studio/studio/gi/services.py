@@ -3768,9 +3768,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             part = _part_at(plist, starts, ss)
             cls = clauses_of(ss, se)
             clause = _clause_for(cls, ms)
-            # rule 4: each service a combined report title names takes its title reading, as a title naming it alone does
+            # rule 4: a combined report title gives its title reading to the one service it gave it before (the first its
+            # line names, _family_named) and to no other: a title naming a service is no statement that it was done today
+            # where the body says it was planned, cancelled or not done (a second service's performed title reading had
+            # turned such a colonoscopy from excluded to held, and a planned one toward ready); every other service it
+            # names is read by its own statements, sections and instruments, as before
             title = part.title is not None and part.title.start <= ms < part.title.end and (
-                part.family == family or (part.combined and part.kind == 'report' and not part.family))
+                part.family == family or (part.combined and part.kind == 'report' and not part.family
+                                          and family == _family_named(part.title.text)[0]))
             in_report = part.kind == 'report' and part.family == family
             if title:
                 reading = Reading('performed', (f'section: report title "{part.title.text}"',))
