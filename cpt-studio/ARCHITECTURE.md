@@ -3158,3 +3158,60 @@ a paste only to a pasted revision with no stored original whose text has the
 document's lines (only trailing whitespace and line-ending style may differ).
 `ops/verify_downloads.py` checks that PROVIDER USAGE lists a member date hold as
 recorded, with nothing sent, no usage and no hashes, beside every run.
+
+## Core repair and customer interface (2026-11-03): P3 REVIEW
+
+**The effective review view** (`studio/validation/review_view.py`; CORE-UX-DESIGN.md 4; R3 section 7). Assessment and
+Proposal rows are immutable, and the engine computes two combination gates once, over the codes it selected: the
+diagnostic-base rule (`services.base_included` and its `base_included` question) and the CMS PFS endoscopic-family check
+(`pfs.endoscopic_base`). A reviewer's decision changes which codes go on together - a rejection takes one away, a
+reinstatement brings an excluded one back - so `review_view.review_view(stored, decisions, *, services, retrieval,
+reference_sources, service_date, answers)` re-applies the SAME rules at read time over the effective set: selected codes
+not rejected, plus excluded, reinstatable codes with a current reinstatement (or the approval resting on one), minus the
+codes a member answer leaves without a needed detail. One implementation: `engine.base_included`, `engine.base_hold`,
+`engine.endoscopic_rows` and `engine.distinct_lesions` were extracted from `engine._encounter`, `_proposal` and
+`_service_considerations`, which call them (byte-identical engine output: replay EQUAL, battery 0, and the whole
+AssessmentResult's sha256 equal on every battery and replay call), and `checks.endoscopic_check` is the engine's own.
+
+- **Positive control**: with no decision and no answer every view equals its stored proposal - status, every check, every
+  open question - byte for byte (`tests/test_cux_review.OverlayPositiveControlTests`: every battery row, every regression
+  replay state, Mara's retained Corti answer and the D14 shapes). So nothing changes for an encounter nobody has decided.
+- **What moves after a decision**: a base code the base rule now holds gets the `services.base_included` check and the
+  `base_included` question (added), one it no longer holds loses them (released, only by the engine's own rule: a
+  documented, performed, reportable act still holds it after its code is rejected), one held beside other codes is
+  re-worded; every decidable code's `pfs.endoscopic_base` is recomputed from the assessment's own retrieval facts (kept
+  as stored and marked `stale` when the trace lacks a row the engine read); a reinstated code the base rule holds gets
+  its `review.reinstatement` gate recomputed with that question. Nothing else is re-read (a same-day E/M's `separate_em`
+  hold is never released here: a recorded limit).
+- **D14** (R8): reinstating 45385 beside a selected 45378 holds 45378 (`needs_clarification`, approve withheld by
+  `services.base_included`, "Is 45378 reported separately from 45385 for this examination?"); an approval already on
+  45378 becomes a readiness blocker until it is revoked, so the reviewed report waits. A reinstated base beside a
+  selected therapeutic code is held the same way.
+- **Every gate reads it**: `review._actions` / `_allowed` / `allowed_actions` / `approve_withheld_by` /
+  `record_decision`, `readiness` / `_assessment_blockers`, `_decisions_waiting`, `coding_completeness` (the open
+  questions the view leaves, `review.open_questions_of`), `_review_state` / `refresh_state`, the operator API
+  (`serializers._proposal_json`: the values of `status`, `checks`, `allowed_actions` and `approve_withheld_by`; its key
+  set is unchanged), the report snapshot (statuses, checks and open questions; a recomputed check is noted in CHECKS),
+  the customer API (`review.effective_view(assessment) -> {proposal key: View}`) and the approved export
+  (`review.approved_items(assessment)`).
+- **Modifier review** (directive 4): a read-time `modifier_review` on a code whose acts are on documented lesions while
+  another code of the effective set, of the same documented service, accounts for an act on another documented lesion:
+  `{kind: 'distinct_lesion', codes, lesions, options: ['59', 'XS'], text, sources, not_checked}`, dropped as soon as the
+  other code leaves the effective set. It cites the dated CMS claims-manual example (Pub. 100-04 ch. 12, 40.6.C item 13)
+  only for 45380 with 45385 and only when the assessment's retrieval carries that passage, and says that NCCI
+  procedure-to-procedure edits and payer modifier policy are not checked. The stored `modifier_considerations` strings
+  are unchanged (the operator report keeps them).
+- **The reviewer's modifier**: `Decision.modifiers` (migration `0009_cux_review`, additive, database default `'[]'`):
+  on an approval only, none or ONE of `59` and `XS`, only where the view offers a modifier review; never prefilled,
+  never both. It is carried with the decision; an approval whose modifier the current view no longer offers is a
+  readiness blocker until revoked. The operator report prints it under the decision.
+- **Approved-export truth**: `review.approved_items(assessment)` lists approved proposals only - never an unresolved,
+  undecided, rejected or excluded one, nor an approval its view no longer supports - with code, units, the chosen
+  modifier, the approver's label and kind, when the approver decided, the note, the exact passages it rests on (CPT
+  Studio's located passages, then the provider passages that show the act; never one the support records as not showing
+  it) and one sentence of CPT Studio's own reading.
+- **Member answers** (P5's data, P3's rule): `review._member_answers(assessment)` (returns `[]` here; P5 fills it). A
+  code's open question answered `not_documented` or `cannot_confirm` makes its view `excluded` with reason
+  `detail_unavailable` (not reinstatable, no decision required, never approvable) until the answer is revoked;
+  readiness treats it as resolved; removal is monotone (an answered base question is read over the effective set, and a
+  code is never re-admitted within one reading). A documented service's answer closes that question only.
