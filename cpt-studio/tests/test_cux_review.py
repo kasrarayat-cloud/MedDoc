@@ -468,8 +468,10 @@ class MemberAnswerTests(SimpleTestCase):
         answers = [{'code': '45378', 'family': 'gi.colonoscopy', 'fact': 'base_included', 'value': 'cannot_confirm'}]
         views = shape.view(answers=answers)
         base = views['45378']
+        # still counted (active): a code a member's answer excluded holds whatever its presence held (session decision
+        # (e); refutation round 2, L7-01) - excluded itself, never approvable, nothing to decide
         self.assertEqual((base.status, base.reason, base.active, base.questions, base.answer),
-                         ('excluded', 'detail_unavailable', False, (), 'cannot_confirm'))
+                         ('excluded', 'detail_unavailable', True, (), 'cannot_confirm'))
         self.assertEqual(actions(shape, '45378', views), [])
         self.assertEqual(views['45385'].status, 'ready')
         self.assertEqual(check(views['45385'], 'pfs.endoscopic_base')['status'], 'pass')  # 45378 left the set
@@ -494,16 +496,23 @@ class MemberAnswerTests(SimpleTestCase):
                                      'value': 'not_documented'}])
         self.assertEqual((views['45378'].status, views['45378'].reason), ('ready', ''))
 
-    def test_removal_is_monotone_where_two_codes_hold_each_other(self):
+    def test_an_answer_never_releases_the_code_its_code_held_where_two_codes_hold_each_other(self):
+        # Refutation round 2, L7-01 (session decision (e): member answers never release a code): this pinned 99214 READY
+        # once 99213's base question was answered "not documented" - the answer picked the billed E/M level. The
+        # answered code still holds the other; only a recorded decision (a rejection) releases it.
         shape = Shape('em_pair')
         self.assertEqual([shape.by_code[c].holds for c in ('99213', '99214')], [('base_included',)] * 2)
         one = [{'code': '99213', 'family': 'gi.office_em', 'fact': 'base_included', 'value': 'not_documented'}]
         views = shape.view(answers=one)
         self.assertEqual(views['99213'].reason, 'detail_unavailable')
-        self.assertEqual((views['99214'].status, views['99214'].released), ('ready', ('base_included',)))
+        self.assertEqual((views['99214'].status, views['99214'].released, [q['fact'] for q in views['99214'].questions]),
+                         ('needs_clarification', (), ['base_included']))
+        self.assertNotIn('approve', actions(shape, '99214', views))
         both = one + [{'code': '99214', 'family': 'gi.office_em', 'fact': 'base_included', 'value': 'cannot_confirm'}]
         views = shape.view(answers=both)
         self.assertEqual([views[c].reason for c in ('99213', '99214')], ['detail_unavailable'] * 2)
+        rejected = shape.view({'99213': 'reject'})
+        self.assertEqual((rejected['99214'].status, rejected['99214'].released), ('ready', ('base_included',)))
 
 
 class ModifierReviewTests(SimpleTestCase):

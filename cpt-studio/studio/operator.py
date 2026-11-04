@@ -22,6 +22,7 @@ import functools
 import re
 from dataclasses import dataclass
 from datetime import timedelta
+from importlib import import_module
 from pathlib import Path
 
 from django.conf import settings
@@ -29,7 +30,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 
 from . import audit, models
 
@@ -125,14 +126,36 @@ def record_view(user, encounter, view, **data):
 
 # --- the gate -----------------------------------------------------------------------------------------------------
 
+def _as_an_unknown_url(request):
+    """Leave ``request``'s session exactly as an unknown URL leaves it - never read: the gate had to read it to know the
+    user, and SessionMiddleware answers a request whose session was read with "Vary: Cookie" (and deletes a stale
+    session cookie it loaded), which an unknown URL's 404 never carries. So the session is handed back unread, keyed by
+    the cookie the request brought, as SessionMiddleware made it."""
+    if hasattr(request, 'session'):
+        store = import_module(settings.SESSION_ENGINE).SessionStore
+        request.session = store(request.COOKIES.get(settings.SESSION_COOKIE_NAME))
+
+
 def operator_view(view):
-    """Anyone who is not an operator gets Django's 404 - the response an unknown URL gets - before the method, the body
-    or the record is read; an operator gets the view."""
+    """Anyone who is not an operator gets exactly what an unknown URL gets - Django's 404, its body and its headers -
+    before the method, the body, the CSRF token or the record is read; an operator gets the view.
+
+    Refutation round 2, L4-2 and L4-3: Django resolves a URL before CsrfViewMiddleware runs, and an unknown URL stops
+    there, so a CSRF check run before this gate answered every non-operator's POST to a real route 403 where an unknown
+    URL answers 404; reading the session for the gate added "Vary: Cookie"; and CommonMiddleware redirected /ops to
+    /ops/. So the global CSRF check is skipped here (csrf_exempt) and the same check (csrf_protect) runs after the gate,
+    for operators only - their writes still need the token -, the session is handed back unread to a non-operator, and
+    no operator URL is reached by appending a slash."""
+    protected = csrf_protect(view)
+
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
         if not is_operator(request.user):
+            _as_an_unknown_url(request)
             raise Http404()
-        return view(request, *args, **kwargs)
+        return protected(request, *args, **kwargs)
+    wrapper.csrf_exempt = True  # the CSRF check is the operator's, after the gate (csrf_protect above)
+    wrapper.should_append_slash = False  # /ops answers what /opsx answers (CommonMiddleware's APPEND_SLASH)
     return wrapper
 
 

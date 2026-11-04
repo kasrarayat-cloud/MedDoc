@@ -98,6 +98,69 @@ class MatrixTests(HarnessCase):
         self.assertFalse(models.ReportArtifact.objects.filter(audience='operator').exclude(pk=self.report.pk).exists())
         self.assertFalse(models.ProviderRun.objects.filter(reconciled_at__isnull=False).exists())
 
+    # --- refutation round 2, L4-2 and L4-3: exactly what an unknown URL answers - status, body, EVERY header and cookie,
+    # with CSRF enforced as in production, signed in, signed out and with a stale session cookie ---------------------
+
+    STALE = 'stale-session-key-that-names-no-session'
+
+    @staticmethod
+    def answer(response):
+        """Everything a client can read of a response: its status, body, every header and every cookie it sets."""
+        return (response.status_code, response.content, sorted(response.headers.items()),
+                sorted((name, morsel.OutputString()) for name, morsel in response.cookies.items()))
+
+    def non_operators(self):
+        """(label, a client factory): every kind of non-operator, each client with CSRF enforced as in production."""
+        def signed(user):
+            def make():
+                client = Client(enforce_csrf_checks=True)
+                if user is not None:
+                    client.force_login(user)
+                return client
+            return make
+
+        def stale():
+            client = Client(enforce_csrf_checks=True)
+            client.cookies[settings.SESSION_COOKIE_NAME] = self.STALE
+            return client
+        users = (('anonymous', None), ('viewer', self.viewer), ('reviewer', self.reviewer), ('owner', self.owner),
+                 ('outsider', self.outsider), ('revoked', self.revoked))
+        return [(label, signed(user)) for label, user in users] + [('stale-cookie', stale)]
+
+    def test_every_operator_url_answers_every_non_operator_exactly_as_an_unknown_url_with_csrf_enforced(self):
+        compared = 0
+        for label, make in self.non_operators():
+            for method, path, body in self.requests() + [('POST', '/ops/', {}), ('POST', '/ops/api/session', {}),
+                                                         ('GET', f'/ops/api/encounters/{self.encounter_id}/reconcile',
+                                                          None)]:
+                with self.subTest(user=label, method=method, path=path):
+                    real = self.answer(self.send(make(), method, path, body))
+                    unknown = self.answer(self.send(make(), method, UNKNOWN, body))
+                    self.assertEqual(real[0], 404)
+                    self.assertEqual(real, unknown)
+                    compared += 1
+        self.assertGreater(compared, 100)
+        self.assertFalse(models.ProviderRun.objects.filter(reconciled_at__isnull=False).exists())
+
+    def test_ops_without_its_slash_is_an_unknown_url_for_everyone(self):
+        for label, make in self.non_operators() + [('operator', lambda: self.as_user(self.operator))]:
+            with self.subTest(user=label):
+                self.assertEqual(self.answer(make().get('/ops')), self.answer(make().get('/opsx')))
+                self.assertEqual(make().get('/ops').status_code, 404)
+
+    def test_an_operator_still_needs_the_csrf_token_to_write(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.operator)
+        path = f'/ops/api/encounters/{self.encounter_id}/reports'
+        refused = client.post(path, data=json.dumps({'kind': 'draft', 'fmt': 'csv'}), content_type='application/json')
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn(b'CSRF', refused.content)
+        self.assertEqual(client.get('/ops/').status_code, 200)  # the console sets the token cookie
+        token = client.cookies[settings.CSRF_COOKIE_NAME].value
+        made = client.post(path, data=json.dumps({'kind': 'draft', 'fmt': 'csv'}), content_type='application/json',
+                           HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(made.status_code, 201, made.content[:300])
+
     def test_operators_get_the_diagnostics_with_or_without_a_membership(self):
         expected = {'/ops/': 200, '/ops/assets/ops.js': 200, '/ops/assets/ops.css': 200}
         for user in (self.operator, self.owner_operator):

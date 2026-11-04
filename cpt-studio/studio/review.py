@@ -306,37 +306,78 @@ def open_questions_of(assessment, views=None):
     return out
 
 
-def _evidence_spans(proposal, view, text, pages):
-    """The exact passages an approved item rests on, re-checked against the revision text: the passages CPT Studio
-    located for its act (support.source, where the provider's passages show none of it), then the provider's passages
-    that show it (support.supporting); where the support records neither, the provider's exact passages. Each
-    {text, start, end, page, origin: 'located' | 'cited'}; never a passage the support records as not showing the act."""
-    from .validation.checks import page_for  # local import: the validation layer's own page reading
+# The support statuses that record the documented act as shown (reconcile.support): 'pass', a provider passage shows it;
+# 'warn', none does and CPT Studio located the passages that do (support.source). Every other status shows nothing:
+# 'not_applicable' (the act is not established as performed), 'fail', or no support reading at all.
+SHOWN_SUPPORT = ('pass', 'warn')
+MAX_PASSAGES = 4  # a short list: CPT Studio's own located passages first, then the provider's supporting ones
 
+
+def _page_of(pages, offset):
+    """The page holding character ``offset`` among the revision's pages (dicts, as SourceRevision.pages stores them,
+    or PageSpans), None when none does."""
+    for page in pages or ():
+        if isinstance(page, dict):
+            start, end, number = page.get('start'), page.get('end'), page.get('page')
+        else:
+            start, end, number = (getattr(page, name, None) for name in ('start', 'end', 'page'))
+        if type(start) is int and type(end) is int and type(number) is int and start <= offset < end:
+            return number
+    return None
+
+
+def act_index(services):
+    """{act id: act} of a recorded documented-service reading (Assessment.services): what evidence_spans reads of
+    each act a code was matched to."""
+    out = {}
+    listed = services.get('services') if isinstance(services, dict) else None
+    for service in listed if isinstance(listed, list) else []:
+        if isinstance(service, dict):
+            for act in service.get('acts') or []:
+                if isinstance(act, dict) and isinstance(act.get('id'), str):
+                    out[act['id']] = act
+    return out
+
+
+def evidence_spans(proposal, text, pages, acts):
+    """The exact passages a code rests on, by ONE rule that "Why this code?" (customer_api) and the approved export
+    (approved_items) both read, so the page and the export never quote different passages (CORE-UX-DESIGN.md 7;
+    refutation round 2, L3-7 and L3-10). Only where the code's support reading records its documented act as shown
+    (SHOWN_SUPPORT): CPT Studio's own located passages for the matched act first - support.source, then the evidence of
+    each matched act the recorded reading (``acts``: act_index) gives as performed or incomplete - then the provider's
+    exact passages the support records as showing it (support.supporting). Nothing where the support records no act as
+    shown - an act denied or in doubt (never the service's own passages, which show no such act), a 'fail', or no
+    support reading at all (never a provider's passage nothing checked): fail-closed, never a passage that does not
+    support. At most MAX_PASSAGES, each re-checked against ``text``; a passage inside one already listed adds nothing.
+    Each {text, start, end, page, origin}: origin 'cited' when the provider cited exactly that passage, else
+    'located'."""
     support = proposal.support or {}
+    if not isinstance(support, dict) or support.get('status') not in SHOWN_SUPPORT:
+        return []
     exact = exact_evidence(proposal.evidence, text)
-    out, seen = [], set()
-
-    def add(start, end, quoted, page, origin):
-        if (start, end) not in seen and type(start) is int and type(end) is int and 0 <= start < end <= len(text) \
-                and text[start:end] == quoted:
-            seen.add((start, end))
-            out.append({'text': quoted, 'start': start, 'end': end, 'page': page, 'origin': origin})
-
-    if support.get('status') == 'warn':
-        for span in support.get('source') or []:
-            add(span.get('start'), span.get('end'), span.get('text'), page_for(span.get('start') or 0, pages),
-                'located')
+    evidence = list(proposal.evidence or [])
     supporting = support.get('supporting')
-    if isinstance(supporting, list):
-        evidence = list(proposal.evidence or [])
-        for index in supporting:
-            span = evidence[index] if type(index) is int and 0 <= index < len(evidence) else None
-            if span is not None and span in exact:
-                add(span['start'], span['end'], span['text'], span.get('page'), 'cited')
-    if not out and not support.get('status'):
-        for span in exact:
-            add(span['start'], span['end'], span['text'], span.get('page'), 'cited')
+    cited = [evidence[index] for index in (supporting if isinstance(supporting, (list, tuple)) else ())
+             if type(index) is int and 0 <= index < len(evidence) and evidence[index] in exact]
+    cited_at = {(span['start'], span['end']) for span in cited}
+    located = list(support.get('source') or [])
+    for act in support.get('acts') or []:
+        stored = acts.get(act.get('id')) if isinstance(act, dict) and isinstance(acts, dict) else None
+        if isinstance(stored, dict) and stored.get('status') in ('performed', 'incomplete'):
+            located += list(stored.get('evidence') or [])
+    out, seen = [], []
+    for span in located + cited:
+        if not isinstance(span, dict) or len(out) >= MAX_PASSAGES:
+            continue
+        start, end, quoted = span.get('start'), span.get('end'), span.get('text')
+        if not (type(start) is int and type(end) is int and isinstance(quoted, str)
+                and 0 <= start < end <= len(text) and text[start:end] == quoted):
+            continue
+        if any(a <= start and end <= b for a, b in seen):
+            continue
+        seen.append((start, end))
+        out.append({'text': quoted, 'start': start, 'end': end, 'page': _page_of(pages, start),
+                    'origin': 'cited' if (start, end) in cited_at else 'located'})
     return out
 
 
@@ -347,16 +388,14 @@ def approved_items(assessment):
     stored order. Not a readiness check: the approved export renders these only once readiness(encounter)['reviewed']. Each a dict: proposal_id, key, code,
     units, modifiers (the reviewer's chosen modifier), approved_by (the approver's label), approver_kind ('human' |
     'agent'), decided_at (ISO, when the approver decided; a carried approval keeps its root's time), note, evidence
-    (_evidence_spans: exact spans with page and character offsets), summary (one sentence of CPT Studio's own reading),
-    reinstated (an excluded code the reviewer reinstated before approving it)."""
+    (evidence_spans: exact spans with page and character offsets, the passages "Why this code?" shows), summary (one
+    sentence of CPT Studio's own reading), reinstated (an excluded code the reviewer reinstated before approving it)."""
     if assessment is None:
         return []
     current = current_decisions(assessment)
     views = effective_view(assessment, current)
     revision = assessment.revision
-    pages = tuple(revision.pages or ())
-    from .types import PageSpan  # local import
-    spans = tuple(PageSpan(**page) if isinstance(page, dict) else page for page in pages)
+    acts = act_index(assessment.services)
     items = []
     for proposal in assessment.proposals.order_by('position'):
         decision, view = current.get(proposal.pk), views.get(proposal.key)
@@ -370,7 +409,7 @@ def approved_items(assessment):
             'modifiers': list(decision.modifiers or []), 'approved_by': decision.reviewer.label(),
             'approver_kind': decision.reviewer_kind,
             'decided_at': root.created_at.isoformat() if root.created_at else None, 'note': decision.note,
-            'evidence': _evidence_spans(proposal, view, revision.text, spans),
+            'evidence': evidence_spans(proposal, revision.text, revision.pages, acts),
             'summary': view.summary if view is not None else '',
             'reinstated': proposal.bucket == EXCLUDED})
     return items

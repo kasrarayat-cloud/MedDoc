@@ -1099,3 +1099,44 @@ corrected here where this changes them):
 - **Customer fixtures** (`tests/fixtures/customer/*.json`) are all generated from the serializer
   (`CPT_STUDIO_WRITE_FIXTURES=1 manage.py test tests.test_customer_fixtures`), including Mara from Corti's retained
   response, read in process.
+
+## Core repair and customer interface (2026-11-04): refutation round 2, overlay and customer repairs
+
+Appended notes; nothing above is rewritten. Each names its finding (`refute-r2`) and the test that holds it
+(`tests/test_cux_r2_overlay.py` unless named).
+
+- **A member answer excludes the code it answers and nothing else (L7-01; session decision (e)).** "Not documented" or
+  "Cannot confirm" on a code's detail makes that code `excluded` (sub label "A needed detail is not documented" / "...
+  could not be confirmed"); no other code's `status`, `details_needed` row, `detail_ids` or `allowed_actions` moves. A
+  code an answer excluded still holds every code its presence held - a diagnostic base beside it keeps its own "how the
+  codes are reported" row, and of two E/M levels that hold each other the other keeps its row and never gains `approve`
+  - and a reinstated same-day procedure it excluded still holds the office visit. Only a recorded decision (a rejection,
+  a revoked reinstatement) releases such a hold, by the engine's own rule, as before. (The overlay reads two sets:
+  `review_view`'s module docstring.)
+- **A reinstated code that cannot be approved yet says "Needs a detail" (L3-8).** While its stored check names what
+  approval waits for (the same facts a selected code of its family is asked: how far the examination reached, a
+  separately identifiable visit, ...), the code row reads `needs_detail` / "Needs a detail" (sub label "Reinstated in
+  review"), and `details_needed` carries one `confirm` row per wait (`affects: [code]`, "Not documented" / "Cannot
+  confirm", `addendum_allowed`), whose ids are the row's `detail_ids`. A wait this release does not word asks for the
+  documentation itself (fact `documentation`). "Not documented" there excludes the reinstated code, leaving only Revoke;
+  readiness then treats it as resolved. The operator view's `status` of that proposal is `needs_clarification`.
+- **One approval, one kind, one label (L3-6).** `sub_label` is "Agent-executed synthetic review — not clinical
+  approval" exactly when `decision.by_kind` is `agent`, i.e. when the approver is an automated agent
+  (`customer_api.agent_approval`); the approved export's `approver_kind` and its agent line follow the same rule. A
+  person's approval of a code an agent reinstated is the person's (`by_kind` `human`, no agent label); the agent's
+  reinstatement stays in the activity, the Decision rows and the operator report.
+- **"Why this code?" and the approved export's evidence are one rule (L3-7, L3-10): `review.evidence_spans`.** Passages
+  are quoted only where the code's support reading records its act as shown (`support.status` `pass` or `warn`): CPT
+  Studio's located passages first (`support.source`, then the matched acts the reading gives as performed or
+  incomplete), then the provider's exact passages the support records as supporting; at most four. A code whose act is
+  denied or in doubt (`not_applicable`), a `fail`, or a code with no support reading quotes nothing, on the page and in
+  the export alike - so an approved item can carry no quotation. The draft export reads the page's quotes.
+- **The operator view's decision carries `modifiers`** (L3-3): `[]` or the one modifier the reviewer chose, on
+  `assessment.proposals[].decision` and `decisions.history[]` of `/ops/api/encounters/{id}`.
+- **A modifier review's `sources` never carry a source key** (L4-4): a source is shown by its title, release, effective
+  date and page; a cited source this release does not bundle has no title here and is left out of `sources`.
+- **Every `/ops/` URL answers a non-operator exactly what an unknown URL answers** (L4-2, L4-3; `tests/test_operator.py`):
+  status, body, every header and every cookie, for GET and POST, signed in or out, with a stale session cookie, CSRF
+  enforced. The CSRF check of an operator route runs after the operator gate (an operator's write still needs the
+  token: 403 without it), the gate leaves a non-operator's session unread (no `Vary: Cookie`), and `/ops` (no slash) is
+  an unknown URL for everyone, operators included (no redirect to `/ops/`).

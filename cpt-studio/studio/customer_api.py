@@ -328,10 +328,14 @@ MODIFIER_FALLBACK = ('Separate lesions are documented for these codes. Whether a
 
 def _source_words(source):
     """A modifier review's dated CMS source as the customer is shown it (its title, release, effective date and page),
-    or '' when it does not pass the guard: never its key, url or hash."""
+    or '' when it does not pass the guard: never its key, url or hash. A source with no title - one this release does
+    not bundle, which the overlay names by no title (review_view._modifier_review) - or a title that is only its key is
+    not shown at all (refutation round 2, L4-4: the key had reached the customer's modifier review)."""
     if not isinstance(source, dict):
         return ''
-    title, release = str(source.get('title') or ''), str(source.get('release') or '')
+    title, release = str(source.get('title') or '').strip(), str(source.get('release') or '')
+    if not title or title == str(source.get('key') or '').strip():
+        return ''
     effective, page = str(source.get('effective_start') or ''), str(source.get('page') or '')
     dated = '; '.join(item for item in (release, f'in effect from {effective}' if effective else '') if item)
     return plain(f'{title}' + (f' ({dated})' if dated else '') + (f', page {page}' if page else ''))
@@ -352,23 +356,31 @@ def modifier_review_of(view):
     return {'options': options, 'text': plain(found.get('text')) or MODIFIER_FALLBACK, 'sources': sources}
 
 
+def agent_approval(decision) -> bool:
+    """Whether an approval is labelled "Agent-executed synthetic review - not clinical approval": exactly when its
+    approver is an automated agent (CORE-UX-DESIGN.md 5 and 7, the directive's test approvals). ONE rule for every
+    customer surface - the code's sub_label beside decision.by_kind, and the approved export's approver kind and agent
+    line - so one approval carries one kind and one label everywhere (refutation round 2, L3-6: a person's approval of
+    a code an agent had reinstated was labelled the agent's beside by_kind 'human'). Who reinstated a code stays in the
+    record (Decision rows, the activity, the operator report), never in the label of somebody else's approval."""
+    return decision is not None and decision.reviewer_kind == models.User.AGENT
+
+
 def approved_export_items(assessment, current, views):
     """The approved export's items (review.approved_items: approved decisions only, never an unresolved or unapproved
     item, nor an approval the overlay no longer supports), in stored order, as the customer report prints them: code,
-    units, the reviewer's chosen modifier, approver, approver kind, whether agent review is involved, decision time and
-    id, the one-sentence summary and the exact passages the approval rests on (with page and character offsets)."""
+    units, the reviewer's chosen modifier, approver, approver kind, whether it is an agent's approval (agent_approval),
+    decision time and id, the one-sentence summary and the exact passages the approval rests on (review.evidence_spans,
+    with page and character offsets: the passages "Why this code?" shows)."""
     proposals = {str(proposal.pk): proposal for proposal in assessment.proposals.all()}
     items = []
     for item in review.approved_items(assessment):
         proposal = proposals[item['proposal_id']]
         decision = current[proposal.pk]
-        reinstated = review.reinstatement_for(decision) if proposal.bucket == Proposal.EXCLUDED else None
         items.append({
             'proposal_id': item['proposal_id'], 'decision_id': str(decision.pk), 'code': _code(item['code']),
             'units': item['units'], 'modifiers': list(item['modifiers']), 'approver': item['approved_by'],
-            'approver_kind': item['approver_kind'],
-            'agent': item['approver_kind'] == models.User.AGENT or (
-                reinstated is not None and reinstated.reviewer_kind == models.User.AGENT),
+            'approver_kind': item['approver_kind'], 'agent': agent_approval(decision),
             'decided_at': item['decided_at'], 'note': item['note'],
             'evidence': [{'text': span['text'], 'start': span['start'], 'end': span['end'], 'page': span.get('page')}
                          for span in item['evidence']],
@@ -379,58 +391,19 @@ def approved_export_items(assessment, current, views):
 # --- the codes -----------------------------------------------------------------------------------------------------
 
 def _act_index(assessment):
-    out = {}
-    for service in (assessment.services or {}).get('services') or []:
-        if not isinstance(service, dict):
-            continue
-        for act in service.get('acts') or []:
-            if isinstance(act, dict) and isinstance(act.get('id'), str):
-                out[act['id']] = act
-    return out
-
-
-def _page(pages, offset):
-    for page in pages or []:
-        if (isinstance(page, dict) and type(page.get('start')) is int and type(page.get('end')) is int
-                and page['start'] <= offset < page['end'] and type(page.get('page')) is int):
-            return page['page']
-    return None
+    return review.act_index(assessment.services)
 
 
 def _quotes(proposal, text, pages, acts, status):
-    """CPT Studio's own located passages for the matched act first (the support record's source passages, then the
-    documented act's evidence), then the provider's exact passages only where the support record says they show the
-    act - never a passage that does not support, and none for an excluded code. Each re-checked against the text."""
+    """ "Why this code?": the passages review.evidence_spans gives - the ONE rule the approved export's evidence is read
+    by, so the page and the export never quote different passages (refutation round 2, L3-7 and L3-10): CPT Studio's
+    own located passages for the matched act first, then the provider's exact passages the support records as showing
+    it, and nothing where the support reading records no act as shown (an act denied or in doubt, no support reading)
+    - never a passage that does not support - and none for an excluded code. Each re-checked against the text."""
     if status == 'excluded':
         return []
-    support = proposal.support or {}
-    out, seen = [], []
-
-    def add(span):
-        if not isinstance(span, dict):
-            return
-        start, end, quote = span.get('start'), span.get('end'), span.get('text')
-        if not (type(start) is int and type(end) is int and isinstance(quote, str) and 0 <= start < end <= len(text)
-                and text[start:end] == quote):
-            return
-        if any(a <= start and end <= b for a, b in seen) or len(out) >= 4:
-            return
-        seen.append((start, end))
-        out.append({'text': quote, 'start': start, 'end': end, 'page': _page(pages, start), 'exact': True})
-
-    for span in support.get('source') or []:
-        add(span)
-    for act in support.get('acts') or []:
-        stored = acts.get(act.get('id')) if isinstance(act, dict) else None
-        if stored is not None and stored.get('status') in ('performed', 'incomplete'):
-            for span in stored.get('evidence') or []:
-                add(span)
-    evidence = proposal.evidence or []
-    for index in support.get('supporting') or []:
-        if type(index) is int and 0 <= index < len(evidence) and evidence[index].get('context_index') == 0 \
-                and evidence[index].get('exact') is True:
-            add(evidence[index])
-    return out
+    return [{'text': span['text'], 'start': span['start'], 'end': span['end'], 'page': span['page'], 'exact': True}
+            for span in review.evidence_spans(proposal, text, pages, acts)]
 
 
 def _summary(proposal):
@@ -489,7 +462,8 @@ QUESTION_WORDS = {
     'target': 'The structure examined is not documented.',
     'cannulation': 'Whether cannulation was achieved is not documented.',
 }
-# why approve is withheld from a code the list shows as ready (review_view.View.withheld_by, same_day_held)
+# why approve is withheld from a code (review_view.View.withheld_by, same_day_held); a reinstated code its gate withholds
+# reads "Needs a detail" with the row that asks it (the overlay asks its waits: refutation round 2, L3-8)
 WITHHELD_WORDS = {
     'review.reinstatement': 'This reinstated code needs a detail before it can be approved.',
     'em.same_day_if_reinstated': 'A separately identifiable office visit is not documented beside the procedure '
@@ -560,10 +534,7 @@ def _status(proposal, decision, view):
     is ready for review."""
     action = decision.action if decision is not None else None
     if action == Decision.APPROVE:
-        reinstated = review.reinstatement_for(decision) if proposal.bucket == Proposal.EXCLUDED else None
-        agent = decision.reviewer_kind == models.User.AGENT or (
-            reinstated is not None and reinstated.reviewer_kind == models.User.AGENT)
-        return 'approved', AGENT_SUB_LABEL if agent else ''
+        return 'approved', AGENT_SUB_LABEL if agent_approval(decision) else ''
     if action == Decision.REJECT:
         return 'excluded', REJECTED_SUB_LABEL
     if action == Decision.CONFIRM:
