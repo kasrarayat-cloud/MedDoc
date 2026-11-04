@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Lower Endoscopy Report
+Date of service: 2026-10-28
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the appendiceal orifice was photographed.
+A 6 mm sessile polyp in the descending colon was snare-resected and retrieved.
+Impression: one descending colon polyp removed.

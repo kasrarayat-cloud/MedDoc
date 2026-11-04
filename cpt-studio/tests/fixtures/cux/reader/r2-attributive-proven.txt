@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report
+Date of service: 2026-10-28
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: EGD
+The gastroscope was advanced to the second part of the duodenum.
+Inspection of the biopsy-proven Barrett esophagus segment was performed with high-definition white light.
+Impression: Barrett esophagus without visible lesion.

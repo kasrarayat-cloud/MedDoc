@@ -1954,7 +1954,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     answered = _field_answer(text, pos, end, service_date)
     if answered is not None:
         return answered
-    if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
+    near_before = before[-40:]
+    # an attributive act compound's participle ("the snare-treated lesion") is no act predicate (rule 2)
+    if ACT_VERB.search(whole) or _predicate_participle(text, after, end) \
+            or _predicate_participle(text, near_before, pos - len(near_before)) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
         if other_time and not today:
             # stated done, but a time in its clause is something else's: its own time is not established (held)
@@ -2710,14 +2713,62 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
 
 
 def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
-    """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took."""
+    """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took. An act word
+    that heads an attributive participle compound ("the snare-treated lesion": _attributive_compound) describes a noun
+    and is no act mention; it still claims its text, so no later kind reads it either."""
     found: list[tuple[str, int, int]] = []
+    attributive: list[tuple[str, int, int]] = []
     for kind, pattern in ACTS:
         for m in pattern.finditer(text, start, end):
-            if any(a < m.end() and m.start() < b for _, a, b in found):
+            if any(a < m.end() and m.start() < b for _, a, b in found + attributive):
                 continue
-            found.append((kind, m.start(), m.end()))
+            (attributive if _attributive_compound(text, m.start(), m.end()) else found).append(
+                (kind, m.start(), m.end()))
     return sorted(found, key=lambda x: x[1])
+
+
+# Core repair 2026-11-03 (P1, rule 2; R1-services-binding section 9): an act word that is the first element of a
+# hyphenated participle compound used attributively - "the snare-treated sigmoid lesion", "biopsy-proven Barrett
+# esophagus", "a clip-closed defect", "the APC-treated area", "snare-resected polyps" - describes a noun. It presupposes
+# the act; it neither states nor denies it (Mara: "The forceps removal was not a biopsy of, or a completion step for, the
+# snare-treated sigmoid lesion." had read a denied snare at the snared lesion, a false conflict). The compound's
+# participle is no act predicate for any other mention either (_predicate_participle). A compound that is itself the
+# predicate of an auxiliary or a subject ("The polyp was snare-resected", "was not snare-resected", "we snare-resected
+# it") states or denies the act and is read as before. ACTS and BARE_PARTICIPLE are unchanged (mention_count reads them).
+COMPOUND_PARTICIPLE_AFTER = re.compile(r'-[A-Za-z]+(?:ed|en|wn)\b')
+COMPOUND_PREDICATE_BEFORE = _rx(r"(?:\b(?:was|were|is|are|be|been|being|get|gets|got|gotten|getting)|n['’]t)"
+                                r"(?:\s+(?:not|never))?(?:\s+(?:then|also|subsequently|successfully|completely|each|"
+                                r"[\w-]+ly))?\s*$"
+                                r"|\b(?:we|I|they|he|she)\s+(?:(?:then|also|[\w-]+ly)\s+)?$")
+COMPOUND_REACH = 40  # characters before an act word read for the auxiliary or subject a predicate compound has
+
+
+def _attributive_compound(text: str, start: int, end: int) -> bool:
+    """Whether the act word at [start, end) is the first element of a hyphenated participle compound used attributively
+    (rule 2 above): a participle follows it after a hyphen, and no auxiliary or subject makes the compound a predicate.
+    Bounded: the word after it and COMPOUND_REACH characters before it."""
+    if COMPOUND_PARTICIPLE_AFTER.match(text, end) is None:
+        return False
+    return COMPOUND_PREDICATE_BEFORE.search(text, max(0, start - COMPOUND_REACH), start) is None
+
+
+def _compound_participle(text: str, at: int) -> bool:
+    """Whether a participle starting at ``at`` is the second element of an attributive act compound (rule 2): a hyphen
+    right before it, after an act word that the compound does not make a predicate. Bounded: one act word before it."""
+    if at < 2 or text[at - 1] != '-':
+        return False
+    for _kind, pattern in ACTS:
+        for m in pattern.finditer(text, max(0, at - 1 - COMPOUND_REACH), at - 1):
+            if m.end() == at - 1 and _attributive_compound(text, m.start(), m.end()):
+                return True
+    return False
+
+
+def _predicate_participle(text: str, segment: str, offset: int) -> bool:
+    """BARE_PARTICIPLE.search(segment) for ``segment`` = text[offset:...], leaving out the participle of an attributive
+    act compound (rule 2: "the snare-treated lesion" states no act for any mention). With no such compound in the
+    segment it is exactly BARE_PARTICIPLE.search(segment)."""
+    return any(not _compound_participle(text, offset + m.start()) for m in BARE_PARTICIPLE.finditer(segment))
 
 
 def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
@@ -3821,8 +3872,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # a form field's denying answer is its item's predicate ("Biopsy: No", "Tattoo placed: None")
                 fielded = reading.status == 'negated' and reading.cues[:1] != () \
                     and reading.cues[0].startswith('field:')
-                has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text) or boxed
-                                    or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
+                # an attributive act compound's participle is no act predicate (rule 2: "the snare-treated lesion")
+                has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
+                                    or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
