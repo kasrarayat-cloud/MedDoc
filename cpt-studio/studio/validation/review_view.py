@@ -195,11 +195,18 @@ def _act_ids(p: Stored) -> set:
 
 
 def _bases(effective: Sequence[Stored], service: Mapping[str, object], readable: bool) -> dict:
-    """code -> what the engine's base rule holds it beside over ``effective`` (engine.base_included; by code, as
-    engine._proposal reads enc.bases_included); {} when the inventory cannot be read."""
+    """code -> (rule, codes): what the engine's two base rules hold it beside over ``effective``, by code, exactly as
+    engine._proposal reads enc.bases_included and enc.bases_within: ('included', the other codes or act labels) from
+    engine.base_included, else ('within', the including service's codes, possibly none) from engine.base_within (R8
+    D15: an EGD that is the endoscopic portion of an EUS) - the ordinary rule wins, as in _proposal; {} when the
+    inventory cannot be read. Both rules, because a stored base_included hold from either one must be re-derived, never
+    released by reading only the other."""
     if not readable:
         return {}
-    return dict(engine.base_included([(p.code, p.family, service[p.key]) for p in effective]))
+    members = [(p.code, p.family, service[p.key]) for p in effective]
+    held = {code: ('within', codes) for code, codes in engine.base_within(members)}
+    held.update({code: ('included', others) for code, others in engine.base_included(members)})
+    return held
 
 
 def _find(items, check_id) -> Optional[int]:
@@ -359,8 +366,12 @@ def summary(p: Stored, inventory) -> str:
 
 
 def _held_blocker(p: Stored, held, effective: Sequence[Stored], service) -> str:
-    """The readiness blocker of an approval the base rule now holds (D14)."""
+    """The readiness blocker of an approval a base rule now holds (D14); ``held``: _bases's (rule, codes)."""
+    rule, held = held if held else ('included', ())
     held = tuple(held or ())
+    if rule == 'within':
+        return (f'{p.code} was approved, but its examination is the endoscopic portion of the endoscopic ultrasound '
+                'documented with it and is normally included in it; revoke the approval')
     if held and all(other[:1].isdigit() for other in held):
         by_code = {other.code: other for other in effective}
         reinstated = all(by_code.get(code) is not None and by_code[code].bucket == EXCLUDED for code in held)
@@ -456,7 +467,9 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
         if active and readable:
             at = _find(items, BASE_CHECK)
             if held:
-                check, spec = engine.base_hold(p.code, p.family, p.key, held, service[p.key])
+                rule, codes = held
+                hold = engine.base_hold if rule == 'included' else engine.base_within_hold
+                check, spec = hold(p.code, p.family, p.key, codes, service[p.key])
                 new = to_jsonable(check)
                 if at is None:
                     items.insert(next((i for i, item in enumerate(items) if item.get('id') in _AFTER_BASE),

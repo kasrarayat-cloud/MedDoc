@@ -206,6 +206,8 @@ class OverlayPositiveControlTests(SimpleTestCase):
             battery.run()
             cls.battery_calls = len(cls.calls)
             replay.replay(regression.load_fixtures())
+        cls.battery_rows = len(battery.CASES)
+        cls.register_rows = sum(n.startswith('R8 ') for n in battery.CASES)
         cls.replay_calls = len(cls.calls) - cls.battery_calls
         text, normalized, result = mara_result()
         cls.calls.append((result, retrieval_for(result, selected_codes(normalized)), DAY))
@@ -234,7 +236,9 @@ class OverlayPositiveControlTests(SimpleTestCase):
                 self.assertEqual(v.reinstatement_clear, any(c['id'] == 'review.reinstatement' and c['status'] == 'pass'
                                                             for c in s.checks), where)
                 self.assertEqual(v.active, s.bucket == 'selected', where)
-        self.assertEqual(self.battery_calls, 50)
+        # every battery row: the 50 round-4 rows and package P2 READ-HOLD's register rows ('R8 '), D15 among them
+        self.assertEqual(self.battery_calls, self.battery_rows)
+        self.assertGreater(self.register_rows, 0)
         self.assertGreater(self.replay_calls, 50)
         self.assertGreater(compared, 300)
         self.assertGreater(recomputable, 25)  # the endoscopic-family check is recomputed (and equal), not skipped
