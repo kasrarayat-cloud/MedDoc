@@ -410,61 +410,11 @@ class CopularNegationTests(SimpleTestCase):
         self.assertEqual(conflicts(inventory(text)), [])
 
 
-# --- rule 5 (minimal): a section heading keeps its own structure; every other heading still ends it ---------------
-
-def two_pages(text):
-    split = text.index('\n\n')
-    return (PageSpan(1, 0, split), PageSpan(2, split + 2, len(text)))
-
-
-class HeadingStructureTests(SimpleTestCase):
-    def test_a_field_label_over_its_value_never_ends_the_section(self):
-        text = document('r5-field-labels-positive')
-        inv = inventory(text)
-        self.assertEqual(sorted(x.kind for x in acts(inv, 'gi.colonoscopy')), ['clip', 'snare'])
-        self.assertEqual([x.kind for x in acts(inv, 'gi.egd')], ['biopsy'])
-        result = run(text, [('43239', 'Cold forceps biopsies were taken from the gastric'),
-                            ('45385', 'A 6 mm polyp was removed with a cold snare')])
-        self.assertEqual(outcomes(result), {'43239': READY, '45385': READY})
-        self.assertEqual(bundled(result), [('gi.colonoscopy', 'clip')])
-
-    def test_page_furniture_never_ends_the_section(self):
-        text = document('r5-furniture-positive')
-        with_pages = inventory(text, two_pages(text))
-        self.assertIn('clip', [x.kind for x in acts(with_pages, 'gi.colonoscopy')])
-        self.assertEqual([x.kind for x in acts(with_pages, 'gi.egd')], ['biopsy'])
-        # without the page spans the repeated header ends the section: the clip goes to no service, never the EGD
-        self.assertNotIn('clip', [x.kind for x in acts(inventory(text), 'gi.egd')])
-
-    def test_twin_a_line_no_other_page_prints_still_ends_the_section(self):
-        text = document('r5-twin-not-furniture')
-        inv = inventory(text, two_pages(text))
-        self.assertNotIn('clip', [x.kind for x in acts(inv)])
-
-    def test_twin_a_site_heading_still_ends_the_section(self):
-        text = document('r5-twin-site-heading')
-        inv = inventory(text)
-        self.assertEqual(acts(inv, 'gi.egd', 'snare'), [])
-        result = run(text, [('43235', 'The gastroscope was advanced to the second part of the duodenum.')])
-        self.assertEqual(outcomes(result)['43235'], READY)
-
-    def test_twin_a_sub_heading_over_a_sentence_still_ends_the_section(self):
-        text = document('r5-twin-subheading')
-        inv = inventory(text)
-        self.assertEqual(acts(inv, 'gi.colonoscopy', 'snare'), [])
-        self.assertEqual(outcomes(run(text, [('45378', 'The colonoscope was advanced to the cecum.')]))['45378'], READY)
-
-    def test_the_structure_test(self):
-        text = 'COLONOSCOPY\nExtent\nCecum\nPolypectomy\nA hot snare was used.\nLarge Bowel\nNormal\nFindings\nNormal\n'
-        lines = services._lines(text)
-        verdicts = {text[a:b]: services._section_structure(text, lines, i) for i, (a, b) in enumerate(lines)
-                    if text[a:b] in ('Extent', 'Polypectomy', 'Large Bowel', 'Findings')}
-        self.assertEqual(verdicts, {'Extent': True, 'Polypectomy': False, 'Large Bowel': False, 'Findings': False})
-
+# --- the A1 must-stay shapes (pi.json PI-A1-HEADING-LAPSE-REBINDS); rule 5 is out of this change (decision (c))
 
 class HeadingLapseShapeTests(SimpleTestCase):
     """pi.json PI-A1-HEADING-LAPSE-REBINDS (tests/test_gi4_pi.py DroppedA1Tests, read again here): after a sub-heading
-    the unsited snare binds to neither service, and the base codes stay READY, whatever rule 5 keeps in a section."""
+    the unsited snare binds to neither service, and the base codes stay READY."""
     HEAD = (B + 'Gastroscopy and Colonoscopy\nDate of service: 10/20/2026\nEndoscopist: Synthetic MD\nSedation: propofol '
             'by CRNA\n\nFindings\n')
     FORWARD = ('The colonoscope was advanced to the cecum. The colon was normal.\nThe gastroscope was advanced to the '

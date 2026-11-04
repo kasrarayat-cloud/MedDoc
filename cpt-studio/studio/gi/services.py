@@ -996,7 +996,7 @@ def _documented_today(text: str, lines, service_date: Optional[date], dates, dat
     return frozenset(found)
 
 
-def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: Sequence = ()) -> tuple[_Part, ...]:
+def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tuple[_Part, ...]:
     """The document cut into report parts (a part about one service, from its title to the next title), role parts
     (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text. A history or plan part
     never runs into today's report: a history part ends at the line routing's sections read as a procedure heading
@@ -1012,9 +1012,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: 
     family - its part, and every untitled part that falls back to it, is a report part of none (``combined``), whose acts
     each service's own heading, an act's own site or its lesion's label places - never the first service named
     (_family_named). A title naming an examination and the service that includes it (an EGD with its EUS: _included)
-    names one service, as before. Rule 5 (minimal): a bare service heading (rule f below) keeps its lines over a field
-    label whose value follows on the next line, over a table's cells written one per line, and over page furniture
-    (_furniture; ``pages`` are the revision's page spans); every other heading still ends it."""
+    names one service, as before."""
     lay = _sections.layout(text)
     by_start = sorted(lay.sections, key=lambda section: section.start)
     layout_starts = [section.start for section in by_start]
@@ -1025,9 +1023,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: 
     dates = gi_context.find_dates(text) if dates is None else dates
     date_starts = [d.start for d in dates]
     documented = _documented_today(text, lines, service_date, dates, date_starts)
-    furniture = _furniture(text, lines, pages)
     title_marks: list[tuple[int, bool]] = []  # (start, combined) of each report title's cut (rule 4)
-    field_value = -1  # rule 5: the line that holds the value of the field label read last inside a section
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
@@ -1059,8 +1055,6 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: 
         named, _ = _family_named(line) if m else ('', '')
         field_m = PROCEDURE_FIELD.match(line)
         if m and named and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line):
-            if ls in furniture and cuts[-1][4] == 'section':
-                continue  # rule 5: the report title repeated in a page's running header never ends a service's section
             combined = _names_separate_services(line)  # rule 4: a combined title binds no single family
             family = '' if combined else named
             s = ls + line.index(stripped)
@@ -1081,13 +1075,6 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: 
                              'section'))
                 continue
             if cuts[-1][4] == 'section':
-                # rule 5: page furniture, a field label over its value (and that value) and a table cell never end the
-                # section
-                if ls in furniture or index == field_value:
-                    continue
-                if _section_structure(text, lines, index):
-                    field_value = index + 1
-                    continue
                 # A bare service heading ("Colonoscopy") owns the lines up to the next heading; the encounter's shared
                 # sections after it (Complications, Impression, Plan) belong to no one service.
                 cuts.append((ls, family, 'physician', None, kind_now))
@@ -1181,101 +1168,6 @@ def _names_separate_services(line: str) -> bool:
     named = {family for family, _, pattern in SERVICES + TITLE_SERVICES if pattern.search(line)}
     named -= {f for g in named for f in INCLUDED_EXAMINATION.get(g, ())}
     return len(named) >= 2
-
-
-# Core repair 2026-11-03 (P1, rule 5): what never ends a bare service heading's section.
-PAGE_HEAD_LINES = 8  # non-empty lines read at the head of each page for its running header (bounded work per page)
-PAGE_FOOT_LINES = 3  # and at its foot for its running footer
-FIELD_LABEL_CHARS = 40  # a field label or a table cell is short
-FIELD_VALUE_CHARS = 80  # and so is a field's value on the next line
-_SENTENCE_STOP = re.compile(r'[.!?]["\')\]]*[ \t]*$')
-
-
-def _furniture(text: str, lines: Sequence[tuple[int, int]], pages: Sequence = ()) -> frozenset:
-    """The starts of the lines that are page furniture (rule 5): a page-number line (cues.page_number_line); a report
-    title line that repeats an earlier report title word for word (the title in each page's running header); and, with
-    the revision's page spans, a line among a page's first PAGE_HEAD_LINES or last PAGE_FOOT_LINES non-empty lines that
-    an earlier page prints at the same edge (_edge_key: page and date numbers masked) - the first page's own lines are
-    the document's, never furniture. Bounded: one pass over the lines, and the edge lines of each page."""
-    out = set()
-    titles = set()
-    for ls, le in lines:
-        line = text[ls:le]
-        stripped = line.strip()
-        if not stripped or len(stripped) > 100:
-            continue
-        if _cues.page_number_line(line):
-            out.add(ls)
-            continue
-        body = line[PART_NUMBER.match(line).end():] if PART_NUMBER.match(line) else line
-        if REPORT_TITLE.match(body) or TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body):
-            key = _edge_key(line)
-            if key in titles:
-                out.add(ls)
-            titles.add(key)
-    seen = {'top': set(), 'bottom': set()}
-    for p in sorted(pages or (), key=lambda p: p.start):
-        if not 0 <= p.start <= p.end <= len(text):
-            continue
-        top = _edge_lines(text, p.start, p.end, True)[:PAGE_HEAD_LINES]
-        if len(top) == EDGE_LINES + 1:  # _edge_lines stops at EDGE_LINES + 1: read the rest of the head here
-            pos = top[-1][1] + 1
-            while len(top) < PAGE_HEAD_LINES and pos < min(p.end, p.start + EDGE_REACH):
-                newline = text.find('\n', pos, p.end)
-                le = p.end if newline < 0 else newline
-                if text[pos:le].strip():
-                    top.append((pos, le))
-                if newline < 0:
-                    break
-                pos = newline + 1
-        bottom = _edge_lines(text, p.start, p.end, False)[:PAGE_FOOT_LINES]
-        for edge, edge_lines in (('top', top), ('bottom', bottom)):
-            keys = []
-            for ls, le in edge_lines:
-                key = _edge_key(text[ls:le])
-                if key in seen[edge]:
-                    out.add(ls)
-                keys.append(key)
-            seen[edge].update(keys)
-    return frozenset(out)
-
-
-def _plain_short_line(text: str, ls: int, le: int, limit: int) -> bool:
-    """A non-empty line of at most ``limit`` characters with no sentence stop, naming no service and no act: a field's
-    label or value, or a table cell (rule 5). Bounded: one line."""
-    line = text[ls:le]
-    stripped = line.strip()
-    return 0 < len(stripped) <= limit and not _SENTENCE_STOP.search(stripped) \
-        and not any(pattern.search(line) for _, _, pattern in SERVICES) and not _acts_in(text, ls, le) \
-        and not ACT_VERB.search(line)
-
-
-def _section_structure(text: str, lines: Sequence[tuple[int, int]], index: int) -> bool:
-    """Whether the heading-shaped line ``index`` inside a bare service heading's section is the section's own structure
-    (rule 5): a field label whose value follows on the very next line ("Extent" / "Complete to cecum and terminal
-    ileum", "Preparation quality" / "BBPS: right 2, ...") or a table header cell written one cell per line over the next
-    cell ("Lesion" / "Location / size"). Never a heading routing's layout reads (a findings, impression or plan heading
-    still ends the section), never one naming a site (a site heading - "Large Bowel", "Stomach" - still ends it: the
-    other tract's acts may follow under it), never one over a sentence ("Polypectomy" / "A hot snare was used ...": the
-    A1 heading-lapse class, pi.json PI-A1-HEADING-LAPSE-REBINDS). The label and its value or next cell name no service
-    and no act and end with no sentence stop. Bounded: the line and the next."""
-    ls, le = lines[index]
-    if not _plain_short_line(text, ls, le, FIELD_LABEL_CHARS) or _anatomy_in(text, ls, le) \
-            or _layout_heading(text, ls, le):
-        return False
-    nxt = lines[index + 1] if index + 1 < len(lines) else None
-    if nxt is None or not _plain_short_line(text, nxt[0], nxt[1], FIELD_VALUE_CHARS):
-        return False
-    nxt_line = text[nxt[0]:nxt[1]]
-    return not (REPORT_TITLE.match(nxt_line) or TITLE_FIELD.match(nxt_line) or _layout_heading(text, *nxt))
-
-
-def _layout_heading(text: str, ls: int, le: int) -> bool:
-    """Whether routing's layout reads the line [ls, le) as a heading of a section of its own kind (findings, impression,
-    plan, history, indication, procedure, technique ...); a heading of kind 'other' ("Bowel preparation", "Sedation") is a
-    field label of the report like any other (rule 5)."""
-    heading = _sections._heading(text, ls, le)
-    return heading is not None and heading[0] != 'other'
 
 
 def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
@@ -2892,7 +2784,7 @@ def _act_frame(text: str, service_date: Optional[date], pages: tuple = ()):
     per document, date and pages, however many codes ask states_an_act_done of it (one linear pass)."""
     flow = reflow(text, pages)
     dates = gi_context.find_dates(flow)
-    plist = parts(flow, service_date=service_date, dates=dates, pages=pages)
+    plist = parts(flow, service_date=service_date, dates=dates)
     return flow, dates, plist, [p.start for p in plist], _sentences(flow)
 
 
@@ -3357,7 +3249,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     token = _ORIGINAL.set(text)
     try:
         inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts,
-                           located=located, pages=pages)
+                           located=located)
     finally:
         _ORIGINAL.reset(token)
     return _restore_spans(inventory, text) if flow != text else inventory
@@ -3837,11 +3729,11 @@ def _restore_spans(obj, text: str):
 
 
 def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None,
-           located: Optional[list] = None, pages: Sequence = ()) -> ServiceInventory:
+           located: Optional[list] = None) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
-    plist = parts(text, service_date=service_date, dates=dates, pages=pages)  # rule 5: page furniture by the pages
+    plist = parts(text, service_date=service_date, dates=dates)
     starts = [p.start for p in plist]
     sentences = _sentences(text)
     blocks = form_field_blocks(text)
