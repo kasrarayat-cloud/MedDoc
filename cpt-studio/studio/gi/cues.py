@@ -808,7 +808,9 @@ EM_ABSENCE = rx(_EM_ABSENT_START + _EM_ABSENT_LEAD + r'(?:' + _EM_ABSENT_THERE +
 # history, an examination or a visit in a wording routing reads as no E/M mention (EM_VISIT, an E/M heading, time and
 # decision making are routing's own): the patient as the one seen, evaluated, examined, assessed or interviewed ("She
 # was also evaluated today", "Separately, she was seen and examined today"); an evaluation stated today; the clinician
-# as the one evaluating ("I examined her"); an evaluation in a clinic or office, never a future one ("will be seen in
+# as the one evaluating ("I examined her"); a named patient seen or assessed for something ("Mara was seen for
+# jaundice"); the patient who underwent or had an evaluation, assessment, consultation, H&P or physical examination;
+# an evaluation in a clinic or office, never a future one ("will be seen in
 # clinic" is none); a history, history and physical, H&P, evaluation, assessment or consultation done ("A separate
 # problem-focused history and examination was performed today"); a physical examination; the note elements of an
 # evaluation (HPI, history of present illness, review of systems, ROS); and a visit's own note ("documented in the
@@ -826,6 +828,11 @@ EM_EVALUATION_STATED = rx(
     + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'\b'
     r'|(?-i:\b[A-Z][a-z]{1,20})\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS
     + r'(?:evaluated|re-?evaluated|examined|re-?examined|interviewed)\b'
+    r'|(?-i:\b[A-Z][a-z]{1,20})\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:seen|assessed|re-?assessed)\s+for\b'
+    r"|\b(?:she|he|patient|pt|(?-i:(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][\w'-]*))\s+" + _EM_EVAL_ADVERBS
+    + r'(?:underwent|had|received)\s+(?:(?:a|an|the)\s+)?(?:(?:separate|problem[- ](?:focused|oriented)|focused|'
+    r'brief|full|complete|detailed|comprehensive|clinical|medical)\s+){0,2}(?:evaluation|assessment|consultation|'
+    r'consult|history\s+and\s+physical|H\s*&\s*P|physical\s+exam(?:ination)?)\b'
     r'|\b' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'(?:\s+and\s+' + _EM_EVAL_VERB + r')?\s+today\b'
     r'|\b(?:I|we)\s+' + _EM_EVAL_ADVERBS + r'(?:saw|evaluated|re-?evaluated|examined|re-?examined|assessed|'
     r're-?assessed|interviewed|met\s+with)\b'

@@ -212,6 +212,9 @@ class AbsenceBesideAnEvaluationTests(SimpleTestCase):
         'The jaundice visit is documented in the clinic note of today.',
         # a denial earlier in the sentence governs nothing past its clause
         'No complications occurred, and she was evaluated today for new-onset jaundice.',
+        # a named patient seen for something; the patient who underwent an evaluation
+        'Mara was seen for new-onset jaundice, a separate problem.',
+        'She also underwent a separate evaluation for new-onset jaundice.',
     )
 
     def assert_held(self, text):
