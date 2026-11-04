@@ -1081,10 +1081,12 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
       the code with both readings - a doubt about this act is never released by a second reader;
     - a passage read as about another TIME (an earlier visit, a planned repeat) does not decide: the inventory reads
       time per clause and per service, and an unrelated historical reference never invalidates a current service;
-      except where that reading rests on the passage's SECTION alone (routing reads it inside a plan or history section,
-      "3. Upcoming procedures" over "4. Polyp removed by EMR at a tertiary center.") and the inventory reads the same
-      passage as the very act the code accounts for: the two readers then disagree about that passage's own time, so it
-      holds (never excludes);
+      except where the inventory reads that same passage as the very act the code accounts for (routing reads it inside
+      a plan or history section, "3. Upcoming procedures" over "4. Polyp removed by EMR at a tertiary center.", or by a
+      cue of its own clause, "Last colonoscopy: 9 mm polyp removed with hot snare.") or, for a code matched to a service
+      with no act, as that service's own statement (an attached prior report's title): the two readers then disagree
+      about that passage's own time, so it holds, never excludes (_another_time_on_the_act; P2 READ-HOLD, R8 D9, D6,
+      D10);
     - a passage about something else (a fragment of a findings sentence) does not decide;
     - where the documented service is not performed but the routing-era reading is positive, the code is held, never
       newly excluded.
@@ -1096,7 +1098,7 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
-            old.state == 'not_performed' and own and _section_time(doubt) and _on_matched_act(doubt, found))
+            old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
         if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
             # The routing-era reader left a negation unresolved ("was complete and was not discontinued") in a passage
             # the documented-service reader reads, clause by clause, as this service's own positive statement: the doubt
@@ -1577,6 +1579,28 @@ def _section_time(reading: checks.Reading) -> bool:
     (Upcoming procedures)"), no clause of it states another time."""
     return reading.status in ('planned', 'historical') and bool(reading.cues) \
         and all(cue.startswith(checks.SECTION_CUE_PREFIX) for cue in reading.cues)
+
+
+def _another_time_on_the_act(doubt: checks.Reading, found: reconcile.Match, text: str) -> bool:
+    """The third hold arm of _second_opinion (P2 READ-HOLD, R8 D9 with D6's and D10's engine halves): the routing-era
+    reading of the code's own passage is planned or historical, by its section (_section_time, as before) or by a cue
+    of its own clause ("historical: Last", "historical: 2026-09-02 is before the service date", "planned: tomorrow") -
+    never a clause cue in a passage whose own words say today ("The polyp seen at the prior colonoscopy was removed
+    with a hot snare today.": the inventory read its "today") - and the passage is what the matched status rests on:
+    the evidence of a matched act (_on_matched_act), or, for a match with no act (a base or a service code), the
+    service's own statement (_on_service_statement). Hold-only: the code is held with both readings, never excluded;
+    an unrelated historical passage still never decides against a current service."""
+    if doubt.status not in ('planned', 'historical') or doubt.start is None:
+        return False
+    if not _section_time(doubt) and gi_services.TODAY_WORDS.search(text, doubt.start, doubt.end):
+        return False
+    return _on_matched_act(doubt, found) or (not found.acts and _on_service_statement(doubt, found))
+
+
+def _on_service_statement(reading: checks.Reading, found: reconcile.Match) -> bool:
+    """Whether the passage overlaps the matched service's own evidence (its statement of performance, its report
+    title)."""
+    return any(reading.start < ev.end and ev.start < reading.end for ev in found.service.evidence)
 
 
 def _on_matched_act(reading: checks.Reading, found: reconcile.Match) -> bool:

@@ -50,6 +50,10 @@ R8_COLON7N = ('Colonoscopy: The colonoscope was advanced to the cecum and the ex
 R8_COLON1 = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
              'normal. No polyps were seen.')
 R8_TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
+R8_DIAG = B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+R8_CECUM_LM = ('The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve.')
+R8_LAST = 'Last colonoscopy: 9 mm polyp removed with hot snare.'
+R8_INDEX = 'At the index colonoscopy, a 9 mm polyp was removed with a hot snare.'
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -59,6 +63,12 @@ R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace o
 
 def _r8(head, *lines):
     return head + ''.join(line + '\n' for line in lines)
+
+
+def _r8_earlier(line):
+    """R8 time-1's document: an earlier colonoscopy's polypectomy on its own line, then today's diagnostic one."""
+    return (R8_DIAG + line + '\nProcedure: Colonoscopy\n' + R8_CECUM_LM + '\nA 15 mm sessile polyp was seen in the '
+            'transverse colon and was not removed today.\n')
 
 
 # (text, [(code, quote, truth)]); a truth 'X|MAY' is the author's X disputed by the second review (judged as MAY)
@@ -397,6 +407,36 @@ CASES = {
         'polyp, hot snare polypectomy: tubular adenoma.\n',
         [('45380', R8_TODAY_BX, 'done'), ('45385', 'Sigmoid colon polyp, hot snare polypectomy: tubular adenoma.',
                                          'not_done')]),
+    # D6: a pathology addendum heading (dated before the service date)
+    'R8 D6 F4C pathology addendum heading': (
+        R8_COLON + R8_TODAY_BX + '\n\nPATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon\n'
+        'Sigmoid colon, polypectomy: tubular adenoma.\n',
+        [('45380', R8_TODAY_BX, 'done'),
+         ('45385', 'PATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen, sigmoid colon', 'not_done')]),
+    # D9: an act at another time (history, "last", index or planned)
+    'R8 D9 time-1 last colonoscopy line': (_r8_earlier(R8_LAST), [('45385', R8_LAST, 'not_done')]),
+    'R8 D9 time-2 last colonoscopy line, base cited': (
+        _r8_earlier(R8_LAST), [('45378', R8_CECUM_LM, 'done'), ('45385', R8_LAST, 'not_done')]),
+    'R8 D9 index colonoscopy prose': (_r8_earlier(R8_INDEX), [('45385', R8_INDEX, 'not_done')]),
+    'R8 D9 release-1 most recent colonoscopy': (
+        _r8(R8_COLON, 'At her most recent colonoscopy the polyp was removed by cold snare.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'At her most recent colonoscopy the polyp was removed by cold snare.', 'not_done')]),
+    'R8 D9 release-1 last spring': (
+        _r8(R8_COLON, 'A sigmoid polyp was removed by cold snare last spring.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'A sigmoid polyp was removed by cold snare last spring.', 'not_done')]),
+    'R8 D9 release-1 to be removed tomorrow': (
+        _r8(R8_COLON, R8_SEEN, 'The polyp is to be removed by hot snare tomorrow.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'The polyp is to be removed by hot snare tomorrow.', 'not_done')]),
+    'R8 D9 release-1 ordered by the referrer': (
+        _r8(R8_COLON, R8_SEEN, 'Cold snare removal of the polyp was ordered by the referring physician.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'Cold snare removal of the polyp was ordered by the referring physician.', 'not_done')]),
+    # D10: an attached prior report's title
+    'R8 D10 attached prior EGD report title': (
+        R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
+        'Procedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. The duodenum was normal.\n',
+        [('45378', R8_CECUM, 'done'), ('43235', 'Upper endoscopy report (fictional)', 'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}

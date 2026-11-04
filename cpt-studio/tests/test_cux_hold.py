@@ -132,6 +132,13 @@ UNMOVED = {
     ('R8 D4 F7N EGD biopsy line, colonoscopy denies', '45378'): HELD,
     ('R8 D4 F1 EGD snare line, colonoscopy normal', '45378'): HELD,
     ('R8 D5 F4B pathology specimen line', '45380'): READY,
+    ('R8 D6 F4C pathology addendum heading', '45380'): READY,
+    ('R8 D9 time-2 last colonoscopy line, base cited', '45378'): HELD,
+    ('R8 D9 release-1 most recent colonoscopy', '45378'): HELD,
+    ('R8 D9 release-1 last spring', '45378'): HELD,
+    ('R8 D9 release-1 to be removed tomorrow', '45378'): HELD,
+    ('R8 D9 release-1 ordered by the referrer', '45378'): HELD,
+    ('R8 D10 attached prior EGD report title', '45378'): READY,
 }
 
 
@@ -363,4 +370,54 @@ class AnotherRolesEntryTests(SimpleTestCase):
         text = HEAD + CECUM + '\n' + TODAY_BX + '\nSigmoid colon polyp, hot snare polypectomy x1.\n'
         line = 'Sigmoid colon polyp, hot snare polypectomy x1.'
         item = proposal(run(text, [sel('45380', span(text, TODAY_BX)), sel('45385', span(text, line))]), '45385')
+        self.assertEqual(item.status, 'ready')
+
+
+DIAG = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+        'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n')
+CECUM_LM = 'The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve.'
+
+
+def earlier(line):
+    return (DIAG + line + '\nProcedure: Colonoscopy\n' + CECUM_LM + '\nA 15 mm sessile polyp was seen in the transverse '
+            'colon and was not removed today.\n')
+
+
+class AnotherTimeOnTheActTests(SimpleTestCase):
+    """D9 (R8 1.3), with D6's and D10's engine halves: the third hold arm of engine._second_opinion holds a routing-era
+    planned or historical reading of the code's own passage by ANY cue - not only by its section - when that passage
+    is the evidence of the matched act (time-1: "Last colonoscopy: 9 mm polyp removed with hot snare."; D6: a pathology
+    addendum heading dated before the service date) or, for a code matched to a service with no act (a base code), the
+    service's own statement (D10: an attached prior report's title). A clause cue never holds a passage its own clause
+    states as today's ("... was removed with a hot snare today.": the inventory read its "today"). Held, never excluded;
+    an unrelated historical passage still never decides against a current service. The base companion is NOT coded
+    (cux-hold.json "stopped": it releases a base beside a hedged therapeutic code)."""
+
+    def test_d9_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D9 ')
+
+    def test_d6_and_d10_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D6 ')
+        RegisterRowsTests.assert_rows(self, 'R8 D10 ')
+
+    def test_a_clause_dated_act_passage_is_held_with_both_readings(self):
+        for line in ('Most recent colonoscopy: 9 mm polyp removed with hot snare.',
+                     'At the last colonoscopy a 9 mm polyp was removed with a hot snare.',
+                     'Index colonoscopy: 9 mm polyp removed with hot snare.'):
+            with self.subTest(line):
+                text = earlier(line)
+                item = proposal(run(text, [sel('45385', span(text, line))]), '45385')
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                self.assertNotIn('so it does not decide', check(item, 'service.status').detail)
+
+    def test_controls_today_and_unrelated_history_still_decide(self):
+        # a passage its own clause states as today's: routing's "prior" is the polyp's, not the act's
+        line = 'The polyp seen at the prior colonoscopy was removed with a hot snare today.'
+        text = colon(line)
+        item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, line))]), '45385')
+        self.assertEqual(item.status, 'ready')
+        # an unrelated history line cited beside today's act sentence never decides against the current service
+        done, history = 'The polyp was removed with a hot snare.', 'Colonoscopy in 2019 was normal.'
+        text = colon(done, history)
+        item = proposal(run(text, [sel('45385', span(text, done), span(text, history))]), '45385')
         self.assertEqual(item.status, 'ready')
