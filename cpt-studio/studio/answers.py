@@ -310,6 +310,11 @@ def _rows(encounter, assessment, view=None):
     selected = [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.SELECTED)] \
         if assessment is not None else []
     for scope, fact, family, code, position in _questions(encounter, assessment, view, answers):
+        if hold and fact != DATE_FACT:
+            # While a member's date conflicts with the document nothing is sent: the date is the one detail asked.
+            # Every other question belongs to a reading made without a settled date, and the assessment that follows
+            # the member's choice asks again what it still needs (an answer saved before stays bound to its detail).
+            continue
         key = (DATE_FACT, '', '') if fact == DATE_FACT else (fact, family, code)
         row = rows.get(key)
         if row is None:

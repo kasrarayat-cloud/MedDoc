@@ -25,7 +25,7 @@ from studio import answers, customer_api, jobs, models, progress, reports, revie
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
-from tests.test_cux_flow import ProgressCase
+from tests.test_cux_flow import DetailsCase, ProgressCase, asks
 from tests.test_cux_review import allowed, decide, persist
 
 COLON = 'gi.colonoscopy'
@@ -148,6 +148,30 @@ class MemberAnswerEffectTests(WireCase):
         self.assertEqual((code['status'], code['sub_label']),
                          ('excluded', customer_api.UNAVAILABLE_SUB_LABELS['cannot_confirm']))
         self.assertEqual(review.readiness(s.encounter)['blockers'], ['45385 has no decision'])
+
+
+class DateHoldRowsTests(DetailsCase):
+    """While a member's date conflicts with the document, the date is the one detail asked (the page says "Choose the
+    date of service. Nothing is checked until you do."): every other question belongs to a reading made without a
+    settled date."""
+
+    def test_only_the_date_is_asked_while_it_is_held_and_the_rest_once_it_is_settled(self):
+        encounter = self.context_for(pf.GI_NOTE, '1998-01-01')
+        held = pf.assess(encounter, pf.result(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent')))
+        encounter.refresh_from_db()
+        self.assertTrue(progress.date_held(encounter))
+        rows = answers.details_needed(encounter, held, review.effective_view(held))
+        self.assertEqual([(row['fact'], row['choices']) for row in rows],
+                         [('service_date', [{'value': 'use_document', 'label': 'Use document date'}])])
+        extent = {'id': answers.detail_id('extent', COLON, '45385'), 'fact': 'extent', 'value': 'not_documented'}
+        with self.assertRaisesMessage(jobs.Refused, answers.STALE):
+            answers.save_details(encounter, self.s.reviewer, [extent])
+        pf.context(encounter, encounter.current_revision, fact_values=pf.facts())  # the document's own date in force
+        settled = pf.assess(encounter, pf.result(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent')))
+        encounter.refresh_from_db()
+        self.assertFalse(progress.date_held(encounter))
+        rows = answers.details_needed(encounter, settled, review.effective_view(settled))
+        self.assertEqual([(row['fact'], row['affects']) for row in rows], [('extent', ['45385'])])
 
 
 class ApprovedExportMarkerTests(WireCase):
