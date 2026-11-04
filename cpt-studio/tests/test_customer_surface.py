@@ -25,7 +25,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.test import Client, override_settings
 
-from studio import customer_api, models, reports, review
+from studio import customer_api, models, progress, reports, review
 from studio.gi.catalogue import COMMON_BUNDLED
 from tests.support import factories as f
 from tests.support import operator as ops
@@ -379,15 +379,24 @@ class SurfaceCase(HarnessCase):
                               checks=pf.standard_checks(service_status='fail'),
                               exclusion_reason=STORED_EXCLUSION, rationale=STORED_RATIONALE)
         alternative = pf.proposal('alt:0', '45381', [LESION_B], text=text, bucket='alternative')
+        # the documented-service reading as the engine records it (gi.services.ServiceInventory, to_jsonable): each act
+        # names its service and role, and the colonoscopy its two lesions - the review overlay reads it again
+        # (review.effective_view: the summary, the separate-lesion modifier review), so it must be the whole record
         services = {'version': 'gi-services@test', 'services': [
             {'id': 'S1', 'family': 'gi.egd', 'kind': 'egd', 'status': 'performed', 'acts': [
-                {'id': 'S1-A1', 'kind': 'biopsy', 'status': 'performed', 'evidence': [span(text, EGD)]}]},
-            {'id': 'S2', 'family': 'gi.colonoscopy', 'kind': 'colonoscopy', 'status': 'performed', 'acts': [
-                {'id': 'S2-A1', 'kind': 'biopsy', 'status': 'performed', 'lesion': 'S2-L1',
-                 'evidence': [span(text, LESION_A)]},
-                {'id': 'S2-A2', 'kind': 'snare', 'status': 'performed', 'lesion': 'S2-L2',
-                 'evidence': [span(text, LESION_B)]},
-                {'id': 'S2-A3', 'kind': 'clip', 'status': 'performed', 'evidence': [span(text, CLIP)]}]}]}
+                {'id': 'S1-A1', 'service': 'S1', 'kind': 'biopsy', 'status': 'performed', 'role': 'physician',
+                 'anatomy': ['gastric antrum'], 'technique': 'cold forceps', 'evidence': [span(text, EGD)]}]},
+            {'id': 'S2', 'family': 'gi.colonoscopy', 'kind': 'colonoscopy', 'status': 'performed', 'lesions': [
+                {'id': 'S2-L1', 'service': 'S2', 'noun': 'polyp', 'size': '3 mm', 'morphology': 'sessile',
+                 'anatomy': 'ascending colon', 'disposition': 'removed', 'evidence': [span(text, LESION_A)]},
+                {'id': 'S2-L2', 'service': 'S2', 'noun': 'polyp', 'size': '9 mm', 'morphology': 'sessile',
+                 'anatomy': 'sigmoid colon', 'disposition': 'removed', 'evidence': [span(text, LESION_B)]}], 'acts': [
+                {'id': 'S2-A1', 'service': 'S2', 'kind': 'biopsy', 'status': 'performed', 'role': 'physician',
+                 'technique': 'cold biopsy forceps', 'lesion': 'S2-L1', 'evidence': [span(text, LESION_A)]},
+                {'id': 'S2-A2', 'service': 'S2', 'kind': 'snare', 'status': 'performed', 'role': 'physician',
+                 'technique': 'cold snare', 'lesion': 'S2-L2', 'evidence': [span(text, LESION_B)]},
+                {'id': 'S2-A3', 'service': 'S2', 'kind': 'clip', 'status': 'performed', 'role': 'physician',
+                 'anatomy': ['sigmoid colon'], 'evidence': [span(text, CLIP)]}]}]}
         completeness = {'state': 'complete', 'reasons': [], 'covered': {'S1': ['43239'], 'S2': ['45380', '45385']},
                         'bundled': [{'service': 'S2', 'act': 'clip', 'label': 'clip placement at the sigmoid colon',
                                      'why': dict(COMMON_BUNDLED)['clip']}],
@@ -437,8 +446,10 @@ class ScenarioTests(SurfaceCase):
         doc = self.detail(encounter_id)
         self.assertEqual(doc['state'], 'ready')
         self.assertEqual([code['code'] for code in doc['codes']][:1], ['99213'])
-        self.assertEqual([check['state'] for check in doc['checks']], ['done', 'done', 'done'])
-        self.assertEqual(doc['progress']['phase'], 'completed')
+        # coding validation states the reference validation (progress.checks_summary): no installed CMS fee-schedule
+        # file applies to this scenario's date, so it is not verified - unavailable, and the results partial (DESIGN 6)
+        self.assertEqual([check['state'] for check in doc['checks']], ['done', 'done', 'unavailable'])
+        self.assertEqual(doc['progress']['phase'], 'partial')
         self.assertClean(self.surface(encounter_id))
 
     def test_harness2_phase_one_while_the_peer_reviews_are_owed(self):
@@ -467,8 +478,10 @@ class ScenarioTests(SurfaceCase):
         self.inputs.append(GI_TWO_LESIONS)
         doc = self.detail(encounter_id)
         codes = {code['code']: code for code in doc['codes']}
-        self.assertEqual(codes['45380']['summary'], 'Colonoscopy: forceps biopsy (cold biopsy forceps) of the 3 mm sessile '
-                                                    'polyp in the ascending colon.')
+        # the review overlay's sentence of CPT Studio's own reading (review_view.summary): the documented service and the
+        # act the code accounts for, never the stored detail or rationale
+        self.assertEqual(codes['45380']['summary'], 'The colonoscopy documents forceps biopsy (cold biopsy forceps) of the '
+                                                    '3 mm sessile polyp in the ascending colon.')
         self.assertEqual([quote['text'] for quote in codes['45385']['why']['quotes']], [LESION_B])
         self.assertEqual((codes['45380']['modifier_review']['options'], codes['45385']['modifier_review']['options']),
                          (['59', 'XS'], ['59', 'XS']))
@@ -523,8 +536,8 @@ class ScenarioTests(SurfaceCase):
         encounter_id = self.create()
         drain()
         doc = self.detail(encounter_id)
-        self.assertEqual((doc['state'], doc['progress']['error']), ('failed', {
-            'text': 'The coding service could not finish for this document.', 'action': 'none'}))
+        text, action = progress.ERRORS['provider_failed']  # P5's fixed sentence for the state, never the run's error
+        self.assertEqual((doc['state'], doc['progress']['error']), ('failed', {'text': text, 'action': action}))
         self.assertClean(self.surface(encounter_id))
 
     def test_a_member_date_conflict_is_action_needed(self):

@@ -20,6 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, candidates, participants, review
+from . import answers as member_answers  # the details flow (P5)
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
@@ -1863,13 +1864,14 @@ def customer_snapshot(encounter, kind):
     ready = customer_api.readiness(encounter, assessment, current)
     if kind == APPROVED and not ready['approved']:
         raise CustomerExportNotReady(ready['blockers'])
+    views = customer_api.views_of(assessment, current)  # the review overlay: statuses as the decisions leave them
     snap = {'format_version': CUSTOMER_FORMAT, 'kind': kind,
             'encounter': {'id': str(encounter.pk), 'title': encounter.title},
             'revision': {'id': str(revision.pk), 'number': revision.number}, 'assessment': str(assessment.pk),
-            'date_of_service': customer_api.service_date_block(encounter)['value'],
+            'date_of_service': member_answers.service_date_block(encounter)['value'],
             'limitations': customer_api.limitations(assessment, revision)}
     if kind == APPROVED:
-        items = customer_api.approved_items(assessment, current)
+        items = customer_api.approved_export_items(assessment, current, views)
         snap['items'] = [{'number': number, 'code': item['code'], 'units': item['units'],
                           'modifiers': list(item['modifiers']), 'status': 'approved', 'approver': item['approver'],
                           'approver_kind': item['approver_kind'], 'agent': bool(item['agent']),
@@ -1878,8 +1880,7 @@ def customer_snapshot(encounter, kind):
                          for number, item in enumerate(items, start=1)]
         snap['agent_review'] = any(item['agent'] for item in snap['items'])
     else:
-        view = customer_api.effective_view(assessment, current)
-        rows, _ = customer_api.code_rows(assessment, current, view)
+        rows, _ = customer_api.code_rows(assessment, current, views)
         snap['items'] = [{'number': row['number'], 'code': row['code'], 'units': row['units'],
                           'modifiers': list(row['modifiers']), 'status': row['status'],
                           'status_label': row['status_label'], 'sub_label': row['sub_label'], 'summary': row['summary'],

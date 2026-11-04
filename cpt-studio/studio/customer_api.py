@@ -9,23 +9,22 @@ server-side guard (``plain``); otherwise the fixed sentence stands in for it. Th
 usage, runs, hashes, rule ids, the trace - stays available to platform operators at /ops/ (studio.operator), served by
 studio.serializers, which is the operator serializer and is never called for a customer.
 
-The blocks other packages build are made here by stand-ins with exactly the contract's shape, each marked
-``# INTEGRATION: replaced by <module.function>``: P3's effective review view and approved items (review.effective_view,
-review.approved_items), P5's progress, details and document-date blocks (progress.encounter_progress,
-answers.details_needed, EncounterContext.document_date).
+What other layers decide is read from them, never decided again here: every status, check, open question, approve
+gate, readiness blocker, modifier review and summary from the review overlay (review.effective_view: the assessment as
+its current decisions and the member's standing answers leave it); the approved export's items from
+review.approved_items; readiness from review.readiness over that overlay; the date of service, the details rows, the
+progress panel and the three checks from P5's answers.service_date_block, answers.details_needed, progress.
+encounter_progress and progress.checks_summary. This module only words them for a member, by allowlist.
 """
 from __future__ import annotations
 
 import re
-from datetime import timedelta
 
 from django.conf import settings
-from django.utils import timezone
 
-from . import answers, models, review
-from .gi.context import charge_date_problem
+from . import answers, models, progress, review
 from .gi.profiles import PROFILES
-from .models import Decision, Job, Proposal, ProviderRun, ReportArtifact, SourceRevision
+from .models import Decision, Proposal, ProviderRun, ReportArtifact, SourceRevision
 
 # --- the customer vocabulary --------------------------------------------------------------------------------------
 
@@ -48,6 +47,12 @@ CONFIRMED_SUB_LABEL = 'Exclusion confirmed in review'
 REINSTATED_SUB_LABEL = 'Reinstated in review'
 CHECK_EXCLUDED_SUB_LABEL = 'Excluded by a documentation check'
 UNAVAILABLE_SUB_LABEL = 'A needed detail is not documented'
+# the member's answer that left a code's needed detail unavailable (review_view.View.answer)
+UNAVAILABLE_SUB_LABELS = {'not_documented': UNAVAILABLE_SUB_LABEL,
+                          'cannot_confirm': 'A needed detail could not be confirmed'}
+# What waits on a member (the review queue, and the session's count of it): a date to choose, details to answer, codes to
+# review - exactly the states the customer page lists in its queue (app.js QUEUE_STATES)
+QUEUE_STATES = ('action_needed', 'awaiting_detail', 'ready')
 GENERIC_ERROR = 'This action is not available right now.'
 STALE_EXPORT = 'This export no longer matches the saved decisions; create a new one.'
 DISTINCT_LESION = "Separate lesions are documented: this code's act is on "  # the engine's own sentence (engine.py)
@@ -77,11 +82,13 @@ RECORDED_RESPONSE = 'These results come from a recorded test response, not a liv
 PARTIAL_READING = 'Part of the document could not be read; check the text against the original.'
 
 # A server-composed customer string is refused when it carries any of these (the regex net of R4 6.6(3)): a label
-# built from the document's own words that matches falls back to CPT Studio's fixed sentence.
+# built from the document's own words that matches falls back to CPT Studio's fixed sentence. The readers' own words
+# (routing, reader, cue, own passage: the engine's support details carry them) are machinery too.
 FORBIDDEN = re.compile(
     r'(?i)\b(?:corti|astra|fable|openai|anthropic|claude)\b|\bgpt-\d|\bclaude-[a-z]|@cptstudio-|\bcpt-studio:[a-z]'
     r'|(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])|\b(?:participants?|peer[ -]reviews?|vendors?|tokens?|credits?|traces?'
-    r'|sha256|tool calls?|request ids?|replay|providers?)\b|\b[a-z]+[.-][a-z_]+@\d+\b')
+    r'|sha256|tool calls?|request ids?|replay|providers?|routing|readers?|cues?|own passages?)\b'
+    r'|\b[a-z]+[.-][a-z_]+@\d+\b')
 
 
 def plain(text) -> str:
@@ -262,6 +269,29 @@ BLOCKER_TEMPLATES = (
     (re.compile(CODE + r' has no decision'), lambda m: f'{m.group(1)} has no decision yet.'),
     (re.compile(r'No code is selected for approval[^\n]*'), lambda m: 'No code is selected for approval.'),
     (re.compile(r'No CPT code was proposed[^\n]*'), lambda m: 'No CPT code was suggested for this document.'),
+    # the review overlay's blockers of an approval it no longer supports (review_view.review_view, _held_blocker)
+    (re.compile(CODE + r' was approved, but a detail it needs was answered as (not documented|cannot be confirmed|'
+                       r'unavailable): revoke the approval'),
+     lambda m: f'{m.group(1)} was approved, but a detail it needs was answered as {m.group(2)}; undo the decision.'),
+    (re.compile(CODE + r' was approved, but its examination is the endoscopic portion of the endoscopic ultrasound '
+                       r'documented with it and is normally included in it; revoke the approval'),
+     lambda m: f'{m.group(1)} was approved, but its examination is part of the endoscopic ultrasound documented with '
+               'it and is normally included in it; undo the decision.'),
+    (re.compile(CODE + r' was approved, but ([0-9A-Z, and]{4,200}) (was reinstated|were reinstated|is selected|are '
+                       r'selected): its diagnostic examination is normally included in (that intervention|those '
+                       r'interventions); revoke one of the decisions'),
+     lambda m: f'{m.group(1)} was approved, but {m.group(2)} {m.group(3)}: its diagnostic examination is normally '
+               f'included in {m.group(4)}; undo one of the decisions.'),
+    (re.compile(CODE + r' was approved, but the documented ([a-z ]{1,60}) includes ([^\n;]{1,200}), which this '
+                       r'diagnostic code does not account for; revoke the approval'),
+     lambda m: plain(f'{m.group(1)} was approved, but the documented {m.group(2)} includes {m.group(3)}, which this '
+                     'diagnostic code does not account for; undo the decision.')),
+    (re.compile(CODE + r' was approved, but it now needs clarification; revoke the approval'),
+     lambda m: f'{m.group(1)} was approved, but it now needs a detail; undo the decision.'),
+    (re.compile(CODE + r' was approved with modifier (59|XS), but the separate-lesion modifier review no longer '
+                       r'applies to it; revoke the approval and decide it again'),
+     lambda m: f'{m.group(1)} was approved with modifier {m.group(2)}, but the separate-lesion modifier review no '
+               'longer applies to it; undo the decision and decide it again.'),
 )
 
 
@@ -274,7 +304,7 @@ def customer_blocker(blocker) -> str:
     for pattern, words in BLOCKER_TEMPLATES:
         match = pattern.fullmatch(text)
         if match:
-            return words(match)
+            return words(match) or 'The review is not complete yet.'
     return 'The review is not complete yet.'
 
 
@@ -282,85 +312,67 @@ def customer_blockers(blockers) -> list:
     return list(dict.fromkeys(customer_blocker(item) for item in blockers or []))
 
 
-# --- the effective review view and the approved items (P3) ------------------------------------------------------
+# --- the effective review view and the approved items (P3: review.effective_view, review.approved_items) ----------
 
-# INTEGRATION: replaced by review.effective_view (P3; CORE-UX-DESIGN.md 4)
-def effective_view(assessment, current):
-    """{proposal key: view} over the stored proposals and the current decisions: its status, the reason a view excluded
-    it ('' here), and its distinct-lesion modifier review over the effective set."""
-    proposals = list(assessment.proposals.order_by('position'))
-    effective = [p for p in proposals if _in_effective_set(p, current.get(p.pk))]
-    out = {}
-    for proposal in proposals:
-        out[proposal.key] = {'status': proposal.status, 'reason': '',
-                             'modifier_review': _modifier_review(proposal, effective)}
-    return out
+def views_of(assessment, current=None):
+    """{proposal key: review_view.View}: ``assessment`` as its current decisions and the member's standing answers leave
+    it (review.effective_view) - every status, check, open question, approve gate, readiness blocker, modifier review and
+    summary this module words is read from it. {} without an assessment."""
+    return review.effective_view(assessment, current) if assessment is not None else {}
 
 
-def _in_effective_set(proposal, decision):
-    """Whether a code counts toward the coding as the review leaves it: selected and not rejected, or reinstated."""
-    action = decision.action if decision is not None else None
-    if proposal.bucket == Proposal.SELECTED:
-        return action != Decision.REJECT
-    return proposal.bucket == Proposal.EXCLUDED and action in (Decision.REINSTATE, Decision.APPROVE)
+MODIFIER_FALLBACK = ('Separate lesions are documented for these codes. Whether an NCCI procedure-to-procedure edit pairs '
+                     'them, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added '
+                     'unless the reviewer chooses one.')
 
 
-def _distinct_lesion(proposal):
-    return any(isinstance(item, str) and item.startswith(DISTINCT_LESION)
-               for item in proposal.modifier_considerations or [])
+def _source_words(source):
+    """A modifier review's dated CMS source as the customer is shown it (its title, release, effective date and page),
+    or '' when it does not pass the guard: never its key, url or hash."""
+    if not isinstance(source, dict):
+        return ''
+    title, release = str(source.get('title') or ''), str(source.get('release') or '')
+    effective, page = str(source.get('effective_start') or ''), str(source.get('page') or '')
+    dated = '; '.join(item for item in (release, f'in effect from {effective}' if effective else '') if item)
+    return plain(f'{title}' + (f' ({dated})' if dated else '') + (f', page {page}' if page else ''))
 
 
-def _claims_manual():
-    """The dated CMS claims-manual source CPT Studio holds, as the customer names it ('' when none is installed)."""
-    source = models.PassageSource.objects.filter(kind='cms-claims-manual').order_by('-effective_start').first()
-    if source is None:
-        return []
-    named = plain(f'{source.title} ({source.release})')
-    return [named] if named else []
-
-
-# INTEGRATION: replaced by review.effective_view's modifier_review (P3; CORE-UX-DESIGN.md 4)
-def _modifier_review(proposal, effective):
-    """The distinct-lesion modifier review of ``proposal`` (directive 4): offered only while another code of the same
-    documented service that the engine records separate lesions for is in the effective set, never assigned."""
-    if proposal not in effective or not _distinct_lesion(proposal):
+def modifier_review_of(view):
+    """The contract's ``modifier_review`` ({options, text, sources}) from the overlay's structured separate-lesion
+    review of the code over the effective set (None when none applies - and so dropped when the other code leaves it):
+    the options it offers, its plain text (a fixed sentence when the text names anything the guard refuses) and its
+    dated sources. The options stay whatever the text says, because the reviewer chooses from them (record_decision)."""
+    found = getattr(view, 'modifier_review', None) if view is not None else None
+    if not isinstance(found, dict):
         return None
-    service = (proposal.support or {}).get('service')
-    others = [p for p in effective if p.pk != proposal.pk and p.code != proposal.code and _distinct_lesion(p)
-              and (p.support or {}).get('service') == service and _code(p.code)]
-    if not service or not others or not _code(proposal.code):
+    options = [option for option in found.get('options') or [] if option in ('59', 'XS')]
+    if not options:
         return None
-    codes = [proposal.code] + sorted({p.code for p in others})
-    joined = ', '.join(codes[:-1]) + f' and {codes[-1]}'
-    return {'kind': 'distinct_lesion', 'codes': codes, 'options': ['59', 'XS'],
-            'text': (f'Separate lesions are documented for {joined}. If a payer edit pairs these codes, one '
-                     'distinct-lesion modifier (59 or XS) may apply; none is assigned. NCCI procedure-to-procedure '
-                     'edits and payer modifier policy are not checked.'),
-            'sources': _claims_manual()}
+    sources = [words for words in (_source_words(source) for source in found.get('sources') or []) if words]
+    return {'options': options, 'text': plain(found.get('text')) or MODIFIER_FALLBACK, 'sources': sources}
 
 
-# INTEGRATION: replaced by review.approved_items (P3; CORE-UX-DESIGN.md 4)
-def approved_items(assessment, current=None):
-    """The approved items of ``assessment``, in stored order: approved decisions only - never an unresolved or unapproved
-    item - each with its code, units, modifiers, approver, approver kind, decision time, note, exact evidence and one
-    sentence of CPT Studio's own reading."""
-    current = review.current_decisions(assessment) if current is None else current
-    revision = assessment.revision
-    acts = _act_index(assessment)
+def approved_export_items(assessment, current, views):
+    """The approved export's items (review.approved_items: approved decisions only, never an unresolved or unapproved
+    item, nor an approval the overlay no longer supports), in stored order, as the customer report prints them: code,
+    units, the reviewer's chosen modifier, approver, approver kind, whether agent review is involved, decision time and
+    id, the one-sentence summary and the exact passages the approval rests on (with page and character offsets)."""
+    proposals = {str(proposal.pk): proposal for proposal in assessment.proposals.all()}
     items = []
-    for proposal in assessment.proposals.order_by('position'):
-        decision = current.get(proposal.pk)
-        if decision is None or decision.action != Decision.APPROVE:
-            continue
+    for item in review.approved_items(assessment):
+        proposal = proposals[item['proposal_id']]
+        decision = current[proposal.pk]
         reinstated = review.reinstatement_for(decision) if proposal.bucket == Proposal.EXCLUDED else None
-        items.append({'proposal_id': str(proposal.pk), 'decision_id': str(decision.pk), 'code': proposal.code,
-                      'units': proposal.units, 'modifiers': list(getattr(decision, 'modifiers', None) or []),
-                      'approver': decision.reviewer.label(), 'approver_kind': decision.reviewer_kind,
-                      'agent': decision.reviewer_kind == models.User.AGENT or (
-                          reinstated is not None and reinstated.reviewer_kind == models.User.AGENT),
-                      'decided_at': _iso(review.decision_root(decision).created_at), 'note': decision.note,
-                      'evidence': _quotes(proposal, revision.text, revision.pages, acts, 'approved'),
-                      'summary': _summary(proposal)})
+        items.append({
+            'proposal_id': item['proposal_id'], 'decision_id': str(decision.pk), 'code': _code(item['code']),
+            'units': item['units'], 'modifiers': list(item['modifiers']), 'approver': item['approved_by'],
+            'approver_kind': item['approver_kind'],
+            'agent': item['approver_kind'] == models.User.AGENT or (
+                reinstated is not None and reinstated.reviewer_kind == models.User.AGENT),
+            'decided_at': item['decided_at'], 'note': item['note'],
+            'evidence': [{'text': span['text'], 'start': span['start'], 'end': span['end'], 'page': span.get('page')}
+                         for span in item['evidence']],
+            'summary': code_summary(proposal, views.get(proposal.key))})
     return items
 
 
@@ -422,7 +434,9 @@ def _quotes(proposal, text, pages, acts, status):
 
 
 def _summary(proposal):
-    """One sentence of CPT Studio's own reading: the documented service and the acts the code accounts for."""
+    """One sentence from the code's support record alone - the documented service's family and the acts the code
+    accounts for, as CPT Studio's reading labels them - for a code the overlay's summary does not describe (its matched
+    service is not in the recorded reading, or the guard refuses its words)."""
     support = proposal.support or {}
     family = _family_label(support.get('family') or proposal.family)
     acts = [plain(act.get('label')) for act in support.get('acts') or [] if isinstance(act, dict)]
@@ -435,6 +449,13 @@ def _summary(proposal):
     if state in ('performed', 'incomplete'):
         return f'{family}: documented as {state} on the date of service.'
     return f'{family}: suggested from this document.'
+
+
+def code_summary(proposal, view):
+    """The code's one sentence of CPT Studio's own reading (CORE-UX-DESIGN.md 7): the overlay's (review_view.summary:
+    the documented service, its state and the acts the code accounts for, from the recorded reading's structured fields
+    and act labels - never a support detail, a provider's wording or any stored free text), else _summary's."""
+    return plain(getattr(view, 'summary', '') if view is not None else '') or _summary(proposal)
 
 
 EXCLUSION_REASONS = (
@@ -468,39 +489,75 @@ QUESTION_WORDS = {
     'target': 'The structure examined is not documented.',
     'cannulation': 'Whether cannulation was achieved is not documented.',
 }
+# why approve is withheld from a code the list shows as ready (review_view.View.withheld_by, same_day_held)
+WITHHELD_WORDS = {
+    'review.reinstatement': 'This reinstated code needs a detail before it can be approved.',
+    'em.same_day_if_reinstated': 'A separately identifiable office visit is not documented beside the procedure '
+                                 'reinstated for the same day.',
+}
+STALE_WORDS = ('After the review decisions, a check that depends on the other codes could not be recomputed for this '
+               'code.')
 
 
-def _qualifications(proposal, status, view, questions, code):
+def _reference_attention(proposal, view):
+    """Whether a CMS fee-schedule check of the code warns or fails, as the overlay leaves its checks (an endoscopic-
+    family check is recomputed over the effective set) - review.reference_check's 'attention'."""
+    checks = view.checks if view is not None else proposal.checks or []
+    return any(isinstance(check, dict) and check.get('id') in review.CMS_CHECKS and check.get('status') in ('warn', 'fail')
+               for check in checks)
+
+
+def _qualifications(proposal, status, view, code):
+    """What qualifies the code, in fixed sentences: why it needs a detail (a conflict, each open question the overlay
+    leaves it), why approve is withheld, why it is excluded, a decision the overlay no longer supports (its readiness
+    blocker), a check that could not be recomputed, its modifier review and a CMS fee-schedule check that needs
+    attention."""
     support = proposal.support or {}
+    questions = list(view.questions) if view is not None else []
     out = []
-    if status == 'needs_detail':
-        if support.get('reason') == 'conflict':
-            kinds = [act.get('kind') for act in support.get('acts') or [] if isinstance(act, dict)]
-            out.append(f'The document has conflicting statements about the {_act_label(kinds[0] if kinds else "")}; '
-                       'a detail is needed before this code can be approved.')
+    if status == 'needs_detail' and support.get('reason') == 'conflict':
+        kinds = [act.get('kind') for act in support.get('acts') or [] if isinstance(act, dict)]
+        out.append(f'The document has conflicting statements about the {_act_label(kinds[0] if kinds else "")}; '
+                   'a detail is needed before this code can be approved.')
+    if status in ('needs_detail', 'ready'):
         for question in questions:
-            fact = question.fact
+            fact = question.get('fact') if isinstance(question, dict) else ''
             if fact == 'base_included':
                 out.append(f'{code} may be included in another code reported for this examination; a detail is '
                            'needed before it can be approved.' if code else
                            'This code may be included in another code reported for this examination.')
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
-        if not out:
+        if status == 'needs_detail' and not out:
             out.append('A detail is needed before this code can be approved.')
-    if status == 'excluded' and proposal.bucket == Proposal.EXCLUDED:
+        withheld = view.withheld_by if view is not None else ''
+        if withheld in WITHHELD_WORDS:
+            out.append(WITHHELD_WORDS[withheld])
+        if view is not None and view.same_day_held:
+            out.append(WITHHELD_WORDS['em.same_day_if_reinstated'])
+    if status == 'excluded' and proposal.bucket == Proposal.EXCLUDED and not (view is not None
+                                                                           and view.reason == review.DETAIL_UNAVAILABLE):
         out.append(_exclusion_reason(proposal))
-    modifier = (view or {}).get('modifier_review')
+    if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
+        out.append('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
+                   'until that answer is withdrawn.')
+    if view is not None and view.blocker:
+        out.append(customer_blocker(view.blocker))
+    if view is not None and view.stale:
+        out.append(STALE_WORDS)
+    modifier = modifier_review_of(view)
     if modifier:
         out.append(modifier['text'])
-    if review.reference_check(proposal)['state'] == 'attention':
+    if _reference_attention(proposal, view):
         out.append('A CMS fee-schedule check for this code needs attention.')
     return list(dict.fromkeys(out))
 
 
 def _status(proposal, decision, view):
-    """(status, sub_label) by CORE-UX-DESIGN.md 7: an approval is approved; a rejection, a confirmed exclusion and an
-    exclusion that stands are excluded; a code that needs a detail needs one; any other is ready for review."""
+    """(status, sub_label) by CORE-UX-DESIGN.md 7 over the review overlay: an approval is approved; a rejection, a
+    confirmed exclusion, an exclusion that stands and a code whose needed detail a member answered as unavailable
+    (review.DETAIL_UNAVAILABLE) are excluded; a code the overlay leaves needing clarification needs a detail; any other
+    is ready for review."""
     action = decision.action if decision is not None else None
     if action == Decision.APPROVE:
         reinstated = review.reinstatement_for(decision) if proposal.bucket == Proposal.EXCLUDED else None
@@ -511,12 +568,12 @@ def _status(proposal, decision, view):
         return 'excluded', REJECTED_SUB_LABEL
     if action == Decision.CONFIRM:
         return 'excluded', CONFIRMED_SUB_LABEL
-    view_status = (view or {}).get('status', proposal.status)
-    if (view or {}).get('reason') == 'detail_unavailable':
-        return 'excluded', UNAVAILABLE_SUB_LABEL
+    if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
+        return 'excluded', UNAVAILABLE_SUB_LABELS.get(view.answer, UNAVAILABLE_SUB_LABEL)
     if proposal.bucket == Proposal.EXCLUDED and action != Decision.REINSTATE:
         return 'excluded', CHECK_EXCLUDED_SUB_LABEL
-    if view_status == Proposal.NEEDS_CLARIFICATION:
+    status = view.status if view is not None else proposal.status
+    if status == Proposal.NEEDS_CLARIFICATION:
         return 'needs_detail', REINSTATED_SUB_LABEL if action == Decision.REINSTATE else ''
     return 'ready', REINSTATED_SUB_LABEL if action == Decision.REINSTATE else ''
 
@@ -551,12 +608,13 @@ def decision_response(decision):
             'decision': _decision_json(decision)}
 
 
-def code_rows(assessment, current, view, membership=None, questions_by_proposal=None, details=()):
+def code_rows(assessment, current, views, membership=None, details=()):
     """(codes, other_codes). The numbered codes: selected and reinstated codes by stored position, then the excluded
     codes a reviewer can still decide (reinstatable); alternatives and exclusions nobody can decide go to other_codes.
-    ``membership``: whose allowed actions are listed (none without one). Each row carries ``_decision`` (its current
-    decision's id, for the report snapshot), which the payload drops."""
-    questions_by_proposal = questions_by_proposal or {}
+    ``views``: views_of(assessment, current), the overlay every status, question, gate and modifier review is read
+    from. ``membership``: whose allowed actions are listed (none without one). ``details``: the details rows; a code's
+    ``detail_ids`` are the rows whose ``affects`` name it. Each row carries ``_decision`` (its current decision's id),
+    which the payload drops."""
     revision = assessment.revision
     acts = _act_index(assessment)
     proposals = list(assessment.proposals.order_by('position'))
@@ -573,22 +631,19 @@ def code_rows(assessment, current, view, membership=None, questions_by_proposal=
     rows = []
     for number, proposal in enumerate(first + then, start=1):
         decision = current.get(proposal.pk)
-        entry = view.get(proposal.key) or {}
-        status, sub_label = _status(proposal, decision, entry)
+        view = views.get(proposal.key)
+        status, sub_label = _status(proposal, decision, view)
         code = _code(proposal.code)
-        modifier = entry.get('modifier_review')
         rows.append({
             'id': str(proposal.pk), 'number': number, 'code': code, 'units': proposal.units,
             'modifiers': list(getattr(decision, 'modifiers', None) or []) if decision is not None else [],
-            'modifier_review': ({'options': list(modifier['options']), 'text': modifier['text'],
-                                 'sources': list(modifier['sources'])} if modifier else None),
+            'modifier_review': modifier_review_of(view),
             'status': status, 'status_label': STATUS_LABELS[status], 'sub_label': sub_label,
-            'summary': _summary(proposal),
+            'summary': code_summary(proposal, view),
             'why': {'quotes': _quotes(proposal, revision.text, revision.pages, acts, status),
-                    'qualifications': _qualifications(proposal, status, entry,
-                                                      questions_by_proposal.get(proposal.pk, ()), code)},
-            'detail_ids': [row['id'] for row in details if proposal.pk in row['_proposals']],
-            'allowed_actions': (list(review.allowed_actions(proposal, assessment, membership))
+                    'qualifications': _qualifications(proposal, status, view, code)},
+            'detail_ids': [row['id'] for row in details if code and code in row['affects']],
+            'allowed_actions': (list(review.allowed_actions(proposal, assessment, membership, views))
                                 if membership is not None else []),
             'decision': _decision_json(decision),
             '_decision': str(decision.pk) if decision is not None else None,
@@ -647,285 +702,31 @@ def _document(encounter, revision):
             'original_url': f'/api/encounters/{encounter.pk}/original' if source else None}
 
 
-def _exact_span(span, text):
-    if not isinstance(span, dict):
-        return None
-    start, end, quote = span.get('start'), span.get('end'), span.get('text')
-    if type(start) is int and type(end) is int and isinstance(quote, str) and 0 <= start < end <= len(text) \
-            and text[start:end] == quote:
-        return {'text': quote, 'start': start, 'end': end}
-    return None
+# --- the details needed (P5: answers.details_needed over the review overlay) ----------------------------------------
+
+def details_rows(encounter, assessment, views, membership):
+    """The contract's ``details_needed``: answers.details_needed's rows - one per open material question the overlay
+    leaves the live assessment (and the date of service at once while a member's date conflicts with the document),
+    each with its control, the codes it affects and its saved answer - with the physician's addendum path offered only
+    to a member whose role may add documentation."""
+    rows = answers.details_needed(encounter, assessment, views if assessment is not None else None)
+    can = bool(membership is not None and membership.can_review)
+    return [{**row, 'addendum_allowed': bool(row['addendum_allowed'] and can)} for row in rows]
 
 
-# INTEGRATION: replaced by P5's service-date block (EncounterContext.document_date and
-# context.document_service_date_fact; CORE-UX-DESIGN.md 6) - the document's own date of a member conflict is known
-# here only where that field exists
-def service_date_block(encounter, context=None, revision=None):
-    """The date of service as the customer is shown it: the value in use, where it comes from, the document's own date
-    and quote beside the date a member entered, whether they conflict and whether "Use document date" can settle it."""
-    context = encounter.current_context if context is None else context
-    revision = encounter.current_revision if revision is None else revision
-    text = revision.text if revision is not None else ''
-    facts = (context.facts or {}) if context is not None else {}
-    fact = facts.get('service_date') if isinstance(facts.get('service_date'), dict) else {}
-    origin = fact.get('origin')
-    asked = charge_date_problem(fact) is not None if fact else False
-    entered = (context.user_values or {}).get('service_date') if context is not None else None
-    document_fact = getattr(context, 'document_date', None) if context is not None else None
-    if not isinstance(document_fact, dict):
-        document_fact = fact if origin == 'document' else None
-    document_value = document_fact.get('value') if document_fact and document_fact.get('origin') == 'document' else None
-    quote = None
-    for span in ((document_fact or {}).get('evidence') or (fact.get('evidence') if origin == 'conflict' else None)
-                 or []):
-        quote = _exact_span(span, text)
-        if quote:
-            break
-    value = fact.get('value') if origin in ('document', 'user') and isinstance(fact.get('value'), str) else None
-    conflict = origin == 'conflict' and not asked
-    source = 'missing' if asked else {'document': 'document', 'user': 'member', 'conflict': 'conflict'}.get(origin,
-                                                                                                       'missing')
-    return {'value': value, 'source': source, 'document_value': document_value if isinstance(document_value, str) else None,
-            'document_quote': quote, 'entered_value': entered if isinstance(entered, str) and entered else None,
-            'conflict': conflict,
-            'can_use_document_date': bool(conflict and entered and isinstance(document_value, str)
-                                          and entered != document_value)}
+# --- progress and the three checks (P5: progress.encounter_progress, progress.checks_summary) ----------------------
 
-
-def _open_questions(assessment):
-    """The open questions of the assessment, one per (fact, family, code), oldest first."""
-    if assessment is None:
-        return []
-    out, seen = [], set()
-    for question in assessment.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal') \
-            .order_by('created_at', 'pk'):
-        key = (question.fact, question.family, question.proposal.code if question.proposal_id else '')
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(question)
-    return out
-
-
-def _prompt(question, code, family):
-    fact = question.fact
-    if fact.startswith('conflict:'):
-        return (f'The document has conflicting statements about the {_act_label(fact.split(":", 1)[1])}. Was it done on '
-                'the date of service?')
-    prompts = {
-        'service_date': 'Which date of service is right for this encounter?',
-        'setting': 'Where was the patient seen (the place of service)?',
-        'patient_status': 'Is the patient new or established?',
-        'billing_context': 'Is this professional or facility billing?',
-        'extent': f'How far was the {family.lower()} advanced?',
-        'completion': f'Was the {family.lower()} completed as intended?',
-        'performed_status': f'Was {code or "this service"} performed on the date of service?',
-        'base_included': f'Is {code or "this code"} reported separately from the other codes for this examination?',
-        'separate_em': 'Was a separate office visit documented on this date?',
-        'em_basis': 'Does the visit level rest on total time or on medical decision making?',
-        'target': 'Which structure was examined?',
-        'cannulation': 'Was cannulation achieved?',
-    }
-    return prompts.get(fact, f'A detail about {code or family.lower()} needs confirming.')
-
-
-# INTEGRATION: replaced by answers.details_needed (P5; CORE-UX-DESIGN.md 6) - no answer is saved in this tree
-def details_needed(encounter, assessment, membership, proposals, date_block):
-    """The open questions as one compact list: one row per material question with its control - a date beside the
-    document's, a listed choice, or a confirmation where only "Not documented" or "Cannot confirm" may be answered (a
-    member never supplies a clinical fact) - the codes it affects and its saved answer."""
-    rows = []
-    decidable = [p for p in proposals if review.decidable(p)]
-    for question in _open_questions(assessment):
-        fact = question.fact
-        code = _code(question.proposal.code) if question.proposal_id else ''
-        family = _family_label(question.family) if question.family else ''
-        if question.proposal_id:
-            affected = [question.proposal]
-        elif question.scope == 'service' and question.family:
-            affected = [p for p in decidable if p.family == question.family]
-        else:
-            affected = list(decidable)
-        control = 'date' if fact == 'service_date' else 'choice' if fact in CHOICES else 'confirm'
-        rows.append({
-            'id': str(question.pk), 'fact': fact, 'family_label': family,
-            'prompt': _prompt(question, code, family or 'procedure'), 'control': control,
-            'choices': [{'value': value, 'label': label} for value, label in CHOICES.get(fact, ())],
-            'allow': ['not_documented', 'cannot_confirm'] if control == 'confirm' else
-            ['not_documented'] if control == 'choice' else [],
-            'document_value': date_block['document_value'] if control == 'date' else None,
-            'entered_value': date_block['entered_value'] if control == 'date' else None,
-            'quote': date_block['document_quote'] if control == 'date' else None,
-            'affects': sorted({_code(p.code) for p in affected if _code(p.code)}),
-            'saved': None,
-            'addendum_allowed': bool(control == 'confirm' and membership.can_review),
-            '_proposals': {p.pk for p in affected},
-        })
-    return rows
-
-
-# --- progress and the three checks (P5) ---------------------------------------------------------------------------
-
-STEPS = (('reading', 'Reading your document'), ('identifying', 'Identifying procedures'),
-         ('checking', 'Checking suggested codes'), ('preparing', 'Preparing your results'))
-STEP_OF = {Job.EXTRACT: 'reading', Job.ANALYZE: 'identifying', Job.PREDICT: 'checking', Job.ASTRA: 'checking',
-           Job.FABLE: 'checking', Job.ASTRA_PEER: 'checking', Job.FABLE_PEER: 'checking', Job.REVIEW2: 'checking',
-           Job.ASSESS: 'preparing'}
-DETAIL_OF = {Job.PREDICT: 'Document review', Job.REVIEW2: 'Document review', Job.ASTRA: 'Independent checks',
-             Job.FABLE: 'Independent checks', Job.ASTRA_PEER: 'Independent checks',
-             Job.FABLE_PEER: 'Independent checks', Job.ASSESS: 'Coding validation'}
-PHASE_MESSAGES = {
-    'queued': 'Your document is in line to be processed. You can leave this page and come back.',
-    'processing': 'Your document is being processed. You can leave this page and come back; your results will be here.',
-    'action_needed': 'The service date you entered differs from the document. Choose the date to use; nothing has been '
-                     'sent for checking yet.',
-    'awaiting_detail': 'A few details are needed before every code can be reviewed.',
-    'completed': 'Your results are ready.',
-    'partial': 'Your results are ready, but some checks could not be completed.',
-    'failed': 'Processing could not finish.',
-    'stopped': 'Processing was stopped. You can resume it.',
-    'being_confirmed': 'We are confirming whether an earlier check completed. Nothing will be sent again until that is '
-                       'settled.',
-}
-FAILED_MESSAGES = {'extraction_failed': ('The text of this document could not be read.', 'new_document'),
-                   'processing_failed': ('Processing could not finish for this document.', 'none'),
-                   'provider_failed': ('The coding service could not finish for this document.', 'none'),
-                   'provider_not_run': ('The coding service did not run for this document.', 'none')}
-PARTIAL_RECORDS = ('refused', 'failed', 'unknown', 'not_sent', 'blocked')
-
-
-def _step_rows(jobs, busy, failed):
-    groups = {key: [] for key, _ in STEPS}
-    for index, job in enumerate(jobs):
-        step = STEP_OF.get(job.kind)
-        if step is None:
-            continue
-        if job.kind == Job.ASSESS and any(later.kind in Job.PEER_KINDS for later in jobs[index + 1:]):
-            step = 'checking'  # a first assessment the peer stages follow
-        groups[step].append(job)
-    rows, active_seen = [], False
-    for key, label in STEPS:
-        group = groups[key]
-        started = [job.started_at or job.created_at for job in group if job.started_at or job.created_at]
-        finished = [job.finished_at for job in group if job.finished_at]
-        live = [job for job in group if job.state in (Job.QUEUED, Job.RUNNING)]
-        if live:
-            state, active_seen = ('active' if not active_seen else 'waiting'), True
-        elif not group:
-            state = 'waiting' if busy and not active_seen else 'skipped' if failed else 'not_started'
-            if busy and active_seen:
-                state = 'waiting'
-        elif group[-1].state == Job.CANCELLED:
-            state = 'stopped'
-        elif group[-1].state in (Job.FAILED, Job.UNKNOWN) and not any(
-                groups[later] for later, _ in STEPS[STEPS.index((key, label)) + 1:]):
-            state = 'failed'
-        else:
-            state = 'done'
-        rows.append({'key': key, 'label': label, 'state': state, 'started_at': _iso(min(started)) if started else None,
-                     'finished_at': _iso(max(finished)) if finished and state in ('done', 'failed', 'stopped') else None})
-    return rows
-
-
-# INTEGRATION: replaced by progress.encounter_progress (P5; CORE-UX-DESIGN.md 6)
-def progress_block(encounter, membership, jobs, assessment, state, now=None):
-    """The one compact progress panel, folded from the current revision's jobs: four plain steps with their real
-    states and times, the phase, a fixed message for it, and the Stop and Resume paths. Never a percentage or an ETA."""
-    from .jobs import busy as is_busy  # local import: jobs imports this module's peers
-
-    now = now or timezone.now()
-    busy = is_busy(encounter)
-    stored = encounter.state
-    running = [job for job in jobs if job.state == Job.RUNNING]
-    queued = [job for job in jobs if job.state == Job.QUEUED]
-    if busy:
-        phase = 'processing' if running else 'queued'
-    elif state == 'failed':
-        phase = 'failed'
-    elif state in ('stopped', 'being_confirmed', 'action_needed'):
-        phase = state
-    elif state == 'awaiting_detail':
-        phase = 'awaiting_detail'
-    elif state == 'processing':  # no stage runs, yet the results are not those of the current document and details
-        phase = 'processing'
-    elif assessment is not None and _partial(assessment, encounter):
-        phase = 'partial'
-    else:
-        phase = 'completed'
-    steps = _step_rows(jobs, busy, phase == 'failed')
-    active = (running or queued)[:1]
-    slow, message = False, PHASE_MESSAGES[phase]
-    if running:
-        job = running[0]
-        bound = settings.JOB_DEADLINE_SECONDS.get(job.kind)
-        began = job.started_at or job.created_at
-        if bound and began and now - began > timedelta(seconds=0.6 * bound):
-            slow = True
-            label = dict(STEPS).get(STEP_OF.get(job.kind, ''), 'Processing')
-            message = (f'{label} is taking longer than usual. It is still running and stops on its own if it cannot '
-                       'finish; you can leave this page and come back.')
-    error = None
-    if phase == 'failed':
-        text, action = FAILED_MESSAGES.get(stored, ('Processing could not finish for this document.', 'none'))
-        error = {'text': text, 'action': action}
-    elif phase == 'stopped':
-        error = {'text': 'Processing was stopped before it finished.', 'action': 'resume'}
-    times = [job.started_at or job.created_at for job in jobs if job.started_at or job.created_at]
-    ends = [job.finished_at for job in jobs if job.finished_at]
-    return {'phase': phase, 'busy': busy, 'steps': steps,
-            'active_detail': DETAIL_OF.get(active[0].kind, '') if active else '',
-            'started_at': _iso(min(times)) if times else None,
-            'finished_at': _iso(max(ends)) if ends and not busy else None,
-            'server_time': _iso(now), 'slow': slow, 'message': message,
-            'can_stop': bool(busy and membership.can_review),
-            'can_resume': bool(review.can_resume(encounter) and membership.can_review), 'can_leave': True,
-            'error': error}
-
-
-def _partial(assessment, encounter):
-    from .serializers import retrieval_failed  # local import: the operator serializer's own predicate
-    records = [record for record in assessment.participants or [] if isinstance(record, dict)]
-    if any(record.get('state') in PARTIAL_RECORDS or record.get('peer_state') in PARTIAL_RECORDS for record in records):
-        return True
-    if any(retrieval_failed(entry) for entry in assessment.retrieval or []):
-        return True
-    return encounter.current_revision is not None and \
-        encounter.current_revision.extraction_status == SourceRevision.PARTIAL
-
-
-# INTEGRATION: replaced by P5's checks fold (progress.encounter_progress; CORE-UX-DESIGN.md 6)
-def checks_block(encounter, jobs, assessment, busy):
-    """Document review, independent checks and coding validation: what each functional stage did, in four words."""
-    def state_of(kinds, done):
-        own = [job for job in jobs if job.kind in kinds]
-        if any(job.state == Job.RUNNING for job in own):
-            return 'running'
-        if any(job.state == Job.QUEUED for job in own) or (busy and not own):
-            return 'waiting'
-        if done is not None:
-            return done
-        if not own:
-            return 'not_run'
-        return 'unavailable' if own[-1].state in (Job.FAILED, Job.UNKNOWN, Job.CANCELLED) else 'done'
-
-    run = assessment.provider_run if assessment is not None else None
-    document = ('done' if run is not None and run.state == ProviderRun.SUCCEEDED and not review._refused_run(assessment)
-                else 'unavailable' if run is not None else None)
-    records = [record for record in (assessment.participants or [] if assessment is not None else [])
-               if isinstance(record, dict)]
-    if records:
-        states = [record.get('state') for record in records] + [record.get('peer_state') for record in records
-                                                                if 'peer_state' in record]
-        independent = 'unavailable' if any(state in PARTIAL_RECORDS for state in states) else (
-            'done' if any(state == 'read' for state in states) else 'not_run')
-    else:
-        independent = None
-    validation = 'done' if assessment is not None and review.is_final(assessment) else None
-    return [{'key': 'document_review', 'label': 'Document review',
-             'state': state_of((Job.PREDICT, Job.REVIEW2), document)},
-            {'key': 'independent_checks', 'label': 'Independent checks',
-             'state': state_of(Job.PARTICIPANT_KINDS + Job.PEER_KINDS, independent)},
-            {'key': 'coding_validation', 'label': 'Coding validation', 'state': state_of((Job.ASSESS,), validation)}]
+def progress_block(encounter, membership):
+    """The contract's ``progress`` (progress.encounter_progress: the four plain steps, one phase, the server's clock;
+    never a percentage or an estimate), with Stop, Resume and the error's action offered only to a member whose role may
+    take them."""
+    block = progress.encounter_progress(encounter)
+    can = bool(membership is not None and membership.can_review)
+    block['can_stop'] = bool(block['can_stop'] and can)
+    block['can_resume'] = bool(block['can_resume'] and can)
+    if isinstance(block.get('error'), dict) and not can:
+        block['error'] = {**block['error'], 'action': 'none'}
+    return block
 
 
 # --- what is not coded, what is unresolved, what is limited -------------------------------------------------------
@@ -998,18 +799,32 @@ def limitations(assessment, revision):
 
 # --- readiness, reports, activity ----------------------------------------------------------------------------------
 
-# INTEGRATION: replaced by review.readiness over review.effective_view (P3; CORE-UX-DESIGN.md 4)
+NONE_APPROVED = 'No code has been approved.'
+NOT_COMPLETE = 'The review is not complete yet.'
+
+
 def readiness(encounter, assessment=None, current=None):
-    """{'draft', 'approved', 'blockers'}: a draft once an assessment exists; the approved export when the review is
-    complete and at least one code is approved; the blockers in the customer's words."""
+    """{'draft', 'approved', 'blockers'}: a draft once an assessment exists; the approved export only when the review
+    is complete (review.readiness over the review overlay: every suggested code resolved - approved, rejected, its
+    exclusion confirmed, or its needed detail answered as unavailable - nothing processing, a settled result, no
+    decision the overlay no longer supports) and it has an approved code to list (session decision (f) of 2026-11-03:
+    the approved export lists the approved codes only, and a partial one is never built). The blockers in the
+    customer's words."""
     ready = review.readiness(encounter)
-    assessment = review.live_assessment(encounter) if assessment is None else assessment
     blockers = customer_blockers(ready['blockers'])
     approved = bool(ready['reviewed'])
-    if approved and (assessment is None or not approved_items(assessment, current)):
-        approved = False
-        blockers.append('No code has been approved.')
-    return {'draft': bool(ready['draft']), 'approved': approved, 'blockers': blockers}
+    if approved:
+        assessment = review.live_assessment(encounter) if assessment is None else assessment
+        current = review.current_decisions(assessment) if current is None else current
+        listed = {item['proposal_id'] for item in review.approved_items(assessment)}
+        decided = {str(pk) for pk, decision in current.items() if decision.action == Decision.APPROVE}
+        if not listed:
+            approved = False
+            blockers.append(NONE_APPROVED)
+        elif listed != decided:  # never an export that leaves out an approval the decisions hold
+            approved = False
+            blockers.append(NOT_COMPLETE)
+    return {'draft': bool(ready['draft']), 'approved': approved, 'blockers': list(dict.fromkeys(blockers))}
 
 
 def report_json(report, current=True):
@@ -1039,8 +854,10 @@ ACTIVITY = {
     'pipeline.stopped': ('processing_stopped', 'Processing stopped'),
     'pipeline.resumed': ('processing_resumed', 'Processing resumed'),
     'provider.second_review_requested': ('check_requested', 'Another check of an unresolved service was requested'),
-    'detail.answered': ('detail_answered', 'A detail was answered'),
-    'assessment.refreshed': ('results_refreshed', 'Results were refreshed with updated software'),
+    # the details flow's own rows, in its own words (answers.ACTIVITY_SUMMARIES)
+    'detail.answered': ('detail_answered', answers.ACTIVITY_SUMMARIES['detail.answered']),
+    'detail.revoked': ('detail_withdrawn', answers.ACTIVITY_SUMMARIES['detail.revoked']),
+    'assessment.refreshed': ('results_refreshed', answers.ACTIVITY_SUMMARIES['assessment.refreshed']),
     'finding.confirmed': ('detail_confirmed', 'A detail was confirmed'),
 }
 
@@ -1073,6 +890,11 @@ def _date_hold(encounter, assessment):
 
 
 def customer_state(encounter, assessment=None):
+    """The encounter's state as a member reads it. "Action needed" as soon as the current context holds a member's
+    date that conflicts with the document (progress.date_held, the progress phase's own reading: known right after the
+    document is read, before anything is sent), as the list and the document page both say it."""
+    if progress.date_held(encounter):
+        return 'action_needed'
     state = STORED_STATES.get(encounter.state, 'processing')
     if state in ('awaiting_detail', 'ready', 'no_codes', 'reviewed'):
         assessment = review.live_assessment(encounter) if assessment is None else assessment
@@ -1082,67 +904,62 @@ def customer_state(encounter, assessment=None):
 
 
 def session_json(user, membership):
-    from .serializers import QUEUE_STATES, _initials, queue_reasons  # local import: the review queue's own rule
+    from .serializers import _initials  # local import: the operator serializer's own initials rule
     workspace = membership.workspace
-    encounters = workspace.encounters.select_related('current_revision', 'current_context', 'current_assessment')
-    queued = sum(1 for encounter in encounters if encounter.state in QUEUE_STATES or queue_reasons(encounter))
+    encounters = list(workspace.encounters.select_related('current_revision', 'current_context',
+                                                          'current_assessment'))
+    queued = sum(1 for encounter in encounters if customer_state(encounter) in QUEUE_STATES)
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': _initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name},
             'role': membership.role, 'can_review': membership.can_review,
             'acknowledgement': review.ACKNOWLEDGEMENTS.get(user.actor_kind, ''),
-            'counts': {'documents': encounters.count(), 'queue': queued},
+            'counts': {'documents': len(encounters), 'queue': queued},
             'synthetic_only': settings.SYNTHETIC_ONLY}
 
 
 def list_row(encounter):
+    """One row of GET /api/encounters: its state, the date of service in use and whether a member's date conflicts with
+    the document's (answers.service_date_block), and the details still unanswered (the rows the document page shows
+    without a saved answer)."""
     assessment = review.live_assessment(encounter)
     state = customer_state(encounter, assessment)
-    date = service_date_block(encounter)
+    date = answers.service_date_block(encounter)
     revision = encounter.current_revision
+    rows = answers.details_needed(encounter, assessment, views_of(assessment) if assessment is not None else None)
     return {'id': str(encounter.pk), 'title': encounter.title, 'state': state, 'state_label': STATE_LABELS[state],
             'service_date': date['value'], 'date_conflict': date['conflict'],
-            'open_details': len(_open_questions(assessment)), 'created_at': _iso(encounter.created_at),
+            'open_details': sum(1 for row in rows if row['saved'] is None), 'created_at': _iso(encounter.created_at),
             'kind': revision.kind if revision is not None and revision.kind in ('upload', 'paste', 'addendum')
             else 'upload'}
 
 
 def encounter_json(encounter, membership):
     """GET /api/encounters/<id> (CORE-UX-DESIGN.md 7): every key listed, nothing else."""
-    from .jobs import busy as is_busy  # local import: jobs imports this module's peers
-
     revision = encounter.current_revision
     assessment = review.live_assessment(encounter)
-    jobs = list(encounter.jobs.filter(revision=revision).order_by('created_at', 'pk')) if revision else []
     state = customer_state(encounter, assessment)
-    date = service_date_block(encounter)
     current = review.current_decisions(assessment) if assessment is not None else {}
-    proposals = list(assessment.proposals.order_by('position')) if assessment is not None else []
-    details = details_needed(encounter, assessment, membership, proposals, date) if assessment is not None else []
-    questions = {}
-    for question in _open_questions(assessment):
-        if question.proposal_id:
-            questions.setdefault(question.proposal_id, []).append(question)
+    views = views_of(assessment, current)
+    details = details_rows(encounter, assessment, views, membership)
     if assessment is not None:
-        view = effective_view(assessment, current)
-        codes, other_codes = code_rows(assessment, current, view, membership, questions, details)
+        codes, other_codes = code_rows(assessment, current, views, membership, details)
         codes = [{key: value for key, value in row.items() if not key.startswith('_')} for row in codes]
         completeness = review.reviewed_completeness(assessment, current) or {}
         services = [service for service in (assessment.services or {}).get('services') or [] if isinstance(service, dict)]
     else:
         codes, other_codes, completeness, services = [], [], {}, []
-    busy = is_busy(encounter)
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'created_at': _iso(encounter.created_at),
         'updated_at': _iso(encounter.updated_at), 'state': state, 'state_label': STATE_LABELS[state],
         'permissions': {'can_review': bool(membership.can_review)},
         'document': _document(encounter, revision),
-        'service_date': date,
-        'progress': progress_block(encounter, membership, jobs, assessment, state),
-        'checks': checks_block(encounter, jobs, assessment, busy),
+        'service_date': answers.service_date_block(encounter),
+        'progress': progress_block(encounter, membership),
+        'checks': progress.checks_summary(encounter),
         'codes': codes, 'other_codes': other_codes,
         'not_separately_coded': _not_separately_coded(completeness, services),
-        'details_needed': [{key: value for key, value in row.items() if not key.startswith('_')} for row in details],
+        'details_needed': details,
         'unresolved': _unresolved(completeness, services),
         'limitations': limitations(assessment, revision),
         'readiness': readiness(encounter, assessment, current),

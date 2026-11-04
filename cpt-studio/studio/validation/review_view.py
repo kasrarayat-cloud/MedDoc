@@ -260,17 +260,18 @@ def _sources(reference_sources) -> tuple:
 
 
 @functools.lru_cache(maxsize=1)
-def _passage_titles() -> dict:
-    """(source key, release) -> the title of each CMS passage source this release ships (studio/reference/data)."""
+def _passage_sources() -> dict:
+    """(source key, release) -> (title, effective start) of each CMS passage source this release ships
+    (studio/reference/data): the citation names the source and the date its window opens."""
     from studio.reference import passages  # local import: only a modifier review's citation reads it
-    titles = {}
+    sources = {}
     for path in passages.bundled_files():
         try:
             source = passages.read_data_file(path).source
         except Exception:  # noqa: BLE001 - a file this release cannot read names no title; the citation keeps its key
             continue
-        titles[(source['key'], source['release'])] = source['title']
-    return titles
+        sources[(source['key'], source['release'])] = (source['title'], str(source.get('effective_start') or ''))
+    return sources
 
 
 def _example_passage(codes: Sequence[str], retrieval) -> Optional[Mapping]:
@@ -316,7 +317,8 @@ def _modifier_review(p: Stored, effective: Sequence[Stored], service: Mapping[st
     sources = []
     if cited is not None:
         key, release = str(cited.get('source_key') or ''), str(cited.get('release') or '')
-        sources.append({'key': key, 'title': _passage_titles().get((key, release), key), 'release': release,
+        title, effective = _passage_sources().get((key, release), (key, ''))
+        sources.append({'key': key, 'title': title, 'release': release, 'effective_start': effective,
                         'section': str(cited.get('section') or ''), 'page': str(cited.get('page') or ''),
                         'passage_key': str(cited.get('passage_key') or '')})
     here = [reconcile.describe_act(own, a) for a in acts if a.lesion in lesions]
