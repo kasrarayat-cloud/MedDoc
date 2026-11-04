@@ -3158,3 +3158,15 @@ a paste only to a pasted revision with no stored original whose text has the
 document's lines (only trailing whitespace and line-ending style may differ).
 `ops/verify_downloads.py` checks that PROVIDER USAGE lists a member date hold as
 recorded, with nothing sent, no usage and no hashes, beside every run.
+
+## Core repair and customer interface (2026-11-03): P6 UI
+
+The customer review screen no longer follows section 8's code cards and tabs (those remain the operator page's). Same
+shell, tokens and approved prefix of `styles.css`; results come first. The review column holds one progress panel (four
+stages: Reading your document, Identifying procedures, Checking suggested codes, Preparing your results; the active
+check named; elapsed time; Stop and Resume; "Action needed" for the date hold), the "A few details needed" panel (one
+save for all rows), the checks strip (Document review, Independent checks, Coding validation), the numbered result list
+(code, units, modifier, status, one sentence, "Why this code?"), review and download actions that keep suggested and
+approved apart, "Not separately coded", "Other codes considered (not suggested)" behind a closed disclosure, the
+limitations and the history. Status labels: Ready for review, Needs a detail, Approved, Excluded. The page's client
+contract is in API.md ("Core repair and customer interface (2026-11-03): P6 UI").
