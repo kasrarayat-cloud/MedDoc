@@ -183,8 +183,14 @@ class StubSite:
             row = {'id': self.id, 'title': self.encounter['title'], 'state': 'reviewed', 'state_label': 'Reviewed', 'service_date': '2026-11-03',
                    'date_conflict': False, 'open_details': 0, 'created_at': self.encounter['created_at'], 'kind': 'paste'}
             return self.send(request, 200, {'encounters': [row]})
+        if route == ('GET', f'/api/encounters/{self.id}/original') and self.leak.get('original'):
+            headers = [('X-Content-SHA256', 'cd' * 32)] if self.leak.get('original_hash') else []
+            return self.send(request, 200, b'%PDF-1.4 synthetic ' + b'0' * (3 * 1024 * 1024), 'application/pdf', headers)
         if route == ('GET', f'/api/encounters/{self.id}'):
             enc = json.loads(json.dumps(self.encounter))
+            if self.leak.get('original'):
+                enc['document'].update(kind='upload', name='note.pdf', media_type='application/pdf', size=3 * 1024 * 1024 + 19,
+                                       original_url=f'/api/encounters/{self.id}/original')
             if self.leak.get('vendor_key'):
                 enc['codes'][0]['vendor'] = 'OpenAI'
             if self.leak.get('run_id'):
@@ -260,6 +266,16 @@ class ScanRunTests(unittest.TestCase):
                 failed = {item['id'] for item in evidence['checks'] if item['status'] == 'fail'}
                 for check in wanted:
                     self.assertIn(check.format(short=site.id[:8]), failed, (leak, sorted(failed)))
+
+    def test_an_uploaded_original_is_read_for_its_headers_only_whatever_its_size(self):
+        enc_id = sample_json('customer-encounter.json')['id']
+        code, evidence, printed, site = self.run_scan('--encounter', enc_id, site=StubSite(original=True))
+        self.assertEqual(code, 0, printed)
+        self.assertEqual({c['id']: c['status'] for c in evidence['checks']}[f'original.{enc_id[:8]}'], 'pass')
+        # a source hash on the original's download is a customer-facing hash
+        code, evidence, printed, site = self.run_scan('--encounter', enc_id, site=StubSite(original=True, original_hash=True))
+        self.assertEqual(code, 1)
+        self.assertTrue(any(h['id'] == 'long_hex' and 'original' in h['where'] for h in evidence['hits']['header']), evidence['hits']['header'])
 
     def test_the_operator_view_s_identifiers_are_looked_for_when_given(self):
         folder = Path(tempfile.mkdtemp())

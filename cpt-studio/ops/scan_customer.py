@@ -396,8 +396,9 @@ class Scanner:
         self.transport, self.origin, self.jar = transport, origin, jar
         self.checks, self.hits = [], {'json': [], 'header': [], 'file': [], 'bundle': []}
 
-    def get(self, where: str, accept: str = 'application/json'):
-        return self.transport.send('GET', where, headers=login._headers(self.origin, accept, login.cookie_header(self.jar)))
+    def get(self, where: str, accept: str = 'application/json', read_body: bool = True):
+        return self.transport.send('GET', where, headers=login._headers(self.origin, accept, login.cookie_header(self.jar)),
+                                   read_body=read_body)
 
     def bundle(self, ctx: ScanContext) -> None:
         page = self.get('/', 'text/html')
@@ -457,7 +458,7 @@ class Scanner:
         self.checks.append(check_contract(data, 'encounter', f'customer.contract.{short}'))
         original = (data.get('document') or {}).get('original_url')
         if isinstance(original, str) and original.startswith('/'):
-            got = self.get(original, '*/*')
+            got = self.get(original, '*/*', read_body=False)  # its headers: the document itself is the customer's own
             scan_headers(got.headers, ctx, f'GET {original}', self.hits['header'])
             self.checks.append(login.check(f'original.{short}', 'hard', got.status == 200, f'GET {original} answered HTTP {got.status}'))
         for report in data.get('reports') or []:

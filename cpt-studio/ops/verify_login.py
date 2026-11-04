@@ -237,7 +237,9 @@ class Transport:
         self.tls = ssl.create_default_context() if self.https else None
         self.requests: list[dict] = []
 
-    def send(self, method: str, path: str, *, headers: dict, body: bytes | None = None) -> Response:
+    def send(self, method: str, path: str, *, headers: dict, body: bytes | None = None, read_body: bool = True) -> Response:
+        """read_body False: the answer's status and headers only, its body left unread (ops/scan_customer.py reads an
+        uploaded original's headers, never the document itself, which may be larger than MAX_BODY_BYTES)."""
         entry = {'method': method, 'path': path, 'status': None, 'location': None, 'at': utc_now()}
         self.requests.append(entry)
         if self.https:
@@ -247,7 +249,7 @@ class Transport:
         try:
             connection.request(method, path, body=body, headers={'User-Agent': USER_AGENT, **headers})
             answer = connection.getresponse()
-            data = answer.read(MAX_BODY_BYTES + 1)
+            data = answer.read(MAX_BODY_BYTES + 1) if read_body else b''
             entry['status'] = answer.status
             entry['location'] = answer.getheader('Location')
             if len(data) > MAX_BODY_BYTES:
