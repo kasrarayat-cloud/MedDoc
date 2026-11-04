@@ -1,0 +1,10 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy report (fictional)
+Patient: Synthetic Patient Nine (fictional)
+Date of service: 2026-11-03
+Procedure: Colonoscopy with polyp removal.
+The colonoscope was advanced to the cecum.
+COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.
+COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.
+Plan: upper endoscopy is scheduled next month.
+No separate office evaluation and management encounter is documented on this date.

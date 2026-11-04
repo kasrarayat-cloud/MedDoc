@@ -211,9 +211,11 @@ class Secret:
 # --- HTTP -----------------------------------------------------------------------------------------------------------
 
 class Response:
-    def __init__(self, status: int, location: str | None, set_cookies: list[str], content_type: str, body: bytes):
+    def __init__(self, status: int, location: str | None, set_cookies: list[str], content_type: str, body: bytes,
+                 headers=()):
         self.status, self.location, self.set_cookies, self.content_type, self.body = (
             status, location, set_cookies, content_type, body)
+        self.headers = list(headers)  # every (name, value) the answer carried (ops/scan_customer.py scans them)
 
     def json(self):
         try:
@@ -251,7 +253,7 @@ class Transport:
             if len(data) > MAX_BODY_BYTES:
                 raise RequestFailed(f'{method} {path}: the answer is over {MAX_BODY_BYTES} bytes')
             return Response(answer.status, entry['location'], answer.msg.get_all('Set-Cookie') or [],
-                            answer.getheader('Content-Type') or '', data)
+                            answer.getheader('Content-Type') or '', data, answer.getheaders())
         except (OSError, http.client.HTTPException) as exc:
             entry['error'] = f'{type(exc).__name__}: {exc}'
             raise RequestFailed(f'{method} {path}: {entry["error"]}') from None
@@ -369,8 +371,11 @@ def session_checks(status: int | None, data, username: str, workspace: str) -> l
     return [
         check('session.read', 'hard', read, f'GET {SESSION_PATH} answered HTTP {status}'
               + ('' if read else ', not 200 with a JSON object')),
-        check('session.username', 'hard', read and user.get('username') == username,
-              f'username {json.dumps(user.get("username"))}; signed in as {json.dumps(username)}{unread}'),
+        check('session.username', 'hard', read and (user.get('username') == username if 'username' in user
+                                                    else isinstance(user.get('label'), str) and bool(user.get('label'))),
+              (f'username {json.dumps(user.get("username"))}; signed in as {json.dumps(username)}' if 'username' in user or not read
+               else f'the session serves no username (the customer contract keeps it out); it is the session this fresh '
+                    f'sign-in as {json.dumps(username)} set, labelled {json.dumps(user.get("label"))}') + unread),
         check('session.actor_kind', 'hard', read and user.get('actor_kind') == HUMAN,
               f'actor kind {json.dumps(user.get("actor_kind"))}; a {HUMAN} account is expected{unread}'),
         check('session.role', 'hard', read and data.get('role') == REVIEWER,

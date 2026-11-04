@@ -587,6 +587,28 @@ class PureCheckTests(unittest.TestCase):
         self.assertEqual(statuses(401, data)['session.read'], 'fail')
         self.assertEqual(statuses(200, [data])['session.actor_kind'], 'fail')
 
+    def test_the_customer_session_serves_no_username_and_the_fresh_sign_in_is_the_account(self):
+        # CORE-UX-DESIGN 7: the customer session is user {id, label, initials, actor_kind}; no username, provider mode or release
+        data = {'user': {'id': 'u-1', 'label': 'Demo reviewer (synthetic demonstration)', 'initials': 'DR', 'actor_kind': 'human'},
+                'workspace': {'id': 'w-1', 'name': WORKSPACE}, 'role': 'reviewer', 'can_review': True, 'synthetic_only': True}
+        checks = {c['id']: c for c in vl.session_checks(200, data, USERNAME, WORKSPACE)}
+        self.assertEqual({c['status'] for c in checks.values()}, {'pass'})
+        self.assertIn('serves no username', checks['session.username']['reason'])
+        # a served username must still be the account's, and a session with no label is no account
+        self.assertEqual({c['id']: c['status'] for c in vl.session_checks(200, {**data, 'user': {**data['user'], 'username': 'x'}}, USERNAME,
+                                                                           WORKSPACE)}['session.username'], 'fail')
+        self.assertEqual({c['id']: c['status'] for c in vl.session_checks(200, {**data, 'user': {**data['user'], 'label': ''}}, USERNAME,
+                                                                           WORKSPACE)}['session.username'], 'fail')
+        self.assertEqual(vl.account_view(data)['user'], {'username': None, 'label': data['user']['label'], 'actor_kind': 'human'})
+
+    def test_a_response_keeps_every_header_it_carried(self):
+        stub = StubStudio()
+        self.addCleanup(stub.close)
+        answer = vl.Transport(stub.base).send('GET', '/login/', headers={'Accept': 'text/html'})
+        names = [name.lower() for name, _ in answer.headers]
+        self.assertIn('content-type', names)
+        self.assertIn('set-cookie', names)
+
     def test_cookies_are_set_replaced_and_deleted_as_django_writes_them(self):
         jar = {}
         vl.apply_cookies(jar, ['cptstudio_csrf=abc; expires=Thu, 28 Oct 2027 10:00:00 GMT; Max-Age=31449600; Path=/; SameSite=Strict',
