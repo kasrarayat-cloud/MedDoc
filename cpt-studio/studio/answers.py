@@ -103,6 +103,13 @@ def detail_id(fact: str, family: str, code: str) -> str:
     return 'd' + hashlib.sha256('\x1f'.join((fact, family, code)).encode()).hexdigest()[:15]
 
 
+DETAIL_ID = re.compile(r'd[0-9a-f]{15}')
+
+
+def is_detail_id(value) -> bool:
+    return isinstance(value, str) and DETAIL_ID.fullmatch(value) is not None
+
+
 def control_for(fact: str) -> str:
     return DATE if fact == DATE_FACT else CHOICE if fact in CHOICES else CONFIRM
 
@@ -371,6 +378,28 @@ def _date_row(row, encounter):
     else:
         row.prompt = DATE_PROMPTS['member' if block['entered_value'] and block['conflict'] else 'asked']
     row.allow = []
+
+
+def addendum_detail(encounter, detail):
+    """(found, clarification) for an addendum sent from details row ``detail``: ``found`` when it is an open row of the
+    live assessment that a physician may answer with documentation (a confirmation row: details_needed's
+    ``addendum_allowed``), and the stored open clarification that row shows, if it shows one - None for a question only
+    the review overlay asks, which the reading that follows the addendum answers or asks again."""
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        return False, None
+    for row in _rows(encounter, assessment, review.effective_view(assessment)):
+        if row.id != detail or row.control != CONFIRM:
+            continue
+        stored = assessment.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
+        for item in stored.order_by('created_at', 'pk'):
+            proposal = item.proposal
+            key = ((item.fact, item.family or proposal.family, proposal.code) if proposal is not None
+                   else (item.fact, item.family, ''))
+            if key == (row.fact, row.family, row.code):
+                return True, item
+        return True, None
+    return False, None
 
 
 def details_needed(encounter, assessment, view=None) -> list[dict]:

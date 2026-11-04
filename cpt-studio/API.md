@@ -1021,8 +1021,10 @@ answer's `download_url`, which must match `/api/reports/<uuid>/download`. The ap
 is listed without a link ("No longer matches the saved decisions").
 
 **`POST /api/encounters/{id}/addenda`**: `{"text", "clarification_id": "<details_needed[].id>", "synthetic_attestation":
-"yes"}`, offered only on a row with `addendum_allowed: true` ("Add to the documentation (physician)"); the server must
-accept a details row id there. **`/stop`** and **`/resume`**: `{}`, offered when `progress.can_stop` (while busy) or
+"yes"}`, offered only on a row with `addendum_allowed: true` ("Add to the documentation (physician)"); the server
+accepts a details row id there (2026-11-04): the open confirmation row of the live assessment it names, answering the
+stored clarification that row shows (none for a question only the review overlay asks); any other row id answers 404
+"That detail is not open on this document." A clarification's own id is read as before. **`/stop`** and **`/resume`**: `{}`, offered when `progress.can_stop` (while busy) or
 `progress.can_resume`, and `permissions.can_review`.
 
 **Polling.** `GET /api/encounters/{id}` while `progress.busy` is true or `progress.phase` is `queued`, `processing` or

@@ -329,11 +329,18 @@ def addenda(request, encounter_id):
         clarification = None
         answered = data.get('clarification_id')
         if answered is not None and answered != '':  # only no value means no clarification: 0, false, [] are refused
-            try:
-                clarification = encounter.clarifications.get(pk=_identifier(answered),
-                                                            state=models.Clarification.OPEN)
-            except (models.Clarification.DoesNotExist, ValueError, ValidationError):
-                raise ApiError(404, 'That clarification is not open on this document.')
+            if answers.is_detail_id(answered):
+                # the customer page sends its details row's id (API.md: the customer contract): the open confirmation
+                # row it names, answering the stored clarification that row shows, if any
+                found, clarification = answers.addendum_detail(encounter, answered)
+                if not found:
+                    raise ApiError(404, 'That detail is not open on this document.')
+            else:
+                try:
+                    clarification = encounter.clarifications.get(pk=_identifier(answered),
+                                                                state=models.Clarification.OPEN)
+                except (models.Clarification.DoesNotExist, ValueError, ValidationError):
+                    raise ApiError(404, 'That clarification is not open on this document.')
         revision = models.SourceRevision.objects.create(
             encounter=encounter, number=number, kind=models.SourceRevision.ADDENDUM,
             parent=parent, addendum_text=text, answers_clarification=clarification,
