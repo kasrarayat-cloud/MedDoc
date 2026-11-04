@@ -562,6 +562,13 @@ def addendum_detail(encounter, detail):
     return False, None
 
 
+def date_confirmation_open(encounter) -> bool:
+    """Whether the date row asks the member to confirm a date entered outside the details panel that chose one of the
+    document's own conflicting dates (refutation r2, L7-02): for a reader that holds the approved export until the member
+    has settled it with those dates in view. Reads the context only (no assessment), as the date row does."""
+    return any(row.confirm for row in _rows(encounter, None) if row.control == DATE)
+
+
 def details_needed(encounter, assessment, view=None) -> list[dict]:
     """DESIGN section 7 ``details_needed``: one row per open material question of the live assessment on the current
     context - a service fact's once for its service, any other once for its code - and the date of service at once

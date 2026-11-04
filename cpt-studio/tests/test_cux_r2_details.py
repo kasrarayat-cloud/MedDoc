@@ -164,6 +164,15 @@ class DateSettledAtUploadTests(PipelineCase):
         self.assertEqual((again.status_code, again.json()['saved'], again.json()['unchanged']), (200, 0, 1))
         self.assertEqual(len(self.date_events(encounter_id)), 1)
 
+    def test_the_open_confirmation_is_readable_for_a_reader_that_holds_the_approved_export(self):
+        encounter_id = self.upload(TWO_DATES, '2026-10-21')
+        self.assertTrue(answers.date_confirmation_open(self.encounter(encounter_id)))
+        self.assertEqual(self.save(encounter_id, self.date_row(self.doc(encounter_id)), '2026-10-21').status_code, 201)
+        self.assertFalse(answers.date_confirmation_open(self.encounter(encounter_id)))
+        for text, entered in ((NO_DATE, '2026-10-02'), (TWO_DATES, ''), (TWO_DATES, '1998-01-01')):
+            with self.subTest(entered=entered):  # a saved date, the document's own question, a held third date
+                self.assertFalse(answers.date_confirmation_open(self.encounter(self.upload(text, entered))))
+
     def test_a_confirmation_stands_for_its_revision_only(self):
         encounter_id = self.upload(TWO_DATES, '2026-10-21')
         self.assertEqual(self.save(encounter_id, self.date_row(self.doc(encounter_id)), '2026-10-21').status_code, 201)
