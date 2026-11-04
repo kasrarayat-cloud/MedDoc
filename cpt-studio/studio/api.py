@@ -15,7 +15,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, intake, jobs, models, reports, review, serializers
+from . import answers, audit, intake, jobs, models, reports, review, serializers
 from .access import active_membership, scoped_encounter
 from .ingest import canonicalize
 from .storage import read_original
@@ -334,6 +334,42 @@ def context(request, encounter_id):
     except jobs.Refused as exc:
         raise ApiError(409, str(exc))
     return JsonResponse({'context_id': str(ctx.pk)}, status=201)
+
+
+@require_POST
+@api_view
+def details(request, encounter_id):
+    """P5 FLOW: one save for the "A few details needed" rows, ``{"answers": [{"id", "fact", "value"}]}``
+    (answers.save_details): context values through one context change and its re-assessment, "not documented" or
+    "cannot confirm" stored as the member's answers. An owner or reviewer only; 400 for an answer a detail does not
+    allow, 409 while processing runs or for a detail no longer asked. 201 when something was saved, 200 when the save
+    changed nothing."""
+    data = _payload(request)
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        saved = answers.save_details(encounter, request.user, data.get('answers'))
+    except answers.InvalidAnswer as exc:
+        raise ApiError(400, str(exc))
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    return JsonResponse(saved, status=201 if saved['saved'] else 200)
+
+
+@require_POST
+@api_view
+def revoke_detail(request, encounter_id, answer_id):
+    """P5 FLOW: withdraw one saved answer (answers.revoke_answer); the detail is asked again. 404 for an answer that is
+    not this document's, 409 while processing runs or for an answer already withdrawn."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        revocation = answers.revoke_answer(encounter, request.user, answer_id)
+    except models.MemberAnswer.DoesNotExist:
+        raise Http404()
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    return JsonResponse({'revoked': str(revocation.answer_id)}, status=201)
 
 
 @require_POST
