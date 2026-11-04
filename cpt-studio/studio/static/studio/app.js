@@ -16,8 +16,8 @@ const REPORT_URL = /^\/api\/reports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const ORIGINAL_URL = /^\/api\/encounters\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/original$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PARAGRAPH_BREAK = /\n(?:[^\S\n]*\n)+/g;
-// The page tells the server which build of this page is asking. A server that no longer serves this build answers
-// HTTP 409 with {"error_code": "client_outdated"}, and the page asks the member to reload (updateNotice).
+// The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
+// call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
 const CLIENT_VERSION = 'customer-2026-11-03';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
@@ -76,6 +76,8 @@ const LEAVE_NOTES = {
 };
 const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
 const USE_DOCUMENT = 'use_document';
+// Removing the member's entered date of service (the server's own clear path), where the document gives no single date.
+const CLEAR_DATE = 'clear';
 const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
 const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'] };
 const ACKNOWLEDGEMENTS = {
@@ -196,7 +198,7 @@ function parseRoute(hash) {
   return { name: lookup(ROUTE_TITLES, path, null) && path !== 'doc' ? path : 'workspace' };
 }
 
-// HTTP 409 {"error_code": "client_outdated"}: this build of the page is no longer served.
+// A conflict status with {"error_code": "client_outdated"}: this build of the page is no longer served.
 function isClientOutdated(status, data) {
   return status === 409 && Boolean(data) && typeof data === 'object' && data.error_code === 'client_outdated';
 }
@@ -367,10 +369,6 @@ function codesOf(doc) {
 
 function detailsOf(doc) {
   return objects(doc?.details_needed);
-}
-
-function openDetails(doc) {
-  return detailsOf(doc).filter(row => !row.saved);
 }
 
 function canReview(doc) {
@@ -746,17 +744,39 @@ function quoteLine(quote) {
   return quote && typeof quote.text === 'string' && quote.text ? `<q class="detail-quote">${escapeHtml(excerpt(quote.text, 120))}</q>` : '';
 }
 
+function offers(row, value) {
+  return objects(row.choices).some(choice => choice.value === value);
+}
+
+// The dates the date row offers as the document's own (the server's choices whose value is a calendar date).
+function documentedDates(row) {
+  return row?.control === 'date' ? objects(row.choices).filter(choice => typeof choice.value === 'string' && Boolean(parseIsoDate(choice.value))) : [];
+}
+
+function addendumButton(row) {
+  return row.addendum_allowed === true ? `<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${escapeHtml(row.id)}">Add to the documentation (physician)</button>` : '';
+}
+
+// The date row: the document's side beside the member's - its one date with the quote, each date it states, or its
+// own wording where it gives no date the page may show - then only the ways the server offers: "Use document date",
+// one of the document's dates, another date, removing the entered date, the physician's addendum. Never prefilled: the
+// date field holds only what the member typed on this page.
 function dateControl(row, ui) {
   const pending = detailAnswer(row, ui);
   const documented = formatDate(row.document_value, true);
   const entered = formatDate(row.entered_value, true);
+  const stated = documentedDates(row);
+  const side = documented ? `<strong>${escapeHtml(documented)}</strong>${quoteLine(row.quote)}`
+    : stated.length ? `<strong>${escapeHtml(joinWords(stated.map(choice => formatDate(choice.value, true))))}</strong>`
+      : row.quote && typeof row.quote.text === 'string' && row.quote.text ? `<strong><q>${escapeHtml(excerpt(row.quote.text, 120))}</q></strong>` : '<strong>Not stated</strong>';
   // offered exactly where the server offers it (a choice of the row: the document states one date, and the member's
   // entry contradicts it), so the save the button makes is one the server accepts; never for a date only asked
-  const offered = objects(row.choices).some(choice => choice.value === USE_DOCUMENT);
-  const useDocument = documented && offered ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
-  const typed = parseIsoDate(pending) ? pending : '';
-  return `<div class="detail-dates"><div class="detail-document-date"><span class="detail-date-label">Document</span><strong>${escapeHtml(documented || 'Not stated')}</strong>${quoteLine(row.quote)}</div><div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${escapeHtml(entered || 'Nothing entered')}</strong></div></div>`
-    + `<div class="detail-controls">${useDocument}<label class="detail-date-input">Or enter the date of service<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${allowedAnswers(row, pending)}</div>`;
+  const useDocument = documented && offers(row, USE_DOCUMENT) ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
+  const remove = offers(row, CLEAR_DATE) ? answerButton(row, CLEAR_DATE, 'Remove the entered date', pending, 'clear-date') : '';
+  const radios = stated.map(choice => `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${pending === choice.value ? ' checked' : ''}><span>${escapeHtml(text(choice.label) || formatDate(choice.value, true))}</span></label>`).join('');
+  const typed = parseIsoDate(pending) && !stated.some(choice => choice.value === pending) ? pending : '';
+  return `<div class="detail-dates"><div class="detail-document-date"><span class="detail-date-label">Document</span>${side}</div><div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${escapeHtml(entered || 'Nothing entered')}</strong></div></div>`
+    + `<div class="detail-controls">${radios}${useDocument}<label class="detail-date-input">${stated.length || row.saved ? 'Or enter another date' : 'Or enter the date of service'}<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${remove}${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
 }
 
 function choiceControl(row, ui) {
@@ -770,26 +790,37 @@ function choiceControl(row, ui) {
 
 function confirmControl(row, ui) {
   const pending = detailAnswer(row, ui);
-  const addendum = row.addendum_allowed === true ? `<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${escapeHtml(row.id)}">Add to the documentation (physician)</button>` : '';
-  return `<div class="detail-controls">${allowedAnswers(row, pending)}${addendum}</div>`;
+  return `<div class="detail-controls">${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
 }
 
-function savedAnswer(row, editable) {
+// A date of service the member entered, saved: it has no answer to withdraw, so the row itself corrects or removes it.
+function changeableDate(row) {
+  return row?.control === 'date' && Boolean(row.saved) && typeof row.saved === 'object' && !text(row.saved.answer_id);
+}
+
+// Whether a row takes an answer in the one save: an open row, or a saved date the member entered.
+function answerable(row) {
+  return Boolean(row) && (!row.saved || changeableDate(row));
+}
+
+function savedAnswer(row, editable, ui = {}) {
   const saved = row.saved;
   const value = text(saved.label) || lookup(DETAIL_ANSWERS, saved.value, saved.value === USE_DOCUMENT ? 'Use document date' : formatDate(saved.value, true) || text(saved.value));
   const by = [text(saved.by), formatTimestamp(saved.at)].filter(Boolean).join(', ');
   const change = editable && typeof saved.answer_id === 'string' && saved.answer_id ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(saved.answer_id)}" id="detail-${escapeHtml(row.id)}-revoke">Change this answer</button>` : '';
-  return `<p class="detail-saved">${icon('check')}<span>Saved: <strong>${escapeHtml(value)}</strong>${by ? ` — ${escapeHtml(by)}` : ''}</span>${change}</p>`;
+  const line = `<p class="detail-saved">${icon('check')}<span>Saved: <strong>${escapeHtml(value)}</strong>${by ? ` — ${escapeHtml(by)}` : ''}</span>${change}</p>`;
+  return line + (editable && changeableDate(row) ? dateControl(row, ui) : '');
 }
 
 function detailRow(row, doc, ui) {
   const editable = canReview(doc) && doc?.progress?.busy !== true;
   const affects = strings(row.affects);
-  const control = row.saved ? savedAnswer(row, editable)
+  const control = row.saved ? savedAnswer(row, editable, ui)
     : !editable ? '<p class="detail-wait">Answers can be saved once processing has finished.</p>'
       : row.control === 'date' ? dateControl(row, ui) : row.control === 'choice' ? choiceControl(row, ui) : confirmControl(row, ui);
-  // a choice is a radio group, named by its legend; the legend comes first, holding the family and the prompt
-  const tag = row.control === 'choice' && !row.saved && editable ? 'fieldset' : 'div';
+  // radios are a group, named by its legend; the legend comes first, holding the family and the prompt
+  const radios = row.control === 'choice' || documentedDates(row).length > 0;
+  const tag = radios && editable && answerable(row) ? 'fieldset' : 'div';
   const lead = tag === 'fieldset' ? 'legend' : 'div';
   return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${control}</${tag}>`;
 }
@@ -799,11 +830,14 @@ function detailsPanel(doc, ui = {}) {
   if (!rows.length) return '';
   const open = rows.filter(row => !row.saved).length;
   const editable = canReview(doc) && doc?.progress?.busy !== true;
+  // "nothing is checked" only while the member's date holds the document (Action needed): a date asked after the
+  // checks ran, or one to confirm, leaves the codes that do not depend on it reviewable
+  const held = doc?.state === 'action_needed' || doc?.progress?.phase === 'action_needed';
   const dateOnly = open && rows.filter(row => !row.saved).every(row => row.control === 'date');
   const lead = !open ? 'Every detail has an answer. You can change an answer below.'
-    : dateOnly ? 'Choose the date of service. Nothing is checked until you do.'
+    : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
       : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
-  const save = open && editable ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
+  const save = editable && rows.some(answerable) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
   return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">A few details needed</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}</section>`;
 }
 
@@ -1492,18 +1526,19 @@ function syncDetailRow(id) {
   const row = $$('.detail-row').find(element => element.dataset.detail === id);
   if (!row) return;
   const value = state.answers.get(id)?.value || '';
-  $$('[data-detail-choice], [data-action="use-document-date"]', row).forEach(button => {
-    const own = button.dataset.detailChoice || USE_DOCUMENT;
+  $$('[data-detail-choice], [data-action="use-document-date"], [data-action="clear-date"]', row).forEach(button => {
+    const own = button.dataset.detailChoice || (button.dataset.action === 'clear-date' ? CLEAR_DATE : USE_DOCUMENT);
     button.setAttribute('aria-pressed', String(own === value));
   });
   $$('input[type="radio"]', row).forEach(input => { input.checked = input.value === value; });
+  // the date field keeps only a date typed as the answer: choosing anything else empties it
   const date = $('input[data-detail-input]', row);
-  if (date && !parseIsoDate(value) && date.value) date.value = '';
+  if (date && date.value && date.value !== value) date.value = '';
 }
 
 function chooseDetail(id, value) {
   const row = findDetail(id);
-  if (!row || row.saved) return;
+  if (!answerable(row)) return;
   if (state.answers.get(id)?.value === value) state.answers.delete(id);
   else state.answers.set(id, { fact: row.fact, value });
   hideError('detailsError');
@@ -1512,7 +1547,7 @@ function chooseDetail(id, value) {
 
 function enterDetailDate(input) {
   const row = findDetail(input.dataset.detail);
-  if (!row || row.saved) return;
+  if (!answerable(row)) return;
   if (parseIsoDate(input.value)) state.answers.set(row.id, { fact: row.fact, value: input.value });
   else if (parseIsoDate(state.answers.get(row.id)?.value || '')) state.answers.delete(row.id);
   hideError('detailsError');
@@ -1520,7 +1555,7 @@ function enterDetailDate(input) {
 }
 
 function detailAnswers(doc) {
-  return openDetails(doc).filter(row => state.answers.has(row.id)).map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }));
+  return detailsOf(doc).filter(row => answerable(row) && state.answers.has(row.id)).map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }));
 }
 
 function saveDetails(button) {
@@ -1860,6 +1895,7 @@ function onClick(event) {
     export: openExport,
     addendum: () => openAddendum(action.dataset.detail),
     'use-document-date': () => chooseDetail(action.dataset.detail, USE_DOCUMENT),
+    'clear-date': () => chooseDetail(action.dataset.detail, CLEAR_DATE),
     'save-details': () => saveDetails(action),
     'revoke-detail': () => revokeDetail(action),
     stop: () => stopProcessing(action),
@@ -1967,7 +2003,7 @@ if (typeof module === 'object' && module.exports) {
     pageRanges, paragraphRanges, paragraphPieces, layoutDocument, progressPhase, shouldPoll, codeStatus, rowSubLabel, unitsLabel,
     modifierLabel, reviewModifierOptions, hasAgentDecision, attestationText, tallyText, exportStatusText, serviceDateText,
     documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
-    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, resultRow, resultList,
+    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, detailAnswers, answerable, resultRow, resultList,
     resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
     exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE,
     STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,

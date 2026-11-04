@@ -1,22 +1,29 @@
 """The "A few details needed" flow (owner directive 2026-11-03, section 4; P5 FLOW): the details a document still needs,
 the answers a member saves, and the date of service as the document and the member state it.
 
-- ``details_needed(encounter, assessment, view)``: one row per open material question, de-duplicated by (fact, family,
-  code), each with its control - ``date`` (the date of service), ``choice`` (place of service, new or established
-  patient, professional or facility claim) or ``confirm`` (a clinical fact, which a member never supplies: only "Not
-  documented" or "Cannot confirm", or the physician's addendum). DESIGN section 7's keys, every one and nothing else.
+- ``details_needed(encounter, assessment, view)``: one row per open material question - one per fact of a documented
+  service (the profiles' required facts: how far an endoscope was advanced, what was examined, a duct cannulated, a
+  visit's setting, status or basis), whichever of its codes hold on it, and one per question about one code otherwise -
+  each with its control: ``date`` (the date of service), ``choice`` (place of service, new or established patient,
+  professional or facility claim) or ``confirm`` (a clinical fact, which a member never supplies: only "Not documented"
+  or "Cannot confirm", or the physician's addendum). DESIGN section 7's keys, every one and nothing else.
+- The date row also stands while a member's date of service is in effect where the document gives no single date of
+  its own: as the member's saved answer, attributed, which the same row corrects or removes (refutation r2, L7-05); and
+  it asks again - the document's own dates beside the one entered - where a date typed outside the details panel chose
+  one of the document's conflicting dates before they were in view (L7-02).
 - ``save_details(encounter, user, answers)``: one save for every row. Context values go through ONE jobs.change_context
   call (the existing path: a new context, then a re-assessment exactly as a context save makes it); "Not documented" and
-  "Cannot confirm" are MemberAnswer rows, read by the review overlay at read time (no re-assessment, nothing sent). A
-  repeated identical save makes nothing.
-- ``revoke_answer(encounter, user, answer_id)``: withdraws one answer.
+  "Cannot confirm" are MemberAnswer rows - one for each code the row's question holds - read by the review overlay at
+  read time (no re-assessment, nothing sent). A repeated identical save makes nothing.
+- ``revoke_answer(encounter, user, answer_id)``: withdraws one answer - with it, the same question's answer for the
+  row's other codes.
 - ``saved_answers(assessment)``: the standing answers of the assessment's revision, which the overlay applies.
 - ``service_date_block(encounter)``: the date of service as the document and the member state it, side by side.
 
 An answer binds to (code, family, fact) and its revision - never to a clarification row or a proposal key, which every
 re-assessment makes anew - so it stands through a re-assessment of the same revision. Every sentence a member reads here
 is from the fixed tables below: no stored question, reason or note text (engine prose, which may quote anything) is
-passed through.
+passed through; the document's own words are quoted only as exact slices of its text.
 """
 from __future__ import annotations
 
@@ -35,6 +42,10 @@ from .validation.reconcile import act_label
 
 NOT_DOCUMENTED, CANNOT_CONFIRM = models.MemberAnswer.NOT_DOCUMENTED, models.MemberAnswer.CANNOT_CONFIRM
 USE_DOCUMENT = 'use_document'
+# Refutation r2, L7-03 and L7-05: remove the member's date of service (the existing clear path, change_context with
+# service_date '') where "Use document date" would name a date the document does not give as its single own one.
+CLEAR = 'clear'
+CLEAR_LABEL = 'Remove the entered date'
 DATE, CHOICE, CONFIRM = 'date', 'choice', 'confirm'
 DATE_FACT = 'service_date'
 CHOICES = {'setting': gi_context.SETTINGS, 'patient_status': gi_context.PATIENT_STATUSES,
@@ -46,6 +57,10 @@ CHOICE_LABELS = {
     'patient_status': {'new': 'New patient', 'established': 'Established patient'},
     'billing_context': {'professional': 'Professional claim', 'facility': 'Facility claim'},
 }
+# Refutation r2, L7-08: the facts a documented service has (each profile's required facts), asked once for the service
+# whichever of its codes hold on them - "How far was the instrument advanced?" is one question about one colonoscopy,
+# never one per code. A question about one code (its units, its base, whether its act was done) stays that code's.
+SERVICE_FACTS = frozenset(fact for profile in PROFILES.values() for fact in profile.required_facts)
 ANSWER_LABELS = {NOT_DOCUMENTED: 'Not documented', CANNOT_CONFIRM: 'Cannot confirm'}
 PROMPTS = {
     'setting': 'Where was this service provided?',
@@ -68,7 +83,15 @@ CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which 
 DEFAULT_PROMPT = 'A detail this code depends on is not clear in the document.'
 DATE_PROMPTS = {'member': 'The date of service entered for this document differs from the date in the document.',
                 'document': 'The document states more than one date of service.',
-                'asked': 'Confirm the date of service for this document.'}
+                'asked': 'Confirm the date of service for this document.',
+                # refutation r2: the date row's other states, each said as it is
+                'third': 'The date of service entered for this document is not one of the dates the document states.',
+                'unconfirmed': 'The date of service entered cannot be confirmed from the document.',
+                'disagree': 'The date of service entered for this document does not agree with the document.',
+                'confirm': ('The document states more than one date of service. Confirm which one is right for this '
+                            'visit.'),
+                'chosen': 'The document states more than one date of service. The date chosen is in use.',
+                'entered': 'The date of service entered for this document is in use.'}
 USE_DOCUMENT_LABELS = {DATE: 'Use document date', CHOICE: 'Use what the document states'}
 STATED_IN_DOCUMENT = '{value} (stated in the document)'
 # The activity rows this flow writes, as a customer reads them (the customer activity allowlist reads these).
@@ -80,6 +103,9 @@ _ID = re.compile(r'd[0-9a-f]{15}')
 _TOKEN = re.compile(r'[a-z][a-z0-9_:.-]{0,39}')
 # The one date form API.md documents (api._PIPE_DATE): YYYY-MM-DD, a calendar date.
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
+_UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+# The newest audit rows read for who entered the date of service in effect (bounded: a document's own trail).
+DATE_ENTRY_EVENTS = 200
 
 BUSY = 'Wait for processing to finish (or stop it) before saving details.'
 STALE = 'That detail is no longer needed. Reload the page to see the details this document needs now.'
@@ -99,7 +125,8 @@ class InvalidAnswer(ValueError):
 
 
 def detail_id(fact: str, family: str, code: str) -> str:
-    """A detail's stable id: the same question about the same code is the same detail across re-assessments."""
+    """A detail's stable id: the same question about the same code is the same detail across re-assessments (a service
+    fact's question, asked once for the service, has the code '')."""
     return 'd' + hashlib.sha256('\x1f'.join((fact, family, code)).encode()).hexdigest()[:15]
 
 
@@ -150,7 +177,8 @@ def _exact(span, text):
 def _document_date(context):
     """The context's pre-merge document date (EncounterContext.document_date). A context recorded before the field
     existed has none: then only where no member value was merged is the stored fact the document's own; otherwise None,
-    and no document date is shown or used (it is never read back from a note's prose)."""
+    and no document date VALUE is shown or used (it is never read back from a note's prose - the document's own wording
+    of it is quoted as it stands: _date_passage)."""
     if context is None:
         return None
     if context.document_date is not None:
@@ -194,6 +222,58 @@ def service_date_block(encounter) -> dict:
     }
 
 
+def _date_in_use(context) -> bool:
+    """Whether a member's date of service is in effect where the document gives no single date of its own - none, one
+    it does not read as this visit's, or more than one: the date row then stays, as the member's saved answer, so the
+    member can correct or remove it (refutation r2, L7-05: a date saved from the panel closed its question and could
+    never be corrected or withdrawn there)."""
+    if context is None:
+        return False
+    fact = (context.facts or {}).get(DATE_FACT) or {}
+    return (fact.get('origin') == 'user' and bool((context.user_values or {}).get(DATE_FACT))
+            and not (_document_date(context) or {}).get('single'))
+
+
+def _date_passage(context, document):
+    """The document's own wording of its date of service, where no date of it is shown: the first evidence span of the
+    document's date fact (recorded with the context, or - for a context recorded before that - the stored fact's) that
+    is an exact slice of the text. Quoted as the document writes it, never read back as a date (refutation r2, L7-07:
+    the row said "Not stated" beside a document that states one)."""
+    if context is None:
+        return None
+    spans = (document or {}).get('evidence') or ((context.facts or {}).get(DATE_FACT) or {}).get('evidence') or []
+    text = context.revision.text
+    return next((found for found in (_exact(span, text) for span in spans) if found), None)
+
+
+def _date_entry(encounter, entered) -> dict:
+    """{'by', 'at', 'confirmed'} for the member's date of service in effect: who entered it and when - the details save
+    that chose it (a detail.answered row naming the date), else the context change that set it, else the upload that
+    carried it - and whether it was chosen or confirmed in the details panel on the current revision, where the
+    document's own dates are in view (refutation r2, L7-02)."""
+    revision = str(encounter.current_revision_id)
+    events = (models.AuditEvent.objects.filter(encounter=encounter, event__in=('detail.answered', 'context.changed'))
+              .select_related('actor').order_by('-created_at', '-pk')[:DATE_ENTRY_EVENTS])
+    for event in events:
+        data = event.data if isinstance(event.data, dict) else {}
+        if event.event == 'detail.answered':
+            if data.get('fact') != DATE_FACT or data.get('value') != entered:
+                continue
+            confirmed = data.get('revision') == revision
+        else:
+            if DATE_FACT not in (data.get('fields') or ()):
+                continue
+            made = models.EncounterContext.objects.filter(pk=data['context'], encounter=encounter).first() \
+                if isinstance(data.get('context'), str) and _UUID.fullmatch(data['context']) else None
+            if made is None or (made.user_values or {}).get(DATE_FACT) != entered:
+                continue
+            confirmed = False
+        return {'by': event.actor.label() if event.actor is not None else '', 'at': _iso(event.created_at),
+                'confirmed': confirmed}
+    creator = encounter.created_by
+    return {'by': creator.label() if creator is not None else '', 'at': _iso(encounter.created_at), 'confirmed': False}
+
+
 # --- the rows ----------------------------------------------------------------------------------------------------------
 
 @dataclass
@@ -204,13 +284,20 @@ class _Row:
     scope: str
     position: tuple
     codes: list = field(default_factory=list)
-    answer: Optional[models.MemberAnswer] = None
+    # the questions the row answers, each (fact, family, code), and each one's standing answer (None: unanswered)
+    members: list = field(default_factory=list)
+    answers: dict = field(default_factory=dict)
     choices: list = field(default_factory=list)
     allow: list = field(default_factory=list)
     document_value: Optional[str] = None
     entered_value: Optional[str] = None
     quote: Optional[dict] = None
     prompt: str = ''
+    # the date row: the member's date in effect as a saved answer (L7-05); a date typed outside the panel that chose
+    # one of the document's own dates, asked again (L7-02); the physician's addendum as the way that settles it (L7-03)
+    saved_date: Optional[dict] = None
+    confirm: bool = False
+    addendum: bool = False
 
     @property
     def id(self):
@@ -220,18 +307,34 @@ class _Row:
     def control(self):
         return control_for(self.fact)
 
+    @property
+    def answer(self) -> Optional[models.MemberAnswer]:
+        """The answer standing for every question the row answers - the same value for each - else None: a row one of
+        whose codes has no answer yet is asked, and the answer then saved stands for each of them (refutation r2, L7-08;
+        never an answer given for one code read as given for another)."""
+        found = [self.answers.get(member) for member in self.members]
+        if not found or any(item is None for item in found) or len({item.value for item in found}) != 1:
+            return None
+        return max(found, key=lambda item: (item.answered_at, str(item.pk)))
+
+    @property
+    def addendum_allowed(self) -> bool:
+        return self.control == CONFIRM or self.addendum
+
     def public(self):
         answer = self.answer
+        if self.control == DATE:
+            saved = dict(self.saved_date) if self.saved_date is not None else None
+        else:
+            saved = None if answer is None else {
+                'value': answer.value, 'label': ANSWER_LABELS[answer.value], 'by': answer.answered_by.label(),
+                'at': _iso(answer.answered_at), 'answer_id': str(answer.pk)}
         return {
             'id': self.id, 'fact': self.fact,
             'family_label': PROFILES[self.family].label if self.family in PROFILES else '',
             'prompt': self.prompt, 'control': self.control, 'choices': list(self.choices), 'allow': list(self.allow),
             'document_value': self.document_value, 'entered_value': self.entered_value, 'quote': self.quote,
-            'affects': list(self.codes),
-            'saved': None if answer is None else {
-                'value': answer.value, 'label': ANSWER_LABELS[answer.value], 'by': answer.answered_by.label(),
-                'at': _iso(answer.answered_at), 'answer_id': str(answer.pk)},
-            'addendum_allowed': self.control == CONFIRM,
+            'affects': list(self.codes), 'saved': saved, 'addendum_allowed': self.addendum_allowed,
         }
 
 
@@ -245,7 +348,7 @@ def saved_answers(assessment) -> list[dict]:
     """[{code, family, fact, value, answer_id, by, at}]: the standing member answers of ``assessment``'s revision, which
     the review overlay applies to the questions they answer (a proposal's question answered 'not documented' or 'cannot
     confirm' leaves that proposal excluded until the answer is withdrawn; a service's question is closed). One per
-    detail: a later answer to the same detail withdraws the earlier one."""
+    detail and code: a later answer to the same detail withdraws the earlier one."""
     if assessment is None:
         return []
     return [{'code': answer.code, 'family': answer.family, 'fact': answer.fact, 'value': answer.value,
@@ -306,36 +409,51 @@ def _questions(encounter, assessment, view, answers):
     return held
 
 
+def _row_key(fact, family, code):
+    """The row a question is asked in: the date of service once for the document; a service fact once for its service
+    (refutation r2, L7-08), whichever of its codes asks it; any other question once for its code."""
+    if fact == DATE_FACT:
+        return (DATE_FACT, '', '')
+    if code and fact in SERVICE_FACTS:
+        return (fact, family, '')
+    return (fact, family, code)
+
+
 def _rows(encounter, assessment, view=None):
     context = _context_of(encounter)
     answers = standing_answers(encounter.current_revision_id) if encounter.current_revision_id else []
     by_key = {(answer.fact, answer.family, answer.code): answer for answer in answers}
     rows: dict = {}
     hold = context is not None and gi_context.is_member_conflict((context.facts or {}).get(DATE_FACT))
-    if hold:
-        rows[(DATE_FACT, '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1))
     selected = [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.SELECTED)] \
         if assessment is not None else []
+    if hold or _date_in_use(context):  # the date of service, which every selected code depends on
+        rows[(DATE_FACT, '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1), codes=list(selected))
     for scope, fact, family, code, position in _questions(encounter, assessment, view, answers):
         if hold and fact != DATE_FACT:
             # While a member's date conflicts with the document nothing is sent: the date is the one detail asked.
             # Every other question belongs to a reading made without a settled date, and the assessment that follows
             # the member's choice asks again what it still needs (an answer saved before stays bound to its detail).
             continue
-        key = (DATE_FACT, '', '') if fact == DATE_FACT else (fact, family, code)
+        key = _row_key(fact, family, code)
         row = rows.get(key)
         if row is None:
             row = rows[key] = _Row(key[0], key[1], key[2], 'encounter' if fact == DATE_FACT else scope, position)
+        elif position < row.position:
+            row.position = position
         if fact == DATE_FACT:
             row.codes = list(dict.fromkeys(row.codes + selected))
-        elif code and code not in row.codes:
+            continue
+        if (fact, family, code) not in row.members:
+            row.members.append((fact, family, code))
+        if code and code not in row.codes:
             row.codes.append(code)
     values = dict((context.user_values if context is not None else encounter.user_values) or {})
     out = []
     for row in sorted(rows.values(), key=lambda item: item.position):
-        row.answer = by_key.get((row.fact, row.family, row.code))
+        row.answers = {member: by_key.get(member) for member in row.members}
         if row.control == DATE:
-            _date_row(row, encounter)
+            _date_row(row, encounter, context)
         elif row.control == CHOICE:
             fact = (context.facts or {}).get(row.fact) if context is not None else None
             conflict = gi_context.is_member_conflict(fact)
@@ -357,55 +475,106 @@ def _rows(encounter, assessment, view=None):
     return out
 
 
-def _date_row(row, encounter):
-    """The date row: the document's date and the member's side by side, "Use document date" only where the document
-    gives one date of its own and the member's differs (clearing the member's date then leaves that date), and the
-    document's own dates as choices where it states more than one, or where its closing charge block's question takes
-    one - never a date it does not state as its own, and never prefilled."""
+def _date_row(row, encounter, context):
+    """The date row: the document's date and the member's side by side, and the ways the server takes.
+
+    - A member's date that conflicts with the document (the hold): "Use document date" where the document gives one
+      date of its own; the document's own dates as choices where it states more than one (or where its closing charge
+      block's question takes one); otherwise the document's own wording of its date and the removal of the entered date
+      - with the physician's addendum where the document has date text but no date of service this service reads, so
+      that no member date can be shown to agree with it (interpretation 35: "an addendum settles it"; refutation r2,
+      L7-03: no way out had been offered).
+    - A member's date in effect where the document gives no single date of its own: the member's saved answer, with
+      who entered it and when, which the row corrects or removes (L7-05) - unless it was typed outside the panel and
+      chose one of the document's own dates, when it is asked again with them in view (L7-02).
+    - Otherwise the date asked: the document's own dates as choices where it states more than one; else its wording
+      of the date, if any, with the physician's addendum where that date text is not one this service reads.
+
+    Never a date the document does not state as its own offered as the document's, and never prefilled."""
     block = service_date_block(encounter)
-    context = _context_of(encounter)
+    fact = ((context.facts or {}).get(DATE_FACT) if context is not None else None) or {}
     document = _document_date(context) or {}
-    row.document_value, row.quote, row.entered_value = (block['document_value'], block['document_quote'],
-                                                         block['entered_value'])
-    if block['can_use_document_date']:
-        row.choices = [{'value': USE_DOCUMENT, 'label': USE_DOCUMENT_LABELS[DATE]}]
-        row.prompt = DATE_PROMPTS['member']
-    elif not document.get('single') and document.get('values'):
-        row.choices = [{'value': value, 'label': STATED_IN_DOCUMENT.format(value=_date_label(value))}
-                       for value in document['values']]
-        row.prompt = DATE_PROMPTS['member' if block['entered_value'] else
-                                  'document' if len(document['values']) > 1 else 'asked']
-    else:
-        row.prompt = DATE_PROMPTS['member' if block['entered_value'] and block['conflict'] else 'asked']
-    row.allow = []
+    single = bool(document.get('single'))
+    stated = [] if single else [value for value in document.get('values') or [] if _iso_date(value)]
+    documented = [{'value': value, 'label': STATED_IN_DOCUMENT.format(value=_date_label(value))} for value in stated]
+    clear = {'value': CLEAR, 'label': CLEAR_LABEL}
+    # The document has date text of its own, recorded with this context, but no date of service this service takes as
+    # an answer: another occasion's date, a date it cannot read.
+    unusable = (context is not None and context.document_date is not None and not single and not stated
+                and bool(document.get('evidence')))
+    entered = block['entered_value']
+    row.document_value, row.quote, row.entered_value, row.allow = (block['document_value'], block['document_quote'],
+                                                                   entered, [])
+    if gi_context.is_member_conflict(fact):
+        if block['can_use_document_date']:
+            row.choices, row.prompt = [{'value': USE_DOCUMENT, 'label': USE_DOCUMENT_LABELS[DATE]}], \
+                DATE_PROMPTS['member']
+        elif documented:
+            row.choices, row.prompt = documented, DATE_PROMPTS['third' if len(stated) > 1 else 'member']
+        else:
+            row.choices, row.addendum = [clear], unusable
+            row.quote = row.quote or _date_passage(context, document)
+            row.prompt = DATE_PROMPTS['unconfirmed' if unusable else 'disagree']
+        return
+    if _date_in_use(context):
+        entry = _date_entry(encounter, entered)
+        if len(stated) > 1 and entered in stated and not entry['confirmed']:
+            row.choices, row.prompt, row.confirm = documented, DATE_PROMPTS['confirm'], True
+            return
+        row.choices = documented + [clear]
+        row.prompt = DATE_PROMPTS['chosen' if len(stated) > 1 else 'entered']
+        if not documented:
+            row.quote = row.quote or _date_passage(context, document)
+        row.saved_date = {'value': entered, 'label': _date_label(entered), 'by': entry['by'], 'at': entry['at'],
+                          'answer_id': ''}
+        return
+    if documented:
+        row.choices = documented
+        row.prompt = DATE_PROMPTS['document' if len(stated) > 1 else 'asked']
+        return
+    row.prompt = DATE_PROMPTS['asked']
+    row.quote = row.quote or _date_passage(context, document)
+    row.addendum = unusable
 
 
 def addendum_detail(encounter, detail):
-    """(found, clarification) for an addendum sent from details row ``detail``: ``found`` when it is an open row of the
-    live assessment that a physician may answer with documentation (a confirmation row: details_needed's
-    ``addendum_allowed``), and the stored open clarification that row shows, if it shows one - None for a question only
-    the review overlay asks, which the reading that follows the addendum answers or asks again."""
+    """(found, clarification) for an addendum sent from details row ``detail``: ``found`` when it is an open row that a
+    physician may answer with documentation (details_needed's ``addendum_allowed``: a confirmation row, or the date row
+    where documentation is what settles the date), and the stored open clarification that row shows, if it shows one -
+    None for a question only the review overlay asks, or the date held before anything was asked, which the reading
+    that follows the addendum answers or asks again."""
     assessment = review.live_assessment(encounter)
-    if assessment is None:
-        return False, None
-    for row in _rows(encounter, assessment, review.effective_view(assessment)):
-        if row.id != detail or row.control != CONFIRM:
+    view = review.effective_view(assessment) if assessment is not None else None
+    for row in _rows(encounter, assessment, view):
+        if row.id != detail or not row.addendum_allowed:
             continue
+        if assessment is None:
+            return True, None
+        keys = set(row.members) or {(row.fact, row.family, row.code)}
         stored = assessment.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
         for item in stored.order_by('created_at', 'pk'):
             proposal = item.proposal
             key = ((item.fact, item.family or proposal.family, proposal.code) if proposal is not None
                    else (item.fact, item.family, ''))
-            if key == (row.fact, row.family, row.code):
+            if key in keys:
                 return True, item
         return True, None
     return False, None
 
 
+def date_confirmation_open(encounter) -> bool:
+    """Whether the date row asks the member to confirm a date entered outside the details panel that chose one of the
+    document's own conflicting dates (refutation r2, L7-02): for a reader that holds the approved export until the member
+    has settled it with those dates in view. Reads the context only (no assessment), as the date row does."""
+    return any(row.confirm for row in _rows(encounter, None) if row.control == DATE)
+
+
 def details_needed(encounter, assessment, view=None) -> list[dict]:
     """DESIGN section 7 ``details_needed``: one row per open material question of the live assessment on the current
-    context (and the date of service at once while a member's date conflicts with the document, before any assessment),
-    de-duplicated by (fact, family, code), dates first, then the document's, the services' and the codes' questions."""
+    context - a service fact's once for its service, any other once for its code - and the date of service at once
+    while a member's date conflicts with the document, before any assessment (or stands as the member's own saved date
+    where the document gives no single date of its own); dates first, then the document's, the services' and the codes'
+    questions."""
     return [row.public() for row in _rows(encounter, assessment, view)]
 
 
@@ -438,7 +607,7 @@ def _in_effect(encounter, answers, fact, value):
     caused (the context value is the one saved), or an answer already recorded."""
     if fact in CHOICES or fact == DATE_FACT:
         current = (encounter.user_values or {}).get(fact) or ''
-        given = '' if value == USE_DOCUMENT else (_iso_date(value) or value) if fact == DATE_FACT else value
+        given = '' if value in (USE_DOCUMENT, CLEAR) else (_iso_date(value) or value) if fact == DATE_FACT else value
         return current == given
     return any(answer.fact == fact and answer.value == value for answer in answers)
 
@@ -447,8 +616,10 @@ def save_details(encounter, user, items) -> dict:
     """Save a member's answers to the details asked, in one transaction under the encounter's row lock: every answer
     is checked against the detail's own control before anything is written (InvalidAnswer: 400), the whole save is
     refused while processing runs or when a detail is no longer asked (jobs.Refused: 409). Context values are ONE
-    jobs.change_context call; 'not_documented' / 'cannot_confirm' are MemberAnswer rows (a later answer withdraws the
-    earlier one). An answer already in effect is left as it is, so a repeated identical save makes nothing."""
+    jobs.change_context call; 'not_documented' / 'cannot_confirm' are MemberAnswer rows, one for each question the row
+    answers (a later answer withdraws the earlier one). A date typed outside the panel that the member confirms with the
+    document's own dates in view is recorded as confirmed (a detail.answered row; nothing is re-assessed or sent). An
+    answer already in effect is left as it is, so a repeated identical save makes nothing."""
     parsed = _parse(items)
     with transaction.atomic():
         encounter = jobs._locked(encounter)
@@ -457,7 +628,7 @@ def save_details(encounter, user, items) -> dict:
         assessment = review.live_assessment(encounter)
         rows = {row.id: row for row in _rows(encounter, assessment, effective_view(assessment))}
         answers = standing_answers(encounter.current_revision_id) if encounter.current_revision_id else []
-        values, recorded, superseded, unchanged = {}, [], [], 0
+        values, recorded, superseded, unchanged, confirming = {}, [], [], 0, None
         for ident, fact, value in parsed:
             row = rows.get(ident)
             if row is None or row.fact != fact:
@@ -476,8 +647,8 @@ def save_details(encounter, user, items) -> dict:
                 continue
             if row.control == CONFIRM:
                 raise InvalidAnswer(CLINICAL)
-            if value == USE_DOCUMENT:
-                if USE_DOCUMENT not in offered:
+            if value in (USE_DOCUMENT, CLEAR):
+                if value not in offered:
                     raise InvalidAnswer(NOT_OFFERED)
                 given = ''
             elif row.control == DATE:
@@ -491,22 +662,32 @@ def save_details(encounter, user, items) -> dict:
             if values.get(row.fact, given) != given:
                 raise InvalidAnswer(TWO_VALUES)
             values[row.fact] = given
-            if row.answer is not None:
-                superseded.append(row.answer)  # a value given for a detail said not to be documented replaces that
+            if row.confirm and given in offered:
+                confirming = row  # one of the document's own dates, chosen with them in view
+            # a value given for a detail said not to be documented replaces that answer, for each of the row's codes
+            superseded.extend(answer for answer in row.answers.values() if answer is not None)
         current = dict(encounter.user_values or {})
         changed = {name: value for name, value in values.items() if (current.get(name) or '') != value}
-        unchanged += len(values) - len(changed)
+        if DATE_FACT in changed:
+            confirming = None  # chosen anew: the context change records the choice
+        unchanged += len(values) - len(changed) - (1 if confirming is not None else 0)
+        revision = str(encounter.current_revision_id)
         saved_ids = []
         for row, value in recorded:
-            if row.answer is not None:
-                models.MemberAnswerRevocation.objects.create(answer=row.answer, revoked_by=user,
-                                                             reason=models.MemberAnswerRevocation.SUPERSEDED)
-            answer = models.MemberAnswer.objects.create(
-                encounter=encounter, revision=encounter.current_revision, assessment=assessment, fact=row.fact,
-                family=row.family, code=row.code, value=value, answered_by=user)
-            saved_ids.append(str(answer.pk))
-            audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=row.fact,
-                         family=row.family, code=row.code, value=value, answer=str(answer.pk))
+            for member in row.members:
+                standing = row.answers.get(member)
+                if standing is not None and standing.value == value:
+                    continue  # already this answer for this code
+                if standing is not None:
+                    models.MemberAnswerRevocation.objects.create(answer=standing, revoked_by=user,
+                                                                 reason=models.MemberAnswerRevocation.SUPERSEDED)
+                fact, family, code = member
+                answer = models.MemberAnswer.objects.create(
+                    encounter=encounter, revision=encounter.current_revision, assessment=assessment, fact=fact,
+                    family=family, code=code, value=value, answered_by=user)
+                saved_ids.append(str(answer.pk))
+                audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=fact,
+                             family=family, code=code, value=value, answer=str(answer.pk))
         for answer in superseded:
             models.MemberAnswerRevocation.objects.create(answer=answer, revoked_by=user,
                                                          reason=models.MemberAnswerRevocation.SUPERSEDED)
@@ -514,19 +695,38 @@ def save_details(encounter, user, items) -> dict:
             context = jobs.change_context(encounter, user, changed)
             for name in sorted(changed):
                 row = next(item for item in rows.values() if item.fact == name)
+                dated = {'revision': revision, 'value': changed[name]} if name == DATE_FACT else {}
                 audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=name,
-                             family=row.family, code=row.code, kind='context', context=str(context.pk))
+                             family=row.family, code=row.code, kind='context', context=str(context.pk), **dated)
         elif recorded or superseded:
             review.refresh_state(encounter)  # the overlay reads the answers: the list state follows them
+        if confirming is not None:
+            audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=DATE_FACT,
+                         family='', code='', kind='context', confirmed=True, context=str(encounter.current_context_id),
+                         revision=revision, value=values[DATE_FACT])
     withdrawn = [answer for answer in superseded if answer.fact not in changed]  # counted once with its value
-    return {'saved': len(recorded) + len(changed) + len(withdrawn), 'unchanged': unchanged, 'answer_ids': saved_ids,
-            'reassessing': bool(changed)}
+    return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
+            'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed)}
+
+
+def _siblings(encounter, answer):
+    """The other standing answers of the row ``answer`` answers: one question asked once for a service, whose answer
+    stands for each of its codes (refutation r2, L7-08) - withdrawn together, so the question is asked again for all."""
+    if answer.revision_id != encounter.current_revision_id:
+        return []
+    assessment = review.live_assessment(encounter)
+    key = (answer.fact, answer.family, answer.code)
+    for row in _rows(encounter, assessment, effective_view(assessment)):
+        if key in row.members:
+            return [item for item in row.answers.values() if item is not None and item.pk != answer.pk]
+    return []
 
 
 def revoke_answer(encounter, user, answer_id):
-    """Withdraw one standing answer (a MemberAnswerRevocation, 'withdrawn'): the detail is asked again. Refused while
-    processing runs and for an answer already withdrawn (jobs.Refused: 409); MemberAnswer.DoesNotExist for an answer
-    that is not this document's (404)."""
+    """Withdraw one standing answer (a MemberAnswerRevocation, 'withdrawn') - and the same question's answer for the
+    row's other codes: the detail is asked again. Refused while processing runs and for an answer already withdrawn
+    (jobs.Refused: 409); MemberAnswer.DoesNotExist for an answer that is not this document's (404). Returns the
+    revocation of ``answer_id``."""
     with transaction.atomic():
         encounter = jobs._locked(encounter)
         if jobs.busy(encounter):
@@ -534,9 +734,11 @@ def revoke_answer(encounter, user, answer_id):
         answer = models.MemberAnswer.objects.select_for_update().get(pk=answer_id, encounter=encounter)
         if models.MemberAnswerRevocation.objects.filter(answer=answer).exists():
             raise jobs.Refused(ALREADY_WITHDRAWN)
-        revocation = models.MemberAnswerRevocation.objects.create(
-            answer=answer, revoked_by=user, reason=models.MemberAnswerRevocation.WITHDRAWN)
-        audit.record(encounter.workspace, 'detail.revoked', encounter=encounter, actor=user, fact=answer.fact,
-                     family=answer.family, code=answer.code, answer=str(answer.pk))
+        revocations = []
+        for item in [answer] + _siblings(encounter, answer):
+            revocations.append(models.MemberAnswerRevocation.objects.create(
+                answer=item, revoked_by=user, reason=models.MemberAnswerRevocation.WITHDRAWN))
+            audit.record(encounter.workspace, 'detail.revoked', encounter=encounter, actor=user, fact=item.fact,
+                         family=item.family, code=item.code, answer=str(item.pk))
         review.refresh_state(encounter)
-    return revocation
+    return revocations[0]
