@@ -962,6 +962,33 @@ def pctc_consideration(code: str, pfs: Optional[dict], release: str, billing: st
             f'{code}; which one applies depends on the billing context ({billing}). No modifier is assigned.')
 
 
+# --- the reviewer's modifier review (CORE-UX-DESIGN.md 4): separate lesions, a reviewer's choice, never an assignment --
+
+DISTINCT_LESION_OPTIONS = ('59', 'XS')  # the reviewer chooses none or ONE of them per approval, never both
+DISTINCT_LESION_NOT_CHECKED = ('NCCI procedure-to-procedure edits', 'payer modifier policy')
+# The pair the example of CMS's claims manual bills together for lesions in different parts of the colon (Pub. 100-04,
+# chapter 12, section 40.6.C, item 13, example), and the retrieved passage that states it: cited for this pair only.
+CLAIMS_EXAMPLE_CODES = frozenset({'45380', '45385'})
+CLAIMS_EXAMPLE_PASSAGE = 'item-13-example'
+CLAIMS_EXAMPLE_TOPIC = 'claims.multiple_endoscopy'
+
+
+def distinct_lesion_review_text(code: str, here: Sequence[str], partners: Sequence[tuple[str, Sequence[str]]],
+                                release: str = '') -> str:
+    """The modifier review of ``code``, in plain words: ``here``, its own acts on their documented lesions;
+    ``partners``, (another code of the review, its acts on other documented lesions); ``release``, the release of the
+    claims-manual example the assessment retrieved for this pair ('' when none applies). It never says a modifier
+    applies or is assigned, and says what is not checked."""
+    there = '; '.join(f'{other} is for the {_join(list(words))}' for other, words in partners)
+    text = f'Separate lesions are documented: {code} is for the {_join(list(here))}; {there}.'
+    if release:
+        text += (" In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; "
+                 f'{release}), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon '
+                 '(45385) are billed together.')
+    return text + (' Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer '
+                   'accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.')
+
+
 NOT_CONNECTED_CHECKS = (
     Check('cpt.membership', 'CPT code-set membership for the service date', 'not_verified',
           'No licensed CPT edition is connected; code-set membership for the service date is not verified.', ''),
