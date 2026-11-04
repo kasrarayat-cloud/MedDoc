@@ -434,8 +434,11 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         record = json.loads(Path(json.loads(stdout.getvalue())['receipt']).read_text())
         migrations = record['details']['migrations']
         self.assertEqual(migrations['baseline'], '0005')
+        # the core repair's three additive migrations (2026-11-03: decision modifiers, operator grants and report
+        # audience, member answers and the upload key), each read safe by the same gate (the last assertion)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
-                                                                '0007_harness_participants_retrieval', MIGRATION_0008])
+                                                                '0007_harness_participants_retrieval', MIGRATION_0008,
+                                                                '0009_cux_review', '0010_cux_operator', '0011_cux_flow'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 

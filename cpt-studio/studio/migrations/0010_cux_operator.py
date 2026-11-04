@@ -14,7 +14,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('studio', '0008_harness2_exchanges_tools_confirmations'),
+        ('studio', '0009_cux_review'),
     ]
 
     operations = [

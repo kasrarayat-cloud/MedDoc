@@ -435,7 +435,7 @@ class ConsoleLogicTests(SimpleTestCase):
 class MigrationTests(SimpleTestCase):
     def test_the_operator_migration_is_additive_for_the_rolling_install(self):
         from ops import install
-        verdict = install.migration_verdict((ROOT / 'studio' / 'migrations' / '0009_cux_operator.py').read_text())
+        verdict = install.migration_verdict((ROOT / 'studio' / 'migrations' / '0010_cux_operator.py').read_text())
         self.assertEqual(verdict, {'safe': True, 'why': [
             'reportartifact.audience: NOT NULL with a database default (db_default)',
             'OperatorGrant: a new table no older revision reads', 'OperatorRevocation: a new table no older revision reads']})
