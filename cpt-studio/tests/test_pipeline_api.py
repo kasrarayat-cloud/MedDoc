@@ -10,6 +10,7 @@ from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange, sha256_json
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 
 OFFICE_NOTE = """SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
 
@@ -79,7 +80,7 @@ def drain():
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class PipelineApiTests(TestCase):
+class PipelineApiTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -97,7 +98,7 @@ class PipelineApiTests(TestCase):
         return response.json()['id']
 
     def detail(self, encounter_id, client=None):
-        response = (client or self.client).get(f'/api/encounters/{encounter_id}')
+        response = (client or self.client).get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -181,15 +182,15 @@ class PipelineApiTests(TestCase):
         drain()
         self.assertEqual(len(self.provider.sent), 1)
         # A reconciliation note is required, then exactly one new attempt happens.
-        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/reconcile',
+        self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                    {'provider_run_id': run_id, 'note': 'short'}).status_code, 400)
         self.provider.outcome = 'succeeded'
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': 'Checked the provider console: no response recorded.'})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
         self.assertEqual(len(self.provider.sent), 2)
-        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/reconcile',
+        self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                    {'provider_run_id': run_id, 'note': 'Second reconciliation attempt.'}).status_code, 409)
 
     def test_addendum_creates_revision_and_invalidates_decisions(self):
@@ -216,14 +217,14 @@ class PipelineApiTests(TestCase):
     def test_report_download_bytes_match_recorded_sha(self):
         encounter_id = self.create()
         drain()
-        response = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'draft', 'fmt': 'csv'})
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'draft', 'fmt': 'csv'})
         self.assertEqual(response.status_code, 201, response.content)
         report = response.json()
         download = self.client.get(report['download_url'])
         self.assertEqual(download.status_code, 200)
         self.assertEqual(hashlib.sha256(download.content).hexdigest(), report['sha256'])
         self.assertIn('attachment;', download['Content-Disposition'])
-        reviewed = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reviewed = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertIn(reviewed.status_code, {201, 409})
 
     def test_provider_unavailable_is_recorded_not_sent(self):
@@ -247,7 +248,7 @@ class PipelineApiTests(TestCase):
             response = self.client.post('/api/encounters', {'file': upload, 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
         encounter_id = response.json()['id']
-        original = self.client.get(f'/api/encounters/{encounter_id}/original')
+        original = self.client.get(f'/ops/api/encounters/{encounter_id}/original')
         self.assertEqual(original.content, payload)
         self.assertEqual(original['X-Content-SHA256'], hashlib.sha256(payload).hexdigest())
 
@@ -258,7 +259,7 @@ class PipelineApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
-class SnapshotHashTests(TestCase):
+class SnapshotHashTests(OperatorReads, TestCase):
     def test_sha256_json_is_order_independent(self):
         self.assertEqual(sha256_json({'a': 1, 'b': [1, 2]}), sha256_json({'b': [1, 2], 'a': 1}))
 
@@ -285,7 +286,7 @@ class _OtherSession:
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class ProviderLockTests(TestCase):
+class ProviderLockTests(OperatorReads, TestCase):
     """Refutation round 1, FG-4 (I8; HARNESS.md 2: every provider send takes the one installation-wide advisory lock):
     no test held the lock from another session, so removing it from jobs._send stayed green."""
 

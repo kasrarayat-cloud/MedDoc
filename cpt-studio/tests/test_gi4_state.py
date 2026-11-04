@@ -36,6 +36,7 @@ from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange, Span
 from studio.validation import engine, reconcile
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 DOCS = regression.load_fixtures()
@@ -96,7 +97,7 @@ def seed_reference(codes):
 
 
 @override_settings(**LIVE)
-class StateBatteryTests(TestCase):
+class StateBatteryTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -129,7 +130,7 @@ class StateBatteryTests(TestCase):
         jobs.run_job(job)
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def answer(self, encounter_id, value):
         response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': value})

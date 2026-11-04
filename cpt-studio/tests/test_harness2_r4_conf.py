@@ -112,7 +112,7 @@ class NoCandidateTests(h2.Harness2Case):
     def test_the_api_serves_no_member_a_candidate_and_no_member_may_confirm(self):
         for user in (self.owner, self.reviewer, self.viewer):
             with self.subTest(user=user.username):
-                data = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}').json()
+                data = self.client_for(user).get(f'/ops/api/encounters/{self.encounter.pk}').json()
                 self.assertIs(data['permissions']['can_confirm'], False)
                 self.assertEqual(sum(c['state'] == 'open' for c in data['clarifications']), 4)
                 self.assertEqual([(c['candidates'], c['confirmation']) for c in data['clarifications']],
@@ -120,7 +120,7 @@ class NoCandidateTests(h2.Harness2Case):
         # the control: on the dormant path a member who may confirm is served the candidates; a member who may not is
         # served none (candidates go only to a member who may confirm one)
         with override_settings(**DORMANT):
-            served = {user: self.client_for(user).get(f'/api/encounters/{self.encounter.pk}').json()
+            served = {user: self.client_for(user).get(f'/ops/api/encounters/{self.encounter.pk}').json()
                       for user in (self.reviewer, self.viewer)}
         reviewer, viewer = served[self.reviewer], served[self.viewer]
         self.assertIs(reviewer['permissions']['can_confirm'], True)
@@ -129,7 +129,7 @@ class NoCandidateTests(h2.Harness2Case):
         self.assertEqual([c['candidates'] for c in viewer['clarifications']], [[]] * len(viewer['clarifications']))
 
     def test_the_page_draws_no_candidate_and_no_answer_it_attributes_to_a_participant(self):
-        detail = self.client_for(self.owner).get(f'/api/encounters/{self.encounter.pk}').json()
+        detail = self.client_for(self.owner).get(f'/ops/api/encounters/{self.encounter.pk}').json()
         html = page(detail)
         for words in LOCATED_WORDS:
             self.assertNotIn(words, html)
@@ -171,7 +171,7 @@ class BasisTests(PipelineCase):
         final = self.encounter(encounter_id).current_assessment
         self.assertEqual((jobs.assessment_phase(final), review.is_final(final)), (2, True))
         question = final.clarifications.get(fact='em_basis', state=models.Clarification.OPEN)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         served = next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
         self.assertEqual(served, [])
         html = page(detail)
@@ -204,7 +204,7 @@ class EncounterQuestionTests(h2.Harness2Case):
     its two codes."""
 
     def test_the_clarification_row_counts_and_the_readiness_rules_say_what_each_question_holds(self):
-        detail = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}').json()
+        detail = self.client_for(self.reviewer).get(f'/ops/api/encounters/{self.encounter.pk}').json()
         # moved by refutation round 5 (R5-ROW, the session's D11; renamed from "..._row_says_what_the_readiness_rules_
         # make_true"): the row says only how many questions are open and what each is about; what each holds is the
         # readiness rules' to say, pinned below as before
@@ -236,7 +236,7 @@ class CodeQuestionTests(ColonCase):
         drain()
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         # moved by refutation round 5 (R5-ROW, the session's D11): the row says only how many questions are open and
         # what each is about; that each holds its code, which can still be rejected, is the readiness rules', pinned
         # below as before (and the row after the rejections in tests/test_harness2_r5_row.py)
@@ -279,7 +279,7 @@ class ServiceQuestionTests(PipelineCase):
         final = encounter.current_assessment
         self.assertEqual([(q.scope, q.fact, q.proposal_id) for q in final.clarifications.filter(state='open')],
                          [('service', 'extent', None)])
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         # moved by refutation round 5 (R5-ROW, the session's D11): the row says only how many questions are open and
         # what each is about; that this one holds neither a code nor the reviewed report is the readiness rules', pinned
         # below as before (and a service a code carries in tests/test_harness2_r5_row.py)
@@ -354,7 +354,7 @@ class CaseRowsTests(h2.Harness2Case):
         frozen = jobs._frozen(self.revision, self.corti, {record['name']: record for record in records})
         self.assertEqual(self.final.participants, [{**record, 'frozen': frozen} for record in records])
         # so each participant's position on 45385 is its own located quote, never "none of its quotes was found"
-        detail = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}').json()
+        detail = self.client_for(self.reviewer).get(f'/ops/api/encounters/{self.encounter.pk}').json()
         snare = next(p for p in detail['assessment']['proposals'] if p['code'] == '45385' and p['bucket'] == 'selected')
         positions = snare['participant_positions']
         self.assertEqual({name: (item['position'], item['quote']) for name, item in positions.items()},

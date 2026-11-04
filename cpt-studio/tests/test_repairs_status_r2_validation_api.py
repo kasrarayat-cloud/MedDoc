@@ -16,6 +16,7 @@ from studio.gi.detect import route
 from studio.types import RawExchange
 from studio.validation import checks
 from tests.support import pipeline_factories as pf
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE, ApiHarness, ScriptedProvider
 
@@ -39,7 +40,7 @@ def gated_result():
 BLOCKER = '99213 needs a separately identifiable E/M: 46221 was reinstated as a same-day procedure'
 
 
-class Review0GateTests(TestCase):
+class Review0GateTests(OperatorReads, TestCase):
     def setUp(self):
         self.s = pf.scenario()
         self.assessment = pf.assess(self.s.encounter, gated_result())
@@ -149,7 +150,7 @@ class ApiCase(ApiHarness):
         return encounter_id
 
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -163,18 +164,18 @@ class ApiCase(ApiHarness):
         return self.post(f'/api/encounters/{encounter_id}/decisions', data)
 
     def report(self, encounter_id, kind):
-        return self.post(f'/api/encounters/{encounter_id}/reports', {'kind': kind, 'fmt': 'txt'})
+        return self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': kind, 'fmt': 'txt'})
 
     def report_text(self, encounter_id, kind='draft'):
         response = self.report(encounter_id, kind)
         self.assertEqual(response.status_code, 201, response.content)
-        download = self.client.get(f'/api/reports/{response.json()["id"]}/download')
+        download = self.client.get(f'/ops/api/reports/{response.json()["id"]}/download')
         self.assertEqual(download.status_code, 200)
         return b''.join(download.streaming_content if download.streaming else [download.content]).decode('utf-8')
 
 
 @override_settings(**LIVE)
-class Review0ReinstatedProcedureApiTests(ApiCase, TestCase):
+class Review0ReinstatedProcedureApiTests(OperatorReads, ApiCase, TestCase):
     """review:0 — a reinstated same-day procedure gates the selected E/M, whichever is decided first."""
 
     def test_a_reinstate_then_approve_both(self):
@@ -239,7 +240,7 @@ class Review0ReinstatedProcedureApiTests(ApiCase, TestCase):
 
 
 @override_settings(**LIVE)
-class Review1PlanDiscussionApiTests(ApiCase, TestCase):
+class Review1PlanDiscussionApiTests(OperatorReads, ApiCase, TestCase):
     """review:1 — an office visit whose plan only discusses a procedure can be approved and reported."""
 
     def test_discussed_procedure_does_not_block_approval(self):
@@ -262,7 +263,7 @@ class MultiEvidenceApiCase(ApiCase):
 
 
 @override_settings(**LIVE)
-class Status4ApiTests(MultiEvidenceApiCase, TestCase):
+class Status4ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     """status:4 — EUS named only as requested: the EGD passage does not make 43259 approvable."""
 
     def test_status4_an_uncertain_family_is_not_approvable(self):
@@ -277,7 +278,7 @@ class Status4ApiTests(MultiEvidenceApiCase, TestCase):
 
 
 @override_settings(**LIVE)
-class Status13ApiTests(MultiEvidenceApiCase, TestCase):
+class Status13ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     """status:13 — one Corti code with a performed and a hedged evidence passage is not approvable."""
 
     def test_status13_a_hedged_second_passage_is_not_approvable(self):
@@ -294,7 +295,7 @@ class Status13ApiTests(MultiEvidenceApiCase, TestCase):
 
 
 @override_settings(**LIVE)
-class Status19ApiTests(ApiCase, TestCase):
+class Status19ApiTests(OperatorReads, ApiCase, TestCase):
     """status:19 (b) — the report never certifies coverage routing does not have."""
 
     def test_the_report_carries_no_false_coverage_pass(self):

@@ -4,6 +4,7 @@ from django.test import TestCase, override_settings
 
 from studio import models
 from tests.test_pipeline_api import FakeProvider, drain
+from tests.support.operator import OperatorReads
 from tests.test_repairs_ec5_reportfacts import browser
 from tests.test_repairs_gi2_present import LETTER, NO_PLACE, UNDATED, VISIT_TIME
 from tests.test_repairs_gi2_present import Harness as PresentHarness
@@ -11,7 +12,7 @@ from tests.test_repairs_pipeline import LIVE, ApiHarness
 
 
 @override_settings(**LIVE)
-class RepeatedResumeTests(ApiHarness, TestCase):
+class RepeatedResumeTests(OperatorReads, ApiHarness, TestCase):
     """sends known limit 'third Resume': every Resume appended 44 characters to the previous key, so the third or fourth
     Stop/Resume in a row overflowed Job.idempotency_key (200 characters) with an HTTP 500 and nothing recorded."""
 
@@ -33,7 +34,7 @@ class RepeatedResumeTests(ApiHarness, TestCase):
         self.assertEqual(len(self.provider.sent), 1)
 
 
-class OneSubActReadPerSentenceTests(TestCase):
+class OneSubActReadPerSentenceTests(OperatorReads, TestCase):
     """gi2 integration, cost (negation repair's must-fix concern): every status reference in one sentence re-read the
     whole sentence for its sub-act question, so one pasted line repeating "The procedure was not aborted," passed the
     analyze stage's 60 s at 8,000 repetitions (60.3 s at 2b82889f). The answer is read once per family and sentence."""
@@ -91,7 +92,7 @@ class ListedDateQuotesTheKeptEvidenceTests(PresentHarness):
         self.assertNotIn('Not read', shown['row'])
 
 
-class EmTimeReadOncePerSentenceTests(TestCase):
+class EmTimeReadOncePerSentenceTests(OperatorReads, TestCase):
     """gi2 integration, cost (the dates fix agent's pre-existing report): every E/M time statement re-read its whole
     sentence for "this time is not E/M time", so one pasted line of 7,500 "Total time on the date of service: 34
     minutes;" statements - one sentence - took 60.1 s to route at 2b82889f (the analyze stage's limit is 60 s)."""
@@ -118,7 +119,7 @@ class EmTimeReadOncePerSentenceTests(TestCase):
         self.assertEqual(routed, detect.route(text, date(2026, 10, 22)))
 
 
-class ExtentValueDepthIsLinearTests(TestCase):
+class ExtentValueDepthIsLinearTests(OperatorReads, TestCase):
     """gi2 integration, cost (refutation gi2 ops; ACCURACY-RESIDUALS gi2 cost-extent-blanks): the depth an extent label's
     value may open with began with two plain blank runs around an optional comma or bracket, so a run of blanks before no
     depth was tried at every split - quadratic per label (1,289 blank-padded labels routed 56.8-57.6 s against the

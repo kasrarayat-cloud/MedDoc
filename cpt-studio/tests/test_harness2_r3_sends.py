@@ -51,6 +51,7 @@ from studio import jobs, models, participants, serializers
 from studio.participants.replay import ReplayParticipant
 from studio.reference import tools as reference_tools
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_harness2_pipeline import (ASTRA_READING, EMPTY_PEER, FABLE_READING, Harness2Case, LoopParticipant,
                                           answered, asks, facts_call, install_reference_store)
 from tests.test_harness_pipeline import BOTH, ScriptedCorti, _WorkerDied
@@ -115,7 +116,7 @@ def end_session_by_server():
 
 
 @override_settings(**LIVE, **BOTH)
-class LockedSessionTests(OfflineMixin, TransactionTestCase):
+class LockedSessionTests(OperatorReads, OfflineMixin, TransactionTestCase):
     """HARNESS.md 2 and I8: every provider send takes the one installation-wide advisory lock, a lock of the database
     session that took it (jobs._send). No test transaction wraps the pipeline here, as none wraps the worker, so a write
     that meets an ended session lets Django open another one exactly as it does in the worker. Round 4's sends-3 tests
@@ -475,7 +476,7 @@ class FinalAnswerSweptTests(Harness2Case):
         self.assertEqual((run.state, run.sent, run.error), ('unknown', True, IN_FLIGHT))
         drain()
         self.assertEqual((self.encounter(encounter_id).state, self.sent('fable', 'first')), ('provider_unknown', 0))
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(run.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()

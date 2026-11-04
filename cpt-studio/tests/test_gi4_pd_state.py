@@ -33,6 +33,7 @@ from studio.gi.context import is_member_conflict
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_gi4_state import DOCS, LIVE, RetainedProvider, seed_reference
 
 H401 = DOCS['h4-01']
@@ -50,7 +51,7 @@ def request_sha(text, day):
 
 
 @override_settings(**LIVE)
-class WideDateStateTests(TestCase):
+class WideDateStateTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -164,7 +165,7 @@ def installed_reading(text, service_date):
 
 
 @override_settings(**LIVE)
-class RecordedInstallConsequenceTests(TestCase):
+class RecordedInstallConsequenceTests(OperatorReads, TestCase):
     """CTS-6: what an encounter recorded before the install meets at its first context save after it (recorded for the
     install declaration). Before the install every stage runs under installed 80df1831d168's labels (INSTALLED_LABELS:
     its context is gi-context@3, now an earlier version) as well as its reading."""
@@ -201,7 +202,7 @@ class RecordedInstallConsequenceTests(TestCase):
             jobs.run_job(job)
 
     def proposal(self, encounter_id, code):
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         return next(p for p in detail['assessment']['proposals'] if p['code'] == code)
 
     def approve(self, encounter_id):

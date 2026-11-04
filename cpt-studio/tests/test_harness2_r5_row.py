@@ -32,8 +32,9 @@ from unittest import mock
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
-from studio import jobs, review
+from studio import customer_api, jobs, review
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, SNARE, TWO_EXTENTS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_evidence import page
@@ -49,7 +50,7 @@ REVIEWED = 'Reviewed — every selected code has a current decision.'
 
 class RowMixin:
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -133,7 +134,10 @@ class StoppedTests(RowMixin, ColonCase):
         self.assertEqual([p['allowed_actions'] for p in selected], [[], []])
         refused = self.post(f'/api/encounters/{encounter_id}/decisions',
                             {'proposal_id': selected[0]['id'], 'action': 'reject', 'note': 'Synthetic rejection.'})
-        self.assertEqual((refused.status_code, refused.json()), (409, {'error': review.NOT_FINAL_DECISION}))
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a refusal reaches a member in the customer
+        # vocabulary
+        self.assertEqual((refused.status_code, refused.json()),
+                         (409, {'error': customer_api.customer_error(review.NOT_FINAL_DECISION)}))
         self.assertIn(f'Still needed: {review.NOT_FINAL_BLOCKER}', self.still_needed(detail))
         # the finding: the row said "2 questions about codes are open; each holds its code, which can still be
         # rejected."
@@ -147,7 +151,7 @@ COLON = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-21\n'
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class CortiOnlyTests(RowMixin, TestCase):
+class CortiOnlyTests(OperatorReads, RowMixin, TestCase):
     """parity-1: Corti alone at the release default (Astra and Fable disabled, no confirmation offered). Corti selects
     45385 on the snare and 45378 on the cecum, and the engine asks whether 45378 is reported separately from 45385 - a
     question about 45378. A reviewer approves 45385 and rejects 45378: the encounter is reviewed and the question is

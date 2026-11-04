@@ -9,6 +9,7 @@ from django.test import TestCase, override_settings
 
 from studio.models import ReferenceCodeFact, ReferenceSource
 from tests.test_repairs_pipeline import LIVE
+from tests.support.operator import OperatorReads
 from tests.test_repairs_status_r2_validation_api import MultiEvidenceApiCase
 
 HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
@@ -22,7 +23,7 @@ def row(global_days):
 
 
 @override_settings(**LIVE)
-class RoundFourValidationApiTests(MultiEvidenceApiCase, TestCase):
+class RoundFourValidationApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def setUp(self):
         super().setUp()
         common = dict(publisher='CMS', url='https://www.cms.gov/synthetic',

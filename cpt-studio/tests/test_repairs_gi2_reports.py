@@ -412,7 +412,7 @@ class TheOriginOfASecondReviewCodeIsSaidTests(Harness):
         drain()
         for code in ('45385', '45380'):
             self.decide_with_note(encounter_id, code, 'reject' if code == rejected else 'approve')
-        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reply.status_code, 201, reply.content)
         return encounter_id
 

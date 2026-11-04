@@ -21,6 +21,7 @@ from studio.gi import context as gi_context
 from studio.providers import corti
 from studio.providers.base import ProviderUnavailable
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
 
@@ -55,7 +56,7 @@ class Provider(TwoPassProvider):
             self.first, self.later = first, later
 
 
-class Base(TestCase):
+class Base(OperatorReads, TestCase):
     provider_class = Provider
 
     def setUp(self):
@@ -88,7 +89,7 @@ class Base(TestCase):
         return self.post(f'/api/encounters/{encounter_id}/second-review')
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     # --- what was sent and what stands ------------------------------------------------------------------------------
 
@@ -329,7 +330,7 @@ class PreUpgradeMemberDateTests(Base):
         self.installed_context(encounter_id, {'service_date': MEMBER})
         run = self.installed_run(encounter_id, MEMBER, state=models.ProviderRun.UNKNOWN)
         self.installed.append(run.pk)
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing billed.'})
         self.assertEqual(reply.status_code, 201, reply.content)
         drain()
@@ -808,7 +809,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
         self.assertEqual(self.upgrade_stages(encounter_id), [])
         self.assertEqual(encounter.state, 'provider_unknown')
         self.assertFalse(review.can_resume(encounter))
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing billed.'})
         self.assertEqual(reply.status_code, 201, reply.content)
         drain()
@@ -919,7 +920,9 @@ class ReviewerSecondReviewTests(Base):
         self.assertEqual(self.sent(), 2)
         reply = self.ask(encounter_id)
         self.assertEqual(reply.status_code, 409, reply.content)
-        self.assertIn('unknown outcome', reply.json()['error'])
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): a refusal reaches a member in the customer vocabulary
+        self.assertEqual(reply.json()['error'], 'We are confirming whether an earlier check completed. Nothing will be '
+                                                'sent again until that is settled.')
         drain()
         self.assertEqual(self.sent(), 2)
 

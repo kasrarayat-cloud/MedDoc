@@ -74,6 +74,7 @@ from studio import models  # noqa: E402
 from studio.providers import CortiProvider  # noqa: E402
 from studio.providers import corti as corti_module  # noqa: E402
 from tests.support import pipeline_factories as pf  # noqa: E402
+from tests.support.operator import OperatorReads  # noqa: E402
 
 NOTE = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm polyp was removed with a cold snare.\n'
 SNARE = 'A 6 mm polyp was removed with a cold snare.'
@@ -116,7 +117,7 @@ class CandidateCapTests(SimpleTestCase):
                 self.assertEqual(len(normalized.codes), 1 + sum(counts.values()))
 
 
-class BulkProposalTests(TestCase):
+class BulkProposalTests(OperatorReads, TestCase):
     def test_every_proposal_is_written_in_one_insert(self):
         s = pf.scenario()
         alternatives = tuple(pf.proposal(f'alt:{n + 1}', '45380', [pf.CECUM_PASSAGE], bucket='alternative')
@@ -189,7 +190,7 @@ class LiveEncounter:
 
 
 @override_settings(**LIVE)
-class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
+class DateChangeRoutesBeforeSendingTests(OperatorReads, LiveEncounter, TestCase):
     def test_a_new_date_the_document_cannot_be_routed_for_in_time_sends_nothing(self):
         encounter_id = self.finished_encounter(UNDATED_NOTE, service_date='2026-10-20')
         runs_before = models.ProviderRun.objects.filter(encounter_id=encounter_id).count()
@@ -236,7 +237,7 @@ class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertEqual(encounter.current_context.facts['service_date']['origin'], 'conflict')
         self.assertEqual(encounter.state, 'needs_clarification')
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         (question,) = [q for q in detail['clarifications'] if q['fact'] == 'service_date']
         self.assertIn('gives 2026-10-22; the document gives 2026-10-20', question['reason'])
 
@@ -287,7 +288,7 @@ from django.utils import timezone  # noqa: E402
 
 
 @override_settings(**LIVE)
-class StoppedOrOverranAnalysisTests(LiveEncounter, TestCase):
+class StoppedOrOverranAnalysisTests(OperatorReads, LiveEncounter, TestCase):
     def extracted_only(self, text=OFFICE_NOTE):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
@@ -388,10 +389,10 @@ from studio import review  # noqa: E402
 
 
 @override_settings(**LIVE)
-class AttestationStatusTests(LiveEncounter, TestCase):
+class AttestationStatusTests(OperatorReads, LiveEncounter, TestCase):
     def test_a_missing_or_wrong_acknowledgement_answers_400_and_records_nothing(self):
         encounter_id = self.finished_encounter()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         approvable = [p['id'] for p in detail['assessment']['proposals'] if 'approve' in p['allowed_actions']]
         self.assertTrue(approvable, 'nothing to approve: the test proves nothing')
         url = f'/api/encounters/{encounter_id}/decisions'
@@ -407,7 +408,7 @@ class AttestationStatusTests(LiveEncounter, TestCase):
 
     def test_controls_an_unavailable_action_is_still_409_and_the_exact_attestation_approves(self):
         encounter_id = self.finished_encounter()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         approvable = [p['id'] for p in detail['assessment']['proposals'] if 'approve' in p['allowed_actions']]
         url = f'/api/encounters/{encounter_id}/decisions'
         response = self.post(url, {'proposal_id': approvable[0], 'action': 'revoke'})
@@ -423,7 +424,7 @@ from studio import reports, serializers  # noqa: E402
 from tests.test_repairs_r4c_lead_review import excluded_em_result  # noqa: E402
 
 
-class ApproveWithheldByTests(TestCase):
+class ApproveWithheldByTests(OperatorReads, TestCase):
     def setUp(self):
         self.s = pf.scenario()
 
@@ -461,7 +462,7 @@ class ApproveWithheldByTests(TestCase):
 
 # --- pipeline:4: the reviewed status line counts confirmations, never an exclusion nobody decided -------------------
 
-class ConfirmedCountTests(TestCase):
+class ConfirmedCountTests(OperatorReads, TestCase):
     def setUp(self):
         self.s = pf.scenario()
 
@@ -505,7 +506,7 @@ from tests.test_repairs_r4c_lead_pipeline import Probe  # noqa: E402
 
 
 @override_settings(**LIVE)
-class OneComputationPerChildTests(LiveEncounter, TestCase):
+class OneComputationPerChildTests(OperatorReads, LiveEncounter, TestCase):
     def test_each_child_computes_the_context_and_the_analysis_once(self):
         # _service_dates runs only inside context._context's cached body and _route only inside detect._analysis's,
         # so each probe line is one real computation, not one public call. A fresh text and empty caches in this

@@ -270,7 +270,7 @@ class CandidateTests(h2.Harness2Case):
         served the unchecked located passages)."""
         for user, can_review in ((self.owner, True), (self.reviewer, True), (self.viewer, False)):
             with self.subTest(user=user.username):
-                response = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}')
+                response = self.client_for(user).get(f'/ops/api/encounters/{self.encounter.pk}')
                 self.assertEqual(response.status_code, 200, response.content)
                 data = response.json()
                 self.assertEqual((data['permissions']['can_review'], data['permissions']['can_confirm']),
@@ -283,7 +283,7 @@ class CandidateTests(h2.Harness2Case):
         # served none
         with override_settings(**DORMANT):
             for user, allowed in ((self.reviewer, True), (self.viewer, False)):
-                data = self.client_for(user).get(f'/api/encounters/{self.encounter.pk}').json()
+                data = self.client_for(user).get(f'/ops/api/encounters/{self.encounter.pk}').json()
                 self.assertEqual(data['permissions']['can_confirm'], allowed)
                 self.assertEqual(all(c['candidates'] for c in data['clarifications'] if c['state'] == 'open'),
                                  allowed)
@@ -325,7 +325,7 @@ class PeerRequestTests(PipelineCase):
         question = final.clarifications.get(fact='performed_status', proposal__code='45331',
                                             state=models.Clarification.OPEN)
         with override_settings(**DORMANT):  # the candidate the base served verified, and a reviewer confirmed
-            detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+            detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         served = next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
         candidate = next(c for c in served if c['verified'] and c['value'] == 'performed')
         for run in self.runs_of(encounter_id, purpose='peer_review'):

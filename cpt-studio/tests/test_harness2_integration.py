@@ -35,7 +35,7 @@ def confirm(case, encounter_id, question, candidate):
 
 
 def served_candidates(case, encounter_id, question):
-    detail = case.client.get(f'/api/encounters/{encounter_id}').json()
+    detail = case.client.get(f'/ops/api/encounters/{encounter_id}').json()
     return next(c for c in detail['clarifications'] if c['id'] == str(question.pk))['candidates']
 
 
@@ -109,12 +109,12 @@ class ConfirmationEndToEndTests(ColonCase):
                 self.assertEqual(after_records[name][key], before_records[name][key], (name, key))
         # nothing is approved: the code is ready for a member's decision, which stays the member's (I3, I4)
         self.assertFalse(models.Decision.objects.exists())
-        proposal = next(p for p in self.client.get(f'/api/encounters/{encounter_id}').json()['assessment']['proposals']
+        proposal = next(p for p in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['assessment']['proposals']
                         if p['key'] == 'sel:0')
         self.assertEqual((proposal['decision_state'], proposal['confirmed']), ('undecided', [str(confirmation.pk)]))
         # the confirmed question is answered and raised no more, and the confirmation is still listed
         self.assertFalse(again.clarifications.filter(proposal__key='sel:0', state=models.Clarification.OPEN).exists())
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertEqual([c['id'] for c in detail['confirmations']], [str(confirmation.pk)])
 
     def test_a_refused_reassessment_leaves_nothing_recorded(self):
@@ -268,12 +268,12 @@ class OneReadingTests(Harness2Case):
         first, final = self.assessments(encounter_id)
         for assessment in (first, final, None):
             self.assertEqual(review.assessment_phase(assessment), jobs.assessment_phase(assessment))
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertEqual(detail['harness']['phase'], jobs.assessment_phase(final))
         owner = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         owner.role = models.Membership.OWNER
         owner.save(update_fields=['role'])
-        trace = self.client.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = self.client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         self.assertEqual([a['phase'] for a in trace['assessments']], [jobs.assessment_phase(first),
                                                                       jobs.assessment_phase(final)])
         snapshot = reports.snapshot(self.encounter(encounter_id), 'draft')
@@ -285,7 +285,7 @@ class OneReadingTests(Harness2Case):
         owner = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         owner.role = models.Membership.OWNER
         owner.save(update_fields=['role'])
-        trace = self.client.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = self.client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         traced = {run['id']: run for participant in trace['participants'] for run in participant['runs']}
         for run in self.runs(encounter_id):
             with self.subTest(provider=run.provider, purpose=run.purpose):
@@ -328,7 +328,7 @@ class OneReadingTests(Harness2Case):
         encounter_id = self.create()
         drain()
         source = models.ReferenceSource.objects.get(key=PFS_KEY)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         rows = {row['name']: row for row in detail['harness']['participants']}
         for name, field, purpose in (('astra', 'references', 'independent'), ('fable', 'references', 'independent'),
                                      ('astra', 'peer_references', 'peer_review')):
@@ -449,7 +449,7 @@ class PeerRunRecordTests(Harness2Case):
             jobs.run_job(job)  # refused by the live gate: recorded not sent, in live mode
         self.adapters['astra'].mode = 'replay'
         drain()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         modes = {(run['provider'], run['purpose']): run['mode'] for run in detail['provider_runs']}
         self.assertEqual((modes[('astra', 'peer_review')], modes[('fable', 'peer_review')]), ('live', 'replay'))
         self.assertEqual({(run['provider'], run['purpose']): run['mode'] for run in detail['provider_runs']
@@ -472,7 +472,7 @@ class PeerStageStateTests(Harness2Case):
         self.assertEqual(job.state, 'unknown')
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
         peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
-        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/reconcile',
+        self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                    {'provider_run_id': str(peer.pk), 'note': RECONCILE_NOTE}).status_code, 201)
         drain()
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')

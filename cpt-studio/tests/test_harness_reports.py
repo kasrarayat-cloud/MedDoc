@@ -20,6 +20,7 @@ from django.test import TestCase, override_settings
 from studio import jobs, models, reports, review, serializers
 from studio.participants.http import USAGE_BASIS  # what the adapters record: 'provider_reported_tokens'
 from tests.support import pipeline_factories as pf
+from tests.support.operator import OperatorReads
 from tests.test_harness_api import record
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
 from tests.test_pipeline_api import drain
@@ -50,7 +51,7 @@ def rows(content):
     return list(csv.reader(io.StringIO(content.decode('utf-8'))))
 
 
-class HandBuiltReportTests(TestCase):
+class HandBuiltReportTests(OperatorReads, TestCase):
     """Reports of a hand-built assessment that records participant entries and a retrieval trace."""
 
     def setUp(self):
@@ -222,7 +223,7 @@ class HandBuiltReportTests(TestCase):
         self.assertTrue(fable.endswith(' · read by this assessment; its response was not used'), fable)
 
 
-class CortiOnlyReportTests(TestCase):
+class CortiOnlyReportTests(OperatorReads, TestCase):
     def test_participants_not_configured_and_nothing_retrieved(self):
         s = pf.scenario()
         enc = s.encounter
@@ -287,7 +288,7 @@ NOT_CONNECTED_LINE = ('  Not connected: NCCI procedure-to-procedure edits (AMA l
                       'AMA CPT descriptors and guidelines (no licence); Payer policies.')
 
 
-class FailedRetrievalReportTests(TestCase):
+class FailedRetrievalReportTests(OperatorReads, TestCase):
     """A retrieval that failed (refutation round 1, parity-1: one Assessment.retrieval entry marked failed, with no
     code, jobs.retrieval_failure) is one line in REFERENCE RETRIEVAL saying reference validation failed, with the
     entry's note - never "  -  · service date ..." followed by the note, a code entry with no code."""
@@ -325,7 +326,7 @@ class FailedRetrievalReportTests(TestCase):
 
 
 @override_settings(**LIVE)
-class FailedRetrievalDownloadsTests(HarnessCase):
+class FailedRetrievalDownloadsTests(OperatorReads, HarnessCase):
     """The server's own TXT and CSV, draft and reviewed, of an encounter whose retrieval raised: the download verifier
     (ops/verify_downloads.py) still passes both formats, and REFERENCE RETRIEVAL says reference validation failed."""
 
@@ -339,7 +340,7 @@ class FailedRetrievalDownloadsTests(HarnessCase):
         reviewer = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         for kind in ('draft', 'reviewed'):
             if kind == 'reviewed':
-                for proposal in self.client.get(f'/api/encounters/{encounter_id}').json()['assessment']['proposals']:
+                for proposal in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['assessment']['proposals']:
                     if 'approve' in proposal['allowed_actions']:
                         response = self.post(f'/api/encounters/{encounter_id}/decisions',
                                              {'proposal_id': proposal['id'], 'action': 'approve',
@@ -369,7 +370,7 @@ class FailedRetrievalDownloadsTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class RealDownloadsTests(HarnessCase):
+class RealDownloadsTests(OperatorReads, HarnessCase):
     """The server's own TXT and CSV of a harness encounter, read by ops/verify_downloads.py as a download is."""
 
     def test_the_download_verifier_still_passes_both_formats(self):
@@ -382,7 +383,7 @@ class RealDownloadsTests(HarnessCase):
         reviewer = models.Membership.objects.get(user=self.reviewer, workspace=self.ws)
         for kind in ('draft', 'reviewed'):
             if kind == 'reviewed':  # a member approves each code: the reviewed report needs the member's decisions
-                for proposal in self.client.get(f'/api/encounters/{encounter_id}').json()['assessment']['proposals']:
+                for proposal in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['assessment']['proposals']:
                     if 'approve' in proposal['allowed_actions']:
                         response = self.post(f'/api/encounters/{encounter_id}/decisions',
                                              {'proposal_id': proposal['id'], 'action': 'approve',

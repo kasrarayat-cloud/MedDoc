@@ -39,6 +39,7 @@ from studio import jobs, models, participants, review
 from studio.reference import importers, passages
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_harness_pipeline import BOTH, HarnessCase
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_reference import ArchiveMixin
@@ -115,7 +116,7 @@ class AssessedTwiceMixin:
 # --- parity-r2-2 with Corti alone (I1) --------------------------------------------------------------------------------
 
 @override_settings(**LIVE)
-class CortiOnlyCase(AssessedTwiceMixin, ArchiveMixin, TestCase):
+class CortiOnlyCase(OperatorReads, AssessedTwiceMixin, ArchiveMixin, TestCase):
     """Corti alone (Astra and Fable disabled, the settings' defaults), selecting only 45378 (the cecum sentence), so the
     polypectomy and the biopsy are left for a second review; the CMS PFS and MUE tables loaded through the importers."""
 
@@ -147,7 +148,7 @@ class CortiOnlyCase(AssessedTwiceMixin, ArchiveMixin, TestCase):
     def decide(self, encounter_id):
         """The reviewer's decision on 45378, whichever the encounter offers (its endoscopic-base question leaves only a
         rejection)."""
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         proposal = next(p for p in detail['assessment']['proposals'] if p['code'] == '45378')
         if 'approve' in proposal['allowed_actions']:
             data = {'proposal_id': proposal['id'], 'action': 'approve',
@@ -300,7 +301,7 @@ def jobs_records():
 # --- parity-r2-2 with participants configured (HARNESS.md 12.3) -------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredRepersistTests(AssessedTwiceMixin, ArchiveMixin, HarnessCase):
+class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
     """Astra and Fable configured (the pipeline tests' fakes) and both of their first requests failed, so assess #1 owes
     no peer stage and is the final assessment (I10). The same assess, resumed after the stale sweep with the passages
     imported in between, reads the same participant runs: it is the same assessment."""
@@ -342,7 +343,7 @@ class ConfiguredRepersistTests(AssessedTwiceMixin, ArchiveMixin, HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredSameAssessmentTests(SameAssessmentMixin, HarnessCase):
+class ConfiguredSameAssessmentTests(OperatorReads, SameAssessmentMixin, HarnessCase):
     """review._same_assessment while a model participant is configured, on a final assess #2 (both participants read,
     both peer reviews read): the participant runs each entry names decide it with the round-4 inputs, and nothing else
     recorded beside the result does - never the retrieval traces."""
@@ -421,7 +422,7 @@ ASSESSMENT_FIELDS = ('profiles_version', 'engine_version', 'encounter_checks', '
 
 
 @override_settings(**LIVE)
-class ImportedReferenceParityTests(ArchiveMixin, TestCase):
+class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
     """I1's one declared exception, pinned through the importers: Corti alone on COLON, the CMS PFS and practitioner
     MUE tables loaded by studio.reference.importers. Re-pin only with a declaration of the change (HARNESS.md 9): a
     moved digest is a change to every Corti-only assessment on an installed system."""

@@ -32,6 +32,7 @@ from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantCode,
                           sha256_json)
 from studio.validation import engine
 from tests.support import docgen
+from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
@@ -338,7 +339,7 @@ class HarnessCase(TestCase):
 # --- I1: no participant configured -----------------------------------------------------------------------------------
 
 @override_settings(**LIVE)
-class CortiOnlyParityTests(HarnessCase):
+class CortiOnlyParityTests(OperatorReads, HarnessCase):
     """I1: with Astra and Fable disabled, the stages, their keys, the rows and the assessment's sha256 are as before;
     the only additions are the run columns and the assessment's participants ('not configured') and retrieval."""
 
@@ -442,7 +443,7 @@ class CortiOnlyParityTests(HarnessCase):
         encounter_id = self.create()
         drain()
         unknown = self.runs_of(encounter_id)[0]
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(unknown.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -451,7 +452,7 @@ class CortiOnlyParityTests(HarnessCase):
                          [f'predict:{context.pk}:after-reconcile:{unknown.pk}', f'assess:{context.pk}:{sent.pk}'])
         reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
         self.assertEqual(reconciled.data, {'run': str(unknown.pk)})  # Corti's row names no provider, as before
-        summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{encounter_id}').json()['activity']]
+        summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['activity']]
         self.assertIn('Unknown provider outcome reconciled', summaries)
 
     def test_a_held_encounter_and_a_second_review_keep_todays_assess_keys(self):
@@ -481,7 +482,7 @@ class CortiOnlyParityTests(HarnessCase):
 # --- the chain --------------------------------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class ChainTests(HarnessCase):
+class ChainTests(OperatorReads, HarnessCase):
     def test_predict_then_astra_then_fable_then_assess(self):
         encounter_id = self.create()
         drain()
@@ -561,7 +562,7 @@ class ChainTests(HarnessCase):
                          {name: ('read', str(peers[name].pk)) for name in ('astra', 'fable')})
         self.assertEqual((jobs.assessment_phase(first), jobs.assessment_phase(final)), (1, 2))
         self.assertEqual(encounter.state, 'ready_for_review')
-        summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{encounter_id}').json()['activity']]
+        summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['activity']]
         self.assertIn('Astra request started', summaries)
         self.assertIn('Fable response recorded', summaries)
         self.assertIn('Provider response recorded', summaries)  # Corti's, as before
@@ -717,7 +718,7 @@ class ChainTests(HarnessCase):
 # --- unknown outcomes, reuse, failures --------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class UnknownOutcomeTests(HarnessCase):
+class UnknownOutcomeTests(OperatorReads, HarnessCase):
     def test_an_unknown_outcome_blocks_every_later_send_and_reconcile_resends_only_that_participant(self):
         self.adapters['astra'].outcomes = ['unknown']
         encounter_id = self.create()
@@ -735,10 +736,10 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 1)
         encounter = self.encounter(encounter_id)
         self.assertEqual(encounter.state, 'provider_unknown')  # the encounter-wide block stays
-        self.assertIn('reconciliation', self.client.get('/api/encounters').json()['encounters'][0]['queue_reasons'])
+        self.assertIn('reconciliation', self.client.get('/ops/api/encounters').json()['encounters'][0]['queue_reasons'])
         # a participant's reconciliation re-checks with Corti's run in use, which answers the request: nothing is handed
         # to Corti and no predict runs (refutation round 1, sends-1), and only Astra is sent again
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -755,7 +756,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
         reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
         self.assertEqual(reconciled.data, {'run': str(astra[0].pk), 'provider': 'astra'})
-        summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{encounter_id}').json()['activity']]
+        summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['activity']]
         self.assertIn('Unknown Astra outcome reconciled', summaries)
 
     def test_an_adapter_that_raises_while_sending_leaves_an_unknown_outcome_to_reconcile(self):
@@ -778,7 +779,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual([(j.kind, j.state) for j in self.jobs_of(encounter_id)][-3:],
                          [('astra', 'succeeded'), ('fable', 'succeeded'), ('assess', 'succeeded')])
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -797,7 +798,7 @@ class UnknownOutcomeTests(HarnessCase):
         self.assertEqual(self.peer_sends(), (0, 0))  # nothing read, so no peer review is owed
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
         corti = self.runs_of(encounter_id, 'corti')[0]
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(corti.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -826,7 +827,7 @@ class UnknownOutcomeTests(HarnessCase):
                              ('succeeded', False, original.pk, str(self.assessments(second)[0].pk)))
             self.assertEqual(self.records(second)[name]['peer_state'], 'read')
         self.assertEqual(self.peer_sends(), (1, 1))
-        summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{second}').json()['activity']]
+        summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{second}').json()['activity']]
         self.assertIn('Retained Astra result reused (no new request)', summaries)
 
     def test_a_replayed_answer_never_stands_in_for_a_live_one(self):
@@ -887,7 +888,7 @@ class UnknownOutcomeTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class ProviderLockTests(HarnessCase):
+class ProviderLockTests(OperatorReads, HarnessCase):
     """Refutation round 1, FG-4 (I8): a participant's send takes the same installation-wide advisory lock as Corti's; a
     stage that finds it held by another session reserves and sends nothing, and goes back to the queue."""
 
@@ -913,13 +914,13 @@ class ProviderLockTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class NotSentAttemptTests(HarnessCase):
+class NotSentAttemptTests(OperatorReads, HarnessCase):
     """Refutation round 1, sends-1 (I8; ARCHITECTURE 5.4): an attempt that went through the send doors and was recorded
     not sent stands. A chain re-run by another run's reconciliation or by a context change never attempts that identical
     request again - only an addendum or a new upload makes a new one - and the reconciled run alone gets its attempt."""
 
     def reconcile(self, encounter_id, run):
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(run.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -970,7 +971,7 @@ class NotSentAttemptTests(HarnessCase):
         context = self.encounter(encounter_id).current_context
         self.assertEqual(context.version, earlier)
         astra = self.runs_of(encounter_id, 'astra')[0]
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         queued = self.jobs_of(encounter_id)[-1]
@@ -1016,7 +1017,7 @@ class NotSentAttemptTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class MemberDateHoldTests(HarnessCase):
+class MemberDateHoldTests(OperatorReads, HarnessCase):
     """Session interpretation 19: nothing is built, reused or sent while a member date conflict stands - the
     participants' requests included - and settling the date makes the request and gives the participants their turn."""
 
@@ -1033,7 +1034,7 @@ class MemberDateHoldTests(HarnessCase):
         self.assertEqual((records['astra']['reason'], records['fable']['reason']),
                          (jobs.PARTICIPANT_HELD_MESSAGE.format(label='Astra'),
                           jobs.PARTICIPANT_HELD_MESSAGE.format(label='Fable')))
-        harness = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']
+        harness = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']
         rows = {row['name']: row for row in harness['participants']}
         self.assertEqual((rows['astra']['state'], rows['astra']['detail']),
                          ('not_sent', 'Nothing was sent: the service date entered as encounter metadata conflicts '
@@ -1074,7 +1075,7 @@ class MemberDateHoldTests(HarnessCase):
 # --- the stale sweep, Stop and Resume ---------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class SweepAndResumeTests(HarnessCase):
+class SweepAndResumeTests(OperatorReads, HarnessCase):
     def run_until(self, kind):
         while True:
             job = jobs.claim_next()
@@ -1124,7 +1125,7 @@ class SweepAndResumeTests(HarnessCase):
         astra = self.runs_of(encounter_id, 'astra')[0]
         self.assertEqual((job.state, astra.state), ('unknown', 'unknown'))
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -1147,7 +1148,9 @@ class SweepAndResumeTests(HarnessCase):
         self.assertEqual(self.encounter(encounter_id).state, 'stopped')
         response = self.client.post(f'/api/encounters/{encounter_id}/resume')
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.json(), {'resumed': 'astra'})
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): the response names no stage (a stage kind names a participant); the resumed stage is read from its row
+        self.assertEqual(response.json(), {'resumed': True})
+        self.assertEqual(self.jobs_of(encounter_id)[-1].kind, 'astra')
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         # the swept reservation is no outcome: the assess reads the run the resumed stage sent
@@ -1278,7 +1281,7 @@ class SweepAndResumeTests(HarnessCase):
 # --- what the assess reads, and retrieval -----------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class AssessReadsTests(HarnessCase):
+class AssessReadsTests(OperatorReads, HarnessCase):
     def test_retrieval_reads_the_same_lookup_for_every_proposal_code(self):
         recorded = []
         with mock.patch('studio.jobs.reference_passages', fake_passages(recorded)):
@@ -1410,7 +1413,7 @@ def install_endoscopy_pfs():
 
 
 @override_settings(**LIVE)
-class RetrievalFailureTests(HarnessCase):
+class RetrievalFailureTests(OperatorReads, HarnessCase):
     """With Astra and Fable disabled (I1): nothing retrieval meets stops the assessment Corti's answer makes."""
 
     def setUp(self):
@@ -1471,7 +1474,7 @@ class RetrievalFailureTests(HarnessCase):
         self.assertTrue(note.startswith('Reference validation failed: '))
         self.assertNotIn('synthetic defect', note)  # the exception's text is logged, never recorded
         # no reader takes the failure for a code checked: the page never says reference validation is done
-        harness = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']
+        harness = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']
         self.assertNotEqual(harness['reference_validation']['state'], 'done')
         # and the reports' REFERENCE RETRIEVAL section says reference validation failed, in CPT Studio's words, as one
         # line of its own - never a code entry with no code
@@ -1482,7 +1485,7 @@ class RetrievalFailureTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class RetrievalFailureChainTests(HarnessCase):
+class RetrievalFailureChainTests(OperatorReads, HarnessCase):
     def test_both_assessments_of_the_chain_are_recorded_and_say_reference_validation_failed(self):
         tampered = ValueError('changed after import')
         with mock.patch('studio.jobs.reference_passages.load_passages', side_effect=tampered), \
@@ -1505,7 +1508,7 @@ class RetrievalFailureChainTests(HarnessCase):
 # --- what a participant is given --------------------------------------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class DocumentKindTests(HarnessCase):
+class DocumentKindTests(OperatorReads, HarnessCase):
     def setUp(self):
         super().setUp()
         import tempfile

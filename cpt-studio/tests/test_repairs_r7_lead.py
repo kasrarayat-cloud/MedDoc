@@ -30,6 +30,7 @@ from studio.providers import corti as corti_module
 from studio.types import Fact
 from studio.validation import checks
 from tests.support import pipeline_factories as pf
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_repairs_r4d_lead import DEADLINES, LIVE, NEW_DATE, LiveEncounter, NOTE, SNARE
 
@@ -52,7 +53,7 @@ def _verify_downloads():
 
 # --- bypass:0: the invalidation reason names what differs ---------------------------------------------------------
 
-class InvalidationReasonTests(TestCase):
+class InvalidationReasonTests(OperatorReads, TestCase):
     def setUp(self):
         self.s = pf.scenario()
         pf.assess(self.s.encounter, pf.standard_result())
@@ -110,12 +111,12 @@ class InvalidationReasonTests(TestCase):
 
 
 @override_settings(**LIVE)
-class RealEngineDateChangeReasonTests(LiveEncounter, TestCase):
+class RealEngineDateChangeReasonTests(OperatorReads, LiveEncounter, TestCase):
     def test_an_approved_em_invalidated_by_a_new_date_is_never_blamed_on_its_evidence_or_checks(self):
         # a note with no date of its own, dated by the member and then re-dated: a member's date beside a documented
         # one would be a conflict instead (session interpretation 11)
         encounter_id = self.finished_encounter(UNDATED_NOTE, service_date='2026-10-20')
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         em = next(p for p in detail['assessment']['proposals'] if p['code'] == '99213')
         response = self.post(f'/api/encounters/{encounter_id}/decisions',
                              {'proposal_id': em['id'], 'action': 'approve',
@@ -170,7 +171,7 @@ class RefusedResponseCheckTests(SimpleTestCase):
 
 
 @override_settings(**LIVE)
-class RefusedResponseReadinessTests(LiveEncounter, TestCase):
+class RefusedResponseReadinessTests(OperatorReads, LiveEncounter, TestCase):
     def encounter_with(self, selections):
         self.provider.selections = selections
         with self.captureOnCommitCallbacks(execute=True):
@@ -181,7 +182,7 @@ class RefusedResponseReadinessTests(LiveEncounter, TestCase):
 
     def test_a_refused_response_is_named_in_the_checks_the_blockers_and_the_draft(self):
         encounter_id = self.encounter_with([('99213', E_M_QUOTE)] * 65)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         status = next(c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.status')
         self.assertEqual(status['status'], 'fail')
         self.assertIn('was not used', status['detail'])
@@ -200,7 +201,7 @@ class RefusedResponseReadinessTests(LiveEncounter, TestCase):
 
     def test_controls_a_response_with_no_code_still_says_none_was_proposed(self):
         encounter_id = self.encounter_with([])
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         status = next(c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.status')
         self.assertEqual(status['status'], 'warn')
         self.assertIn('No CPT code was proposed', detail['readiness']['blockers'])
@@ -213,10 +214,10 @@ class RefusedResponseReadinessTests(LiveEncounter, TestCase):
 # --- bypass:3: an unknown action is invalid input ----------------------------------------------------------------
 
 @override_settings(**LIVE)
-class UnknownActionTests(LiveEncounter, TestCase):
+class UnknownActionTests(OperatorReads, LiveEncounter, TestCase):
     def test_an_unknown_missing_or_non_string_action_answers_400_and_records_nothing(self):
         encounter_id = self.finished_encounter()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         proposal_id = detail['assessment']['proposals'][0]['id']
         url = f'/api/encounters/{encounter_id}/decisions'
         for action in ('approved', 'APPROVE', '', ' approve', 7, None, ['approve'], {'action': 'approve'}, True):
@@ -231,7 +232,7 @@ class UnknownActionTests(LiveEncounter, TestCase):
 
     def test_controls_a_known_action_unavailable_now_is_still_a_409(self):
         encounter_id = self.finished_encounter()
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         response = self.post(f'/api/encounters/{encounter_id}/decisions',
                              {'proposal_id': detail['assessment']['proposals'][0]['id'], 'action': 'revoke'})
         self.assertEqual(response.status_code, 409, response.content)
@@ -239,7 +240,7 @@ class UnknownActionTests(LiveEncounter, TestCase):
 
 # --- bypass:4: the draft's list title after a complete review ----------------------------------------------------
 
-class DraftListTitleTests(TestCase):
+class DraftListTitleTests(OperatorReads, TestCase):
     INCOMPLETE = 'UNDECIDED — REVIEW NOT COMPLETE'
     COMPLETE = 'UNDECIDED OR PROVISIONAL — THE REVIEWED REPORT IS AVAILABLE'
 
@@ -279,7 +280,7 @@ class DraftListTitleTests(TestCase):
 # --- pipeline:1: an undated note that a member dates is routed for that date before anything is sent -------------
 
 @override_settings(**LIVE)
-class UndatedNoteDatedLaterTests(LiveEncounter, TestCase):
+class UndatedNoteDatedLaterTests(OperatorReads, LiveEncounter, TestCase):
     def undated_encounter(self):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post('/api/encounters', {'text': UNDATED_NOTE, 'synthetic_attestation': 'yes'})

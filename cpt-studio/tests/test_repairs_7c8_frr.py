@@ -129,7 +129,7 @@ class TheReportsNameTheEnteroscopyRoutingReadsTests(Harness):
         self.assertIn(MISSED_ENTEROSCOPY, shown['checks'])
         self.assertNotIn(EVERY_DETECTED, shown['checks'])
         self.decide(encounter_id, '43242', 'approve')
-        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reply.status_code, 201, reply.content)
         reviewed = self.txt(encounter_id, 'reviewed')
         self.assertIn(line, reviewed)
@@ -167,7 +167,7 @@ class ReviewHarness(Harness):
         return encounter_id
 
     def reviewed(self, encounter_id):
-        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reply.status_code, 201, reply.content)
         return self.txt(encounter_id, 'reviewed')
 
@@ -337,7 +337,7 @@ class SecondReviewRollbackBase(P2Base):
     def ask_again(self, encounter_id, outcome, provider=None):
         """The second review the panel offers again once an unknown one is reconciled (jobs: a reconciled unknown
         releases another ask), ending ``outcome``; with ``provider`` the retry is made by that adapter instead."""
-        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        offered = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']
         self.assertTrue(offered['available'], offered)
         self.provider.outcomes = [outcome]
         with mock.patch('studio.jobs.get_provider', return_value=provider or self.provider):
@@ -416,7 +416,7 @@ class AStoppedSecondReviewIsNeverAFailedRequestTests(SecondReviewRollbackBase):
         its stage runs, before its request is sent."""
         self.provider.first, self.provider.later = list(primary), list(primary)
         encounter_id = self.create(tag, text=P2_REPORT)
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']['available'])
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
         job = jobs.claim_next()
         self.assertEqual(job.kind, models.Job.REVIEW2)

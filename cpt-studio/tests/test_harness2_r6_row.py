@@ -35,6 +35,7 @@ from django.test import Client, TestCase, override_settings
 
 from studio import jobs, models, review
 from tests import test_harness2_pipeline as hp
+from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness2_pipeline import LAND, SNARE, TWO_EXTENTS, ColonCase
 from tests.test_harness2_r2_evidence import page
@@ -177,7 +178,7 @@ class StaleRowTests(StaleMixin, ColonCase):
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class CortiOnlyStaleRowTests(StaleMixin, TestCase):
+class CortiOnlyStaleRowTests(OperatorReads, StaleMixin, TestCase):
     """(B) Corti alone at the release default (Astra and Fable disabled, no confirmation offered): R5-ROW's
     CortiOnlyTests input - Corti selects 45385 on the snare and 45378 on the cecum, and the engine asks whether 45378 is
     reported separately from 45385 - then an addendum that answers no question (POST /addenda needs none)."""

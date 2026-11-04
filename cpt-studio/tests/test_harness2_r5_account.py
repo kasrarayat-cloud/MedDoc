@@ -81,12 +81,12 @@ class Surfaces:
         return self._owner_client
 
     def trace(self, encounter_id):
-        response = self.owner().get(f'/api/encounters/{encounter_id}/trace')
+        response = self.owner().get(f'/ops/api/encounters/{encounter_id}/trace')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
     def download(self, encounter_id, kind='draft', fmt='txt'):
-        made = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': kind, 'fmt': fmt})
+        made = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': kind, 'fmt': fmt})
         self.assertEqual(made.status_code, 201, made.content)
         got = self.client.get(made.json()['download_url'])
         self.assertEqual(got.status_code, 200)
@@ -230,7 +230,7 @@ class PeerAnswerReportTests(ErcpCase):
         with mock.patch.multiple(candidates, **readers):
             encounter_id = self.chain((True, FAILED_ANSWER, FAILED_C))
             self.assertEqual({job.state for job in self.jobs_of(encounter_id)}, {models.Job.SUCCEEDED})
-            detail = self.client.get(f'/api/encounters/{encounter_id}')
+            detail = self.client.get(f'/ops/api/encounters/{encounter_id}')
             self.assertEqual(detail.status_code, 200, detail.content)
             questions = detail.json()['clarifications']
             self.assertTrue(questions)
@@ -261,7 +261,7 @@ class AnsweredQuestionCountTests(ErcpCase):
         encounter_id = self.chain((True, 'Biliary cannulation failed.', FAILED_C), (True, 'successful', DONE_C))
         first = self.assessments(encounter_id)[0]
         self.assertEqual(first.clarifications.filter(state=models.Clarification.OPEN, fact='cannulation').count(), 1)
-        summary = self.summary(self.client.get(f'/api/encounters/{encounter_id}').json())
+        summary = self.summary(self.client.get(f'/ops/api/encounters/{encounter_id}').json())
         self.assertIn(ANSWERED_TWICE, summary)
         self.assertNotIn('2 open questions', summary)
         # and the reports print each answer as the participant's claim, neither value (D10)
@@ -272,7 +272,7 @@ class AnsweredQuestionCountTests(ErcpCase):
 
     def test_one_answer_to_one_question_reads_as_before(self):
         encounter_id = self.chain((True, FAILED_ANSWER, FAILED_C))
-        self.assertIn(ANSWERED_ONCE, self.summary(self.client.get(f'/api/encounters/{encounter_id}').json()))
+        self.assertIn(ANSWERED_ONCE, self.summary(self.client.get(f'/ops/api/encounters/{encounter_id}').json()))
 
 
 class AnsweredQuestionEngineTests(SimpleTestCase):

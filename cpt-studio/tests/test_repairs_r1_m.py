@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from studio import jobs, models, review
 from studio.gi import context as gi_context
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -50,7 +51,7 @@ def member_conflict(context):
 
 
 @override_settings(**LIVE)
-class MemberDateConflictIsHeldWhereDecidedTests(TestCase):
+class MemberDateConflictIsHeldWhereDecidedTests(OperatorReads, TestCase):
     """migrate-4: whichever path would start the request for a context whose service date is a member conflict records
     the not-sent held run itself and queues only the assess that reads it - never a predict that a worker reading the
     conflict under other rules would send."""
@@ -124,7 +125,7 @@ class MemberDateConflictIsHeldWhereDecidedTests(TestCase):
         self.assertEqual(encounter.current_assessment.provider_run_id, held.pk)
         self.assertIn('Nothing was sent: the service date entered as encounter metadata conflicts with the document',
                       review.readiness(encounter)['blockers'])
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertTrue([q for q in detail['clarifications'] if q['fact'] == 'service_date'])
 
     # --- the member's own change, the finding's input and its paraphrases ------------------------------------------
@@ -194,7 +195,10 @@ class MemberDateConflictIsHeldWhereDecidedTests(TestCase):
         holds = models.ProviderRun.objects.filter(encounter_id=encounter_id, state=models.ProviderRun.NOT_SENT).count()
         response = self.post(f'/api/encounters/{encounter_id}/resume')
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.json(), {'resumed': models.Job.ASSESS})
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): the response names no stage (a stage kind names a participant); the resumed stage is read from its row
+        self.assertEqual(response.json(), {'resumed': True})
+        self.assertEqual(models.Job.objects.filter(encounter_id=encounter_id).order_by('-created_at', '-pk').first().kind,
+                         models.Job.ASSESS)
         held = self.assert_held_at_queue(encounter_id)
         self.assertEqual(models.ProviderRun.objects.filter(encounter_id=encounter_id,
                                                            state=models.ProviderRun.NOT_SENT).count(), holds + 1)
@@ -228,7 +232,7 @@ class MemberDateConflictIsHeldWhereDecidedTests(TestCase):
         self.set_date(encounter_id, '1998-01-01')
         first = self.assert_held_at_queue(encounter_id)
         drain()
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(unknown.pk), 'note': 'Checked with the provider: nothing billed.'})
         self.assertEqual(response.status_code, 201, response.content)
         held = self.assert_held_at_queue(encounter_id)
@@ -662,7 +666,7 @@ def run_app_script(body, params):
 
 
 @override_settings(**LIVE)
-class TheUndoScriptsOnTheDatabaseTests(TestCase):
+class TheUndoScriptsOnTheDatabaseTests(OperatorReads, TestCase):
     """The installer's in-image scripts, run against real rows: what the undone pair left open is closed as failed
     with its revision named; nothing else moves and nothing is removed."""
 

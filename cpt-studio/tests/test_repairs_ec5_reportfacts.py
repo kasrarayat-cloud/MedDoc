@@ -13,11 +13,12 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from tests.test_pipeline_api import OFFICE_NOTE
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
 from tests.test_repairs_status_r2_validation_api import ApiCase
 from tests.test_services_reconcile import check, proposal, run, sel, span
 
-APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
+APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 
 
 def browser(expression, data):
@@ -210,7 +211,7 @@ POLYP = 'A 7 mm sessile polyp in the sigmoid colon was removed with a cold snare
 
 
 @override_settings(**LIVE)
-class RejectedCodeAccountsForNothingTests(ApiCase, TestCase):
+class RejectedCodeAccountsForNothingTests(OperatorReads, ApiCase, TestCase):
     """report-6: a colonoscopy with a cold-snare polypectomy, 45385 selected and rejected by the reviewer. The reviewed
     report printed "accounted for by: 45385" under DOCUMENTED SERVICES (and the screen "Accounted for by: 45385.")
     beside "REJECTED: 45385" and "APPROVED SELECTIONS: None.": the assessment-time reconciliation was printed as if the
@@ -255,7 +256,7 @@ SCREEN = ('[app.factValue(data.facts.service_date, null, true), app.metaFact(dat
 
 
 @override_settings(**LIVE)
-class MemberConflictIsNeverConflictingDocumentationTests(ApiCase, TestCase):
+class MemberConflictIsNeverConflictingDocumentationTests(OperatorReads, ApiCase, TestCase):
     """context-5: a member's service date (or setting) unlike the document's single value is stored as a member
     conflict (context.is_member_conflict). The readers outside checks, engine and reconcile never asked that predicate:
     the TXT's ENCOUNTER CONTEXT said "Service date: conflicting documentation", the source paper said "Conflicting
@@ -265,7 +266,7 @@ class MemberConflictIsNeverConflictingDocumentationTests(ApiCase, TestCase):
 
     def readings(self, encounter_id):
         detail = self.detail(encounter_id)
-        rows = self.client.get('/api/encounters').json()['encounters']
+        rows = self.client.get('/ops/api/encounters').json()['encounters']
         (row,) = [r for r in rows if r['id'] == encounter_id]
         return detail, row, browser(SCREEN, {'facts': detail['context']['facts'], 'row': row})
 
@@ -331,7 +332,7 @@ UNRESOLVED_TITLE = 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL'
 
 
 @override_settings(**LIVE)
-class ReadInPartSpeaksForWhatWasReadTests(ApiCase, TestCase):
+class ReadInPartSpeaksForWhatWasReadTests(OperatorReads, ApiCase, TestCase):
     """report-8: a findings sentence over the 1,200-character act-reading bound, whose unread tail documents a cold-forceps
     removal inside the colonoscopy that WAS read. The reading recorded the problem (state 'partial'), but UNRESOLVED
     closed with "none among the services read: ... so a service it did not read is not listed" and the services.unresolved
@@ -376,7 +377,7 @@ EUS_BESIDE_COLONOSCOPY = (SYNTHETIC + 'Date of service: 2026-10-14\nEUS: Normal 
 
 
 @override_settings(**LIVE)
-class UnestablishedServiceKeepsCodingIncompleteTests(ApiCase, TestCase):
+class UnestablishedServiceKeepsCodingIncompleteTests(OperatorReads, ApiCase, TestCase):
     """report-1 (repaired by WIP 8p, 9086a4271; re-checked here): a findings-only EUS (or ERCP) section beside a coded
     colonoscopy is read 'uncertain' with no proposal and no question. Coding completeness had said "Every documented
     service has a proposal" in the draft, the reviewed TXT, the CSV and the screen. It says incomplete, naming the
@@ -395,8 +396,8 @@ class UnestablishedServiceKeepsCodingIncompleteTests(ApiCase, TestCase):
                     self.assertIn('State: incomplete', coding)
                     self.assertIn('1 documented service not established as performed and read by no proposal', coding)
                     self.assertNotIn('Every documented service has a proposal', coding)
-                response = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'csv'})
-                csv_text = self.client.get(f'/api/reports/{response.json()["id"]}/download')
+                response = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'csv'})
+                csv_text = self.client.get(f'/ops/api/reports/{response.json()["id"]}/download')
                 body = b''.join(csv_text.streaming_content if csv_text.streaming else [csv_text.content]).decode()
                 (row,) = [line for line in body.split('\r\n') if '"coding_completeness"' in line]
                 self.assertIn('"incomplete"', row)
@@ -493,7 +494,7 @@ NOT_UPPER = ('the document does not place it at an upper GI site of an upper GI 
 
 
 @override_settings(**LIVE)
-class LowerEusBiopsyIsNeverReadUnderTheUpperFamilyTests(ApiCase, TestCase):
+class LowerEusBiopsyIsNeverReadUnderTheUpperFamilyTests(OperatorReads, ApiCase, TestCase):
     """skeptic of the report-0 repair (9d9fb8e17): an upper endoscopy report (antral forceps biopsy, 43239 selected) beside
     a rectal EUS (perirectal node FNA, 45392 selected, and cold forceps biopsies of the rectal mass). The rectal biopsy
     was filed as "not separately reported - A forceps biopsy at the same upper examination is read under the upper GI
@@ -610,7 +611,7 @@ NOT_READ = ('The documented-service reading reported a problem (see services.inv
 
 
 @override_settings(**LIVE)
-class ConflictsCheckSpeaksForWhatWasReadTests(ApiCase, TestCase):
+class ConflictsCheckSpeaksForWhatWasReadTests(OperatorReads, ApiCase, TestCase):
     """skeptic of the report-8 repair (e6601b1cf): a colonoscopy whose findings sentence (over 1,200 characters) is read
     for acts only in its first 1,200 characters, its unread tail denying the tattoo another sentence states done (45385
     and 45381 selected). The inventory recorded the problem and no conflict, yet services.conflicts passed with "No act

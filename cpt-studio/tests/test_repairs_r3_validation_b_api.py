@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 
 from studio.models import ReferenceCodeFact, ReferenceSource
 from tests.test_reports import section
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import LIVE
 from tests.test_repairs_status_r2_validation_api import MultiEvidenceApiCase
 
@@ -21,7 +22,7 @@ def xxx():
 
 
 @override_settings(**LIVE)
-class RoundThreeValidationApiTests(MultiEvidenceApiCase, TestCase):
+class RoundThreeValidationApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def setUp(self):
         super().setUp()
         common = dict(publisher='CMS', url='https://www.cms.gov/synthetic',

@@ -16,6 +16,7 @@ from django.test import Client, TestCase, override_settings
 
 from studio import models, review
 from tests import test_harness2_pipeline as hp
+from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
@@ -84,7 +85,7 @@ class FirstReadingPositionTests(R2WordingCase):
         for said in self.card_positions(detail, snare):
             self.assertNotIn('Astra proposed', said)
         # the owner's trace reconciliation says the same
-        trace = _owner(self, 'owner_r4truth2').get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = _owner(self, 'owner_r4truth2').get(f'/ops/api/encounters/{encounter_id}/trace').json()
         (row,) = [item for item in trace['reconciliation'] if item['code'] == '45385'
                   and item['proposed_by'] == snare['proposed_by']]
         self.assertEqual(row['positions']['astra'], {'position': 'not_proposed', 'quote': '', 'detail': LISTED})
@@ -287,7 +288,7 @@ class CortiOnlyUnlistedCountTests(CortiUnlistedCountMixin, R2WordingCase):
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class SecondReviewUnlistedTests(TestCase):
+class SecondReviewUnlistedTests(OperatorReads, TestCase):
     """falsegreen-6: Corti's row counts the codes its answers returned that cannot be listed - "its primary run and any
     bounded second review" - yet no test had a second review return one: a mutant counting the primary run alone made
     the row read "Answered; its codes were checked." with 0, and every gate stayed green. The second review's count is
@@ -326,7 +327,7 @@ class SecondReviewUnlistedTests(TestCase):
         drain()
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertIsNotNone(encounter.current_assessment.second_run_id)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         return encounter, detail
 
     def checks(self, detail):
@@ -510,7 +511,7 @@ class CortiOnlyRetrievalFailureStepTests(RetrievalFailureStepMixin, R2WordingCas
         self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
 
 
-class RetrievalFailureEntryStepTests(TestCase):
+class RetrievalFailureEntryStepTests(OperatorReads, TestCase):
     """jobs.retrieval_failure words the step that failed - loading the stored passages, or the retrieval - and what it
     leaves of the checks; a caller that names no step, or one it does not know, is given the retrieval's own sentence,
     which claims nothing was loaded or read (fail closed)."""

@@ -10,6 +10,7 @@ from django.utils import timezone
 from studio import jobs, models, review
 from studio.providers.base import ProviderUnavailable
 from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
 # A note that documents no place of service: a member's setting supplies it, and a later one changes it. A member's
@@ -22,7 +23,7 @@ class _WorkerDied(BaseException):
 
 
 @override_settings(**LIVE)
-class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
+class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:2 — a predict whose worker died with its run only reserved is settled by the stale sweep as
     not sent, and stays resumable (round 3, evidence:3). That run never reached the send, so it is no provider
     outcome: a setting or billing change makes the one attempt it never made, exactly as a Resume does, instead of
@@ -64,7 +65,7 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
         sends = len(self.provider.requests)
         self.die_after_reserving(how)
         self.assertEqual(len(self.provider.requests), sends)  # nothing was sent
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
         return encounter_id
 
     def change(self, encounter_id, body):
@@ -125,7 +126,7 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
         self.provider.outcomes = ['unknown']
         encounter_id = self.create()
         drain()
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': self.unknown_run_id(encounter_id),
                               'note': 'Checked the synthetic provider console: no result exists.'})
         self.assertEqual(response.status_code, 201, response.content)
@@ -178,7 +179,7 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class RunInUseTests(ApiHarness, TestCase):
+class RunInUseTests(OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:2 — exactly the runs the sweep settled from reserved stop standing; every other finished
     run stands as before (cc78bc4c4), whatever it is newer than."""
 
@@ -223,7 +224,7 @@ class RunInUseTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class ContextValuesAreStringsTests(ApiHarness, TestCase):
+class ContextValuesAreStringsTests(OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:6 — POST /context takes, per field, a listed string, or null or '' to clear it (API.md). Any
     other JSON type answers 400 and changes nothing, never a silent clear (the round-3 orchestrator:5 class, on
     another endpoint). A service date is a string in YYYY-MM-DD form only: never a JSON number, a basic or week date

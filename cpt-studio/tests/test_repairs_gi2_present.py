@@ -22,6 +22,7 @@ from django.test import Client, TestCase, override_settings
 from studio import models, serializers
 from studio.providers.base import ProviderUnavailable
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import COLONOSCOPY, page
 from tests.test_repairs_7c8_p2reports import Scripted
@@ -76,7 +77,7 @@ def only_inside_details(html, text):
 
 
 @override_settings(**LIVE)
-class Harness(TestCase):
+class Harness(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -102,12 +103,12 @@ class Harness(TestCase):
             return self.client.post(path, data=json.dumps(data or {}), content_type='application/json')
 
     def detail(self, encounter_id):
-        reply = self.client.get(f'/api/encounters/{encounter_id}')
+        reply = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(reply.status_code, 200, reply.content)
         return reply.json()
 
     def rows(self):
-        return self.client.get('/api/encounters').json()['encounters']
+        return self.client.get('/ops/api/encounters').json()['encounters']
 
     def row(self, encounter_id):
         (row,) = [item for item in self.rows() if item['id'] == encounter_id]
@@ -183,7 +184,7 @@ class QueueListsWhatWaitsOnAMemberTests(Harness):
         self.approve(encounter_id, '45385')
         missing = ProviderUnavailable('Live provider mode needs CPT_STUDIO_CORTI_CREDENTIALS_FILE.')
         with mock.patch('studio.jobs.get_provider', side_effect=missing):
-            listed = self.client.get('/api/encounters')
+            listed = self.client.get('/ops/api/encounters')
             self.assertEqual(listed.status_code, 200)
             (row,) = listed.json()['encounters']
             self.assertEqual((row['state'], row['queue_reasons']), ('reviewed', ['incomplete']))
@@ -233,7 +234,7 @@ class QueueListsWhatWaitsOnAMemberTests(Harness):
         self.assertIn('reconciliation', self.row(encounter_id)['queue_reasons'])
         self.assertIn('Provider outcome to reconcile', self.screen()['queue'])
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: no response.'})
         self.assertIn(reply.status_code, (200, 201), reply.content)
         drain()

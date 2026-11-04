@@ -39,6 +39,7 @@ from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import CortiProvider
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
 from tests.test_providers import FakeResponse, dotenv, token_response, write_file
 from tests.test_repairs_7c8_p1sends import DATE, UNDATED, Steps, installed_run_in_use
@@ -528,7 +529,7 @@ class TheRealAdaptersOutcomesDecideTests(LensSteps):
 
 
 @override_settings(**LIVE)
-class ConcurrentSettlingSavesTests(TransactionTestCase):
+class ConcurrentSettlingSavesTests(OperatorReads, TransactionTestCase):
     """R1 under concurrency: two members settle the same held conflict at once (separate database connections). The row
     lock and the busy check let one save through; the request is attempted once."""
 
@@ -1034,7 +1035,7 @@ class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(LensSteps):
 
 
 @override_settings(**LIVE)
-class ConcurrentAsksAfterANotSentSecondReviewTests(TransactionTestCase):
+class ConcurrentAsksAfterANotSentSecondReviewTests(OperatorReads, TransactionTestCase):
     """L1 under concurrency: two reviewers ask at once after a second review that was never sent (separate database
     connections). The row lock and the busy check queue one stage; the request is sent once."""
 
