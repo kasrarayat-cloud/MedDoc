@@ -110,5 +110,618 @@
   "studio/validation/reconcile.py",
   "the request side"
  ],
- "cost": "Linear: L1a one section_at bisection per note label line; L1c a look at the two lines beside each note label line; L1d one pattern pass over a note label line; L1e one pass over a sentence's sites per sentence of a note's part; R1a a family comparison per bound act; R1b one pass over each label's definitions; R1c one pass over the act clause's own sites; R2a one bounded look after each compound and one reading per doubtful compound; R4a removes three tests from a branch. Measured with ops.gi4.cost if the battery, replay and freeze leave time."
+ "cost": "Linear: L1a one section_at bisection per note label line; L1c a look at the two lines beside each note label line; L1d one pattern pass over a note label line; L1e one pass over a sentence's sites per sentence of a note's part; R1a a family comparison per bound act; R1b one pass over each label's definitions; R1c one pass over the act clause's own sites; R2a one bounded look after each compound and one reading per doubtful compound; R4a removes three tests from a branch. Measured with ops.gi4.cost if the battery, replay and freeze leave time.",
+ "amendment_20261104T0635Z_after_code_offers": {
+  "note": "After code, measured (not declared before code): the 29 new rows' second-review offers (tests/test_gi4_po.offers_of, the row's own answer and an empty one) on c47d71a34 with the rows added and on the head (scratch-r2-reader/offers.py). Recorded so tests/test_cux_hold.RegisterOfferTests reads every 'R8 ' row's offers. The 45 earlier register rows (cux-hold.json's and cux-lead.json's) offer exactly as on c47d71a34, H1 among them. Two new rows gain an own-answer offer, each the installed revision's own: R8 R2 R07b cecal snare after a separate note, 45338 only; R8 R2 F04c label reused under the upper endoscopy - the act the repair gives back to the colonoscopy (R07b's cecal snare, F04c's cold-forceps removal of the colon P1) is covered by no proposed code, an unresolved item as on 41e03656d. Against the installed revision only F05a differs: its \"Forceps-removed: Yes\" is a doubtful compound read as an act done, which R2a never keeps (no performed reading rests on it, as on c47d71a34), so the installed not-covered biopsy item is not raised there.",
+  "moved_against_base": {
+   "R8 R2 R07b cecal snare after a separate note, 45338 only": {
+    "base": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ],
+      [
+       "gi.flex_sig",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ],
+      [
+       "gi.flex_sig",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": [
+      [
+       "gi.colonoscopy",
+       "snare",
+       "not_covered",
+       true
+      ]
+     ]
+    }
+   },
+   "R8 R2 F04c label reused under the upper endoscopy": {
+    "base": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ],
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ],
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": [
+      [
+       "gi.colonoscopy",
+       "biopsy",
+       "not_covered",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  "offer_battery": {
+   "R8 R2 R07a cecal snare after a separate note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 R07b cecal snare after a separate note, 45338 only": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 R07v4 cecal snare inside the separate note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 R07v3 control, sigmoid snare inside the separate note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 R10a separate note on the service date": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 R10b separate same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 R10c separate note for rectal bleeding": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 R10h7 addendum by another physician": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F01A plan, second procedure": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F01B recommendations, follow-on procedure": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F01C subsequent procedure line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F01D impression and recommendations, second procedure": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F01X cancelled separate note": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F02 combined denial on the service date": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F02 combined denial, as previously documented": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F02 control, undated combined denial": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F03a numbered procedure lines": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F03b numbered procedure lines, dashes": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F04a colon label named in an upper endoscopy clause": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F04b specimen number restarted for the upper endoscopy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F04c label reused under the upper endoscopy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F05a snare-resected field answered No": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F05b hot snare-resected field, not done": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F05b2 cold snare-resected field answered No": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F05c neither snare-resected nor retrieved": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F05 control, an attributive compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 F06a denial on a label, in another segment": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F06b denial in another segment, as for a label": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 F06 control, a denial on a label alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   }
+  }
+ }
 }

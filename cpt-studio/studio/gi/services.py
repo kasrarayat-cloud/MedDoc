@@ -837,6 +837,10 @@ class _Part:
     # core repair 2026-11-03 (P1, rule 4): the part is inside a combined report - under a report title naming two or more
     # separate services, which binds no single family (parts)
     combined: bool = False
+    # reader-bind round 2 (cux-r2-bind.json L1e): a part a note label opened - the service the label names (``noted``)
+    # and the family of the part the label interrupted (``host``); '' for every other part
+    noted: str = ''
+    host: str = ''
 
 
 def _lines(text: str) -> list[tuple[int, int]]:
@@ -1024,6 +1028,9 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     date_starts = [d.start for d in dates]
     documented = _documented_today(text, lines, service_date, dates, date_starts)
     title_marks: list[tuple[int, bool]] = []  # (start, combined) of each report title's cut (rule 4)
+    notes: dict[int, tuple[str, str]] = {}  # cut index -> (noted, host) of the parts a note label opened (L1e)
+    blocks: set[int] = set()  # cut indexes of L1d's parts of no family
+    labelled_now = None  # L1f: (cut, family, host) of the labelled part while it is the running one
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
@@ -1032,6 +1039,17 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                 cuts.append((ls, *resume_after_block))
                 resume_after_block = None
             continue  # an extraction block's lines open no part of their own
+        if labelled_now is not None and cuts[-1] is labelled_now[0] \
+                and _other_instrument(text, ls, le, labelled_now[1]):
+            # L1f (reader-bind round 2): the labelled part's text turns to another examination ("The gastroscope was
+            # advanced ..." under "Part 2: Colonoscopy" in a combined report's shared findings): from this line it is
+            # no longer the labelled service's - a part of no family, as L1d's
+            notes[len(cuts)] = (labelled_now[1], labelled_now[2])
+            blocks.add(len(cuts))
+            cuts.append((ls, '', 'physician', None, 'report'))
+            title_marks.append((ls, True))
+            family = ''
+            labelled_now = None
         if not stripped or len(stripped) > 100:
             continue
         if cuts[-1][4] in ('history', 'plan') and _sections.FORM_BLOCK.fullmatch(stripped):
@@ -1049,15 +1067,31 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             cuts.append((ls, family, role, Span(ls + line.index(stripped), ls + line.index(stripped) + len(stripped),
                                                 stripped), 'role'))
             continue
+        note_named = _note_families(text, lines, index, cuts[-1][4], lay)
         labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
-                                            date_starts=date_starts, documented=documented)
+                                            date_starts=date_starts, documented=documented) if note_named else None
         if labelled is not None:
             # lead integration L1 (R8 D7, cux-lead.json): "Separate note: Flexible sigmoidoscopy (fictional),
-            # 2026-10-14" opens a report part of its one service, so the colonoscopy's part no longer runs over it
+            # 2026-10-14" opens a report part of its one service, so the colonoscopy's part no longer runs over it.
+            # Reader-bind round 2 (cux-r2-bind.json L1b): the part starts at the line after the heading, which stays in
+            # the part it is in and reads as installed - no report-title reading of its service (a cancelled note's
+            # "Separate note: Colonoscopy" had read the colonoscopy performed) and no act listed on a procedure line
+            notes[len(cuts)] = (labelled[0], cuts[-1][1])  # L1e: the note's service and the part it interrupts
             family = labelled[0]
-            cuts.append((ls, family, 'physician', labelled[1], 'report'))
+            cuts.append((min(le + 1, len(text)), family, 'physician', None, 'report'))
+            labelled_now = (cuts[-1], labelled[0], notes[len(cuts) - 1][1])  # L1f: the running labelled part
             kind_now = 'report'
             continue
+        if note_named and cuts[-1][1] and note_named - {cuts[-1][1]}:
+            # L1d (R8 D7's fail-closed half): a note label naming another service that the heading reader does not
+            # accept ("Separate note: Flexible sigmoidoscopy (fictional) on 2026-10-14", "Addendum - flexible
+            # sigmoidoscopy performed the same day by Dr. Vale"): the text after it is no longer the running part's -
+            # a part of no family, read in a titled report as a combined report's is (its acts by their own site,
+            # sentence or lesion; its site-less denials beside every service that documents the act)
+            others = note_named - {cuts[-1][1]}
+            block_after = (min(le + 1, len(text)), next(iter(others)) if len(others) == 1 else '', cuts[-1][1])
+        else:
+            block_after = None
         numbered = PART_NUMBER.match(line)
         body = line[numbered.end():] if numbered else line
         m = REPORT_TITLE.match(body) or TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body)
@@ -1103,6 +1137,19 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             continue
         if GENERIC_HEADING.match(line) and cuts[-1][4] == 'role':
             cuts.append((ls, family, 'physician', None, kind_now))
+        if block_after is not None:  # L1d, once the line itself opened no part of its own
+            start, noted, host = block_after
+            running = cuts[-1]
+            notes[len(cuts)] = (noted, host)
+            blocks.add(len(cuts))  # rule 4's reading of a part of no single family: its denials are never dropped
+            if running[4] == 'section':
+                # a bare service heading's section: the part of no family ends where the section would have ended
+                cuts.append((start, '', running[2], None, 'section'))
+            else:
+                # a titled report or a role entry inside one: no part after it falls back to the running family
+                cuts.append((start, '', running[2], None, 'report'))
+                title_marks.append((start, True))
+                family = ''
         del field_m
     out = []
     mark_starts = [start for start, _ in title_marks]
@@ -1112,18 +1159,57 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             kind = 'report'
         # rule 4: a part of no family after a combined report title is that combined report's
         at = bisect.bisect_right(mark_starts, start) - 1
-        combined = not fam and at >= 0 and title_marks[at][1]
+        combined = not fam and (at >= 0 and title_marks[at][1] or i in blocks)
+        noted, host = notes.get(i, ('', ''))
         if end > start:
-            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind, combined))
+            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind, combined,
+                             noted, host))
     return _time_parts(text, out, lay)
 
 
 # P2 READ-HOLD, R8 D7: a note, procedure or addendum label before a heading of its own ("Separate note: Flexible
 # sigmoidoscopy (fictional), 2026-10-14", "Second procedure: ...", "Note 2: ...", "Addendum - ..."). Never a bare field
-# label: "Procedure: Colonoscopy" is a field of today's report (TITLE_FIELD stays as it is).
-LABELLED_NOTE = _rx(r'^[ \t\-*#]*(?:(?:separate|second|another|additional|same[- ]day|subsequent|follow-?on)[ \t]+'
-                    r'(?:note|procedure|report|examination|exam|study|service)|(?:note|procedure|report|part)[ \t]+\d{1,2}'
+# label: "Procedure: Colonoscopy" is a field of today's report (TITLE_FIELD stays as it is). Reader-bind round 2
+# (cux-r2-bind.json L1c): nor a numbered one - "Procedure 1: EGD" / "Procedure 2: Colonoscopy" list today's procedures
+# (refutation F03: the second had opened a colonoscopy part over the upper endoscopy's biopsy) - and "subsequent" and
+# "follow-on" name a later procedure, never a same-day note (F01); "Separate same-day note:" carries two of the label's
+# own modifiers (R10).
+LABELLED_NOTE = _rx(r'^[ \t\-*#]*(?:(?:separate|second|another|additional|same[- ]day)[ \t]+(?:same[- ]day[ \t]+)?'
+                    r'(?:note|procedure|report|examination|exam|study|service)|(?:note|report|part)[ \t]+\d{1,2}'
                     r'|addend(?:um|a))[ \t]*(?::|[-\u2013\u2014](?=[ \t]))[ \t]*(?=\S)')
+
+
+def _note_families(text: str, lines: Sequence[tuple[int, int]], index: int, running_kind: str, lay) -> frozenset:
+    """The families a note label line (LABELLED_NOTE) names after its label, when parts() may act on it at all
+    (reader-bind round 2, cux-r2-bind.json): never in a plan or a history - the running part's own kind, or a plan or
+    history section of routing's layout (L1a, refutation F01: "Plan:" / "Second procedure: Colonoscopy with cold snare
+    polypectomy" had opened a report of today's colonoscopy) - and never beside another note label line naming a service
+    (L1c: "Note 1: EGD" / "Note 2: Colonoscopy" list today's procedures). Empty otherwise. Bounded: the line and its two
+    neighbours, at most 100 characters each, and one bisection."""
+    ls, le = lines[index]
+    line = text[ls:min(le, ls + 100)]
+    label = LABELLED_NOTE.match(line)  # anchored at the line's start: matched on the line itself
+    if label is None or running_kind in ('history', 'plan') or lay.section_at(ls).kind in ('plan', 'history'):
+        return frozenset()
+    for other in (index - 1, index + 1):
+        if 0 <= other < len(lines):
+            near_line = text[lines[other][0]:min(lines[other][1], lines[other][0] + 100)]
+            near = LABELLED_NOTE.match(near_line)
+            if near is not None and any(pattern.search(near_line, near.end()) for _, _, pattern in SERVICES):
+                return frozenset()
+    return frozenset(f for f, _, pattern in SERVICES if pattern.search(line, label.end()))
+
+
+def _other_instrument(text: str, ls: int, le: int, family: str) -> bool:
+    """Whether the line [ls, le) tells an examination of a family other than ``family`` by its instrument (L1f:
+    "The gastroscope was advanced to the second part of the duodenum." inside a colonoscopy's labelled part). A bare
+    "endoscope" names no family. Bounded: the line's first SENTENCE_READ_CHARS characters."""
+    for m in INSTRUMENTS.finditer(text, ls, min(le, ls + SENTENCE_READ_CHARS)):
+        word = re.sub(r'\s+', ' ', m.group(0).lower())
+        named = next((f for name, f in INSTRUMENT_FAMILY if name in word), '')
+        if named and named != family:
+            return True
+    return False
 
 
 def labelled_service_heading(text: str, ls: int, le: int, *, service_date: Optional[date], dates, date_starts,
@@ -1233,7 +1319,8 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
             if pieces and pieces[-1].kind == kind:
                 pieces[-1] = replace(pieces[-1], end=b)
             else:
-                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind, p.combined))
+                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind, p.combined,
+                                    p.noted, p.host))
         out.extend(pieces)
     return tuple(out)
 
@@ -2398,7 +2485,7 @@ ALTERNATIVE_WORDS = 3  # words an alternative named with "or" may have ("Tattoo 
 _PLAIN_WORD = re.compile(r"[a-z][a-z'-]*")
 
 
-def _own_question(text: str, start: int, end: int) -> bool:
+def _own_question(text: str, start: int, end: int, denial: bool = False) -> bool:
     """Whether the field label [start, end) is an item's own question: every word of it outside the acts and services
     it names is a word of that question (routing's _BOX_ITEM_WORDS: "Biopsy taken", "Was a biopsy performed"), as
     routing's _box_label_kind reads an 'item' label; a time, an attribute or a count ("Biopsy (Y/N)", "Flexible
@@ -2410,9 +2497,16 @@ def _own_question(text: str, start: int, end: int) -> bool:
     alternative is at most ALTERNATIVE_WORDS plain words (no digit, no negation) and a name or a word of the question
     must follow it: "Tattoo or marking agent" (nothing after it) and "Tattoo or marking agent recommended" (another
     predicate) stay other questions, as does an "or" after anything but the item's name ("Bleeding or perforation after
-    polypectomy")."""
+    polypectomy").
+
+    With ``denial`` (a denying answer is being read: never a reading of an act done), a doubtful act compound in the
+    label (_acts_in's ``doubtful``: "Snare-resected", "Hot snare-resected") is the item's name too (reader-bind round 2,
+    R2a)."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    names = [(a, b) for _, a, b in _acts_in(text, start, end)]
+    doubtful: list = []
+    names = [(a, b) for _, a, b in _acts_in(text, start, end, doubtful)]
+    if denial:  # R2a (reader-bind round 2): a doubtful compound is the item a denying answer denies ("Snare-resected: No")
+        names += [(a, b) for _, a, b in doubtful]
     names += [(m.start(), m.end()) for _, _, pattern in SERVICES for m in pattern.finditer(text, start, end)]
     words = [(w.group(0).lower(), any(a <= w.start() < b for a, b in names))
              for w in detect._BOX_LABEL_WORD.finditer(text, start, end)]
@@ -2572,7 +2666,7 @@ def _denying_answer(text: str, ls: int, colon: int, pos: int, end: int, value: s
         # (no stones were found), never a statement that the act was not done (triage round 2 skeptic: an
         # ERCP's "Stones: None" had denied the stone extraction its sweep documented).
         return Reading('uncertain', (SILENT_READINGS[0],))
-    if _own_question(text, ls, colon):
+    if _own_question(text, ls, colon, denial=True):
         return Reading('negated', (f'field: the answer \u201c{value}\u201d denies it',))
     return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is to a question that names it among '
                                  'other words',))
@@ -2617,7 +2711,7 @@ def _field_answer_read(text: str, pos: int, end: int, service_date: Optional[dat
             return Reading('uncertain', (SILENT_READINGS[0],))  # an option not marked says nothing of the item
         word = re.sub(r'\s+', ' ', option.group('option').lower())
         if word in ('no', 'none', 'not done', 'not performed'):
-            if _own_question(text, ls, colon):
+            if _own_question(text, ls, colon, denial=True):
                 return Reading('negated', (f'field: its option \u201c{word}\u201d is checked',))
             return Reading('uncertain', (f'field: its option \u201c{word}\u201d is checked, to a question that names it '
                                          'among other words',))
@@ -2956,10 +3050,13 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
     return best
 
 
-def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
+def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -> list[tuple[str, int, int]]:
     """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took. An act word
     that heads an attributive participle compound ("the snare-treated lesion": _attributive_compound) describes a noun
-    and is no act mention; it still claims its text, so no later kind reads it either."""
+    and is no act mention; it still claims its text, so no later kind reads it either. With ``doubtful`` (a list, the
+    inventory's pass 3 only), the compounds left out that stand in no attributive position (_attributive_position: a
+    field label "Snare-resected: No", a predicate "was neither snare-resected nor retrieved") are added to it, sorted:
+    reader-bind round 2 R2a, read there only as denials. The result itself is the same with or without it."""
     found: list[tuple[str, int, int]] = []
     attributive: list[tuple[str, int, int]] = []
     for kind, pattern in ACTS:
@@ -2968,6 +3065,8 @@ def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
                 continue
             (attributive if _attributive_compound(text, m.start(), m.end()) else found).append(
                 (kind, m.start(), m.end()))
+    if doubtful is not None:
+        doubtful.extend(sorted((x for x in attributive if not _attributive_position(text, x[2])), key=lambda x: x[1]))
     return sorted(found, key=lambda x: x[1])
 
 
@@ -2998,6 +3097,24 @@ def _attributive_compound(text: str, start: int, end: int) -> bool:
     return COMPOUND_PREDICATE_BEFORE.search(text, max(0, start - COMPOUND_REACH), start) is None
 
 
+# Reader-bind round 2 (cux-r2-bind.json R2a; refutation F05): a compound is attributive where a noun phrase follows it
+# ("the snare-treated sigmoid lesion", "biopsy-proven Barrett esophagus", "two snare-resected polyps") - a word that is no
+# conjunction, pronoun, determiner, preposition, auxiliary, negator or adverb. Anywhere else (a field label's colon, "nor",
+# a clause's end) it may be a predicate whose subject or auxiliary lies outside COMPOUND_REACH or this pattern's forms: a
+# doubtful compound, which pass 3 keeps only when its clause denies the act. A word added to this list only holds.
+COMPOUND_NOUN_AFTER = re.compile(r'[ \t]+(?!(?:and|or|nor|but|then|also|it|its|them|they|this|that|these|those|which|who|'
+                                 r'whom|with|without|by|in|at|on|to|from|of|for|into|onto|under|after|before|during|'
+                                 r'using|via|as|was|were|is|are|be|been|not|no|never|neither|either|en|piecemeal)\b)'
+                                 r'[A-Za-z][A-Za-z-]*(?<!ly)\b', re.A | re.I)
+
+
+def _attributive_position(text: str, end: int) -> bool:
+    """Whether the compound whose act word ends at ``end`` is followed by a noun phrase it describes (R2a). Bounded: the
+    participle and the word after it."""
+    participle = COMPOUND_PARTICIPLE_AFTER.match(text, end)
+    return participle is not None and COMPOUND_NOUN_AFTER.match(text, participle.end()) is not None
+
+
 def _compound_participle(text: str, at: int) -> bool:
     """Whether a participle starting at ``at`` is the second element of an attributive act compound (rule 2): a hyphen
     right before it, after an act word that the compound does not make a predicate. Bounded: one act word before it."""
@@ -3015,6 +3132,25 @@ def _predicate_participle(text: str, segment: str, offset: int) -> bool:
     act compound (rule 2: "the snare-treated lesion" states no act for any mention). With no such compound in the
     segment it is exactly BARE_PARTICIPLE.search(segment)."""
     return any(not _compound_participle(text, offset + m.start()) for m in BARE_PARTICIPLE.finditer(segment))
+
+
+# Reader-bind round 2 (cux-r2-bind.json L1e): the sites a flexible sigmoidoscope reaches - CPT's sigmoidoscopy, the
+# examination of the rectum and the sigmoid colon that may include a portion of the descending colon - with the bare
+# colon (its name does not tell which segment) and the anal canal. A site of the lower tract or of the small bowel outside
+# them (the splenic and hepatic flexures, the transverse and ascending colon, the cecum with its valve and orifice, the
+# ileum) lies beyond a sigmoidoscope: an act there is never a separate sigmoidoscopy note's (refutation R07: "A 5 mm polyp
+# in the cecum was removed with a cold snare." after the note had become a sigmoidoscopy with snare, 45338 READY).
+NOTE_REACH = {'gi.flex_sig': frozenset(('rectum', 'rectosigmoid', 'sigmoid colon', 'descending colon', 'colon',
+                                        'anal canal'))}
+
+
+def _beyond_note_reach(part, anat) -> bool:
+    """Whether a site of ``anat`` (_anatomy_in's (name, region, start, end)) lies beyond the reach of the service whose
+    note label opened ``part`` (L1e): a lower-tract or small-bowel site its instrument cannot reach. Such an act or lesion
+    is placed by the part the label interrupted (``part.host``), as it was before the label."""
+    reach = NOTE_REACH.get(part.noted)
+    return reach is not None and any(region in LOWER | {'small_bowel'} and name not in reach
+                                     for name, region, _, _ in anat)
 
 
 def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
@@ -3463,7 +3599,9 @@ def _label_answered_below(prev: str, nxt: str) -> bool:
             or BOX_MARK.search(prev) or any(c in prev for c in '|\t'):
         return False
     label = stripped[:-1]
-    if not (BARE_PARTICIPLE.search(label) or ACT_VERB.search(label)) or not _acts_in(label, 0, len(label)):
+    doubtful: list = []  # R2a (reader-bind round 2): "Snare-resected:" over "No" is one field line too
+    if not (BARE_PARTICIPLE.search(label) or ACT_VERB.search(label)) \
+            or not (_acts_in(label, 0, len(label), doubtful) or doubtful):
         return False
     return _ANSWER_OPENING.match(nxt) is not None and not _NEXT_ITEM.match(nxt)
 
@@ -4021,7 +4159,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if se > read_end:
                 problems.append(f'A sentence of {se - ss:,} characters at offset {ss} was read for acts only in its '
                                 f'first {SENTENCE_READ_CHARS:,} characters.')
-            mentions = _acts_in(text, ss, read_end)
+            doubtful: list[tuple[str, int, int]] = []  # R2a: compounds in no attributive position, read only as denials
+            mentions = _acts_in(text, ss, read_end, doubtful)
+            doubtful_at = {ms for _, ms, _ in doubtful}
+            if doubtful:
+                mentions = sorted(mentions + doubtful, key=lambda x: x[1])
             lesion_matches = list(LESION.finditer(text, ss, read_end))
             if not mentions and not lesion_matches:
                 continue
@@ -4052,7 +4194,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if re.match(r'\s+(?:treatment|resection|removal|site|bed|base|margin)', tail):
                     continue
                 region_one = next(iter(regions)) if len(regions) == 1 else ''
-                fam = _family_for_act('biopsy', region_one, part_family, present_families, binding_families)
+                lesion_part_family = part_family
+                if part.noted:
+                    lc = _clause_for(cls, lm.start())
+                    if _beyond_note_reach(part, [a for a in anatomy_all if lc[0] <= a[2] < lc[1]] or anatomy_all):
+                        # L1e: a lesion beyond the note's reach is the interrupted part's, as before the note
+                        lesion_part_family = part.host if part.host in drafts else ''
+                fam = _family_for_act('biopsy', region_one, lesion_part_family, present_families, binding_families)
                 if not fam or fam not in drafts or denies_further:
                     continue
                 d = drafts[fam]
@@ -4140,18 +4288,27 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # rule 1: a lesion label (or one lesion's specimen) named in the act's own clause binds the act to that
                 # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
                 # or a site of the clause's own that the lesion's tract cannot hold, leave it to the rules below
+                act_part_family = part_family
+                if part.noted and _beyond_note_reach(part, anat):
+                    # L1e (reader-bind round 2): an act beyond the note's reach is the interrupted part's, as before it
+                    act_part_family = part.host if part.host in drafts else ''
                 bound = _bound_lesion(text, clause, own_anat, label_index, drafts)
                 if bound is not None:
                     if described is None:
                         described = _described_starts(text, lesion_matches, ss, read_end)
                     if _lesions_described(described, clause[0], clause[1]):
                         bound = None  # a clause naming a lesion of its own (not a label's word) is placed as before
+                if bound is not None and act_part_family and drafts[act_part_family].id != bound.service:
+                    # R1a (reader-bind round 2, refutation F04): a label or specimen never moves an act its own part,
+                    # sentence or the one procedure gives to one service onto another service's lesion ("Biopsies were
+                    # then taken with the same cold forceps used to retrieve COL-1." inside UPPER ENDOSCOPY)
+                    bound = None
                 if bound is not None:
                     anat = own_anat
                     region = (own_anat[0][1] if own_anat else '') or bound.region
                     fam = next(f for f, dd in drafts.items() if dd.id == bound.service)
                 else:
-                    fam = _family_for_act(kind, region, part_family, present_families, binding_families)
+                    fam = _family_for_act(kind, region, act_part_family, present_families, binding_families)
                 if not fam or fam not in drafts:
                     # Neither its part, its sentence nor its site tells which of the documented services the statement
                     # is about. A checklist item's own field or check box that denies it today is then the encounter's
@@ -4187,9 +4344,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # a form field's denying answer is its item's predicate ("Biopsy: No", "Tattoo placed: None")
                 fielded = reading.status == 'negated' and reading.cues[:1] != () \
                     and reading.cues[0].startswith('field:')
-                # an attributive act compound's participle is no act predicate (rule 2: "the snare-treated lesion")
+                # an attributive act compound's participle is no act predicate (rule 2: "the snare-treated lesion"); a
+                # doubtful compound's own participle is its act's predicate (R2a: "Snare-resected: No", "was neither
+                # snare-resected nor retrieved")
                 has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
-                                    or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
+                                    or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms)
+                                    or ms in doubtful_at)
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
@@ -4221,11 +4381,18 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
+                if ms in doubtful_at and reading.status not in ('negated', 'cancelled'):
+                    continue  # R2a: a doubtful compound stands only as a denial, never as an act done
                 combined_denial = part.combined and part.kind == 'report' and reading.status in ('negated', 'cancelled')
-                if not fam and (not (_own_mark_denies(text, ms, me, reading, service_date) or combined_denial)
-                                or _dates_in(dates, *bc) or HISTORY_WORDS.search(clause_text)
-                                or PLAN_WORDS.search(clause_text)):
-                    continue  # no service named, and no item's own denial today (a date or time word: another's?)
+                # R4a (reader-bind round 2, refutation F02): a combined report's prose denial is kept whatever date or
+                # history word its clause carries - read_clause has read its time ("No biopsies were taken on
+                # 2026-11-03." had been dropped and its genuine conflict with it); the date, history and plan exclusions
+                # stay on the field and box path they were written for (a date or time word: another's?)
+                if not fam and not (combined_denial or (_own_mark_denies(text, ms, me, reading, service_date)
+                                                         and not (_dates_in(dates, *bc)
+                                                                  or HISTORY_WORDS.search(clause_text)
+                                                                  or PLAN_WORDS.search(clause_text)))):
+                    continue  # no service named, and no item's own denial today
                 if fam:
                     d = drafts[fam]
                     d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam
@@ -4633,6 +4800,10 @@ def _unique_labels(definitions: dict) -> frozenset:
     disjoint sites is ambiguous and resolves to nothing."""
     out = set()
     for label, defs in definitions.items():
+        if len(defs) > 1 and not all(r for _, _, r in defs):
+            # R1b (reader-bind round 2, refutation F04 c): a label defined again with no site ("P1: a 9 mm sessile
+            # polyp." under "Stomach:", after "P1 - sigmoid colon: ...") may name another lesion: which, is not told
+            continue
         regions = set().union(*(r for _, _, r in defs))
         if all(_regions_compatible(a, b) for a in regions for b in regions):
             out.add(label)
@@ -4723,6 +4894,11 @@ def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index:
         return None
     lesion = next(iter(named))
     if any(not _regions_compatible(region, lesion.region) for _, region, _, _ in own_anat):
+        return None
+    if any(name not in (lesion.anatomy, lesion.region) for name, _, _, _ in own_anat):
+        # R1c (reader-bind round 2, refutation F06): a site of the clause's own that is neither the lesion's site nor the
+        # whole of its region ("No snare was used on COL-1 in the sigmoid colon." for an ascending-colon COL-1): which
+        # place the denial is about is not told - read as before the label
         return None
     return lesion
 

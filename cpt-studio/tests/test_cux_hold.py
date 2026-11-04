@@ -708,6 +708,11 @@ class RegisterOfferTests(SimpleTestCase):
                           .read_text(encoding='utf-8'))
         declared.update(next(value['offer_battery'] for key, value in reversed(list(lead.items()))
                              if isinstance(value, dict) and 'offer_battery' in value))
+        # reader-bind round 2's register rows (R8 R2) carry theirs in cux-r2-bind.json (its after-code amendment)
+        bind2 = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-r2-bind.json')
+                           .read_text(encoding='utf-8'))
+        declared.update(next(value['offer_battery'] for key, value in reversed(list(bind2.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
         names = [n for n in battery.CASES if n.startswith('R8 ')]
         self.assertEqual(sorted(declared), sorted(names))
         for name in names:
