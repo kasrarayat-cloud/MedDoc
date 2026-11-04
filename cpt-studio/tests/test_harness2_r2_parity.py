@@ -39,7 +39,8 @@ from studio import jobs, models, participants, review
 from studio.reference import importers, passages
 from studio.types import RawExchange
 from tests.support import factories as f
-from tests.test_harness_pipeline import BOTH, HarnessCase
+from tests.support.operator import OperatorReads
+from tests.test_harness_pipeline import BOTH, HarnessCase, installed_reader_labels
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_reference import ArchiveMixin
 from tests.test_repairs_pipeline import LIVE
@@ -115,7 +116,7 @@ class AssessedTwiceMixin:
 # --- parity-r2-2 with Corti alone (I1) --------------------------------------------------------------------------------
 
 @override_settings(**LIVE)
-class CortiOnlyCase(AssessedTwiceMixin, ArchiveMixin, TestCase):
+class CortiOnlyCase(OperatorReads, AssessedTwiceMixin, ArchiveMixin, TestCase):
     """Corti alone (Astra and Fable disabled, the settings' defaults), selecting only 45378 (the cecum sentence), so the
     polypectomy and the biopsy are left for a second review; the CMS PFS and MUE tables loaded through the importers."""
 
@@ -147,7 +148,7 @@ class CortiOnlyCase(AssessedTwiceMixin, ArchiveMixin, TestCase):
     def decide(self, encounter_id):
         """The reviewer's decision on 45378, whichever the encounter offers (its endoscopic-base question leaves only a
         rejection)."""
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         proposal = next(p for p in detail['assessment']['proposals'] if p['code'] == '45378')
         if 'approve' in proposal['allowed_actions']:
             data = {'proposal_id': proposal['id'], 'action': 'approve',
@@ -300,7 +301,7 @@ def jobs_records():
 # --- parity-r2-2 with participants configured (HARNESS.md 12.3) -------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredRepersistTests(AssessedTwiceMixin, ArchiveMixin, HarnessCase):
+class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
     """Astra and Fable configured (the pipeline tests' fakes) and both of their first requests failed, so assess #1 owes
     no peer stage and is the final assessment (I10). The same assess, resumed after the stale sweep with the passages
     imported in between, reads the same participant runs: it is the same assessment."""
@@ -342,7 +343,7 @@ class ConfiguredRepersistTests(AssessedTwiceMixin, ArchiveMixin, HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredSameAssessmentTests(SameAssessmentMixin, HarnessCase):
+class ConfiguredSameAssessmentTests(OperatorReads, SameAssessmentMixin, HarnessCase):
     """review._same_assessment while a model participant is configured, on a final assess #2 (both participants read,
     both peer reviews read): the participant runs each entry names decide it with the round-4 inputs, and nothing else
     recorded beside the result does - never the retrieval traces."""
@@ -409,6 +410,11 @@ ROUND_4_LICENSE_NOTE = ('CPT codes are copyright the American Medical Associatio
 # and the harness ROUND_4_SHA256 with the round-4 note: the note is the only difference.
 ROUND_4_SHA256 = '07315c45fbdaed9668696efea28795e9e29f0ac4be8c72548b15ffa3832ee9ff'
 HEAD_SHA256 = 'c961e7e69c35ad1e9b22b5b4b88d4284fb649145a17d9dd945a2638a0246d3e7'
+# The core repair (2026-11-03) moved the routing, inventory and engine labels by one (feace7606), and the assessment
+# records them, so both digests move with the labels alone: with the four labels put back to installed 41e03656df61's
+# (installed_reader_labels) this head makes exactly the two above - the I1 proof stands - and at its own labels these.
+CORE_REPAIR_HEAD_SHA256 = 'a71679b8af53c478c99b56a58a5a0cc020f7e985bceb5415127eae8f92cc6687'
+CORE_REPAIR_ROUND_4_SHA256 = 'ab443cf120172659e3a0ddcd3e8dac9a9ec403dca8166fc97dd07475622d3f69'
 IMPORTED = ('cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d')
 SELECTIONS = (('45385', SNARE), ('45378', REACHED))
 # What a proposal row and a clarification row hold, compared field by field (every field but its ids and its row).
@@ -421,7 +427,7 @@ ASSESSMENT_FIELDS = ('profiles_version', 'engine_version', 'encounter_checks', '
 
 
 @override_settings(**LIVE)
-class ImportedReferenceParityTests(ArchiveMixin, TestCase):
+class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
     """I1's one declared exception, pinned through the importers: Corti alone on COLON, the CMS PFS and practitioner
     MUE tables loaded by studio.reference.importers. Re-pin only with a declaration of the change (HARNESS.md 9): a
     moved digest is a change to every Corti-only assessment on an installed system."""
@@ -458,7 +464,7 @@ class ImportedReferenceParityTests(ArchiveMixin, TestCase):
 
     def test_with_the_importers_note_it_is_the_declared_head_digest(self):
         assessment = self.assess()
-        self.assertEqual(assessment.sha256, HEAD_SHA256)
+        self.assertEqual(assessment.sha256, CORE_REPAIR_HEAD_SHA256)
         notes = self.notes(assessment)
         self.assertEqual({key: notes.pop(key) for key in IMPORTED}, dict.fromkeys(IMPORTED, importers.LICENSE_NOTE))
         self.assertTrue(notes)  # the AMA CPT and NCCI PTP entries: their own notes, neither of the two
@@ -466,16 +472,21 @@ class ImportedReferenceParityTests(ArchiveMixin, TestCase):
 
     def test_with_the_round_4_note_it_is_the_round_4_heads_assessment(self):
         assessment = self.assess(ROUND_4_LICENSE_NOTE)
-        self.assertEqual(assessment.sha256, ROUND_4_SHA256)
+        self.assertEqual(assessment.sha256, CORE_REPAIR_ROUND_4_SHA256)
         self.assertEqual({key: self.notes(assessment)[key] for key in IMPORTED},
                          dict.fromkeys(IMPORTED, ROUND_4_LICENSE_NOTE))
+
+    def test_at_the_installed_labels_the_head_makes_both_declared_digests_exactly(self):
+        # I1 (HARNESS.md): the labels apart, the core repair's head reads this colonoscopy as the round-4 head did
+        with installed_reader_labels():
+            self.assertEqual((self.assess().sha256, self.assess(ROUND_4_LICENSE_NOTE).sha256), (HEAD_SHA256, ROUND_4_SHA256))
 
     def test_the_note_is_the_only_difference(self):
         """Every proposal (its fingerprint included, so decisions carry by it as before), every question and every
         record of the result is the same, and the reference-source entries are once the note is mapped back."""
         harness = self.assess()
         round_4 = self.assess(ROUND_4_LICENSE_NOTE)
-        self.assertEqual((harness.sha256, round_4.sha256), (HEAD_SHA256, ROUND_4_SHA256))
+        self.assertEqual((harness.sha256, round_4.sha256), (CORE_REPAIR_HEAD_SHA256, CORE_REPAIR_ROUND_4_SHA256))
         for name in ASSESSMENT_FIELDS:
             self.assertEqual(getattr(harness, name), getattr(round_4, name), name)
         mapped = [dict(entry, license_note=ROUND_4_LICENSE_NOTE) if entry['key'] in IMPORTED else entry

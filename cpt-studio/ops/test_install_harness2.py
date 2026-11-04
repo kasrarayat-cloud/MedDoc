@@ -25,7 +25,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import TemporaryDirectoryTest  # noqa: E402
+from test_install import TemporaryDirectoryTest, guard_host, release_host  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40
@@ -429,8 +434,12 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         record = json.loads(Path(json.loads(stdout.getvalue())['receipt']).read_text())
         migrations = record['details']['migrations']
         self.assertEqual(migrations['baseline'], '0005')
+        # the core repair's three additive migrations (2026-11-03: decision modifiers, operator grants and report
+        # audience, member answers and the upload key), each read safe by the same gate (the last assertion)
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
-                                                                '0007_harness_participants_retrieval', MIGRATION_0008])
+                                                                '0007_harness_participants_retrieval', MIGRATION_0008,
+                                                                '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
+                                                                '0012_cux_worker_beat'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
@@ -510,9 +519,12 @@ def database():
 
 
 def tearDownModule():
-    if 'connection' in _DATABASE:
-        connection = _DATABASE.pop('connection')
-        connection.creation.destroy_test_db(_DATABASE.pop('old_name'), verbosity=0)
+    try:
+        if 'connection' in _DATABASE:
+            connection = _DATABASE.pop('connection')
+            connection.creation.destroy_test_db(_DATABASE.pop('old_name'), verbosity=0)
+    finally:
+        release_host()
 
 
 def run_in_image(body, params):

@@ -39,3 +39,16 @@ Pipeline worker: `manage.py run_worker` (`--once` drains the queue and exits).
 Accounts and the GI workspace: `manage.py provision` (passwords from files).
 Reference data: `manage.py import_reference` (CMS PFS RVU and practitioner MUE,
 sha256-pinned; descriptors are never imported).
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+Workspace members are served the customer contract (`/api/`, `studio/customer_api.py`): no provider, model, usage,
+hash, rule id or trace. The complete diagnostics are a platform operator's, under `/ops/`. Grant and revoke operator
+access with a reason file (never argv):
+
+```bash
+python manage.py grant_operator --username <account> --reason-file <file> [--by <your label>]
+python manage.py revoke_operator --username <account> --reason-file <file> [--by <your label>]
+```
+
+An operator with no workspace membership signs in on the usual login page and lands on `/ops/`.

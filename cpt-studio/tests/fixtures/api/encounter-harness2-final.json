@@ -284,7 +284,7 @@
   "user_values": {}
  },
  "routing": {
-  "version": "gi-routing@5",
+  "version": "gi-routing@6",
   "document_kind": "procedure_report",
   "families": [
    {
@@ -388,55 +388,64 @@
     "kind": "extract",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:20Z"
+    "finished_at": "2026-11-01T09:00:20Z",
+    "step_outcome": "done"
    },
    {
     "kind": "analyze",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:21Z"
+    "finished_at": "2026-11-01T09:00:21Z",
+    "step_outcome": "done"
    },
    {
     "kind": "predict",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:22Z"
+    "finished_at": "2026-11-01T09:00:22Z",
+    "step_outcome": "done"
    },
    {
     "kind": "astra",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:23Z"
+    "finished_at": "2026-11-01T09:00:23Z",
+    "step_outcome": "done"
    },
    {
     "kind": "fable",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:24Z"
+    "finished_at": "2026-11-01T09:00:24Z",
+    "step_outcome": "done"
    },
    {
     "kind": "assess",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:25Z"
+    "finished_at": "2026-11-01T09:00:25Z",
+    "step_outcome": "done"
    },
    {
     "kind": "astra_peer",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:30Z"
+    "finished_at": "2026-11-01T09:00:30Z",
+    "step_outcome": "done"
    },
    {
     "kind": "fable_peer",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:31Z"
+    "finished_at": "2026-11-01T09:00:31Z",
+    "step_outcome": "done"
    },
    {
     "kind": "assess",
     "state": "succeeded",
     "error": "",
-    "finished_at": "2026-11-01T09:00:32Z"
+    "finished_at": "2026-11-01T09:00:32Z",
+    "step_outcome": "done"
    }
   ]
  },
@@ -521,8 +530,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "1c5acd67ca2ba4a5d8929b3a00dff15a44b728066fd1972241a3c006d829482c",
-   "response_sha256": "f2937e6ce4ff4f8e1ad4180517e1b1e52fd1b0b0a16782b2dbdb3deec68d98e8",
+   "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
+   "response_sha256": "8bb9c343fe034aa09618a745637622fd08e8b974374c88a3cbbc34f531f7113c",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -544,8 +553,8 @@
     "output_tokens": 200
    },
    "usage_basis": "provider_reported_tokens_summed_over_exchanges",
-   "request_sha256": "552b7de11acd70d506d2e4611e434b7de9afca8aed822def0d764b7f0c32d9f4",
-   "response_sha256": "186ec1a7d8c0c12aee84de4c0c87d6ff4ffa0ba7fb63686de28001c7110a63c0",
+   "request_sha256": "8b8c8a85aa8f0a6e31208329dd36b0319b6390d2493bc63809fe99774e5509b1",
+   "response_sha256": "d3d0fe604810be56566e9a48d17090bd64a8be7ee8020a5d81a35442ab4d4afc",
    "reused_from": null,
    "error": "",
    "reconciled": false,
@@ -567,7 +576,7 @@
  "assessment": {
   "id": "e2b00000-0000-4000-8000-000000000008",
   "profiles_version": "gi-profiles@3",
-  "engine_version": "cpt-studio-validation@5",
+  "engine_version": "cpt-studio-validation@6",
   "created_at": "2026-11-01T09:00:33Z",
   "proposals": [
    {
@@ -627,14 +636,14 @@
       "id": "service.status",
       "label": "Service performed on this encounter",
       "detail": "The colonoscopy is documented as performed with snare removal (cold snare) of the 6 mm sessile polyp in the ascending colon.",
-      "source": "cpt-studio:gi-services@2",
+      "source": "cpt-studio:gi-services@3",
       "status": "pass"
      },
      {
       "id": "evidence.support",
       "label": "Passages show the coded act",
       "detail": "Every provider passage shows snare removal.",
-      "source": "cpt-studio:gi-services@2",
+      "source": "cpt-studio:gi-services@3",
       "status": "pass"
      },
      {
@@ -761,6 +770,16 @@
      "reject"
     ],
     "approve_withheld_by": null,
+    "overlay_reason": "",
+    "customer": {
+     "number": 1,
+     "status": "needs_detail",
+     "status_label": "Needs a detail",
+     "sub_label": "",
+     "reviewer_actions": [
+      "reject"
+     ]
+    },
     "proposed_by": [
      "corti",
      "astra",
@@ -848,14 +867,14 @@
       "id": "service.status",
       "label": "Service performed on this encounter",
       "detail": "The colonoscopy is documented as performed, but the document does not establish the forceps biopsy as done: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.”. The routing-era reading of the passages it cites also holds it: No documentation establishes that Colonoscopy was performed on the date of service. Read as uncertain: “A 3 mm polyp in the rectum was possibly biopsied with cold forceps.” (cue “uncertain: A 3 mm polyp in the rectum was possibly biopsied”, linked passage). Routing reads it as performed elsewhere: “Colonoscopy.” (cue “section: procedure (Procedure)”, routing).",
-      "source": "cpt-studio:gi-services@2",
+      "source": "cpt-studio:gi-services@3",
       "status": "warn"
      },
      {
       "id": "evidence.support",
       "label": "Passages show the coded act",
       "detail": "Not checked: the documented service or act is not established as performed.",
-      "source": "cpt-studio:gi-services@2",
+      "source": "cpt-studio:gi-services@3",
       "status": "not_applicable"
      },
      {
@@ -991,6 +1010,16 @@
      "reject"
     ],
     "approve_withheld_by": null,
+    "overlay_reason": "",
+    "customer": {
+     "number": 2,
+     "status": "needs_detail",
+     "status_label": "Needs a detail",
+     "sub_label": "",
+     "reviewer_actions": [
+      "reject"
+     ]
+    },
     "proposed_by": [
      "corti",
      "astra",
@@ -1088,6 +1117,8 @@
     "reinstated_by": null,
     "allowed_actions": [],
     "approve_withheld_by": null,
+    "overlay_reason": "",
+    "customer": null,
     "proposed_by": [],
     "listed_by": [
      "astra"
@@ -1140,7 +1171,7 @@
     "id": "services.inventory",
     "label": "Documented services",
     "detail": "Documented as done on this encounter: colonoscopy (performed). The reading is advisory: it reads declared wording and can miss wording it does not recognise.",
-    "source": "cpt-studio:gi-services@2",
+    "source": "cpt-studio:gi-services@3",
     "status": "info"
    },
    {
@@ -1161,7 +1192,7 @@
     "id": "services.conflicts",
     "label": "Conflicting statements",
     "detail": "No act is stated both as done and as not done for the same service and site.",
-    "source": "cpt-studio:gi-services@2",
+    "source": "cpt-studio:gi-services@3",
     "status": "pass"
    },
    {
@@ -1225,7 +1256,7 @@
    "needs_clarification": 2
   },
   "services": {
-   "version": "gi-services@2",
+   "version": "gi-services@3",
    "problems": [],
    "services": [
     {

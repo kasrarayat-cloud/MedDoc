@@ -293,7 +293,7 @@ class PeerRequestTests(PeerMaterialCase):
         encounter_id, _, _, _ = self.run_chain()
         client = Client()
         client.force_login(owner)
-        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         astra = next(item for item in trace['participants'] if item['name'] == 'astra')
         reading = next(run['reading'] for run in astra['runs'] if run['reading'])
         shown = json.dumps(reading, ensure_ascii=False)

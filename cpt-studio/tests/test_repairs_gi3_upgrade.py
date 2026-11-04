@@ -20,6 +20,7 @@ from django.test import TestCase, override_settings
 from studio import jobs, models
 from studio.types import Fact, from_jsonable
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import FakeProvider
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'gi3'
@@ -44,7 +45,7 @@ class DateLines(FakeProvider):
 
 
 @override_settings(**LIVE_SETTINGS)
-class RecordedBeforeTheInstallTests(TestCase):
+class RecordedBeforeTheInstallTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -98,7 +99,7 @@ class RecordedBeforeTheInstallTests(TestCase):
         self.drain()  # the swap: this revision's worker claims the installed pair's queued predict
         self.assert_read_again(encounter_id)
         self.assertEqual(self.provider.date_lines, [[]])  # one request, and no date line in it
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         self.assertIn('service_date', [q['fact'] for q in detail['clarifications']])
 
     def test_a_predict_stopped_before_the_swap_and_resumed_after_it(self):
@@ -118,7 +119,7 @@ class RecordedBeforeTheInstallTests(TestCase):
         self.assertEqual(self.provider.date_lines, [['Date of service: 2026-10-05']])
         self.provider.outcome = 'succeeded'
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN)
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(unknown.pk), 'note': 'Checked with the provider: nothing billed.'})
         self.assertEqual(reply.status_code, 201, reply.content)
         self.drain()

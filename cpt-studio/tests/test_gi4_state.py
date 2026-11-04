@@ -36,6 +36,7 @@ from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange, Span
 from studio.validation import engine, reconcile
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 DOCS = regression.load_fixtures()
@@ -47,6 +48,11 @@ INSTALLED_READER_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@4',
                            (gi_services, 'INVENTORY_VERSION'): 'gi-services@1',
                            (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@1',
                            (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@4'}
+# installed 41e03656df61's labels (the harness install, 2026-11-03), which the core repair's readers move by one
+CORE_REPAIR_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@5',
+                                (gi_services, 'INVENTORY_VERSION'): 'gi-services@2',
+                                (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@2',
+                                (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@5'}
 # a rule (a) document (pd.json, CTS-6's PD-06): installed reads and sends 2026-10-19; the round-4 reader asks the date
 RULE_A = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
           'Date of service: 10/19/2026\nDate seen: 10/12/2026 in clinic; procedure today\nEndoscopist: Synthetic MD\n'
@@ -96,7 +102,7 @@ def seed_reference(codes):
 
 
 @override_settings(**LIVE)
-class StateBatteryTests(TestCase):
+class StateBatteryTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -129,7 +135,7 @@ class StateBatteryTests(TestCase):
         jobs.run_job(job)
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def answer(self, encounter_id, value):
         response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': value})
@@ -320,9 +326,13 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@5', 'gi-services@2', 'cpt-studio:gi-services@2', 'cpt-studio-validation@5'))
+                         ('gi-routing@6', 'gi-services@3', 'cpt-studio:gi-services@3', 'cpt-studio-validation@6'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
+            self.assertNotEqual(getattr(module, name), installed, name)
+        # the core repair (2026-11-03): each reader that reads differently from installed 41e03656df61 moved once more;
+        # the context did not (its facts are unchanged: the H2 freeze of cux-lead.json)
+        for (module, name), installed in CORE_REPAIR_INSTALLED_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
 
     def labels_and_fingerprints(self):
@@ -352,8 +362,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@2')},
-                         {('gi-routing@5', 'gi-services@2', 'cpt-studio-validation@5')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@3')},
+                         {('gi-routing@6', 'gi-services@3', 'cpt-studio-validation@6')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

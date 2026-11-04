@@ -407,6 +407,12 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
     re-persist rule on the paths above, with no participant configured and with participants configured. The inputs I1
     compares are Corti's answers as they arrive within the send deadline: a read the deadline cuts is `unknown` (section
     8, HTTP-TRICKLE), where the round-4 adapter kept reading.
+  Since the core repair (2026-11-03) moved the routing, inventory and engine labels by one (gi-routing@6,
+  gi-services@3, cpt-studio-validation@6), which an assessment records, both digests move with the labels alone: at the
+  head's labels they are `a71679b8af53` (the importer's note) and `ab443cf12017` (the round-4 note), and with the four
+  labels put back to installed 41e03656df61's the head makes `c961e7e69c35` and `07315c45fbda` exactly
+  (`ImportedReferenceParityTests`); the superscript pin of `RetrievalFailureTests` likewise (`fd0b37c42efd` at the head's
+  labels, `b8bdc979057d` at the installed ones).
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
   Corti's, with located exact evidence.
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
@@ -2009,3 +2015,48 @@ findings against what remains were not reproduced. So no concrete finding justif
   excluded and 42 held, as on the base.
 - The suite passes 5,278 tests in 220 modules, 3 of them skipped because the OCR tools are absent. Ops passes 313,
   ops/verification 37, and node 134 and 91. `manage.py check` and `makemigrations --check` are clean.
+
+## Core repair and customer interface (2026-11-03): P2 READ-HOLD
+
+The hold-only repairs of the previously reported false READYs on the Corti-only path (R8's register, D1-D10, D12, D13,
+D15) and R3 7.5.1's narrow evidence hold, declared before the code in `tests/fixtures/gi4/declarations/cux-hold.json`.
+Every rule can only move a code from READY to held (`selected/needs_clarification`); none excludes and none releases.
+
+- **The own-passage release** (`engine._second_opinion`, `_own_passage_may_stand`) stands only for a `performed`
+  routing-era reading of a passage that names no failure or yield of nothing (`cues.UNDONE_ACT`, D1), lies in no other
+  role's entry (D5), and whose act the inventory's own placement rule gives to the matched family alone (D4,
+  fail-closed: the correct code on an unplaceable sentence of a combined report is held too).
+- **The clause reader** (`services.read_clause`) reads a failure word on the act's own predicate as a doubt (D2), the
+  denials "none (of ...) was", "at no point was", "without" over the act's noun phrase and a purpose phrase before the
+  act's own negated predicate (D3), and a boxed row whose own options check a denial, by the row's own convention (D3).
+  An indication line inside a titled report is an indication over its own line only (D8).
+- **The second opinion's hold arms**: a routing-era denial of the code's own act is a status signal (D3); a planned or
+  historical reading by any cue - never a clause cue in a passage that says today - holds on the matched act's evidence
+  or, for a match with no act, on the service's own statement (D9, D6, D10).
+- **C4** reads its not-in-person words on a folded copy too (no-break and Unicode spaces, soft hyphens, zero-width
+  characters), and "in person today" no longer matches inside "not seen in person today" (D12). A named EGD whose report
+  says the examination stopped short of its reach has its extent withheld (D13). A base code whose service is the
+  endoscopic portion of another documented service is held (D15, `engine._base_within`).
+- **The narrow evidence hold** (`engine._passages_elsewhere`): a procedure code with warn or fail support whose every
+  cited passage is another service's, or another time's or a denial by a cue of its own, is held.
+
+Not coded, recorded in the declaration: the D9 base companion (it releases the base beside a hedged therapeutic code,
+a must-stay-held twin); the D7 heading helper's wiring (`services.labelled_service_heading` is P1's `parts()` to call);
+D6's title-branch line in `_on_procedure_line` (P1's). I1: the 41 register rows are permanent battery rows with 39
+declared movements; H1 replay is EQUAL; H2 holds with no movement; H3 has no movement; one parity case moves
+(`two-codes-a-plan-code-and-hcpcs`, its 45378 adds a performed_status hold), to be re-pinned at integration.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+The harness's provenance - each participant's runs, models, usage and estimated cost, the readings and peer reviews,
+the exchanges and tool calls, the retrieval traces, the reconciliation table and the `harness` block of the encounter
+view - is unchanged and complete, and is now served only to platform operators: `GET /ops/api/encounters/<id>` (the
+full encounter serializer, `harness` included) and `GET /ops/api/encounters/<id>/trace` (section 7's trace). The
+workspace owner no longer opens the trace (`GET /api/encounters/<id>/trace` is removed; directive of 2026-11-03,
+section 2: a tenant owner must not automatically gain platform-operator access). Customers see the harness as three
+functional checks - Document review, Independent checks, Coding validation - with a state each, and never a
+participant's name, position, phase, model or reading (`studio/customer_api.py`). The operator console
+(`/ops/`, `studio/operator/ops.js`) is the website the harness sections above describe, its API base switched to
+`/ops/api/`; its node tests are `tests/operator/ops.test.cjs`. The verification tooling that reads provider runs,
+request hashes or report sha256s (ops/verify_browser.cjs, ops/verify_downloads.py) reads them from `/ops/api/` with an
+operator session.

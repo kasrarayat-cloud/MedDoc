@@ -1,4 +1,10 @@
-"""Persisted rows -> the JSON shapes in API.md. Read-only; no business rules."""
+"""Persisted rows -> the JSON shapes in API.md. Read-only; no business rules.
+
+This is the OPERATOR serializer (CORE-UX-DESIGN.md 5): complete provenance - participants, models, usage, runs,
+hashes, rule ids, the trace - served only to platform operators under /ops/ (studio.operator). A workspace member
+is served studio.customer_api's allowlist, never these payloads."""
+from dataclasses import dataclass
+
 from django.conf import settings
 
 from . import models, participants, review
@@ -250,6 +256,9 @@ def _decision_json(decision):
         'invalidated': {'reason': invalidation.reason, 'created_at': _iso(invalidation.created_at)}
         if invalidation else None,
         'revision_number': decision.revision.number,
+        # the modifier the reviewer chose on an approval (Decision.modifiers: [] or one of 59 and XS), the record the
+        # download check and the walk compare a chosen modifier against (refutation round 2, L3-3)
+        'modifiers': list(decision.modifiers or []),
     }
 
 
@@ -268,28 +277,78 @@ def _reinstated_by(proposal, decision):
             'decided_at': _iso(review.decision_root(reinstate).created_at)}
 
 
-def _proposal_json(proposal, current, assessment, membership, clarification_ids):
+@dataclass(frozen=True)
+class ReviewingMember:
+    """A member of the encounter's workspace whose role may review (an owner or a reviewer), as review.allowed_actions
+    reads a membership: customer_codes asks what such a member may record on each code now, by the rule the customer
+    page offers actions by. It is read by allowed_actions only - never stored, never given to record_decision (which
+    also requires the member's own user) - so it authorises nothing."""
+    workspace_id: object
+    can_review: bool = True
+
+
+def customer_codes(encounter, assessment, current):
+    """{proposal id: what the customer page shows for that code}, the operator view's statement of the customer page
+    (refutation round 3, B-02 and B-03): customer_api.code_rows over the review overlay - the very rows GET
+    /api/encounters/<id> serves - each as its number, status, status label, sub label and ``reviewer_actions``, the
+    actions a member who may review is allowed (review.allowed_actions for a ReviewingMember; a member who may not
+    review is allowed none). The walk (ops/verify_browser.cjs) and the download check (ops/verify_downloads.py) judge the
+    customer page and the exports against it, never against a re-derivation of the overlay's rules, which read a
+    reinstated code whose needed detail a member answered unavailable as ready with approve accepted, and one still
+    waiting on its detail as revoke only. {} while ``assessment`` is not the live one: the page then lists no code. A
+    statement that cannot be made is logged and left out ({}), so the tools cannot verify the page rather than pass it,
+    and the operator's diagnostics never fail on it."""
+    from . import customer_api  # local import: customer_api imports this module
+
+    live = review.live_assessment(encounter)
+    if assessment is None or live is None or live.pk != assessment.pk:
+        return {}
+    try:
+        rows, _ = customer_api.code_rows(assessment, current, customer_api.views_of(assessment, current),
+                                         ReviewingMember(workspace_id=encounter.workspace_id))
+    except Exception:  # noqa: BLE001 - logged; the statement serves the tools, and never fails the operator's page
+        import logging
+
+        logging.getLogger(__name__).exception('the customer page of encounter %s could not be stated', encounter.pk)
+        return {}
+    return {row['id']: {'number': row['number'], 'status': row['status'], 'status_label': row['status_label'],
+                        'sub_label': row['sub_label'], 'reviewer_actions': list(row['allowed_actions'])}
+            for row in rows}
+
+
+def _proposal_json(proposal, current, assessment, membership, clarification_ids, customer=None):
     family = profile(proposal.family) if proposal.family in PROFILES else None
     decision = current.get(proposal.pk)
+    # the review overlay (CORE-UX-DESIGN.md 4): status, checks and actions as the current decisions leave them; with no
+    # decision and no member answer, exactly the stored proposal
+    views = review.effective_view(assessment, current)
+    view = views.get(proposal.key)
+    status = view.status if view is not None else proposal.status
     return {
         'id': str(proposal.pk), 'key': proposal.key, 'bucket': proposal.bucket, 'code': proposal.code,
         'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': family.label if family else proposal.family,
         'eyebrow': family.eyebrow if family else 'CPT', 'supported': family.supported if family else False,
-        'profile_version': proposal.profile_version, 'status': proposal.status,
-        'status_label': review.status_label(proposal.status), 'exclusion_reason': proposal.exclusion_reason,
+        'profile_version': proposal.profile_version, 'status': status,
+        'status_label': review.status_label(status), 'exclusion_reason': proposal.exclusion_reason,
         'reinstatable': proposal.reinstatable,
         'descriptor': {'status': 'withheld',
                        'label': 'Description withheld — no licensed CPT descriptor is connected.'},
         'evidence': proposal.evidence, 'rationale': proposal.rationale, 'units': proposal.units,
-        'checks': proposal.checks, 'modifier_considerations': proposal.modifier_considerations,
+        'checks': list(view.checks) if view is not None else proposal.checks,
+        'modifier_considerations': proposal.modifier_considerations,
         'support': proposal.support or {},
         'clarification_ids': clarification_ids.get(proposal.pk, []),
         'decision': _decision_json(decision) if decision else None,
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
         'reinstated_by': _reinstated_by(proposal, decision),
-        'allowed_actions': review.allowed_actions(proposal, assessment, membership),
-        'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current),
+        'allowed_actions': review.allowed_actions(proposal, assessment, membership, views),
+        'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current, views),
+        # the overlay's reason beside its status: 'detail_unavailable' while a member's answer that a needed detail is
+        # not documented (or cannot be confirmed) excludes the code, else ''
+        'overlay_reason': view.reason if view is not None else '',
+        # what the customer page shows for this code (customer_codes), None where the page does not list it
+        'customer': (customer or {}).get(str(proposal.pk)),
         # Who proposed it, what the CMS reference checks found, and (above) a member's decision: three statuses, never
         # one (I4). Participants' positions are shown beside it and decide nothing (I2, I3).
         'proposed_by': review.proposed_by(proposal),
@@ -323,7 +382,8 @@ def _assessment_json(encounter, membership):
     for clarification in clarifications:
         if clarification.proposal_id and clarification.state == models.Clarification.OPEN:
             by_proposal.setdefault(clarification.proposal_id, []).append(str(clarification.pk))
-    proposals = [_proposal_json(p, current, assessment, membership, by_proposal)
+    customer = customer_codes(encounter, assessment, current)
+    proposals = [_proposal_json(p, current, assessment, membership, by_proposal, customer)
                  for p in assessment.proposals.select_related('assessment')]
     data = {
         'id': str(assessment.pk), 'profiles_version': assessment.profiles_version,
@@ -410,7 +470,7 @@ def confirmation_json(confirmation):
 def _report_json(report):
     return {'id': str(report.pk), 'kind': report.kind, 'fmt': report.fmt, 'filename': report.filename,
             'sha256': report.sha256, 'generated_at': _iso(report.generated_at),
-            'generated_by': report.generated_by.label(), 'download_url': f'/api/reports/{report.pk}/download'}
+            'generated_by': report.generated_by.label(), 'download_url': f'/ops/api/reports/{report.pk}/download'}
 
 
 ACTIVITY_SUMMARIES = {
@@ -426,6 +486,7 @@ ACTIVITY_SUMMARIES = {
     'account.provisioned': 'Account provisioned',
     'finding.confirmed': "Finding confirmed from a participant's located passage (not a decision)",
 }
+OPERATOR_VIEWED = 'operator.viewed'  # studio.operator.VIEWED (that module imports this one's peers)
 # Repair gi2 (the recovery lens): 'provider.sending' is recorded before the exchange, so it says only that the attempt
 # started, and 'provider.finished' is worded from the outcome its own row recorded (every revision records the state and
 # the HTTP status there). An attempt the adapter recorded as not sent, or whose outcome is unknown, read "Provider request
@@ -1067,6 +1128,12 @@ def harness_json(encounter, jobs):
     }
 
 
+def _step_outcome(job):
+    """progress._step_outcome for a finished stage, None while it is queued or running."""
+    from . import progress  # local import: progress reads the review layer this module serializes
+    return None if job.state in (models.Job.QUEUED, models.Job.RUNNING) else progress._step_outcome(job)
+
+
 def encounter_detail(encounter, membership):
     from .jobs import busy, second_review_status  # local import: jobs imports this module's peers
 
@@ -1097,8 +1164,12 @@ def encounter_detail(encounter, membership):
                      'can_resume': review.can_resume(encounter) and membership.can_review,
                      # A member's Stop, as opposed to a stage the system cancelled (expired, or left by a dead worker).
                      'stopped_by_member': encounter.stopped_at is not None,
+                     # step_outcome: the state the finished stage gives its customer step, by the page's own rule
+                     # (progress._step_outcome: done, failed, stopped, or None when it did nothing for the step), so the
+                     # walk folds the steps a member is shown from the persisted stages without a second copy of it
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
-                                 'finished_at': _iso(j.finished_at)} for j in jobs]},
+                                 'finished_at': _iso(j.finished_at),
+                                 'step_outcome': _step_outcome(j)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],
         # The run the provider_failed state reads, named so the page never picks one by recency (ec5 skeptic).
         'state_run': str(state_run.pk) if state_run is not None else None,
@@ -1113,7 +1184,10 @@ def encounter_detail(encounter, membership):
         'readiness': review.readiness(encounter),
         'coding': review.coding_completeness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
-        'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],
+        # the encounter's own history: an operator's reads of it (operator.viewed, studio.operator) are the access log,
+        # kept as audit rows and never part of the encounter's activity
+        'activity': [_activity_json(e) for e in encounter.audit_events.exclude(event=OPERATOR_VIEWED)
+                     .select_related('actor').order_by('created_at')],
     }
 
 

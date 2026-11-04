@@ -47,7 +47,7 @@ class PeerProposedPositionTests(ColonCase):
         added = self.encounter(encounter_id).current_assessment.proposals.get(code='45378')
         self.assertEqual((added.support.get('proposed_by'), added.support.get('phases')),
                          (['fable'], {'fable': 'peer_review'}))
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         positions = _proposal(detail, '45378')['participant_positions']
         self.assertEqual(positions['fable'], {'position': 'not_proposed', 'detail': PEER_ONLY, 'quote': ''})
         # a participant that proposed it in neither phase says so as before
@@ -55,7 +55,7 @@ class PeerProposedPositionTests(ColonCase):
                                               'quote': ''})
         owner = Client()
         owner.force_login(self.owner)
-        trace = owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = owner.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         row = next(item for item in trace['reconciliation'] if item['code'] == '45378')
         self.assertEqual((row['proposed_by'], row['positions']['fable']['detail']), (['fable'], PEER_ONLY))
         # a code a first reading proposed keeps its first reading's own wording
@@ -115,7 +115,7 @@ class ReferenceValidationTruthMixin:
     against the CMS reference files" beside cards whose every CMS check was "not verified")."""
 
     def block(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['reference_validation']
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['reference_validation']
 
     def assertNoCodeChecked(self, encounter_id, detail):
         self.assertEqual(self.block(encounter_id), {'state': 'not_verified', 'detail': detail, 'codes_checked': 0,
@@ -216,7 +216,7 @@ class RetrievalFailureWordingMixin:
         for proposal in decidable:  # what the note says: each code's checks read the CMS facts, and stand
             statuses = {check['id']: check['status'] for check in proposal.checks}
             self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('pass', 'pass'), proposal.code)
-        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
         block = detail['harness']['reference_validation']
         self.assertEqual((block['state'], block['detail'], block['codes_checked']), ('failed', note, 0))
         text = reports.render_txt(reports.snapshot(self.encounter(encounter_id), 'draft')).decode('utf-8')
@@ -240,7 +240,7 @@ class RetrievalFailureWordingMixin:
 class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
     def test_with_both_participants_after_peer_review(self):
         encounter_id = self.run_tampered()
-        self.assertEqual(self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['phase'], 2)
+        self.assertEqual(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['phase'], 2)
         self.assertSaysWhatFailed(encounter_id)
 
 
@@ -265,7 +265,7 @@ class ConfirmationEffectTests(ColonCase):
     assessment reads it as documented by this passage")."""
 
     def detail(self, encounter_id):
-        return self.client.get(f'/api/encounters/{encounter_id}').json()
+        return self.client.get(f'/ops/api/encounters/{encounter_id}').json()
 
     def verified_extent(self, encounter_id):
         detail = self.detail(encounter_id)
@@ -340,10 +340,10 @@ class CostCoverageTests(Harness2Case):
     def served_costs(self, encounter_id, run):
         owner = Client()
         owner.force_login(self.owner)
-        trace = owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = owner.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         traced = [item for participant in trace['participants'] for item in participant['runs']
                   if item['id'] == str(run.pk)]
-        rows = owner.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        rows = owner.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['participants']
         row = next(item for item in rows if item['name'] == 'astra')
         self.assertEqual(row['run_id'], str(run.pk))  # the row reports the run it names
         return [item['estimated_cost_usd'] for item in traced], row['estimated_cost_usd']
@@ -392,7 +392,7 @@ class UndeliveredReferenceTests(Harness2Case):
     and the reports listed all 8 refs as retrieved). The trace still shows every tool call CPT Studio answered."""
 
     def astra_row(self, encounter_id):
-        rows = self.client.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        rows = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['participants']
         return next(row for row in rows if row['name'] == 'astra')
 
     def references_lines(self, encounter_id, run):
@@ -423,7 +423,7 @@ class UndeliveredReferenceTests(Harness2Case):
         # the owner's trace keeps every tool call CPT Studio answered, with the refs it returned
         owner = Client()
         owner.force_login(f.member(self.ws, f.user('owner_sends_r2_3'), role=models.Membership.OWNER))
-        trace = owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = owner.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         (traced,) = [item for participant in trace['participants'] for item in participant['runs']
                      if item['id'] == str(run.pk)]
         self.assertEqual(traced['exchanges'][0]['tool_calls'][0]['refs'], refs)
@@ -479,7 +479,7 @@ class ReusedRunReferenceTests(Harness2Case):
         self.owner_client.force_login(self.owner)
 
     def astra(self, encounter_id):
-        rows = self.owner_client.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        rows = self.owner_client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['participants']
         return next(row for row in rows if row['name'] == 'astra')
 
     def references_lines(self, encounter_id, run):
@@ -497,7 +497,7 @@ class ReusedRunReferenceTests(Harness2Case):
                 and row['proposed_by'] == 'astra' and row['proposal_origin'] == 'independent'}
 
     def trace_used(self, encounter_id, run):
-        trace = self.owner_client.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = self.owner_client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         (traced,) = [item for participant in trace['participants'] for item in participant['runs']
                      if item['id'] == str(run.pk)]
         return traced['reading']['references_used']

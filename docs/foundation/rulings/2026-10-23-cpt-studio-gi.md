@@ -2007,3 +2007,90 @@ document costs one Corti request and the participants' bounded exchanges (about 
 rates), plus the install's access checks; the US$10 stop of 2026-11-01 stands.
 
 The working checklist is `CPT-CORE-UX-CHECKLIST.md` at the repository root.
+
+### Session interpretation, 2026-11-03 (a12d8fb3, after mapping main and its completeness critique) — recorded, not owner-ruled
+
+Nine read-only maps of `main` and a completeness critique (session scratch, `understand/R1..R9`, `critic.md`) reproduced
+Mara's four defects byte for byte and every previously reported false READY of HARNESS.md 12.14 (register D1-D15, all
+still present on the Corti-only path). These decisions bind the build:
+
+(a) **Status follows CPT Studio's own reading of the documented service, never the provider's quotation** (the existing
+design: ARCHITECTURE 5.10; the engine's `support` check never decides a status). So a code whose act CPT Studio reads as
+performed today, in its own procedure and at its own lesion, may be ready even when the provider quoted a weaker passage.
+The customer's "Why this code?" shows CPT Studio's own located passage first. The new narrow evidence hold only ADDS
+holds: a code is held when every provider passage lies in another documented service or reads as another time or a
+denial. A broad rule (hold whenever no provider passage shows the act) is not adopted, and is not offered as an owner
+question.
+
+(b) **The E/M questions are removed at the reader only.** The explicit "no separate E/M ... documented" statement is read
+as a denial by both the routing and the documented-service readers, through one shared pattern. A validation-side
+suppression of E/M questions is not adopted: it would also hide the questions for a visit that is stated ("An office
+visit was also completed today.") but has no time or decision-making documented.
+
+(c) **The A1 class stays closed.** Rule 5 of the binding map (a per-procedure heading kept in force over later structure)
+and rule 6 (tract binding) are not part of this change. A1 was dropped after its second refutation (`pi.json`,
+`amendment_20261101_cycle2`), and Mara needs only rules 1, 2, 3, 4 and 8: lesion labels, attributive compounds, copular
+negation scope, combined titles, and the E/M denial. Reopening A1 would need its own decision.
+
+(d) **The hold-only register repairs land with or before any rule that removes an act**, and every rule is measured at
+proposal level (an act removed from the inventory must not be released back to ready by the own-passage path).
+
+(e) **Member answers never release a code.** "Not documented" or "Cannot confirm" moves a code from "Needs a detail" to
+"Excluded". It is never approvable and needs no further decision, until the answer is revoked. A member never supplies
+a clinical fact. Only routine context (date of service, setting, new or established status, billing context) takes a
+value. The dormant reviewer-confirmation path stays off (checklist 4.6 stays an open owner decision).
+
+(f) **The approved export.** It is available only when every suggested code is resolved: approved, rejected or excluded,
+or its detail answered as unavailable. It lists the approved codes only. A partial approved export is not built. The
+directive's "exclude unresolved or unapproved items" is met by construction, and no export can be mistaken for a
+complete review.
+
+(g) **Older stored reports become operator-only.** They name the participants and carry hashes, and the directive
+requires customer downloads without them. Customers can generate a new customer report of the persisted state at any
+time. The stored bytes are kept unchanged. This loss follows from the directive itself, so it is not asked as an
+accepted-capability question.
+
+(h) **Operator access uses two new accounts** with recorded grants and no workspace membership:
+- `platform-operator`, a human account for the owner, with its password in a root-only file;
+- `ops-agent`, the automated verification account, with its password file 0600 under the session's home.
+
+No workspace role confers access. The live refusal of operator URLs is proven with the reviewer and agent accounts. The
+tenant-owner refusal is proven by the test suite, because the session does not sign in as the owner.
+
+(i) **Test approvals in this directive's walk go through `review-agent`.** That account's approvals are labelled
+"agent-executed synthetic review" everywhere, as the directive asks. Interpretation 63's labelled human-account path is
+not used for this walk.
+
+(j) **A dead worker never animates.** A worker heartbeat lets the progress panel say that processing is paused when no
+worker has been seen recently.
+
+(k) **A Corti run left `sending` after its job failed blocks further sends like an unknown outcome**, closing a recorded
+duplicate-send edge.
+
+(l) **A browser tab opened on the previous release gets a "reload" message, not a broken page.** Customer API calls
+carry a client contract header, and a call without the current one is answered 409 `client_outdated`.
+
+(m) **Disclosures.** CPT Studio has no privacy or subprocessor page, and after this change no customer screen names a
+subprocessor. Whether a disclosure is legally required elsewhere is an owner or legal question, recorded here and not
+answered.
+
+**Session decisions (n) and (o), 2026-11-04 (lead integration, session a12d8fb3).** Both close seams the wiring report
+found. Each keeps a capability or a ruled rule rather than removing one, so neither is a product decision without
+precedent, and neither is an accepted-capability loss.
+
+(n) **The customer page keeps the bounded second review.** The installed page (41e03656df61) offers it to owners and
+reviewers as "Ask the provider once more". The new customer contract left it out without a decision: CORE-UX-DESIGN.md
+section 7 never names it, and R4's open question 1 ("keep as a customer action with functional wording, or make it
+operator-only?") was left undecided. Making it operator-only would take away something customers have, which is the
+owner's trade to accept. Keeping it is the installed state. So it stays, worded by what it does and naming no provider:
+"Check what is still open again", under "Still open".
+- The server sends `recheck: {available, can_request}`. `available` reads `jobs.second_review_status`, the same predicate
+  POST second-review accepts an ask by. `can_request` is true only for owners and reviewers.
+- An assessment never queues one (owner decision 2026-10-27), and the offer itself sends nothing.
+
+(o) **The customer queue lists what its badge counts.** The badge kept the review queue's rule, which refutations gi2
+RC6 and ec5 pinned (`serializers.queue_reasons`, joined with the three customer states that wait on the member). The page
+listed only those three states, so the badge could count documents the queue never showed: in the fixtures it counted 9
+and listed 7. The rule is unchanged. Each list row now carries `in_queue`, the predicate the session counts
+(`customer_api.in_queue`), and the queue lists exactly those rows. The queue's wording names "something still open"
+beside a date, a detail and codes to review.

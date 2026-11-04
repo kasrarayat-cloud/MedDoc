@@ -16,6 +16,7 @@ from django.utils import timezone
 from studio import jobs, models
 from studio.types import ExtractionResult, PageSpan, RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_frontend import PLAIN_STATIC
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
@@ -77,7 +78,7 @@ class ApiHarness:
 
 
 @override_settings(**LIVE)
-class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
+class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
     """provider:0 and provider:1 — one reconciliation, at most one new provider attempt."""
 
     def test_reconcile_is_refused_while_a_predict_is_queued(self):
@@ -90,7 +91,7 @@ class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
         # instead of queueing a second predict beside it.
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
                                    {'service_date': '2026-10-22'}).status_code, 201)
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 409, response.content)
         self.assertIsNone(models.ProviderRun.objects.get(pk=run_id).reconciled_at)
@@ -98,7 +99,7 @@ class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
         self.assertEqual(len(self.provider.sent), 1)
         # Reconciled once, against a provider that now fails: exactly one new send, never a retry.
         self.provider.outcomes = ['failed', 'failed', 'failed']
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -116,13 +117,13 @@ class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
                              {'text': 'Date of service: 2026-10-20', 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
         # The addendum's pipeline is queued in the same transaction, so the encounter is busy.
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 409, response.content)
         drain()
         self.assertEqual(len(self.provider.sent), 1)
         self.provider.outcome = 'succeeded'
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': run_id, 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -148,7 +149,7 @@ class ReconcileReleasesOneAttemptTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class ContextChangeRepredictTests(ApiHarness, TestCase):
+class ContextChangeRepredictTests(OperatorReads, ApiHarness, TestCase):
     """provider:2 and fidelity:1 — the run in use is compared on its own request, not the previous context."""
 
     def test_setting_change_after_stopped_date_change_repredicts_for_the_new_date(self):
@@ -199,7 +200,7 @@ class ContextChangeRepredictTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class WorkerSweepTests(ApiHarness, TestCase):
+class WorkerSweepTests(OperatorReads, ApiHarness, TestCase):
     """provider:3 — an orphaned send is settled by the running worker, with no restart."""
 
     def test_running_worker_settles_an_orphaned_send(self):
@@ -232,7 +233,7 @@ class WorkerSweepTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class StopRecordTests(ApiHarness, TestCase):
+class StopRecordTests(OperatorReads, ApiHarness, TestCase):
     """provider:6 — a Stop recorded while a stage runs survives the worker's save."""
 
     def test_stop_on_a_running_job_keeps_who_and_when(self):
@@ -253,7 +254,7 @@ class StopRecordTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class InputBoundaryTests(ApiHarness, TestCase):
+class InputBoundaryTests(OperatorReads, ApiHarness, TestCase):
     """security:2 and ingest:13 — text the database cannot store answers a JSON 400, never a 500."""
 
     def test_nul_in_pasted_text_is_refused_with_json(self):
@@ -289,7 +290,7 @@ class InputBoundaryTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class AddendumExtractionTests(ApiHarness, TestCase):
+class AddendumExtractionTests(OperatorReads, ApiHarness, TestCase):
     """ingest:1 and ingest:7 — an addendum keeps the parent's limitations and cannot exceed the limit."""
 
     def test_addendum_keeps_the_parents_partial_status_and_messages(self):
@@ -331,7 +332,7 @@ class AddendumExtractionTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class ConcurrentContextTests(TransactionTestCase):
+class ConcurrentContextTests(OperatorReads, TransactionTestCase):
     """fidelity:3 — a second concurrent context change waits for the first and is refused, never half-applied."""
 
     def setUp(self):
@@ -391,7 +392,7 @@ HISTORY_QUOTE = 'Colonoscopy 03/14/2021: hot snare polypectomy of a 12 mm sigmoi
 
 
 @override_settings(**LIVE)
-class MemberServiceDateRoutingTests(ApiHarness, TestCase):
+class MemberServiceDateRoutingTests(OperatorReads, ApiHarness, TestCase):
     """status:6 — a member-supplied service date reaches routing and span status, not only assessment."""
 
     def test_dated_history_is_historical_against_a_member_supplied_date(self):

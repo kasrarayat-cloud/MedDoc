@@ -23,7 +23,16 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import FakeOwnership, TemporaryDirectoryTest, run_body  # noqa: E402
+from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
+
+
+def setUpModule():
+    guard_host()  # no test here reaches Docker, sudo, nginx or a live port (test_install)
+
+
+def tearDownModule():
+    release_host()
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40
@@ -248,11 +257,11 @@ class StopTimeoutTests(unittest.TestCase):
 
 
 class ServiceMountTests(unittest.TestCase):
-    def container(self, role, mounts):
+    def container(self, role, mounts, port=install.WEB_PORT):
         return {'Image': IMAGE, 'Config': {'User': f'{install.APP_UID}:{install.APP_UID}',
                                            'Labels': {install.LABEL: '1', install.ROLE_LABEL: role}},
                 'HostConfig': {'ReadonlyRootfs': True, 'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'],
-                               'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '9150'}]}
+                               'PortBindings': ({'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': str(port)}]}
                                                 if role == 'web' else {})},
                 'Mounts': mounts}
 
@@ -266,6 +275,15 @@ class ServiceMountTests(unittest.TestCase):
         self.assertEqual(install.service_problems(self.container('worker', [volume, *credentials]), 'worker', IMAGE),
                          [])
         self.assertEqual(install.service_problems(self.container('web', [volume]), 'web', IMAGE), [])
+        # either blue/green port, and exactly the one named when one is
+        for port in install.WEB_PORTS:
+            self.assertEqual(install.service_problems(self.container('web', [volume], port), 'web', IMAGE), [])
+            self.assertEqual(install.service_problems(self.container('web', [volume], port), 'web', IMAGE, port=port),
+                             [])
+        self.assertEqual(install.service_problems(self.container('web', [volume], 9151), 'web', IMAGE, port=9150),
+                         ['unexpected published ports'])
+        self.assertEqual(install.service_problems(self.container('web', [volume], 9152), 'web', IMAGE),
+                         ['unexpected published ports'])
         for role, mounts in (('web', [volume, self.bind(ASTRA['target'], ASTRA['mounted'])]),
                              ('worker', [volume, self.bind(ASTRA['target'], ASTRA['mounted'], writable=True)]),
                              ('worker', [volume, self.bind('/etc/passwd', ASTRA['mounted'])]),
@@ -1187,10 +1205,12 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
                 live[name] = {**old[role], 'Id': f'new-{role}', 'Image': IMAGE}
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
-        def wait(role, revision, image_id):
+        def wait(role, revision, image_id, **kwargs):
+            waited.append(role)
             if role == 'worker':
                 raise install.InstallError('cpt-studio-worker did not become ready')
             return {'id': 'new-web'}
+        waited = []
         ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
         with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: live.get(name)), \
                 mock.patch.object(install, 'docker', fake_docker), mock.patch.object(install, 'wait_service', wait), \
@@ -1208,6 +1228,7 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
         put_back.assert_not_called()
         self.assertFalse([call for call in calls if call[0] == 'rename' and call[1].endswith('-previous')])
         self.assertIn(install.SERVICES['web'] + '-previous', live)
+        self.assertEqual(waited, ['web', 'worker'])  # it failed where it was meant to, at the worker
 
 
 if __name__ == '__main__':

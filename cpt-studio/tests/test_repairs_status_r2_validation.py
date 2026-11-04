@@ -743,5 +743,6 @@ class EngineVersionTests(SimpleTestCase):
     def test_the_engine_version_is_bumped_once(self):
         # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11); @5: GI round 4's
         # engine reads differently from installed 80df1831d168's @4 (PA's one-cause holds, PO's second-review offers,
-        # V3's nouns; pd.json integration_20261101_cycle2)
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@5')
+        # V3's nouns; pd.json integration_20261101_cycle2); @6: the core repair (2026-11-03) reads differently from
+        # installed 41e03656df61's @5 (P2's holds, the D15 base rule, the lead's L3; cux-hold.json, cux-lead.json)
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@6')

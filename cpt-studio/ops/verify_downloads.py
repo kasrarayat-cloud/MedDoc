@@ -65,6 +65,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.util
 import io
 import json
 import re
@@ -72,6 +73,7 @@ import sys
 import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 DRAFT_HEADLINE = re.compile(r'\bDRAFT\b\s*[-–—:]*\s*NOT\s+REVIEWED\b')
@@ -116,6 +118,8 @@ CSV_EVIDENCE_OFFSETS = re.compile(r'(?<=" )\[(\d+)-(\d+)(?:, p\d+)?\](?= \| "|$)
 # indented line, and every other C0 control but tab, DEL and C1 prints as \xNN; the CSV keeps line breaks inside
 # its quoted cells and escapes the same controls. Passages are compared as the renderer shows them.
 TXT_LINE_BREAKS = re.compile('[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]')
+# The breaks str.splitlines splits a value at, as reports._join splits it: \r\n is ONE break (txt_printed).
+TXT_VALUE_BREAK = re.compile('\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]')
 CONTROL = re.compile('[\x00-\x08\x0e-\x1f\x7f-\x9f]')
 HEX64 = re.compile(r'\b[0-9a-f]{64}\b', re.I)
 UUID = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', re.I)
@@ -206,6 +210,19 @@ def escaped(text: str) -> str:
 def txt_shown(text: str) -> str:
     """A passage as the TXT prints it (line breaks become continuation lines; collapse() then reads them as spaces)."""
     return escaped(TXT_LINE_BREAKS.sub('\n', text))
+
+
+def txt_printed(text: str) -> str:
+    """``text`` exactly as a customer TXT prints it inside a quotation - reports._join's one rule for a line break in a
+    value: split where str.splitlines splits it, each part's controls escaped (reports._visible), and every part after
+    the first on a line of its own, CONTINUATION deep unless it already starts that deep, when it is printed as it is.
+
+    So a printed line seven to thirteen spaces deep reads two ways (a part that had seven fewer spaces, or one that had
+    exactly as many), and a quotation is never read back by stripping a fixed indent: the passage it is compared with is
+    printed as the writer prints it, and the two must be equal (refutation round 3, B-04: stripping seven spaces read a
+    passage line the document indents eight spaces back with one, and failed the genuine export)."""
+    first, *rest = (escaped(part) for part in TXT_VALUE_BREAK.split(text))
+    return '\n'.join([first] + [part if part.startswith(CONTINUATION) else CONTINUATION + part for part in rest])
 
 
 def who(reviewer: str, kind: str) -> str:
@@ -1166,6 +1183,684 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
     return out
 
 
+# --- customer reports (cpt-studio-customer-report@1; cpt-studio/CORE-UX-DESIGN.md section 5) ------------------------
+#
+# A customer report is checked against the OPERATOR view of the encounter (today's full encounter view, as
+# GET /ops/api/encounters/<id> serves it): --api-dir/<encounter id>.json when given, otherwise the operator snapshot the
+# evidence names (operator_snapshots) - never the customer API the browser session read, which is what is being
+# verified. A draft's statuses are the view's statement of the customer page (each listed code's 'customer':
+# serializers.customer_codes; refutation round 3, B-02), never re-derived from the overlay's facts; where the view
+# states none, the status check cannot run (incomplete). The grammar read here is the one studio/reports.py writes
+# (render_customer_txt, render_customer_csv), and the committed samples under ops/verification/samples are that
+# renderer's own bytes (tests/test_cux_r2_reports.py pins them; refutation round 2, L3-1: the checks once read a grammar
+# the server never wrote, so every genuine export failed): when the format changes, change it there and here together;
+# never loosen a check to fit.
+#
+# TXT, as reports.render_customer_txt writes it:
+#     SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
+#     CPT STUDIO — APPROVED CODES | CPT STUDIO — SUGGESTED CODES — NOT APPROVED
+#     [Agent-executed synthetic review — not clinical approval]       when agent review took part in a listed approval
+#     Report format: cpt-studio-customer-report@1
+#     Encounter: <title>
+#     Date of service: <YYYY-MM-DD> | not established
+#     Generated: <ISO time> by <label>
+#
+#     Approved codes | Suggested codes — not approved
+#     N. CODE — units U — modifiers: M[, M] | none                     approved; a draft: N. CODE — <status> — units ...
+#        Approved by <label> (<agent|human>) at <ISO time>             approved only
+#        Agent-executed synthetic review — not clinical approval       an approval agent review took part in
+#        <the draft's other review label, when it has one>
+#        <one sentence>
+#        Quote: "<passage>" (page P, characters S–E)                   a draft: (page P), or (page not known)
+#
+#     Limitations
+#     - <limitation>
+#
+#     SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
+# Item lines at column 0, detail lines at three spaces; a line break inside any value continues on a line indented seven
+# spaces (reports.CONTINUATION), so stored text never starts an item, a detail or a heading - and a part of the value
+# that already starts seven spaces deep is printed as it is, so a quotation's passage is compared as txt_printed prints
+# it, never read back by stripping seven spaces (refutation round 3, B-04).
+#
+# CSV, as reports.render_customer_csv writes it: the header row (CUSTOMER_CSV_COLUMNS), a banner row (report_format =
+# the SYNTHETIC line, every other cell empty), one row per quotation of each code (a code with none has one row with
+# empty evidence cells), and the banner row again last.
+
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+CUSTOMER_KINDS = ('draft', 'approved')
+CUSTOMER_DRAFT_HEADLINE = re.compile(r'\bSUGGESTED\s+CODES\s*[-–—:]+\s*NOT\s+APPROVED\b', re.I)
+CUSTOMER_APPROVED_HEADLINE = re.compile(r'\bAPPROVED\s+CODES\b', re.I)
+CUSTOMER_STATUS_LABELS = {'ready': 'Ready for review', 'needs_detail': 'Needs a detail', 'approved': 'Approved',
+                          'excluded': 'Excluded'}
+AGENT_SUB_LABEL = 'Agent-executed synthetic review — not clinical approval'
+# The reading is strict about what a report says and tolerant only of how a line is laid out: an item line "N. CODE ..."
+# at 0-6 spaces carries its units ("units 1", "Units: 1", "1 unit"), modifiers ("modifiers: XS", "Modifier: 59") and,
+# in a draft, its status label - read from the item line only, never from a detail line; detail lines at one to six
+# spaces; a line at seven or more continues the value above it and is never read as anything of its own; a quotation
+# opened by "Quote:" (or "Evidence:", "Source:", a bullet), its passage between the first and the last quote mark, its
+# place in a trailing (...) or [...] ("page P", "characters S–E", "chars S-E"); headings at column 0 after a blank line.
+CUSTOMER_ITEM_LINE = re.compile(rf'^ {{0,6}}(?P<number>\d+)[.)]\s+(?P<code>{CODE})\b(?P<rest>.*)$')
+CUSTOMER_FIELD = re.compile(r'^(?P<name>Report format|Encounter|Date of service|Generated at|Generated by|Generated):\s*'
+                            r'(?P<value>.*)$', re.I)
+CUSTOMER_GENERATED = re.compile(r'^(?P<at>\S+)\s+by\s+(?P<by>\S.*)$')
+CUSTOMER_APPROVER = re.compile(r'^Approved by:?\s*(?P<by>.+?)(?:\s*\((?P<kind>agent|human)\))?\s*(?:\bat\b|\bon\b|·|,)\s*'
+                               r'(?P<at>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}:?\d{2}|UTC)?)\s*$',
+                               re.I)
+CUSTOMER_QUOTE_OPEN = re.compile(r'^(?:(?:Quote|Quoted|Evidence|Source|Passage)s?:\s*|[-•*]\s*)"', re.I)
+CUSTOMER_QUOTE = re.compile(r'^"(?P<text>.*)"(?:\s*[\[(](?P<where>[^\])]*)[\])])?\s*$', re.S)
+CUSTOMER_PAGE = re.compile(r'\b(?:page|p\.)\s*(\d+)\b', re.I)
+CUSTOMER_OFFSETS = re.compile(r'\b(?:chars?|characters|offsets?)\s*:?\s*(\d+)\s*(?:[–-]|to)\s*(\d+)\b', re.I)
+CUSTOMER_UNITS = re.compile(r'\bunits?\s*:?\s*(\d+)\b|\b(\d+)\s+units?\b', re.I)
+CUSTOMER_MODIFIERS = re.compile(r'\bmodifiers?\s*:?\s*(none|[0-9A-Z]{2}(?:\s*[,;/]\s*[0-9A-Z]{2})*)(?![0-9A-Za-z])', re.I)
+CUSTOMER_KNOWN_HEADING = re.compile(r'^(?:SUGGESTED\s+CODES\s*[-–—:]+\s*NOT\s+APPROVED|APPROVED\s+CODES|LIMITATIONS)\s*:?$', re.I)
+# reports.CUSTOMER_CSV_COLUMNS: CORE-UX-DESIGN.md 5's columns, then review_label (the agent label of a row's approval)
+CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers', 'status',
+                        'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text', 'evidence_page',
+                        'evidence_start', 'evidence_end', 'review_label')
+CUSTOMER_APPROVAL_CELLS = ('approved_by', 'approver_kind', 'approved_at')
+CUSTOMER_QUOTE_CONTINUATION = '       '
+ISO_TIMESTAMP_LOOSE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$')
+# What a modifier comparison reads where the operator view's decision does not say which modifier was chosen (no
+# 'modifiers' on it): the export can be judged neither right nor wrong, so the check could not run (refutation round 2,
+# L3-3: read as "none", a dropped modifier passed and the reviewer's chosen one failed).
+UNKNOWN = None
+_scanner = None
+
+
+def scanner():
+    """ops/scan_customer.py, the stdlib reader of the shared denylist (loaded by path: ops is no package)."""
+    global _scanner
+    if _scanner is None:
+        spec = importlib.util.spec_from_file_location('cpt_verify_downloads_scan', Path(__file__).resolve().parent / 'scan_customer.py')
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault('cpt_verify_downloads_scan', module)
+        spec.loader.exec_module(module)
+        _scanner = module
+    return _scanner
+
+
+def _proposals(api: dict) -> list:
+    return list(((api.get('assessment') or {}).get('proposals')) or [])
+
+
+def customer_code_rows(api: dict) -> list:
+    """The codes a customer report lists, in the contract's order (ops/verify_browser.cjs expectedCodeRows): selected and
+    reinstated codes by stored position, then the excluded codes still decidable; never an alternative."""
+    proposals = _proposals(api)
+    first = [p for p in proposals if p.get('bucket') == 'selected'
+             or (p.get('bucket') == 'excluded' and p.get('decision') and p['decision'].get('action') != 'confirm')]
+    then = [p for p in proposals if p.get('bucket') == 'excluded' and p not in first
+            and (p.get('reinstatable') is True or (p.get('decision') or {}).get('action') == 'confirm')]
+    return first + then
+
+
+def customer_status(p: dict):
+    """The customer status the server gives the code - on the page and in a draft - as the operator view states it:
+    the proposal's 'customer' (serializers.customer_codes: customer_api.code_rows over the review overlay, the rows the
+    page is served; ops/verify_browser.cjs expectedCustomerStatus reads the same). UNKNOWN where the view carries none,
+    which nothing is judged against (cannot verify). Never re-derived from the overlay's facts (refutation round 3, B-02:
+    the re-derivation read a reinstated code whose needed detail a member answered unavailable - Excluded, revoke only -
+    as ready, failing the genuine draft and passing one forged to say "Ready for review")."""
+    row = p.get('customer')
+    status = row.get('status') if isinstance(row, dict) else None
+    return status if isinstance(status, str) and status in CUSTOMER_STATUS_LABELS else UNKNOWN
+
+
+def agent_reviewed(p: dict) -> bool:
+    """Whether the code's current decision is an agent's approval, by the one rule every customer surface labels it by
+    (customer_api.agent_approval, refutation round 2 L3-6): exactly when its approver is an agent. A person's approval
+    of a code an agent reinstated is the person's (who reinstated it stays in the record, never in the label)."""
+    decision = p.get('decision') or {}
+    return decision.get('action') == 'approve' and decision.get('reviewer_kind') == 'agent'
+
+
+def act_index(api: dict) -> dict:
+    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services)."""
+    out = {}
+    services = ((api.get('assessment') or {}).get('services') or {}).get('services')
+    for service in services if isinstance(services, list) else []:
+        for act in (service.get('acts') or []) if isinstance(service, dict) else []:
+            if isinstance(act, dict) and isinstance(act.get('id'), str):
+                out[act['id']] = act
+    return out
+
+
+def _sliced(span, revision_text: str) -> bool:
+    return isinstance(span, dict) and cp_slice(revision_text, span.get('start'), span.get('end')) == span.get('text')
+
+
+SHOWN_SUPPORT = ('pass', 'warn')  # studio/review.py SHOWN_SUPPORT: the readings a code's passages are quoted under
+
+
+def allowed_passages(p: dict, revision_text: str, acts: dict | None = None, status: str | None = None) -> tuple[list, list]:
+    """(the passages a quotation of the code may be, the passages CPT Studio found unrelated) by the one rule the server
+    quotes a code by - the page's "Why this code?" (customer_api._quotes) and the approved export's evidence alike
+    (CORE-UX-DESIGN.md 7: CPT Studio's own located passages for the matched act first, then the provider's exact passages
+    only when they support; never a passage that does not support, and none for an excluded code):
+    - nothing at all unless the support reading records the act as shown ('pass' or 'warn', review.SHOWN_SUPPORT): a
+      'not_applicable' reading's source passages are the service's own, which show no act (refutation round 2, L3-7),
+      and a 'fail' shows none; then support.source;
+    - the evidence CPT Studio's reading recorded for each act the support record names, while that act is stored
+      'performed' or 'incomplete';
+    - the provider's exact passages (context 0, exact) the support reading found supporting, never one it found unrelated.
+    Nothing where no support reading was recorded (L3-10: every exact provider passage was accepted, so a page quoting a
+    passage nothing had shown to support the code passed). ``status``: the code's customer status (customer_status);
+    an excluded code quotes nothing."""
+    exact = {i: s for i, s in enumerate(p.get('evidence') or []) if isinstance(s, dict) and s.get('context_index') == 0
+             and s.get('exact') is True and _sliced(s, revision_text)}
+    support = p.get('support') if isinstance(p.get('support'), dict) else {}
+    unrelated_ids = {i for i in support.get('unrelated') or [] if type(i) is int} if isinstance(support.get('unrelated'), list) else set()
+    unrelated = [exact[i] for i in sorted(unrelated_ids) if i in exact]
+    reading = support.get('status') if isinstance(support.get('status'), str) else None
+    # review.evidence_spans: nothing unless the support reading records the act as shown (SHOWN_SUPPORT)
+    if reading not in SHOWN_SUPPORT or status == 'excluded':
+        return [], unrelated
+    source = [s for s in support.get('source') or [] if _sliced(s, revision_text)]
+    own = []
+    for act in support.get('acts') or []:
+        stored = (acts or {}).get(act.get('id')) if isinstance(act, dict) else None
+        if isinstance(stored, dict) and stored.get('status') in ('performed', 'incomplete'):
+            own += [s for s in stored.get('evidence') or [] if _sliced(s, revision_text)]
+    supporting = support.get('supporting') if isinstance(support.get('supporting'), list) else []
+    cited = [exact[i] for i in supporting if type(i) is int and i in exact and i not in unrelated_ids]
+    return source + own + cited, unrelated
+
+
+def page_of(pages, start: int, end: int):
+    for item in pages or []:
+        if isinstance(item, dict) and isinstance(item.get('start'), int) and item['start'] <= start and end <= item['end']:
+            return item.get('page')
+    return None
+
+
+def established_date(api: dict) -> str | None:
+    fact = ((api.get('context') or {}).get('facts') or {}).get('service_date') or {}
+    value = str(fact.get('value') or '')
+    return value if fact.get('origin') in ('document', 'user') and re.fullmatch(r'\d{4}-\d{2}-\d{2}', value) else None
+
+
+def same_instant(a: str, b: str) -> bool:
+    """Two timestamps are the same second ('Z', '+00:00', '+0000' and a trailing ' UTC' read alike; no zone is UTC)."""
+    def parse(value):
+        text = re.sub(r'\s*UTC$', '+00:00', str(value).strip()).replace('Z', '+00:00')
+        text = re.sub(r'([+-]\d{2})(\d{2})$', r'\1:\2', text)
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    x, y = parse(a), parse(b)
+    return x is not None and y is not None and int(x.timestamp()) == int(y.timestamp())
+
+
+@dataclass
+class CustomerItem:
+    number: int
+    code: str
+    units: str = ''
+    modifiers: tuple = ()
+    status: str = ''
+    approved_by: str = ''
+    approver_kind: str = ''
+    approved_at: str = ''
+    summary: str = ''
+    quotes: list = None
+    tokens: tuple = ()
+    modifiers_seen: bool = False
+    agent_label: bool = False  # the item carries the agent-executed synthetic review label
+    other_label: str = ''      # a CSV review_label that is not that label
+
+
+def _decided_modifiers(decision: dict):
+    """The modifiers the operator view's decision records - () where none was chosen - or UNKNOWN where it does not say
+    (a decision with no 'modifiers' list): fail closed, never read as none."""
+    if not decision:
+        return ()
+    value = decision.get('modifiers', UNKNOWN)
+    return tuple(str(m) for m in value) if isinstance(value, list) else UNKNOWN
+
+
+def customer_truth(api: dict, kind: str) -> list[dict]:
+    """What a customer report of ``kind`` must list, from the operator view: each code with its number, units, decided
+    modifiers (UNKNOWN where the view does not say), status (customer_status: the server's, UNKNOWN where the view does
+    not state it), approver (label, own kind, time), whether agent review took part in its approval, and the passages it
+    may quote."""
+    revision_text = (api.get('revision') or {}).get('text') or ''
+    rows = customer_code_rows(api)
+    acts = act_index(api)
+    if kind == 'approved':
+        rows = [p for p in rows if (p.get('decision') or {}).get('action') == 'approve']
+    out = []
+    for number, p in enumerate(rows, start=1):
+        decision = p.get('decision') or {}
+        approve = decision.get('action') == 'approve'
+        status = customer_status(p)
+        allowed, unrelated = allowed_passages(p, revision_text, acts, status)
+        out.append({'number': number, 'id': p.get('id'), 'code': str(p.get('code', '')), 'units': str(p.get('units', '')),
+                    'modifiers': _decided_modifiers(decision), 'status': status,
+                    'approved_by': decision.get('reviewer', '') if approve else '',
+                    'approver_kind': decision.get('reviewer_kind', '') if approve else '',
+                    'approved_at': (decision.get('decided_at') or decision.get('created_at') or '') if approve else '',
+                    'agent': agent_reviewed(p), 'allowed': allowed, 'unrelated': unrelated})
+    return out
+
+
+def _item_facts(item: 'CustomerItem', line: str) -> None:
+    """Units, modifiers and the status label as an item line states them (the first statement of each)."""
+    units = CUSTOMER_UNITS.search(line)
+    if units and not item.units:
+        item.units = units.group(1) or units.group(2)
+    modifiers = CUSTOMER_MODIFIERS.search(line)
+    if modifiers and not item.modifiers_seen:
+        item.modifiers_seen = True
+        words = [w for w in re.split(r'[\s,;/]+', modifiers.group(1)) if w]
+        item.modifiers = () if [w.lower() for w in words] == ['none'] else tuple(w.upper() for w in words)
+    for label in CUSTOMER_STATUS_LABELS.values():
+        if not item.status and re.search(rf'(?<![\w-]){re.escape(label)}(?![\w-])', line):
+            item.status = label
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(' '))
+
+
+def parse_customer_txt(text: str) -> dict:
+    """The customer TXT, in reports.render_customer_txt's grammar (the comment above CUSTOMER_FORMAT), laid out as the
+    comment above CUSTOMER_ITEM_LINE allows: the banner lines, the headline, the header fields and the header's agent
+    label, the sections and, in the codes section, the numbered items with their detail lines and quotations. A numbered
+    code line anywhere else - before the codes section, in the limitations or in any other section - is a stray item."""
+    lines = text.splitlines()
+    filled = [line for line in lines if line.strip()]
+    out = {'first': filled[0] if filled else '', 'last': filled[-1] if filled else '', 'headline': filled[1] if len(filled) > 1 else '',
+           'fields': {}, 'formats': [], 'sections': [], 'items': [], 'limitations': [], 'stray_items': [], 'header_agent': False}
+    section = ''
+    codes_section = False
+    item = None
+    entry = None
+    names = {name.lower(): name for name in ('Report format', 'Encounter', 'Date of service', 'Generated at', 'Generated by', 'Generated')}
+
+    def close_entry():
+        nonlocal entry
+        if entry is not None and item is not None:
+            # the entry is the quotation as printed - its first line from the opening quote mark, every continued line
+            # whole - so 'printed' is the passage exactly as the file prints it, which is what a passage is compared
+            # with (txt_printed); 'text' reads it with each continued line's seven-space indent removed, for messages
+            match = CUSTOMER_QUOTE.match(entry)
+            where = match.group('where') if match else None
+            offsets = CUSTOMER_OFFSETS.search(where or '')
+            page = CUSTOMER_PAGE.search(where or '')
+            printed = match.group('text') if match else None
+            item.quotes.append({'raw': entry, 'parsed': bool(match), 'printed': printed,
+                                'text': printed.replace('\n' + CUSTOMER_QUOTE_CONTINUATION, '\n') if match else None,
+                                'start': int(offsets.group(1)) if offsets else None, 'end': int(offsets.group(2)) if offsets else None,
+                                'page': int(page.group(1)) if page else None})
+        entry = None
+
+    for index, line in enumerate(lines):
+        if entry is not None:
+            if line.startswith(CUSTOMER_QUOTE_CONTINUATION):  # a line break inside the passage continues it
+                entry += '\n' + line  # whole: how deep it is printed is part of what it says (txt_printed)
+                continue
+            close_entry()
+        if line.startswith(CUSTOMER_QUOTE_CONTINUATION):
+            continue  # the continuation of a value above: never an item, a detail, a field or a heading of its own
+        field_match = CUSTOMER_FIELD.match(line)
+        if field_match and not section:
+            name, value = names[field_match.group('name').lower()], field_match.group('value').strip()
+            if name == 'Report format':
+                out['formats'].append(value)
+            elif name == 'Generated':
+                generated = CUSTOMER_GENERATED.match(value)
+                for field, part in (('Generated at', 'at'), ('Generated by', 'by')):
+                    if generated:
+                        out['fields'].setdefault(field, generated.group(part).strip())
+            else:
+                out['fields'].setdefault(name, value)
+            continue
+        stripped = line.strip()
+        if not section and line == stripped and stripped == AGENT_SUB_LABEL:
+            out['header_agent'] = True
+            continue
+        capitals = not re.search(r'[a-z]', line) and len(re.findall(r'[A-Z]', line)) >= 4 and not CODE_TOKEN.search(line)
+        heading = (bool(stripped) and line == line.lstrip() and index > 1 and not lines[index - 1].strip()
+                   and (capitals or bool(CUSTOMER_KNOWN_HEADING.match(stripped))))
+        if heading:
+            section = stripped
+            out['sections'].append(section)
+            codes_section = bool(CUSTOMER_DRAFT_HEADLINE.search(section) or CUSTOMER_APPROVED_HEADLINE.search(section))
+            item = None
+            continue
+        match = CUSTOMER_ITEM_LINE.match(line)
+        if match:
+            tokens = tuple(token.strip() for token in re.split(r'\s[—·]\s', match.group('rest')) if token.strip())
+            found = CustomerItem(number=int(match.group('number')), code=match.group('code'), quotes=[], tokens=tokens)
+            _item_facts(found, match.group('rest'))
+            if codes_section:
+                out['items'].append(found)
+                item = found
+            else:
+                out['stray_items'].append(found)
+                item = None
+            continue
+        if re.match(r'limitations\b', section, re.I):
+            bullet = re.match(r'^\s*[-•*]\s+(.*)$', line)
+            if bullet:
+                out['limitations'].append(bullet.group(1).strip())
+            continue
+        if item is not None and 1 <= _indent(line) < len(CUSTOMER_QUOTE_CONTINUATION):
+            detail = stripped
+            approver = CUSTOMER_APPROVER.match(detail)
+            if approver:
+                item.approved_by, item.approved_at = approver.group('by').strip(), approver.group('at').strip()
+                item.approver_kind = (approver.group('kind') or '').lower()
+            elif detail == AGENT_SUB_LABEL:
+                item.agent_label = True
+            elif CUSTOMER_QUOTE_OPEN.match(detail):
+                entry = line[line.index('"'):]  # from the line as printed, its trailing spaces kept
+            elif not item.summary:
+                item.summary = detail
+    close_entry()
+    return out
+
+
+def _quote_text_ok(printed: str, slice_text: str | None) -> bool:
+    """A printed quotation is the passage exactly - as written, with its controls escaped, or with its line breaks as the
+    TXT shows them (txt_shown); never equal only once whitespace is collapsed, which would pass an offset one character
+    off at a line end."""
+    return slice_text is not None and printed in (slice_text, escaped(slice_text), txt_shown(slice_text))
+
+
+def _quote_matches(quote: dict, passage: str | None) -> bool:
+    """Whether a quotation is ``passage`` exactly. A TXT quotation (parse_customer_txt: it carries 'printed') is the
+    passage as reports._join prints it (txt_printed) - its line breaks continued as the writer continues them, its
+    controls escaped - never the passage read back by stripping a fixed indent, nor equal only once whitespace is
+    collapsed (refutation round 3, B-04). A CSV cell is the passage as written or with its controls escaped
+    (_quote_text_ok)."""
+    if passage is None:
+        return False
+    if 'printed' in quote:
+        return quote['printed'] is not None and quote['printed'] == txt_printed(passage)
+    return _quote_text_ok(quote['text'], passage)
+
+
+def _check_customer_items(doc, name, kind, items, truth, revision_text, pages, prefix) -> list[Result]:
+    """The numbered items against the truth: the same codes in order and numbered 1..n, each with its units, modifiers,
+    status, approver, agent label and quotations (each exact where it gives offsets, each a passage the server's one
+    quotation rule holds for the code)."""
+    out = []
+    shown = Counter(i.code for i in items)
+    wanted = Counter(t['code'] for t in truth)
+    numbered = [i.number for i in items] == list(range(1, len(items) + 1))
+    out.append(Result(doc, name, f'{prefix}.items', 'pass' if shown == wanted and numbered else 'fail',
+                      f'{len(items)} item(s): {", ".join(f"{i.number}. {i.code}" for i in items) or "none"}'
+                      + ('' if shown == wanted else f'; the operator view implies {", ".join(t["code"] for t in truth) or "none"}')
+                      + ('' if numbered else '; not numbered 1..n')))
+    order = [i.code for i in items] == [t['code'] for t in truth]
+    out.append(Result(doc, name, f'{prefix}.order', 'pass' if order else 'warn',
+                      'in the order the customer list shows them' if order else 'not in the order the customer list shows them'))
+    # each item against the persisted proposal of its code (the n-th of a code against the n-th)
+    pending = {}
+    for want in truth:
+        pending.setdefault(want['code'], []).append(want)
+    pairs = [(item, pending[item.code].pop(0)) for item in items if pending.get(item.code)]
+    wrong_units, wrong_modifiers, unknown_modifiers, wrong_status, unknown_status, wrong_approver = [], [], [], [], [], []
+    wrong_label, inexact, unsupported, unquoted = [], [], [], []
+    for item, want in pairs:
+        if (item.units or '') != want['units']:
+            wrong_units.append(f'{item.code} units {item.units or "not printed"} (persisted {want["units"]})')
+        if want['modifiers'] is UNKNOWN:
+            unknown_modifiers.append(f'{item.code} (the report shows {list(item.modifiers) or "none"})')
+        elif tuple(item.modifiers) != tuple(want['modifiers']):
+            wrong_modifiers.append(f'{item.code} modifiers {list(item.modifiers)} (persisted {list(want["modifiers"])})')
+        if kind == 'draft' and want['status'] is UNKNOWN:
+            unknown_status.append(f'{item.code} (the report shows {item.status or "no status"})')
+        elif kind == 'draft' and item.status != CUSTOMER_STATUS_LABELS.get(want['status']):
+            wrong_status.append(f'{item.code} {item.status or "no status"} (expected {CUSTOMER_STATUS_LABELS.get(want["status"])})')
+        if item.agent_label != want['agent'] or item.other_label:
+            wrong_label.append(f'{item.code} {"carries" if item.agent_label else "lacks"} the agent-executed synthetic review label'
+                               + (f' and is labelled {item.other_label!r}' if item.other_label else '')
+                               + f' ({"an approval agent review took part in" if want["agent"] else "no approval agent review took part in"})')
+        if kind == 'approved':
+            if item.approved_by != want['approved_by'] or not same_instant(item.approved_at, want['approved_at']) \
+                    or item.approver_kind != want['approver_kind'] or item.status not in ('', 'Approved'):
+                wrong_approver.append(f'{item.code} approved by {item.approved_by or "nobody"} ({item.approver_kind or "no kind"}) at '
+                                      f'{item.approved_at or "no time"}; persisted {want["approved_by"]} ({want["approver_kind"]}) at '
+                                      f'{want["approved_at"]}')
+            if not item.quotes and want['allowed']:
+                unquoted.append(item.code)
+        for q in item.quotes or []:
+            if not q['parsed']:
+                inexact.append(f'{item.code} {q["raw"][:40]!r} is not a quotation the grammar reads')
+                continue
+            if q['start'] is not None:
+                slice_text = cp_slice(revision_text, q['start'], q['end'])
+                if not _quote_matches(q, slice_text):
+                    inexact.append(f'{item.code}[{q["start"]}:{q["end"]}]')
+                elif q['page'] is not None and page_of(pages, q['start'], q['end']) not in (None, q['page']):
+                    inexact.append(f'{item.code}[{q["start"]}:{q["end"]}] page {q["page"]}')
+                same = [s for s in want['allowed'] if s.get('start') == q['start'] and s.get('end') == q['end']]
+                if any(s.get('start') == q['start'] and s.get('end') == q['end'] for s in want['unrelated']):
+                    unsupported.append(f'{item.code}[{q["start"]}:{q["end"]}] is a passage CPT Studio found unrelated')
+                elif not same:
+                    unsupported.append(f'{item.code}[{q["start"]}:{q["end"]}] is none of the passages CPT Studio holds as support')
+            else:
+                texts = [s.get('text', '') for s in want['allowed']]
+                if not any(_quote_matches(q, t) for t in texts):
+                    unsupported.append(f'{item.code} {collapse(q["text"])[:50]!r} is none of the passages CPT Studio holds as support')
+                if kind == 'approved':
+                    inexact.append(f'{item.code} {collapse(q["text"])[:40]!r} is printed without its character offsets')
+    out.append(Result(doc, name, f'{prefix}.units', 'fail' if wrong_units else 'pass', '; '.join(wrong_units) or 'units as persisted'))
+    if wrong_modifiers:
+        out.append(Result(doc, name, f'{prefix}.modifiers', 'fail', '; '.join(wrong_modifiers)))
+    elif unknown_modifiers:
+        out.append(Result(doc, name, f'{prefix}.modifiers', 'incomplete', 'cannot verify: the operator view\'s decision carries '
+                          f'no "modifiers" list for {"; ".join(unknown_modifiers)}'))
+    else:
+        out.append(Result(doc, name, f'{prefix}.modifiers', 'pass', 'modifiers as decided (none where none was chosen)'))
+    if kind == 'draft' and wrong_status:
+        out.append(Result(doc, name, f'{prefix}.status', 'fail', '; '.join(wrong_status)))
+    elif kind == 'draft' and unknown_status:
+        out.append(Result(doc, name, f'{prefix}.status', 'incomplete', 'cannot verify: the operator view does not say what '
+                          f'the customer page shows (no "customer" status) for {"; ".join(unknown_status)}'))
+    elif kind == 'draft':
+        out.append(Result(doc, name, f'{prefix}.status', 'pass', 'each status as the server gives it on the customer page'))
+    else:
+        out.append(Result(doc, name, f'{prefix}.approver', 'fail' if wrong_approver else 'pass', '; '.join(wrong_approver)
+                          or 'each approval by its persisted reviewer, of the reviewer\'s own kind, at its time'))
+        out.append(Result(doc, name, f'{prefix}.quoted', 'fail' if unquoted else 'pass',
+                          f'approved without a quotation although CPT Studio holds a supporting passage: {unquoted}' if unquoted
+                          else 'every approved code quotes its evidence where CPT Studio holds a supporting passage'))
+    out.append(Result(doc, name, f'{prefix}.agent_label', 'fail' if wrong_label else 'pass', '; '.join(wrong_label)
+                      or 'each approval agent review took part in is labelled agent-executed synthetic review, and only those'))
+    out.append(Result(doc, name, f'{prefix}.evidence.exact', 'fail' if inexact else 'pass', '; '.join(inexact)
+                      or 'every quotation with offsets is an exact slice of the revision text on its page'))
+    out.append(Result(doc, name, f'{prefix}.evidence.support', 'fail' if unsupported else 'pass', '; '.join(unsupported)
+                      or 'every quotation is a passage CPT Studio holds as support for its code'))
+    return out
+
+
+def _customer_scan(doc, name, text, fmt, api, trace) -> list[Result]:
+    module = scanner()
+    revision_text = (api.get('revision') or {}).get('text') or '' if api else ''
+    ctx = module.scan_context(revision_text, module.deny_values_from(api, trace) if api else ())
+    hits = module.scan_file(text, ctx, name, fmt)
+    hard = [h for h in hits if h['severity'] == 'hard']
+    soft = [h for h in hits if h['severity'] != 'hard']
+    words = lambda items: '; '.join(f'{h["id"]} at {h["where"]}: {h["match"]!r}' for h in items[:6])  # noqa: E731
+    out = [Result(doc, name, 'scan.file', 'fail' if hard else 'pass', f'{len(hard)} hit(s): {words(hard)}' if hard
+                  else 'no provider, model, usage, id, hash, trace, rule-id or orchestration text')]
+    if soft:
+        out.append(Result(doc, name, 'scan.file.wording', 'warn', f'{len(soft)} soft hit(s): {words(soft)}'))
+    return out
+
+
+def check_customer_txt(doc: str, name: str, text: str, kind: str, api: dict | None, trace: dict | None = None,
+                       generated_by: str | None = None) -> list[Result]:
+    parsed = parse_customer_txt(text)
+    out = [Result(doc, name, 'marker.synthetic', 'pass' if SYNTHETIC_MARK.search(parsed['first']) and SYNTHETIC_MARK.search(parsed['last']) else 'fail',
+                  'the SYNTHETIC line opens and closes the report' if SYNTHETIC_MARK.search(parsed['first']) and SYNTHETIC_MARK.search(parsed['last'])
+                  else f'first line {parsed["first"][:60]!r}; last line {parsed["last"][:60]!r}'),
+           Result(doc, name, 'format', 'pass' if parsed['formats'] == [CUSTOMER_FORMAT] else 'fail', f'report format {parsed["formats"]}')]
+    draft_head = bool(CUSTOMER_DRAFT_HEADLINE.search(parsed['headline']))
+    approved_head = bool(CUSTOMER_APPROVED_HEADLINE.search(parsed['headline'])) and not draft_head
+    ok = draft_head if kind == 'draft' else approved_head
+    out.append(Result(doc, name, 'headline', 'pass' if ok else 'fail', parsed['headline'][:80] or 'no headline'))
+    codes_section = [s for s in parsed['sections'] if CUSTOMER_DRAFT_HEADLINE.search(s) or CUSTOMER_APPROVED_HEADLINE.search(s)]
+    wrong_section = (kind == 'draft' and any(CUSTOMER_APPROVED_HEADLINE.search(s) and not CUSTOMER_DRAFT_HEADLINE.search(s) for s in codes_section)) \
+        or (kind == 'approved' and any(CUSTOMER_DRAFT_HEADLINE.search(s) for s in codes_section))
+    out.append(Result(doc, name, 'codes.section', 'pass' if len(codes_section) == 1 and not wrong_section else 'fail',
+                      f'sections {parsed["sections"]}'))
+    out.append(Result(doc, name, 'items.outside_section', 'fail' if parsed['stray_items'] else 'pass',
+                      f'numbered codes outside the codes section: {[i.code for i in parsed["stray_items"]]}' if parsed['stray_items'] else 'none'))
+    out.append(Result(doc, name, 'limitations', 'pass' if parsed['limitations'] else 'warn',
+                      f'{len(parsed["limitations"])} limitation(s)' if parsed['limitations'] else 'no limitations listed'))
+    if api is None:
+        out.append(Result(doc, name, 'content.vs.operator', 'incomplete', 'no operator view of the encounter; content checks skipped'))
+        return out
+    fields = parsed['fields']
+    date = established_date(api)
+    printed = fields.get('Date of service')
+    # an established date is printed as it is; none established, the report names no date of its own
+    date_ok = printed == date if date else (printed is not None and not re.search(r'\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}', printed))
+    out.append(Result(doc, name, 'header.encounter', 'pass' if fields.get('Encounter') == api.get('title') else 'fail',
+                      f'{fields.get("Encounter")!r} (operator {api.get("title")!r})'))
+    out.append(Result(doc, name, 'header.date_of_service', 'pass' if date_ok else 'fail',
+                      f'{printed!r} (operator {date or "no date established"!r})'))
+    out.append(Result(doc, name, 'header.generated', 'pass' if fields.get('Generated at') and fields.get('Generated by') else 'fail',
+                      f'generated at {fields.get("Generated at")!r} by {fields.get("Generated by")!r}'))
+    out.append(Result(doc, name, 'header.generated_iso', 'pass' if ISO_TIMESTAMP_LOOSE.match(fields.get('Generated at') or '') else 'warn',
+                      f'generated at {fields.get("Generated at")!r}'))
+    if generated_by:
+        out.append(Result(doc, name, 'header.generated_by', 'pass' if fields.get('Generated by') == generated_by else 'warn',
+                          f'{fields.get("Generated by")!r} (the walk signed in as {generated_by!r})'))
+    revision = api.get('revision') or {}
+    truth = customer_truth(api, kind)
+    agent = any(t['agent'] for t in truth)
+    out.append(Result(doc, name, 'header.agent_label', 'pass' if parsed['header_agent'] == agent else 'fail',
+                      ('the header says agent-executed synthetic review' if parsed['header_agent'] else 'the header does not say agent-executed synthetic review')
+                      + (' (agent review took part in a listed approval)' if agent else ' (agent review took part in no listed approval)')))
+    out.extend(_check_customer_items(doc, name, kind, parsed['items'], truth, revision.get('text') or '', revision.get('pages'), 'items'))
+    if kind == 'approved':
+        approved = {t['code'] for t in truth}
+        others = {t['code'] for t in customer_truth(api, 'draft')} - approved
+        quoted = [q['text'] or '' for i in parsed['items'] for q in i.quotes or []]
+        mentioned = sorted(code_tokens(text, quoted) & others)
+        out.append(Result(doc, name, 'approved.only', 'warn' if mentioned else 'pass',
+                          f'codes not approved are named outside the items: {mentioned}' if mentioned else 'no code that was not approved is named'))
+    out.extend(_customer_scan(doc, name, text, 'txt', api, trace))
+    return out
+
+
+def _banner_row(row) -> bool:
+    """reports.render_customer_csv's banner row: report_format the SYNTHETIC line, every other cell empty."""
+    return bool(row) and bool(SYNTHETIC_MARK.search(row[0])) and not any(cell.strip() for cell in row[1:])
+
+
+def check_customer_csv(doc: str, name: str, text: str, kind: str, api: dict | None, trace: dict | None = None) -> list[Result]:
+    rows = scanner().csv_rows(text)
+    rows = [row for row in rows if any(cell.strip() for cell in row)]
+    if not rows:
+        return [Result(doc, name, 'csv.parse', 'fail', 'no header row')]
+    header = [undo_neutralisation(cell) for cell in rows[0]]
+    out = [Result(doc, name, 'csv.columns', 'pass' if tuple(header) == CUSTOMER_CSV_COLUMNS else 'fail',
+                  f'columns {header}' + ('' if tuple(header) == CUSTOMER_CSV_COLUMNS else f' (expected {list(CUSTOMER_CSV_COLUMNS)})'))]
+    if tuple(header) != CUSTOMER_CSV_COLUMNS:
+        return out
+    banner_first = len(rows) > 1 and _banner_row(rows[1])
+    banner_last = len(rows) > 2 and _banner_row(rows[-1])
+    out.append(Result(doc, name, 'csv.synthetic_marker', 'pass' if banner_first and banner_last else 'fail',
+                      'the SYNTHETIC banner row follows the header and closes the file' if banner_first and banner_last else
+                      f'SYNTHETIC banner row {"after the header" if banner_first else "not after the header"} and {"last" if banner_last else "not last"}'))
+    data = rows[2 if banner_first else 1:len(rows) - 1 if banner_last else len(rows)]
+    out.extend(_neutralised(doc, name, data))
+    col = {column: index for index, column in enumerate(CUSTOMER_CSV_COLUMNS)}
+    cell = lambda row, column: undo_neutralisation(row[col[column]]) if col[column] < len(row) else ''  # noqa: E731
+    ragged = [n for n, row in enumerate(data, start=3 if banner_first else 2) if len(row) != len(CUSTOMER_CSV_COLUMNS)]
+    out.append(Result(doc, name, 'csv.parse', 'fail' if ragged else 'pass', f'rows of another width: {ragged[:5]}' if ragged else f'{len(data)} row(s)'))
+    formats = sorted({cell(row, 'report_format') for row in data})
+    out.append(Result(doc, name, 'format', 'pass' if formats in ([CUSTOMER_FORMAT], []) else 'fail', f'report_format {formats}'))
+    if api is None:
+        out.append(Result(doc, name, 'content.vs.operator', 'incomplete', 'no operator view of the encounter; content checks skipped'))
+        return out
+    titles = sorted({cell(row, 'encounter_title') for row in data})
+    dates = sorted({cell(row, 'date_of_service') for row in data})
+    date = established_date(api) or ''
+    out.append(Result(doc, name, 'csv.constants', 'pass' if titles in ([api.get('title')], []) and dates in ([date], []) else 'fail',
+                      f'encounter_title {titles}, date_of_service {dates} (operator {api.get("title")!r}, {date!r})'))
+    groups: dict[str, list] = {}
+    for row in data:
+        groups.setdefault(cell(row, 'number'), []).append(row)
+    facts = ('code', 'units', 'modifiers', 'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'review_label')
+    inconsistent = [number for number, group in groups.items() if len({tuple(cell(r, c) for c in facts) for r in group}) > 1]
+    out.append(Result(doc, name, 'csv.groups', 'fail' if inconsistent else 'pass',
+                      f'items whose rows disagree: {inconsistent}' if inconsistent else f'{len(groups)} item(s), each one set of values across its rows'))
+    items = []
+    status_of = {label.lower(): key for key, label in CUSTOMER_STATUS_LABELS.items()}
+    for number, group in groups.items():
+        first = group[0]
+        status = cell(first, 'status').strip()
+        label = cell(first, 'review_label').strip()
+        item = CustomerItem(number=int(number) if number.isdigit() else -1, code=cell(first, 'code').strip(), units=cell(first, 'units').strip(),
+                            modifiers=tuple(w for w in re.split(r'[\s,;/]+', cell(first, 'modifiers')) if w),
+                            status=CUSTOMER_STATUS_LABELS.get(status, CUSTOMER_STATUS_LABELS.get(status_of.get(status.lower(), ''), status)),
+                            approved_by=cell(first, 'approved_by'), approver_kind=cell(first, 'approver_kind'),
+                            approved_at=cell(first, 'approved_at'), summary=cell(first, 'summary'), quotes=[],
+                            agent_label=label == AGENT_SUB_LABEL, other_label=label if label and label != AGENT_SUB_LABEL else '')
+        for row in group:
+            if not any(cell(row, c) for c in ('evidence_text', 'evidence_page', 'evidence_start', 'evidence_end')):
+                continue
+            start, end, page = cell(row, 'evidence_start'), cell(row, 'evidence_end'), cell(row, 'evidence_page')
+            item.quotes.append({'raw': cell(row, 'evidence_text'), 'parsed': start.isdigit() and end.isdigit(), 'text': cell(row, 'evidence_text'),
+                                'start': int(start) if start.isdigit() else None, 'end': int(end) if end.isdigit() else None,
+                                'page': int(page) if page.isdigit() else None})
+        items.append(item)
+    if kind == 'draft':
+        filled = [i.code for i in items if i.approved_by or i.approver_kind or i.approved_at]
+        out.append(Result(doc, name, 'csv.approval_cells', 'fail' if filled else 'pass',
+                          f'a draft carries approval cells for {filled}' if filled else 'no approval cell is filled in a draft'))
+    revision = api.get('revision') or {}
+    truth = customer_truth(api, kind)
+    out.extend(_check_customer_items(doc, name, kind, items, truth, revision.get('text') or '', revision.get('pages'), 'csv.items'))
+    out.extend(_customer_scan(doc, name, text, 'csv', api, trace))
+    return out
+
+
+def check_customer_hashes(doc: str, name: str, data: bytes, download: dict) -> list[Result]:
+    """A customer download: the bytes on disk, re-fetched with the customer session, as the operator listing and the
+    operator's stored bytes hold them; never an X-Content-SHA256 on the customer download."""
+    actual = sha256_bytes(data)
+    out = []
+    for field, label in (('sha256', 'browser-computed'), ('refetch_sha256', 're-fetched customer download'),
+                         ('operator_sha256', 'operator listing'), ('operator_download_sha256', 'operator stored bytes'),
+                         ('operator_header_sha256', "operator download's X-Content-SHA256")):
+        recorded = download.get(field)
+        if not recorded:
+            out.append(Result(doc, name, f'sha256.{field}', 'fail', f'no {label} sha256 recorded'))
+        else:
+            out.append(Result(doc, name, f'sha256.{field}', 'pass' if recorded == actual else 'fail',
+                              actual if recorded == actual else f'file {actual} != {label} {recorded}'))
+    out.append(Result(doc, name, 'header.no_hash', 'fail' if download.get('header_sha256') else 'pass',
+                      'the customer download carries X-Content-SHA256' if download.get('header_sha256') else 'no X-Content-SHA256 on the customer download'))
+    out.append(Result(doc, name, 'audience', 'pass' if download.get('operator_audience') == 'customer' else 'fail',
+                      f'the operator listing calls it {download.get("operator_audience")!r}'))
+    if download.get('size') != len(data):
+        out.append(Result(doc, name, 'size', 'fail', f'file {len(data)} bytes != recorded {download.get("size")}'))
+    return out
+
+
+def load_trace(evidence_dir: Path, doc: dict, api_dir: Path | None) -> dict | None:
+    candidates = []
+    if api_dir and doc.get('encounter_id'):
+        candidates.append(api_dir / f'{doc["encounter_id"]}.trace.json')
+    trace = (doc.get('operator_snapshots') or {}).get('trace')
+    if trace:
+        candidates.append(evidence_dir / trace)
+    for path in candidates:
+        if path.is_file():
+            return json.loads(path.read_text(encoding='utf-8'))
+    return None
+
+
 # --- API-level ------------------------------------------------------------------
 
 def check_api_evidence(doc: str, api: dict) -> list[Result]:
@@ -1203,18 +1898,21 @@ def _decisions_match(doc_id, doc, api) -> Result:
 # --- driver ---------------------------------------------------------------------
 
 def load_api(evidence_dir: Path, doc: dict, api_dir: Path | None) -> tuple[dict | None, str]:
+    """The encounter JSON the checks hold the files to: --api-dir/<id>.json, else the OPERATOR snapshot the evidence
+    names (operator_snapshots, schema cpt-studio-browser-evidence@2), else - for evidence of a walk before the customer
+    interface - its api_snapshots (then the full view). A @2 walk's customer_snapshots are never a source of truth."""
     candidates = []
     if api_dir and doc.get('encounter_id'):
         candidates.append(api_dir / f'{doc["encounter_id"]}.json')
-    snapshots = doc.get('api_snapshots') or {}
-    candidates += [evidence_dir / snapshots[key] for key in ('final', 'after_reload') if snapshots.get(key)]
+    for snapshots in (doc.get('operator_snapshots') or {}, doc.get('api_snapshots') or {}):
+        candidates += [evidence_dir / snapshots[key] for key in ('final', 'after_reload') if snapshots.get(key)]
     for path in candidates:
         if path.is_file():
             return json.loads(path.read_text(encoding='utf-8')), str(path)
     return None, ''
 
 
-def verify_document(evidence_dir: Path, doc: dict, api_dir: Path | None) -> list[Result]:
+def verify_document(evidence_dir: Path, doc: dict, api_dir: Path | None, session_label: str | None = None) -> list[Result]:
     doc_id = doc.get('id', '?')
     downloads = doc.get('downloads') or []
     if not downloads:
@@ -1239,17 +1937,31 @@ def verify_document(evidence_dir: Path, doc: dict, api_dir: Path | None) -> list
             out.append(Result(doc_id, name, 'file', 'fail', f'downloaded file missing: {path}'))
             continue
         data = path.read_bytes()
-        out.extend(check_hashes(doc_id, name, data, download, listed))
-        if kind not in ('draft', 'reviewed') or fmt not in ('txt', 'csv'):
-            out.append(Result(doc_id, name, 'format', 'fail', f'unknown report {kind!r}/{fmt!r}'))
-            continue
         try:
-            text = data.decode('utf-8')
+            text, problem = data.decode('utf-8'), None
         except UnicodeDecodeError as exc:
-            out.append(Result(doc_id, name, 'utf8', 'fail', str(exc)))
+            text, problem = None, str(exc)
+        # a customer report (the walk records its audience; the file names its format) or an operator report as before
+        customer = download.get('audience') == 'customer' or (text is not None and CUSTOMER_FORMAT in text)
+        if customer:
+            out.extend(check_customer_hashes(doc_id, name, data, download))
+            if download.get('audience') != 'customer':
+                out.append(Result(doc_id, name, 'audience.recorded', 'fail', 'a customer report recorded as another audience\'s download'))
+        else:
+            out.extend(check_hashes(doc_id, name, data, download, listed))
+        if kind not in (CUSTOMER_KINDS if customer else ('draft', 'reviewed')) or fmt not in ('txt', 'csv'):
+            out.append(Result(doc_id, name, 'format', 'fail', f'unknown {"customer " if customer else ""}report {kind!r}/{fmt!r}'))
             continue
-        out.extend(check_txt(doc_id, name, text, kind, api) if fmt == 'txt' else
-                   check_csv(doc_id, name, text, kind, api))
+        if text is None:
+            out.append(Result(doc_id, name, 'utf8', 'fail', problem))
+            continue
+        if customer:
+            trace = load_trace(evidence_dir, doc, api_dir)
+            out.extend(check_customer_txt(doc_id, name, text, kind, api, trace, session_label) if fmt == 'txt' else
+                       check_customer_csv(doc_id, name, text, kind, api, trace))
+        else:
+            out.extend(check_txt(doc_id, name, text, kind, api) if fmt == 'txt' else
+                       check_csv(doc_id, name, text, kind, api))
     return out
 
 
@@ -1274,7 +1986,8 @@ def print_table(results: list[Result], stream=None) -> None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--evidence', type=Path, required=True)
-    parser.add_argument('--api-dir', type=Path, help='directory of <encounter id>.json API snapshots')
+    parser.add_argument('--api-dir', type=Path, help='directory of <encounter id>.json OPERATOR encounter views (GET /ops/api/'
+                                                     'encounters/<id>), optionally beside <encounter id>.trace.json')
     parser.add_argument('--only', help='comma-separated document ids')
     parser.add_argument('--json-out', type=Path, help='also write the results as JSON')
     args = parser.parse_args(argv)
@@ -1286,8 +1999,9 @@ def main(argv=None) -> int:
     only = {s.strip() for s in args.only.split(',')} if args.only else None
     documents = [d for d in evidence.get('documents', []) if only is None or d.get('id') in only]
     results = [] if documents else [Result('-', '-', 'documents', 'incomplete', 'no documents selected')]
+    session_label = ((evidence.get('session') or {}).get('user') or {}).get('label')
     for doc in documents:
-        results.extend(verify_document(args.evidence.parent, doc, args.api_dir))
+        results.extend(verify_document(args.evidence.parent, doc, args.api_dir, session_label))
     print_table(results)
     if args.json_out:
         args.json_out.write_text(json.dumps([asdict(r) for r in results], indent=2) + '\n', encoding='utf-8')

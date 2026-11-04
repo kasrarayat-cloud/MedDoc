@@ -1,0 +1,136 @@
+{
+  "generated": {
+    "at": "2026-11-03T22:10:00Z",
+    "by": "CPT Studio review agent (automated agent)"
+  },
+  "approved": {
+    "format_version": "cpt-studio-customer-report@1",
+    "kind": "approved",
+    "encounter": {
+      "id": "7d0c4a52-2f6e-4c39-9a51-3b1e6f0d2a11",
+      "title": "Synthetic colonoscopy (two lesions)"
+    },
+    "revision": {
+      "id": "0e5d1c6b-8a47-4f2e-b3d9-5c6a7b8d9e10",
+      "number": 1
+    },
+    "assessment": "4b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
+    "date_of_service": "2026-11-03",
+    "limitations": [
+      "CPT descriptions are withheld: no licensed CPT description is connected.",
+      "Procedure-to-procedure edits and payer modifier policies are not checked.",
+      "Whether each service was performed is read from the document; review the whole document."
+    ],
+    "items": [
+      {
+        "number": 1,
+        "code": "45380",
+        "units": 1,
+        "modifiers": [],
+        "status": "approved",
+        "approver": "CPT Studio review agent (automated agent)",
+        "approver_kind": "agent",
+        "agent": true,
+        "decided_at": "2026-11-03T22:05:00+00:00",
+        "decision": "d0e1f2a3-0001-4b5c-9d6e-7f8091a2b3c4",
+        "summary": "The colonoscopy documents removal of the 4 mm ascending colon polyp (COL-1) with cold biopsy forceps.",
+        "quotes": [
+          {
+            "text": "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.",
+            "page": 1,
+            "start": 256,
+            "end": 329
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "code": "45385",
+        "units": 1,
+        "modifiers": [
+          "XS"
+        ],
+        "status": "approved",
+        "approver": "CPT Studio review agent (automated agent)",
+        "approver_kind": "agent",
+        "agent": true,
+        "decided_at": "2026-11-03T22:05:30+00:00",
+        "decision": "d0e1f2a3-0002-4b5c-9d6e-7f8091a2b3c4",
+        "summary": "The colonoscopy documents removal of the 9 mm sigmoid colon polyp (COL-2) with a cold snare.",
+        "quotes": [
+          {
+            "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.",
+            "page": 1,
+            "start": 330,
+            "end": 394
+          }
+        ]
+      }
+    ],
+    "agent_review": true
+  },
+  "draft": {
+    "format_version": "cpt-studio-customer-report@1",
+    "kind": "draft",
+    "encounter": {
+      "id": "7d0c4a52-2f6e-4c39-9a51-3b1e6f0d2a11",
+      "title": "Synthetic colonoscopy (two lesions)"
+    },
+    "revision": {
+      "id": "0e5d1c6b-8a47-4f2e-b3d9-5c6a7b8d9e10",
+      "number": 1
+    },
+    "assessment": "4b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
+    "date_of_service": "2026-11-03",
+    "limitations": [
+      "CPT descriptions are withheld: no licensed CPT description is connected.",
+      "Procedure-to-procedure edits and payer modifier policies are not checked.",
+      "Whether each service was performed is read from the document; review the whole document."
+    ],
+    "items": [
+      {
+        "number": 1,
+        "code": "45380",
+        "units": 1,
+        "modifiers": [],
+        "status": "approved",
+        "status_label": "Approved",
+        "sub_label": "Agent-executed synthetic review — not clinical approval",
+        "agent": true,
+        "summary": "The colonoscopy documents removal of the 4 mm ascending colon polyp (COL-1) with cold biopsy forceps.",
+        "decision": "d0e1f2a3-0001-4b5c-9d6e-7f8091a2b3c4",
+        "quotes": [
+          {
+            "text": "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.",
+            "page": 1,
+            "start": 256,
+            "end": 329
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "code": "45385",
+        "units": 1,
+        "modifiers": [
+          "XS"
+        ],
+        "status": "approved",
+        "status_label": "Approved",
+        "sub_label": "Agent-executed synthetic review — not clinical approval",
+        "agent": true,
+        "summary": "The colonoscopy documents removal of the 9 mm sigmoid colon polyp (COL-2) with a cold snare.",
+        "decision": "d0e1f2a3-0002-4b5c-9d6e-7f8091a2b3c4",
+        "quotes": [
+          {
+            "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.",
+            "page": 1,
+            "start": 330,
+            "end": 394
+          }
+        ]
+      }
+    ],
+    "agent_review": true
+  }
+}

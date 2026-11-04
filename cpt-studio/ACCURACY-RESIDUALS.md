@@ -810,3 +810,64 @@ The next round's repair must read each shape no worse than installed before CPT 
 the reader to tell a dropped section or a hit limit from damage, from pypdf's warnings. The text rows need it to keep
 6.21.2's refusals for strings it cannot decode as the font says (TXT-2, n-2), and its literal glyph names where a
 decoded one would be dropped (TXT-3).
+
+## Core repair, refutation round 2 (2026-11-04): false READYs the installed revision gives too
+
+The core repair (branch `feat/cpt-studio-core-ux-20261103`) holds the register's false READYs (R8 D1 to D10, D12, D13,
+D15). Lens L1 of the round-2 refutation (base `41e03656df61`, head `372ec44b0e24`) attacked each class with new
+wordings. For the rows below, its verifier reproduced a READY code on the head that the installed revision ALSO gives:
+the same input, the same result. So these are not regressions of the change. They are new members of classes the
+register named. They are recorded here under this file's rule: wording outside every declared list is measured and
+listed, and a misreading of what the code declares it reads is fixed in code. Rows L1/R05, R06 and R12 read a declared
+form in a variant spelling or layout, so they were fixed in code in the same round (the variant repair,
+`tests/fixtures/gi4/declarations/cux-r2-variants.json`); their rows follow the table below, with what each still leaves.
+
+Each input is the lens's, a synthetic document through the assess stage's own children (`jobs._analyze_child`,
+`_assess_child`) with a synthetic Corti answer. *Ready* means approvable with the whole-document acknowledgement, never
+approved: a reviewer's or the agent's recorded decision still approves, and the result says the service status is not
+verified.
+
+| id | example input (the class) | head and installed | locus | why it is not a rule yet |
+|---|---|---|---|---|
+| L1/R01 | "Attached prior report:" / "Upper endoscopy report (fictional)" / "Date of service: 2025-03-01" / an EGD biopsy sentence, after today's colonoscopy; Corti cites the biopsy sentence for 43239 (also 43235 and 45380 variants) | 43239 ready (the attached report opens a current EGD part) | `services.parts()` at REPORT_TITLE; D10's hold reaches only a code citing the title | another occasion inside one document is read from the title alone; the register's title-cited D10 row is held |
+| L1/R02 | "We tried to remove the polyp with a hot snare, but it slipped off." / "Hot snare polypectomy proved impossible." / "Cold forceps biopsy of the antrum was impossible because of bleeding." / "... was aborted ..." | 45385 / 43239 ready | `cues.FAILED_ACT` (failed, unsuccessful, abandoned) and `UNDONE_ACT` at the own-passage release | failure verbs are open ("tried ... but", "slipped", "impossible", "aborted", "halted") |
+| L1/R03 | "The polyp was not excised." on the procedure line's colonoscopy with hot snare polypectomy | 45385 ready (the procedure line's snare stands) | `engine._denies_an_act_of`: a denial must name an act kind or a listed participle | denial verbs are open ("excised", "resected", "taken off") |
+| L1/R04 | "Hot snare polypectomy was proposed for a later session." / "... at a later date." / "Hot snare removal of the polyp is advised." | 45385 ready | `engine._own_passage_may_stand` (no plan or time gate); the inventory's act predicate | plan and advice wording is open ("proposed", "advised", "at a later date") |
+| L1/R08 | the register's D5 "PATHOLOGY ADDENDUM" heading over a specimen line with a predicate ("... removed by hot snare polypectomy") | 45385 ready (a pathology-role act bound to today's lesion) | `reconcile.match()` collects performed acts of any role | a specimen line restating the act is read as the act; D5/D6's headings without a predicate are held |
+| L1/R09 | "Pathology: hot snare polypectomy of sigmoid polyp" / "Surgical pathology - hot snare polypectomy specimen from the sigmoid colon" as a heading | 45385 ready | `services.ROLE_HEADINGS['pathology']` needs "pathology report/result/results/addendum" | heading wording is open; to be judged with R08 |
+| L1/R11 | "Examination was terminated in the gastric body." / "The duodenum was not reached." / "We were unable to pass the pylorus." in D13's named-EGD construction | 43244 ready with the duodenum as the extent | `detect._P2_UPPER_STOP` (a 'we' or 'the <exam>' subject and a listed stop verb) | stop and reach wording is open |
+
+The three declared-form variants, fixed in code, and what each still leaves:
+
+| id | example input | installed and head | locus | what changed and what is left |
+|---|---|---|---|---|
+| L1/R05 | "Indication: Surveillance after a sigmoid polyp was removed with a hot snare" (R8 D8's line without its full stop) in a titled colonoscopy report, 45385 citing it with the reach sentence; the dash form "Indication: surveillance - sigmoid polyp removed with hot snare" cited alone; the same line ending in a semicolon, a comma or a dash | installed 41e03656d: 45385 ready. Head: held, fixed in code (variant repair, `tests/fixtures/gi4/declarations/cux-r2-variants.json` V05, commit 0b8b1d871a31) | `services._time_parts` (`services._statement_line_end` keeps its full-stop test for history and plan sections) | fixed in code: a variant layout of D8's declared line. The heading line of an indication section is now the indication's whatever it ends with, inside a titled report too, and only that line: after it the section reads as before (today's report inside a titled report, the indication outside one), so an act stated today on a later line stays ready. A history section's heading line was already never read as today's |
+| L1/R06 | "Surveillance of biopsy–proven Barrett esophagus was performed." (U+2013; also U+2010, U+2011, U+2012 and U+2014) with 43239; "Snare–resected: No" beside today's snare | installed: 43239 ready. Head: held, fixed in code (V06, commit 0b8b1d871a31); "The snare–resected sigmoid polyp was not retrieved." beside today's snare is now ready, as its ASCII twin is | `services.COMPOUND_PARTICIPLE_AFTER`, `services._compound_participle`, `services._own_question` (the hyphen's spellings: `cues.HYPHEN`) | fixed in code: a variant spelling of rule 2's compound, read wherever the ASCII hyphen is (the inventory, its doubtful compounds and field labels, the own-passage release). Still ready, as installed, because they are new wording: "biopsy proven" with a space or a spaced dash (an act word, a space and a participle is also how a report states today's act: "Biopsy performed today"), and the noun compounds "The polypectomy scar in the sigmoid colon was healed." and "The polypectomy site ..." (45385 by the own-passage release). The repair's measured cost, hold-only: an em or en dash written as a separator right after an act word ("Biopsies—taken from the antrum and body—were sent for pathology.", "Cold snare polypectomy—completed without bleeding.") now holds a code done today, as the ASCII hyphen there already did (the declaration's false_hold_costs_measured) |
+| L1/R12 | "Patient not seen in-person today." / "Patient wasn't seen in person today." under R8 D12's h4-01 twin, 99204; also "isn't", a U+2019 apostrophe, "The patient wasn't seen.", a Unicode hyphen in "in-person", and two spaces or a line break inside the phrase | installed: 99204 ready. Head: held, fixed in code (V12, commits 0b8b1d871a31 and f5cb22d825c9) | `cues.NOT_IN_PERSON`, `detect._PV1_ATTENDANCE`, `detect._pv1_in_person_today` | fixed in code: variant spellings and layouts of D12's declared phrase, each read on its plain form's path (another time or another service in its clause still clears it), and the phrase's own words no longer clear its hold. Still ready, as installed, because they are new wording: "Patient not evaluated in person today." and "not examined in person" (other verbs). Found by this repair and not changed by it, because they are other declared C4 forms outside R12's phrase (ready on the head, as installed): "Visit was audio‑only." and "Patient was a no‑show today." with U+2011, and "The patient didn’t show up for the visit." with U+2019 |
+
+One measured cost of the R06 repair is recorded rather than narrowed: a dash written as a separator right after an act
+word, with no spaces ("Cold snare polypectomy—completed without bleeding."), now holds a code done today, as the ASCII
+hyphen there already did. It is hold-only, and no battery, regression or corpus text contains such a dash. A spaced dash
+(" — ") is unaffected.
+
+How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
+(independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
+
+## Core repair, refutation round 3 (2026-11-04): what the bounded round leaves
+
+Round 3 attacked the round-2 repairs only, against one standard: the head never reads a document worse than the
+installed revision, and keeps the round-2 improvements. Its repairs (`tests/fixtures/gi4/declarations/cux-r3-reader.json`,
+with its integration amendment) meet that standard on every reproduced input but these, which are recorded, not
+repaired:
+
+| id | input | head and installed | why it is left |
+|---|---|---|---|
+| A8 | R8 D8's titled colonoscopy with "Indication - surveillance after a sigmoid polyp was removed with a hot snare" (a dash heading, no colon) above the procedure; 45385 cites it | ready on the head and on installed | routing's layout (`sections.layout`, frozen by the H2 gate, gi-context@4) reads no indication section there; repairing it moves the frozen context reader |
+| A3 (43239) | a combined EGD and colonoscopy narrative, with no section per service, whose gastric biopsy names no site | the head holds 43239 (installed reads it READY); 45380, which the round-2 repair made READY on the gastric biopsy, is held again | rule 4's declared cost (`cux-bind.json`): a combined title binds no family. Reading 43239 READY needs a context rule (the A1/rule-6 class closed by session decision (c)) |
+| R1a-r3 | an examination told only by its name ("The EGD showed ...") between a colon lesion and a labelled act; an instrument named in a denial | does not unbind the label (hold direction) | the guard reads instruments, not service names |
+| L1d-r3 | a header line naming another service, then the running report's findings with no instrument told | held, as installed holds it (for its extent) | no instrument resumes the running part |
+| L1e-r3 | a back-reference to a lesion two lesions back ("the first polyp") in a note | reads the part's last lesion | the reach rule reads the last current lesion |
+| R1b-r3 | a restatement with no size, told after another tract's instrument; sizes compared as written ("8 mm" vs "0.8 cm") | the label stays unresolved (hold direction) | a restatement must not contradict the definition it restates |
+| R1c-r3 | a clause naming a site of another tract than the labelled lesion's | unbinds the label as round 2 did; the denial is read at its site and at the lesion | one statement read both ways keeps both conflicts |
+| R8b-r3 | a post-modified same-day evaluation outside the closed list (opener, article, up to three adjectives, five prepositions, "of" with a possessive) | the absence statement negates the visit | a closed list; wider wording is for the accuracy evaluation |
+

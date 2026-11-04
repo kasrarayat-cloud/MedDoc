@@ -1,0 +1,957 @@
+{
+  "id": "7d0c4a52-2f6e-4c39-9a51-3b1e6f0d2a11",
+  "title": "Synthetic colonoscopy (two lesions)",
+  "state": "reviewed",
+  "state_label": "Reviewed",
+  "service_date": "2026-11-03",
+  "service_date_conflict": false,
+  "service_date_asked": false,
+  "service_date_evidence": [
+    {
+      "context_index": 0,
+      "start": 142,
+      "end": 169,
+      "text": "Date of service: 2026-11-03",
+      "exact": true,
+      "page": 1
+    }
+  ],
+  "families": [
+    "Colonoscopy"
+  ],
+  "source_kind": "paste",
+  "open_clarifications": 0,
+  "coding_state": "complete",
+  "queue_reasons": [],
+  "created_at": "2026-11-03T22:00:00+00:00",
+  "created_by": "CPT Studio review agent (automated agent)",
+  "permissions": {
+    "can_review": false,
+    "is_owner": false,
+    "can_confirm": false
+  },
+  "harness": {
+    "participants": [
+      {
+        "name": "corti",
+        "label": "Corti",
+        "vendor": "Corti",
+        "model": "corti-coding-v2",
+        "state": "done",
+        "detail": "Corti returned 3 codes.",
+        "run_id": "c0ffee00-0001-4a5b-8c6d-7e8f9a0b1c2d",
+        "returned_model": "corti-coding-v2",
+        "usage": {
+          "creditsConsumed": 3
+        },
+        "usage_basis": "reported",
+        "estimated_cost_usd": null,
+        "codes": [
+          "45380",
+          "45385",
+          "45378"
+        ],
+        "unverified_quotes": 0,
+        "reused": false
+      },
+      {
+        "name": "astra",
+        "label": "Astra",
+        "vendor": "OpenAI",
+        "model": "gpt-6-astra",
+        "state": "done",
+        "detail": "Astra read the document.",
+        "run_id": "c0ffee00-0002-4a5b-8c6d-7e8f9a0b1c2d",
+        "returned_model": "gpt-6-astra-2026-10-01",
+        "usage": {
+          "input_tokens": 2100,
+          "output_tokens": 420
+        },
+        "usage_basis": "reported",
+        "estimated_cost_usd": 0.0412,
+        "codes": [
+          "45380",
+          "45385"
+        ],
+        "unverified_quotes": 0,
+        "reused": false,
+        "peer": {
+          "state": "done",
+          "run_id": "c0ffee00-0004-4a5b-8c6d-7e8f9a0b1c2d",
+          "codes_added": [],
+          "unverified_quotes": 0
+        },
+        "references": {
+          "retrieved": [],
+          "used": []
+        },
+        "peer_references": {
+          "retrieved": [],
+          "used": []
+        }
+      },
+      {
+        "name": "fable",
+        "label": "Fable",
+        "vendor": "Anthropic",
+        "model": "claude-fable-5-1",
+        "state": "done",
+        "detail": "Fable read the document.",
+        "run_id": "c0ffee00-0003-4a5b-8c6d-7e8f9a0b1c2d",
+        "returned_model": "claude-fable-5-1",
+        "usage": {
+          "input_tokens": 2300,
+          "output_tokens": 510
+        },
+        "usage_basis": "reported",
+        "estimated_cost_usd": 0.0533,
+        "codes": [
+          "45380",
+          "45385"
+        ],
+        "unverified_quotes": 0,
+        "reused": false,
+        "peer": {
+          "state": "done",
+          "run_id": "c0ffee00-0005-4a5b-8c6d-7e8f9a0b1c2d",
+          "codes_added": [],
+          "unverified_quotes": 0
+        },
+        "references": {
+          "retrieved": [],
+          "used": []
+        },
+        "peer_references": {
+          "retrieved": [],
+          "used": []
+        }
+      }
+    ],
+    "phase": 2,
+    "reference_validation": {
+      "state": "done",
+      "codes_checked": 2,
+      "passages": 4,
+      "sources": [
+        {
+          "key": "cms-pfs-rvu-2026"
+        }
+      ]
+    },
+    "clarification": {
+      "open": 0
+    },
+    "final": {
+      "state": "reviewed",
+      "label": "Reviewed"
+    }
+  },
+  "revision": {
+    "id": "0e5d1c6b-8a47-4f2e-b3d9-5c6a7b8d9e10",
+    "number": 1,
+    "kind": "paste",
+    "revisions_total": 1,
+    "created_at": "2026-11-03T22:00:00+00:00",
+    "source_file": null,
+    "addendum_text": "",
+    "addendum_offset": null,
+    "extraction": {
+      "status": "ok",
+      "method": "text",
+      "messages": [],
+      "ocr_pages": [],
+      "page_count": 1,
+      "engine": "text/plain@1"
+    },
+    "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nPatient: Synthetic Patient Nine (fictional)\nDate of service: 2026-11-03\nProcedure: Colonoscopy with polyp removal.\nThe colonoscope was advanced to the cecum.\nCOL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.\nCOL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.\nPlan: upper endoscopy is scheduled next month.\nNo separate office evaluation and management encounter is documented on this date.\n",
+    "text_sha256": "2ad7c1bfc56ced7106373b157a7e64035259e74d433d9a9b48ba860b0d1549e0",
+    "pages": [
+      {
+        "page": 1,
+        "start": 0,
+        "end": 525
+      }
+    ]
+  },
+  "context": {
+    "facts": {
+      "service_date": {
+        "name": "service_date",
+        "value": "2026-11-03",
+        "origin": "document",
+        "evidence": [
+          {
+            "context_index": 0,
+            "start": 142,
+            "end": 169,
+            "text": "Date of service: 2026-11-03",
+            "exact": true,
+            "page": 1
+          }
+        ],
+        "note": "",
+        "member_conflict": false,
+        "date_asked": false
+      }
+    },
+    "user_values": {}
+  },
+  "routing": {
+    "version": "routing-2026-11@4",
+    "document_kind": "procedure_report",
+    "families": [
+      {
+        "family": "gi.colonoscopy",
+        "label": "Colonoscopy",
+        "supported": true,
+        "status": "performed",
+        "mentions": [
+          {
+            "status": "performed",
+            "section": "procedure",
+            "cues": [],
+            "span": {
+              "context_index": 0,
+              "start": 213,
+              "end": 255,
+              "text": "The colonoscope was advanced to the cecum.",
+              "exact": true,
+              "page": 1
+            }
+          }
+        ],
+        "facts": [],
+        "missing": []
+      },
+      {
+        "family": "gi.egd",
+        "label": "Upper GI endoscopy",
+        "supported": true,
+        "status": "planned",
+        "mentions": [
+          {
+            "status": "planned",
+            "section": "plan",
+            "cues": [],
+            "span": {
+              "context_index": 0,
+              "start": 395,
+              "end": 441,
+              "text": "Plan: upper endoscopy is scheduled next month.",
+              "exact": true,
+              "page": 1
+            }
+          }
+        ],
+        "facts": [],
+        "missing": []
+      }
+    ]
+  },
+  "pipeline": {
+    "busy": false,
+    "can_stop": false,
+    "can_resume": false,
+    "stopped_by_member": false,
+    "stages": [
+      {
+        "kind": "extract",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:01+00:00"
+      },
+      {
+        "kind": "analyze",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:02+00:00"
+      },
+      {
+        "kind": "predict",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:03+00:00"
+      },
+      {
+        "kind": "astra",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:04+00:00"
+      },
+      {
+        "kind": "fable",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:05+00:00"
+      },
+      {
+        "kind": "assess",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:06+00:00"
+      },
+      {
+        "kind": "astra_peer",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:07+00:00"
+      },
+      {
+        "kind": "fable_peer",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:08+00:00"
+      },
+      {
+        "kind": "assess",
+        "state": "succeeded",
+        "error": "",
+        "finished_at": "2026-11-03T22:00:09+00:00"
+      }
+    ]
+  },
+  "provider_runs": [
+    {
+      "id": "c0ffee00-0001-4a5b-8c6d-7e8f9a0b1c2d",
+      "provider": "corti",
+      "mode": "live",
+      "state": "succeeded",
+      "http_status": 200,
+      "latency_ms": 1201,
+      "usage": {
+        "creditsConsumed": 3
+      },
+      "usage_basis": "reported",
+      "request_sha256": "49bfaf4d68764a867518edb6fc5d5d7999e2d6fa0956f76742c1af516eef5222",
+      "response_sha256": "a33bf3ca8fa85942228cf3638cfd80d2f3e1cecba73c3372a6d38b1470b6335d",
+      "reused_from": null,
+      "error": "",
+      "reconciled": false,
+      "created_at": "2026-11-03T22:00:11+00:00",
+      "purpose": "primary",
+      "scope_items": [],
+      "requested_model": "corti-coding-v2",
+      "returned_model": "corti-coding-v2"
+    },
+    {
+      "id": "c0ffee00-0002-4a5b-8c6d-7e8f9a0b1c2d",
+      "provider": "astra",
+      "mode": "live",
+      "state": "succeeded",
+      "http_status": 200,
+      "latency_ms": 1202,
+      "usage": {
+        "input_tokens": 2100,
+        "output_tokens": 420
+      },
+      "usage_basis": "reported",
+      "request_sha256": "2d1ef242d0f5a8837bd8d223f8706e4264c26a2eec484b2bfddae1cbae6b4719",
+      "response_sha256": "e782137a56853c3db1e8b3e27d1f49148a9f20b6965c50c3523c931eea43a394",
+      "reused_from": null,
+      "error": "",
+      "reconciled": false,
+      "created_at": "2026-11-03T22:00:12+00:00",
+      "purpose": "independent",
+      "scope_items": [],
+      "requested_model": "gpt-6-astra",
+      "returned_model": "gpt-6-astra-2026-10-01"
+    },
+    {
+      "id": "c0ffee00-0003-4a5b-8c6d-7e8f9a0b1c2d",
+      "provider": "fable",
+      "mode": "live",
+      "state": "succeeded",
+      "http_status": 200,
+      "latency_ms": 1203,
+      "usage": {
+        "input_tokens": 2300,
+        "output_tokens": 510
+      },
+      "usage_basis": "reported",
+      "request_sha256": "daa633e1bd655ef46f2de8127aa1c6be3a0ca8de772d0576ec51d72fd6e98a49",
+      "response_sha256": "5b9e55d9d981fc02333c793ea7b71c2c874a38ec0e5ede74548f9515d6275e43",
+      "reused_from": null,
+      "error": "",
+      "reconciled": false,
+      "created_at": "2026-11-03T22:00:13+00:00",
+      "purpose": "independent",
+      "scope_items": [],
+      "requested_model": "claude-fable-5-1",
+      "returned_model": "claude-fable-5-1"
+    },
+    {
+      "id": "c0ffee00-0004-4a5b-8c6d-7e8f9a0b1c2d",
+      "provider": "astra",
+      "mode": "live",
+      "state": "succeeded",
+      "http_status": 200,
+      "latency_ms": 1204,
+      "usage": {
+        "input_tokens": 2600,
+        "output_tokens": 300
+      },
+      "usage_basis": "reported",
+      "request_sha256": "eac03726da5f1b022d04395eaf272c49eb99ecea0d2ccdb09eedd5381e1f72c3",
+      "response_sha256": "5d78615a7f0c6ab4f28bd65758dc6adaf07351e58dfbaca5f56e3cb0d3e09a29",
+      "reused_from": null,
+      "error": "",
+      "reconciled": false,
+      "created_at": "2026-11-03T22:00:14+00:00",
+      "purpose": "peer_review",
+      "scope_items": [],
+      "requested_model": "gpt-6-astra",
+      "returned_model": "gpt-6-astra-2026-10-01"
+    },
+    {
+      "id": "c0ffee00-0005-4a5b-8c6d-7e8f9a0b1c2d",
+      "provider": "fable",
+      "mode": "live",
+      "state": "succeeded",
+      "http_status": 200,
+      "latency_ms": 1205,
+      "usage": {
+        "input_tokens": 2700,
+        "output_tokens": 280
+      },
+      "usage_basis": "reported",
+      "request_sha256": "56cab624f3ee5c14c50f6dc916865c7f2e28606a66af3e1ea11bfd1a0ded5dd4",
+      "response_sha256": "f9194a4ea834926226f6e8fc05a78d0b7aedfad5df29d8da8261f79f1b1cfca1",
+      "reused_from": null,
+      "error": "",
+      "reconciled": false,
+      "created_at": "2026-11-03T22:00:15+00:00",
+      "purpose": "peer_review",
+      "scope_items": [],
+      "requested_model": "claude-fable-5-1",
+      "returned_model": "claude-fable-5-1"
+    }
+  ],
+  "state_run": null,
+  "second_review": {
+    "available": false,
+    "can_request": false,
+    "items": [],
+    "reason": ""
+  },
+  "assessment": {
+    "id": "4b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
+    "profiles_version": "gi-profiles@7",
+    "engine_version": "engine-2026.11.03@1",
+    "created_at": "2026-11-03T22:00:00+00:00",
+    "proposals": [
+      {
+        "id": "a1f0b2c3-0001-4d5e-8f60-718293a4b5c6",
+        "key": "45380:b5c6",
+        "bucket": "selected",
+        "code": "45380",
+        "code_kind": "cpt1",
+        "family": "gi.colonoscopy",
+        "family_label": "Colonoscopy",
+        "eyebrow": "COLONOSCOPY",
+        "supported": true,
+        "profile_version": "gi.colonoscopy@3",
+        "status": "ready",
+        "status_label": "ready",
+        "exclusion_reason": "",
+        "reinstatable": false,
+        "descriptor": {
+          "status": "withheld",
+          "label": "Description withheld."
+        },
+        "evidence": [
+          {
+            "context_index": 0,
+            "start": 256,
+            "end": 329,
+            "text": "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps.",
+            "exact": true,
+            "page": 1
+          }
+        ],
+        "rationale": "Selected by corti. 1 exact evidence passage.",
+        "units": 1,
+        "checks": [
+          {
+            "id": "evidence.exact",
+            "status": "pass",
+            "label": "Exact evidence",
+            "detail": "",
+            "source": "cpt-studio:provider@1"
+          },
+          {
+            "id": "pfs.endoscopic_family",
+            "status": "pass",
+            "label": "Endoscopic family",
+            "detail": "",
+            "source": "cms-pfs-rvu-2026@1"
+          }
+        ],
+        "modifier_considerations": [
+          "Two lesions in different parts of the colon: a distinct-lesion modifier (59 or XS) may apply. NCCI edits are not connected; no modifier is assigned."
+        ],
+        "support": {
+          "origin": "primary",
+          "service": "colon-a",
+          "family": "gi.colonoscopy",
+          "state": "performed",
+          "reason": "",
+          "detail": "The colonoscopy documents removal of the 4 mm ascending colon polyp (COL-1) with cold biopsy forceps.",
+          "acts": [
+            {
+              "id": "act-1",
+              "kind": "removal",
+              "label": "The colonoscopy documents removal of the 4 mm ascending colon polyp (COL-1) with cold biopsy forceps."
+            }
+          ],
+          "status": "pass",
+          "supporting": [
+            0
+          ],
+          "unrelated": [],
+          "detail_support": "",
+          "source": []
+        },
+        "clarification_ids": [],
+        "decision": {
+          "id": "d0e1f2a3-0001-4b5c-9d6e-7f8091a2b3c4",
+          "proposal_id": "a1f0b2c3-0001-4d5e-8f60-718293a4b5c6",
+          "code": "45380",
+          "action": "approve",
+          "note": "Agent-executed synthetic verification review",
+          "reviewer": "CPT Studio review agent (automated agent)",
+          "reviewer_kind": "agent",
+          "created_at": "2026-11-03T22:05:00+00:00",
+          "decided_at": "2026-11-03T22:05:00+00:00",
+          "carried_at": null,
+          "acknowledgement": "I am an automated agent. This agent-executed synthetic review is not clinical approval or billing advice.",
+          "carried_from": null,
+          "invalidated": null,
+          "revision_number": 1,
+          "modifiers": []
+        },
+        "decision_state": "approved",
+        "reinstated_by": null,
+        "allowed_actions": [],
+        "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": {
+          "number": 1,
+          "status": "approved",
+          "status_label": "Approved",
+          "sub_label": "Agent-executed synthetic review — not clinical approval",
+          "reviewer_actions": [
+            "revoke"
+          ]
+        },
+        "proposed_by": [
+          "corti",
+          "astra",
+          "fable"
+        ],
+        "listed_by": [],
+        "corti_relation": "",
+        "participant_positions": [],
+        "reference_check": {
+          "state": "checked",
+          "detail": ""
+        },
+        "retrieval": [],
+        "phases": {
+          "astra": "independent"
+        },
+        "confirmed": []
+      },
+      {
+        "id": "a1f0b2c3-0002-4d5e-8f60-718293a4b5c6",
+        "key": "45385:b5c6",
+        "bucket": "selected",
+        "code": "45385",
+        "code_kind": "cpt1",
+        "family": "gi.colonoscopy",
+        "family_label": "Colonoscopy",
+        "eyebrow": "COLONOSCOPY",
+        "supported": true,
+        "profile_version": "gi.colonoscopy@3",
+        "status": "ready",
+        "status_label": "ready",
+        "exclusion_reason": "",
+        "reinstatable": false,
+        "descriptor": {
+          "status": "withheld",
+          "label": "Description withheld."
+        },
+        "evidence": [
+          {
+            "context_index": 0,
+            "start": 330,
+            "end": 394,
+            "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.",
+            "exact": true,
+            "page": 1
+          }
+        ],
+        "rationale": "Selected by corti. 1 exact evidence passage.",
+        "units": 1,
+        "checks": [
+          {
+            "id": "evidence.exact",
+            "status": "pass",
+            "label": "Exact evidence",
+            "detail": "",
+            "source": "cpt-studio:provider@1"
+          },
+          {
+            "id": "pfs.endoscopic_family",
+            "status": "pass",
+            "label": "Endoscopic family",
+            "detail": "",
+            "source": "cms-pfs-rvu-2026@1"
+          }
+        ],
+        "modifier_considerations": [
+          "Two lesions in different parts of the colon: a distinct-lesion modifier (59 or XS) may apply. NCCI edits are not connected; no modifier is assigned."
+        ],
+        "support": {
+          "origin": "primary",
+          "service": "colon-a",
+          "family": "gi.colonoscopy",
+          "state": "performed",
+          "reason": "",
+          "detail": "The colonoscopy documents removal of the 9 mm sigmoid colon polyp (COL-2) with a cold snare.",
+          "acts": [
+            {
+              "id": "act-1",
+              "kind": "removal",
+              "label": "The colonoscopy documents removal of the 9 mm sigmoid colon polyp (COL-2) with a cold snare."
+            }
+          ],
+          "status": "pass",
+          "supporting": [
+            0
+          ],
+          "unrelated": [],
+          "detail_support": "",
+          "source": []
+        },
+        "clarification_ids": [],
+        "decision": {
+          "id": "d0e1f2a3-0002-4b5c-9d6e-7f8091a2b3c4",
+          "proposal_id": "a1f0b2c3-0002-4d5e-8f60-718293a4b5c6",
+          "code": "45385",
+          "action": "approve",
+          "note": "Agent-executed synthetic verification review",
+          "reviewer": "CPT Studio review agent (automated agent)",
+          "reviewer_kind": "agent",
+          "created_at": "2026-11-03T22:05:30+00:00",
+          "decided_at": "2026-11-03T22:05:30+00:00",
+          "carried_at": null,
+          "acknowledgement": "I am an automated agent. This agent-executed synthetic review is not clinical approval or billing advice.",
+          "carried_from": null,
+          "invalidated": null,
+          "revision_number": 1,
+          "modifiers": [
+            "XS"
+          ]
+        },
+        "decision_state": "approved",
+        "reinstated_by": null,
+        "allowed_actions": [],
+        "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": {
+          "number": 2,
+          "status": "approved",
+          "status_label": "Approved",
+          "sub_label": "Agent-executed synthetic review — not clinical approval",
+          "reviewer_actions": [
+            "revoke"
+          ]
+        },
+        "proposed_by": [
+          "corti",
+          "astra",
+          "fable"
+        ],
+        "listed_by": [],
+        "corti_relation": "",
+        "participant_positions": [],
+        "reference_check": {
+          "state": "checked",
+          "detail": ""
+        },
+        "retrieval": [],
+        "phases": {
+          "astra": "independent"
+        },
+        "confirmed": []
+      },
+      {
+        "id": "a1f0b2c3-0003-4d5e-8f60-718293a4b5c6",
+        "key": "45378:b5c6",
+        "bucket": "alternative",
+        "code": "45378",
+        "code_kind": "cpt1",
+        "family": "gi.colonoscopy",
+        "family_label": "Colonoscopy",
+        "eyebrow": "COLONOSCOPY",
+        "supported": true,
+        "profile_version": "gi.colonoscopy@3",
+        "status": "informational",
+        "status_label": "informational",
+        "exclusion_reason": "",
+        "reinstatable": false,
+        "descriptor": {
+          "status": "withheld",
+          "label": "Description withheld."
+        },
+        "evidence": [
+          {
+            "context_index": 0,
+            "start": 213,
+            "end": 255,
+            "text": "The colonoscope was advanced to the cecum.",
+            "exact": true,
+            "page": 1
+          }
+        ],
+        "rationale": "Selected by corti. 1 exact evidence passage.",
+        "units": 1,
+        "checks": [
+          {
+            "id": "evidence.exact",
+            "status": "pass",
+            "label": "Exact evidence",
+            "detail": "",
+            "source": "cpt-studio:provider@1"
+          },
+          {
+            "id": "pfs.endoscopic_family",
+            "status": "pass",
+            "label": "Endoscopic family",
+            "detail": "",
+            "source": "cms-pfs-rvu-2026@1"
+          }
+        ],
+        "modifier_considerations": [],
+        "support": {},
+        "clarification_ids": [],
+        "decision": null,
+        "decision_state": "undecided",
+        "reinstated_by": null,
+        "allowed_actions": [],
+        "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": null,
+        "proposed_by": [
+          "corti",
+          "astra",
+          "fable"
+        ],
+        "listed_by": [],
+        "corti_relation": "",
+        "participant_positions": [],
+        "reference_check": {
+          "state": "checked",
+          "detail": ""
+        },
+        "retrieval": [],
+        "phases": {
+          "astra": "independent"
+        },
+        "confirmed": []
+      },
+      {
+        "id": "a1f0b2c3-0004-4d5e-8f60-718293a4b5c6",
+        "key": "43239:b5c6",
+        "bucket": "excluded",
+        "code": "43239",
+        "code_kind": "cpt1",
+        "family": "gi.egd",
+        "family_label": "Upper GI endoscopy",
+        "eyebrow": "UPPER GI ENDOSCOPY",
+        "supported": true,
+        "profile_version": "gi.colonoscopy@3",
+        "status": "excluded",
+        "status_label": "excluded",
+        "exclusion_reason": "Documented as planned, not as performed on the date of service.",
+        "reinstatable": false,
+        "descriptor": {
+          "status": "withheld",
+          "label": "Description withheld."
+        },
+        "evidence": [
+          {
+            "context_index": 0,
+            "start": 395,
+            "end": 441,
+            "text": "Plan: upper endoscopy is scheduled next month.",
+            "exact": true,
+            "page": 1
+          }
+        ],
+        "rationale": "Selected by corti. 1 exact evidence passage.",
+        "units": 1,
+        "checks": [
+          {
+            "id": "evidence.exact",
+            "status": "pass",
+            "label": "Exact evidence",
+            "detail": "",
+            "source": "cpt-studio:provider@1"
+          },
+          {
+            "id": "pfs.endoscopic_family",
+            "status": "pass",
+            "label": "Endoscopic family",
+            "detail": "",
+            "source": "cms-pfs-rvu-2026@1"
+          }
+        ],
+        "modifier_considerations": [],
+        "support": {},
+        "clarification_ids": [],
+        "decision": null,
+        "decision_state": "undecided",
+        "reinstated_by": null,
+        "allowed_actions": [],
+        "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": null,
+        "proposed_by": [
+          "corti",
+          "astra",
+          "fable"
+        ],
+        "listed_by": [],
+        "corti_relation": "",
+        "participant_positions": [],
+        "reference_check": {
+          "state": "checked",
+          "detail": ""
+        },
+        "retrieval": [],
+        "phases": {
+          "astra": "independent"
+        },
+        "confirmed": []
+      }
+    ],
+    "encounter_checks": [
+      {
+        "id": "participants.summary",
+        "status": "pass",
+        "label": "Independent checks",
+        "detail": "Astra (OpenAI, gpt-6-astra) read the document.",
+        "source": "cpt-studio:participants@1"
+      }
+    ],
+    "unsupported": [],
+    "reference_sources": [
+      {
+        "key": "cms-pfs-rvu-2026",
+        "sha256": "930d8f1185a617e9c7abf9cb2cf6ce07e9be4adc77febe89cdd3f5375f5d1535",
+        "url": "https://www.cms.gov/pfs/2026"
+      }
+    ],
+    "summary": {},
+    "services": {},
+    "completeness": {
+      "state": "complete",
+      "unresolved_items": []
+    },
+    "second_run": null
+  },
+  "clarifications": [],
+  "confirmations": [],
+  "decisions": {
+    "history": [
+      {
+        "id": "d0e1f2a3-0001-4b5c-9d6e-7f8091a2b3c4",
+        "proposal_id": "a1f0b2c3-0001-4d5e-8f60-718293a4b5c6",
+        "code": "45380",
+        "action": "approve",
+        "note": "Agent-executed synthetic verification review",
+        "reviewer": "CPT Studio review agent (automated agent)",
+        "reviewer_kind": "agent",
+        "created_at": "2026-11-03T22:05:00+00:00",
+        "decided_at": "2026-11-03T22:05:00+00:00",
+        "carried_at": null,
+        "acknowledgement": "I am an automated agent. This agent-executed synthetic review is not clinical approval or billing advice.",
+        "carried_from": null,
+        "invalidated": null,
+        "revision_number": 1,
+        "modifiers": []
+      },
+      {
+        "id": "d0e1f2a3-0002-4b5c-9d6e-7f8091a2b3c4",
+        "proposal_id": "a1f0b2c3-0002-4d5e-8f60-718293a4b5c6",
+        "code": "45385",
+        "action": "approve",
+        "note": "Agent-executed synthetic verification review",
+        "reviewer": "CPT Studio review agent (automated agent)",
+        "reviewer_kind": "agent",
+        "created_at": "2026-11-03T22:05:30+00:00",
+        "decided_at": "2026-11-03T22:05:30+00:00",
+        "carried_at": null,
+        "acknowledgement": "I am an automated agent. This agent-executed synthetic review is not clinical approval or billing advice.",
+        "carried_from": null,
+        "invalidated": null,
+        "revision_number": 1,
+        "modifiers": [
+          "XS"
+        ]
+      }
+    ]
+  },
+  "readiness": {
+    "draft": true,
+    "reviewed": true,
+    "blockers": []
+  },
+  "coding": {
+    "state": "complete"
+  },
+  "reports": [
+    {
+      "id": "b0b0b0b0-0001-4c4c-8d8d-9e9e9e9e9e01",
+      "kind": "draft",
+      "fmt": "txt",
+      "filename": "CPT-Studio-draft.txt",
+      "sha256": "cc16dac523f121a43fd6013d2b616d7c7071d245cd6c75f0f9e99c0141945953",
+      "generated_at": "2026-11-03T22:10:00+00:00",
+      "generated_by": "CPT Studio review agent (automated agent)",
+      "download_url": "/api/reports/b0b0b0b0-0001-4c4c-8d8d-9e9e9e9e9e01/download"
+    },
+    {
+      "id": "b0b0b0b0-0002-4c4c-8d8d-9e9e9e9e9e02",
+      "kind": "draft",
+      "fmt": "csv",
+      "filename": "CPT-Studio-draft.csv",
+      "sha256": "0c068c26d06556f8821041e5c54dedf0d541d1e2ca1b401f9a57624d520ec9d1",
+      "generated_at": "2026-11-03T22:10:00+00:00",
+      "generated_by": "CPT Studio review agent (automated agent)",
+      "download_url": "/api/reports/b0b0b0b0-0002-4c4c-8d8d-9e9e9e9e9e02/download"
+    },
+    {
+      "id": "b0b0b0b0-0003-4c4c-8d8d-9e9e9e9e9e03",
+      "kind": "approved",
+      "fmt": "txt",
+      "filename": "CPT-Studio-approved.txt",
+      "sha256": "35054772c1295fe72d6c3ea5a8d68914cd07947261c0cb17343451db994bdb1a",
+      "generated_at": "2026-11-03T22:10:00+00:00",
+      "generated_by": "CPT Studio review agent (automated agent)",
+      "download_url": "/api/reports/b0b0b0b0-0003-4c4c-8d8d-9e9e9e9e9e03/download"
+    },
+    {
+      "id": "b0b0b0b0-0004-4c4c-8d8d-9e9e9e9e9e04",
+      "kind": "approved",
+      "fmt": "csv",
+      "filename": "CPT-Studio-approved.csv",
+      "sha256": "2eb0c56721af26279cac3a1b014f0968851e8cc72b011010ca8013be4e3e7ef6",
+      "generated_at": "2026-11-03T22:10:00+00:00",
+      "generated_by": "CPT Studio review agent (automated agent)",
+      "download_url": "/api/reports/b0b0b0b0-0004-4c4c-8d8d-9e9e9e9e9e04/download"
+    }
+  ],
+  "activity": []
+}

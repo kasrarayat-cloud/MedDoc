@@ -1,0 +1,167 @@
+{
+  "encounter": {
+    "id": "7d0c4a52-2f6e-4c39-9a51-3b1e6f0d2a11",
+    "title": "Synthetic colonoscopy (two lesions)"
+  },
+  "revision": {
+    "id": "0e5d1c6b-8a47-4f2e-b3d9-5c6a7b8d9e10",
+    "number": 1,
+    "text_sha256": "2ad7c1bfc56ced7106373b157a7e64035259e74d433d9a9b48ba860b0d1549e0"
+  },
+  "participants": [
+    {
+      "name": "corti",
+      "label": "Corti",
+      "vendor": "Corti",
+      "model": "corti-coding-v2",
+      "runs": []
+    },
+    {
+      "name": "astra",
+      "label": "Astra",
+      "vendor": "OpenAI",
+      "model": "gpt-6-astra",
+      "runs": [
+        {
+          "id": "c0ffee00-0002-4a5b-8c6d-7e8f9a0b1c2d",
+          "state": "succeeded",
+          "sent": true,
+          "mode": "live",
+          "purpose": "independent",
+          "run_identity": "9f8e7d6c-0001-4b3a-8c7d-6e5f4a3b2c1d",
+          "authorization_ref": "owner-ruling-2026-10-23",
+          "requested_by": "CPT Studio review agent (automated agent)",
+          "adapter_version": "astra-reader@cptstudio-3",
+          "endpoint": "https://api.example.invalid/astra/v1",
+          "requested_model": "gpt-6-astra",
+          "returned_model": "gpt-6-astra-2026-10-01",
+          "request_id": "req_astra0123456789",
+          "response_id": "resp_astra0123456789",
+          "http_status": 200,
+          "latency_ms": 1201,
+          "usage": {},
+          "usage_basis": "reported",
+          "estimated_cost_usd": 0.04,
+          "request_sha256": "2d1ef242d0f5a8837bd8d223f8706e4264c26a2eec484b2bfddae1cbae6b4719",
+          "response_sha256": "e782137a56853c3db1e8b3e27d1f49148a9f20b6965c50c3523c931eea43a394",
+          "response_bytes": 2048,
+          "created_at": "2026-11-03T22:00:00+00:00",
+          "finished_at": "2026-11-03T22:00:00+00:00",
+          "error": "",
+          "reused_from": null,
+          "reconciled": false,
+          "reading": null,
+          "review": null,
+          "exchanges": [
+            {
+              "turn": 1,
+              "state": "succeeded",
+              "http_status": 200,
+              "latency_ms": 900,
+              "usage": {},
+              "request_sha256": "d6234eee91bfeeb9e7eeba4d0b33e612abddb3cddad72c93fd240978ee7dc5a5",
+              "response_sha256": "1f1b952a62026abb28b4c849e7114aa6bcba4c37cceacc4f52d3cfb21281c84c",
+              "provider_request_id": "msg_astra9876543210",
+              "response_id": "chatcmpl-astra9876543210",
+              "error": "",
+              "tool_calls": [
+                {
+                  "call_id": "call_astra55555555",
+                  "tool": "search",
+                  "arguments": {},
+                  "refs": [],
+                  "result_sha256": "e7d328d087638cfeb4f999b4a67360b345d65237a63e36acdd7fc9b0a9d73733",
+                  "executed_at": "2026-11-03T22:00:00+00:00"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fable",
+      "label": "Fable",
+      "vendor": "Anthropic",
+      "model": "claude-fable-5-1",
+      "runs": [
+        {
+          "id": "c0ffee00-0003-4a5b-8c6d-7e8f9a0b1c2d",
+          "state": "succeeded",
+          "sent": true,
+          "mode": "live",
+          "purpose": "independent",
+          "run_identity": "9f8e7d6c-0002-4b3a-8c7d-6e5f4a3b2c1d",
+          "authorization_ref": "owner-ruling-2026-10-23",
+          "requested_by": "CPT Studio review agent (automated agent)",
+          "adapter_version": "fable-reader@cptstudio-3",
+          "endpoint": "https://api.example.invalid/fable/v1",
+          "requested_model": "claude-fable-5-1",
+          "returned_model": "claude-fable-5-1",
+          "request_id": "req_fable0123456789",
+          "response_id": "resp_fable0123456789",
+          "http_status": 200,
+          "latency_ms": 1201,
+          "usage": {},
+          "usage_basis": "reported",
+          "estimated_cost_usd": 0.04,
+          "request_sha256": "daa633e1bd655ef46f2de8127aa1c6be3a0ca8de772d0576ec51d72fd6e98a49",
+          "response_sha256": "5b9e55d9d981fc02333c793ea7b71c2c874a38ec0e5ede74548f9515d6275e43",
+          "response_bytes": 2048,
+          "created_at": "2026-11-03T22:00:00+00:00",
+          "finished_at": "2026-11-03T22:00:00+00:00",
+          "error": "",
+          "reused_from": null,
+          "reconciled": false,
+          "reading": null,
+          "review": null,
+          "exchanges": [
+            {
+              "turn": 1,
+              "state": "succeeded",
+              "http_status": 200,
+              "latency_ms": 900,
+              "usage": {},
+              "request_sha256": "2ae49a528c09ebf1df0b5ab5a636fd974ee6dbe154e2f60d65905a043a4d5bb0",
+              "response_sha256": "431eb2501e95976e6736206f0b32e4d28cb1701dffda97ecf9b497b6c4a541b3",
+              "provider_request_id": "msg_fable9876543210",
+              "response_id": "chatcmpl-fable9876543210",
+              "error": "",
+              "tool_calls": [
+                {
+                  "call_id": "call_fable55555555",
+                  "tool": "search",
+                  "arguments": {},
+                  "refs": [],
+                  "result_sha256": "9a43d33c56b8b412aa35b0931b6766d4ab968f6ca1f3061ba229c36c43fe9040",
+                  "executed_at": "2026-11-03T22:00:00+00:00"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assessments": [
+    {
+      "id": "4b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
+      "created_at": "2026-11-03T22:00:00+00:00",
+      "current": true,
+      "phase": 2,
+      "final": true,
+      "frozen": [
+        [
+          "astra reading",
+          "52881e56b4e582d4d9848e1f410bd01e3fe44d3d3c7def7d40a127a131684bff"
+        ],
+        [
+          "fable reading",
+          "af8f923fd7b0df902fdbdce270e43c5870e5a5234aafe6e9266ded5cc3256adc"
+        ]
+      ]
+    }
+  ],
+  "retrieval": [],
+  "reconciliation": []
+}

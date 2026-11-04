@@ -48,7 +48,7 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@5'
+ROUTING_VERSION = 'gi-routing@6'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -6003,6 +6003,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if _p2_stopped_short(an, sentences, depth):
+        return None  # P2 READ-HOLD, R8 D13: "We stopped in the stomach." beside a reach to the duodenum: withheld (asked)
     if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
                                                                                  labelled):
         return None  # "introduced into the esophagus": where the examination starts, never how far it went
@@ -6019,6 +6021,38 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
+
+
+# P2 READ-HOLD, R8 D13 (reader-repair DESIGN item 4): a statement that the upper examination itself stopped, halted,
+# ended or was terminated or aborted - its subject the examination, the procedure, the scope or "we" - and the landmark
+# it stopped at or in; never a pause on withdrawal or a stop to do something there ("On withdrawal we stopped in the
+# stomach to take biopsies."), and never another thing stopping ("Carvedilol was stopped", "Oozing ... stopped").
+_P2_UPPER_STOP = re.compile(
+    r'\b(?:we|the\s+(?:examination|exam|procedure|study|endoscopy|upper\s+endoscopy|EGD|scope|endoscope|gastroscope|'
+    r'instrument))\s+(?:was\s+|were\s+|had\s+been\s+|had\s+)?(?:stopped|halted|ended|terminated|aborted|turned\s+back'
+    r'|went\s+no\s+further|could\s+go\s+no\s+further|did\s+not\s+(?:go|proceed|advance)\s+(?:any\s+)?further)\b',
+    re.A | re.I)
+_P2_UPPER_PAUSE = re.compile(
+    r'\b(?:on|during|after|before|while)\s+(?:the\s+)?(?:withdrawal|withdrawing|exit|removal\s+of\s+the\s+scope)\b'
+    r'|\bon\s+the\s+way\s+(?:out|in|back)\b|\bbriefly\b|\bto\s+(?:take|obtain|place|band|ligate|biopsy|inspect|examine|'
+    r'photograph|retroflex|apply|treat|inject|clip|suction|irrigate|wash|lavage|look|assess|evaluate|document)\b',
+    re.A | re.I)
+
+
+def _p2_stopped_short(an: Analysis, sentences, depth: int) -> bool:
+    """Whether a clause of the upper service's sentences states that the examination stopped at or in a landmark
+    shallower than ``depth``, the deepest reached (_P2_UPPER_STOP, then an UPPER_LANDMARKS name after it in the clause):
+    the document then contradicts its own extent, so the extent is withheld (held [extent], as the unnamed twin is;
+    hold-only). Bounded: a search per clause, the landmark table only in a clause that states a stop."""
+    text = an.text
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            stop = _P2_UPPER_STOP.search(text, cs, ce)
+            if stop is None or _P2_UPPER_PAUSE.search(text, cs, ce):
+                continue
+            if any(d < depth and pattern.search(text, stop.end(), ce) for _, d, pattern in cues.UPPER_LANDMARKS):
+                return True
+    return False
 
 
 def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
@@ -6503,6 +6537,72 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     return [f for f in facts if f], bool(incomplete) or short
 
 
+# Core repair 2026-11-03 (P1, rule 8; R2-routing-status 1.4): a visit mention inside an explicit statement that no
+# separate office E/M service is documented (cues.EM_ABSENCE, the pattern the documented-service reader reads too) reads
+# negated for this encounter; where another E/M statement of the note reads performed, the denial is held instead
+# (EM_ABSENT_CONTRADICTED), so a note that contradicts itself still asks. A sentence carrying a date other than the
+# service date, a hedge or a condition (any cue _cue_reading reads) keeps its reading.
+EM_ABSENT_CUE = 'negated: an explicit statement that no separate office E/M service is documented'
+EM_ABSENT_CONTRADICTED = ('uncertain: the note states that no separate office E/M service is documented, and another '
+                          'E/M statement of it reads as performed')
+# Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): the absence statement held beside an evaluation of the
+# patient, a history, an examination or a visit the note states in words routing reads as no E/M mention
+# (cues.EM_EVALUATION_STATED; _em_evaluation_stated). The words are quoted after it.
+EM_ABSENT_EVALUATION = ('uncertain: the note states that no separate office E/M service is documented, and it also '
+                        'states an evaluation, a history, an examination or a visit')
+# The opening of a sentence that denies what follows it ("No separate evaluation was performed today.", "No physical
+# examination was documented.", "There was no HPI."): a negator, then at most four words and no punctuation or
+# conjunction before the evaluation words, which it then governs. Such words state no evaluation (_em_evaluation_stated).
+_EM_DENYING_OPENER = re.compile(r'[ \t]*(?:there\s+(?:is|was|were|has\s+been|had\s+been)\s+)?(?:no|not|without|neither|'
+                                r'none\s+of)(?:\s+(?!(?:and|but|or|nor|then|while|so|yet|although|though|however)\b)'
+                                r"[\w/&'-]+){0,4}\s*", re.A | re.I)
+
+
+def _em_absent(an: Analysis, m: Mention) -> bool:
+    """Whether the visit mention [m.start, m.end) lies inside an explicit E/M absence statement (cues.EM_ABSENCE) of its
+    sentence, and that sentence names no date other than the service date. Bounded: the pattern and the date test once
+    per sentence (an.memo), then one bisection per mention - a sentence of many visit mentions is read once, not once
+    for each of them."""
+    ss, se = an.lay.sentence_for(m.start, m.end)
+    key = ('em_absence', ss, se)
+    found = an.memo.get(key)
+    if found is None:
+        spans = [x.span() for x in cues.EM_ABSENCE.finditer(an.text, ss, se)]
+        dated = bool(spans) and all(an.service_date is not None and d.precision == 'day'
+                                    and ctx.compare_to_service(d, an.service_date) == 0 for d in an.dates_in(ss, se))
+        found = an.memo[key] = ([a for a, _ in spans], spans, dated)
+    starts, spans, dated = found
+    at = bisect.bisect_right(starts, m.start) - 1  # the matches never overlap: only the last one starting at or before
+    return dated and at >= 0 and m.end <= spans[at][1]
+
+
+def _em_evaluation_stated(an: Analysis) -> Optional[str]:
+    """Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): the words of the first statement of an
+    evaluation of the patient, a history, an examination or a visit (cues.EM_EVALUATION_STATED) that lies inside no
+    explicit E/M absence statement (cues.EM_ABSENCE) and that its own sentence does not open by denying
+    (_EM_DENYING_OPENER: "No separate evaluation was performed today."); None when the note states none. Read only where
+    an absence statement negates a visit mention (_route), and only to hold it. Bounded: each pattern once over the text
+    (an.memo), then one bisection and one sentence lookup per match."""
+    key = ('em_evaluation_stated',)
+    if key in an.memo:
+        return an.memo[key]
+    text = an.text
+    spans = [x.span() for x in cues.EM_ABSENCE.finditer(text)]
+    starts = [a for a, _ in spans]
+    found = None
+    for m in cues.EM_EVALUATION_STATED.finditer(text):
+        at = bisect.bisect_right(starts, m.start()) - 1
+        if (at >= 0 and spans[at][1] > m.start()) or (at + 1 < len(spans) and spans[at + 1][0] < m.end()):
+            continue  # words of (or reaching into) an absence statement are no other statement
+        ss, _ = an.lay.sentence_for(m.start(), m.end())
+        if ss <= m.start() and _EM_DENYING_OPENER.fullmatch(text, ss, m.start()):
+            continue
+        found = ' '.join(m.group(0).split())[:60]
+        break
+    an.memo[key] = found
+    return found
+
+
 # GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
 # says so is quoted after it), and of an E/M time or decision-making statement held because a time it names may be
 # another date's.
@@ -6518,6 +6618,10 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     cue = _cue_reading(an, m.start, m.end, em=True)
     if cue and cue.status != 'performed':
         return cue
+    if m.kind == 'em-visit' and cue is None and _em_absent(an, m):
+        # core repair 2026-11-03 (P1, rule 8): an explicit statement that no separate office E/M service is documented
+        # negates the visit it names (an affirmative E/M statement elsewhere still outranks it: _route)
+        return Reading('negated', (EM_ABSENT_CUE,), 'cue')
     if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
         reading = _default_reading(an, m.start, m.end)
     else:
@@ -6761,8 +6865,10 @@ def _pv1_compared(text: str, start: int) -> bool:
 # a telephone or audio contact ("by telephone", "telephonic", "audio-only").
 _PV1_MODE_FIELD = re.compile(r'(?:visit|encounter|appointment|contact|consult\w*|type|mode|modality|method)\b[^\n:]*?'
                              r'[ \t]*[:\-][ \t]*(?:tele)?phone\Z', re.A | re.I)
-_PV1_ATTENDANCE = re.compile(r"not\s+seen|no\s+in[- ]person|no[- ]?show|did\s+not|didn't|failed\s+to|missed|cancell?ed|"
-                             r'left\s+without|LWBS', re.A | re.I)
+# (variant repair, round 2, cux-r2-variants.json V12: the contracted "n't seen" and the hyphen's spellings of "no
+# in-person" are attendance predicates as "not seen" and "no in-person" are, so a variant takes its plain form's path)
+_PV1_ATTENDANCE = re.compile(r"not\s+seen|n['\u2019]t\s+seen|no\s+in(?: |" + cues.HYPHEN + r")person|no[- ]?show|"
+                             r"did\s+not|didn't|failed\s+to|missed|cancell?ed|left\s+without|LWBS", re.A | re.I)
 _PV1_COMPOUND = re.compile(r'(?:tele)?phone\s+(?P<noun>[\w/-]+)', re.A | re.I)
 _PV1_DATA_NOUN = re.compile(r'notes?|numbers?|lists?|logs?|records?|lines?|polic(?:y|ies)', re.A | re.I)
 # Another party to a contact: an interpreter, a historian, a clinician, a pharmacy, a family member, a caregiver
@@ -6812,7 +6918,10 @@ _PV1_SPAN = re.compile(r'\b(?:for|in|over|within)\s+(?:the\s+)?(?:past\s+|last\s
 # The visit stated as in person ("seen in person today", "is seen today", "converted to an in-person visit")
 _PV1_IN_PERSON = re.compile(
     r"(?<!not )(?<!never )(?<!n't )\b(?:seen|evaluated|examined|interviewed)\s+(?:today\s+)?in[- ]person\b"
-    r'|(?<!no )(?<!not )\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
+    # (P2 READ-HOLD, R8 D12: never after a verb of its own - "not seen in person today" - which the verb's own
+    # alternative above reads with its negation)
+    r'|(?<!no )(?<!not )(?<!seen )(?<!evaluated )(?<!examined )(?<!interviewed )'
+    r'\bin[- ]person\s+(?:today|visit\s+today|encounter\s+today)\b'
     r'|\bconverted\s+to\s+(?:an?\s+)?(?:in[- ]person|office|clinic|face[- ]to[- ]face)\b|\bface[- ]to[- ]face\b'
     r"|(?<!not )(?<!never )(?<!n't )\b(?:is|was)\s+seen\s+(?:in\s+(?:the\s+)?(?:office|clinic)\s+)?today\b",
     re.A | re.I)
@@ -6914,15 +7023,28 @@ _PV1_LAST_LEAD = re.compile(r'\b(?:last|previously|prior|before|earlier|first|in
 def _pv1_in_person_today(an: Analysis, start: int, end: int) -> bool:
     """Whether [start, end) states that today's visit was in person (_PV1_IN_PERSON) - not one told of another time:
     no 'last', 'previously' or 'prior' right before it ("last seen in person"), and no other time in its clause
-    (_pv1_clause_other_time: "seen in person in August"). Bounded: the matches of a CLAUSE_REACH window."""
+    (_pv1_clause_other_time: "seen in person in August"). An in-person reading inside a cues.NOT_IN_PERSON phrase is
+    that phrase's own words, never a statement of an in-person visit (variant repair, round 2, cux-r2-variants.json
+    V12: "Patient not  seen in person today." with two spaces, a line break inside the phrase, or "wasn\u2019t seen in
+    person", which the fixed-width lookbehinds of _PV1_IN_PERSON miss: _pv1_in_a_not_in_person_phrase). Bounded: the
+    matches of a CLAUSE_REACH window."""
     text = an.text
     for x in _PV1_IN_PERSON.finditer(text, start, end):
+        if _pv1_in_a_not_in_person_phrase(text, x.start(), x.end()):
+            continue
         if _PV1_LAST_LEAD.search(text, max(start, x.start() - 24), x.start()):
             continue
         cs, ce = an.lay.window(an.lay.clauses_for(x.start(), x.end())[0], x.start(), x.end(), CLAUSE_REACH)
         if not _pv1_clause_other_time(an, cs, ce):
             return True
     return False
+
+
+def _pv1_in_a_not_in_person_phrase(text: str, start: int, end: int) -> bool:
+    """Whether a cues.NOT_IN_PERSON match overlaps [start, end) (V12): the in-person words there are the phrase's own.
+    Hold-only: read only to set an in-person reading aside. Bounded: _PV1_QUOTE_WINDOW characters on either side."""
+    lo, hi = max(0, start - _PV1_QUOTE_WINDOW), min(len(text), end + _PV1_QUOTE_WINDOW)
+    return any(m.start() < end and start < m.end() for m in cues.NOT_IN_PERSON.finditer(text, lo, hi))
 
 
 def _pv1_under_another_occasion(an: Analysis, pos: int) -> bool:
@@ -7018,7 +7140,42 @@ def _pv1_not_in_person_words(an: Analysis) -> tuple[Optional[str], tuple[tuple[i
                 if after is None or not _PV1_PHONE_NUMBER.search(after.group(0)):
                     words = title.group(0).strip()
                     break
+        if words is None:
+            # P2 READ-HOLD, R8 D12: the same reading of a folded copy - no-break and other Unicode spaces as a space,
+            # soft hyphens and zero-width characters removed - where the text holds any ("Patient not<NBSP>seen<NBSP>in
+            # <NBSP>person today." reads as the plain sentence does). Hold-only: it can only add the document's hold.
+            folded = _p2_folded_analysis(an)
+            if folded is not None:
+                words = _pv1_not_in_person_words(folded)[0]
         an.memo[key] = (words, spans, tuple(s for s, _ in spans))
+    return an.memo[key]
+
+
+# P2 READ-HOLD, R8 D12: what a fold turns into a space and what it removes (cues are ASCII, cues.FLAGS: "\s" never
+# matches a no-break space, and a soft hyphen or a zero-width character splits a word)
+_P2_FOLD_SPACE = re.compile('[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]')
+_P2_FOLD_DROP = re.compile('[\u00ad\u180e\u200b\u200c\u200d\u2060\ufeff]')
+
+
+def _p2_fold(text: str) -> str:
+    return _P2_FOLD_DROP.sub('', _P2_FOLD_SPACE.sub(' ', text))
+
+
+def _p2_folded_analysis(an: Analysis) -> Optional['Analysis']:
+    """The analysis of the folded copy of ``an``'s text (_p2_fold), for C4's hold only, or None when the fold changes
+    nothing (so a text with no foldable character costs one pass of two searches). Built as _analysis builds one, for
+    the same effective service date, without routing it: only the C4 reading reads it, once per document (memo)."""
+    key = ('p2-folded',)
+    if key not in an.memo:
+        folded = _p2_fold(an.text) if (_P2_FOLD_SPACE.search(an.text) or _P2_FOLD_DROP.search(an.text)) else an.text
+        if folded == an.text:
+            an.memo[key] = None
+        else:
+            lay = layout(folded)
+            interventions = tuple(Intervention(label, families, m.start(), m.end())
+                                  for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(folded))
+            an.memo[key] = Analysis(folded, lay, _service_mentions(folded), _em_mentions(folded, lay),
+                                    _clause_cues(folded), ctx.find_dates(folded), an.service_date, interventions)
     return an.memo[key]
 
 
@@ -8146,6 +8303,21 @@ def _route(an: Analysis) -> RoutingResult:
     an.references = _references(an, attributed)
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
+    absent = {m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)}  # a set: one look per other reading
+    if absent:
+        # rule 8 (core repair 2026-11-03): any other E/M statement that reads the visit as done or open (performed, or
+        # held - a telephone visit, a hedged one) outranks the absence statement, which is then held: the note
+        # contradicts itself, so the family stays open and its questions are asked. Round-2 repair (R8b-2): so does an
+        # evaluation of the patient, a history, an examination or a visit the note states in words routing reads as no
+        # E/M mention ("She was also evaluated today for new-onset jaundice, a separate problem.")
+        if any(r.status in ('performed', 'incomplete', 'uncertain') for m, r in base.items() if m not in absent):
+            held = EM_ABSENT_CONTRADICTED
+        else:
+            stated = _em_evaluation_stated(an)
+            held = None if stated is None else f"{EM_ABSENT_EVALUATION} ('{stated}')"
+        if held is not None:
+            base = {m: (Reading('uncertain', (held,) + r.cues, 'cue', doubt=True)
+                        if r.cues[:1] == (EM_ABSENT_CUE,) else r) for m, r in base.items()}
     em_facts = _em_facts(an, base)
     has_basis = any(f.name == 'em_basis' for f in em_facts)
     findings: dict[str, FamilyFinding] = {}

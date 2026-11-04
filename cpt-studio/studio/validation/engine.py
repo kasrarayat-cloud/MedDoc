@@ -16,6 +16,7 @@ from datetime import date
 from typing import Mapping, Optional, Sequence
 
 from studio.gi.context import charge_question_day, is_member_conflict
+from studio.gi import cues as gi_cues
 from studio.gi import sections as gi_sections
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
@@ -32,7 +33,7 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
 from studio.validation import checks, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@5'
+ENGINE_VERSION = 'cpt-studio-validation@6'
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.
@@ -135,6 +136,10 @@ class _Encounter:
     # Engine @4: a family's base (diagnostic) code selected beside a code of the same documented service that accounts
     # for one of its interventions: (base code, the other codes). The base is held, never excluded.
     bases_included: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # P2 READ-HOLD, R8 D15: a base code whose documented service is the endoscopic portion of another (an EGD inside an
+    # EUS): (base code, the selected codes of that service that include the examination - none when it has no selected
+    # code). Held, never excluded; empty when no base is so read (I1).
+    bases_within: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -1047,6 +1052,23 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         supported = reconcile.support(found, kept, current=lambda span: (span.start, span.end) not in another_time
                                       and gi_services.current_statement(text, span.start, span.end, day),
                                       today=today, report_family=report_family)
+        if found.state in checks.POSITIVE and supported.status in ('warn', 'fail') and found.reason != 'own_passage' \
+                and legacy not in checks.EM_FAMILIES:
+            # P2 READ-HOLD, R3 7.5.1: the narrow evidence hold (_passages_elsewhere), for a procedure code. Never over
+            # the own-passage release, whose passage the inventory reads no act in by definition and which its own gates
+            # already placed (_own_passage_may_stand: D1, D4, D5); never for an office visit, whose own plan and history
+            # sentences are documentation of that visit ("Return in three months.": validation:6's pinned reading)
+            # a passage another time's or denied by a cue of its OWN: a time read only from the section it stands in is
+            # the layout's reading, not the passage's (round 4 PA's "one cause"; a numbered "3. Upcoming procedures"
+            # item makes today's "4. 6 mm sigmoid polyp removed with cold snare." planned: test_repairs_r4_sections)
+            own_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE and not _section_time(r)}
+            elsewhere = _passages_elsewhere(kept, own_time, found, inventory)
+            if elsewhere:
+                found = replace(found, state='uncertain', reason='readings_disagree', question=(
+                    f'Confirm whether {code} is supported: none of the passages it cites shows what was done on the date '
+                    'of service.'),
+                    detail=f'{found.detail} But none of the passages the code cites shows it: {elsewhere} Held for the '
+                           'reviewer, not excluded.')
         note = _undecided(outcome, found, supported, kept)
         outcome = _service_outcome(found)
     elif unmatched and inventory is not None:
@@ -1060,6 +1082,36 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     row = reference.lookup(code, day if dated else None)
     return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
                                                      (row if dated else reference.lookup(code, day)).pfs))
+
+
+def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory) -> str:
+    """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
+    than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
+    another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
+    historical, negated or cancelled by a cue of its own (``another_time``: never by its section alone) - or '' when one
+    is not. Read only where the documented service reads the code as performed and the passages' support is warn or
+    fail; the code is then held, never excluded. A passage of the matched service's own (its procedure-level statement)
+    is never elsewhere: such a code stays as it is (R3 open question 1, the narrow choice). Bounded: one pass over the
+    inventory's services per passage."""
+    if inventory is None or not kept:
+        return ''
+    own = found.service
+    why = []
+    for span in kept:
+        if (span.start, span.end) in another_time:
+            why.append(f'{reconcile.quote(span, 80)} reads as another time or a denial')
+            continue
+        stand_in = checks.Reading('performed', (), 'evidence', span.text, span.start, span.end)
+        if _elsewhere(stand_in, found, inventory):
+            why.append(f'{reconcile.quote(span, 80)} is another documented service\'s')
+            continue
+        inside_own = own.scope_end > own.scope_start and own.scope_start <= span.start and span.end <= own.scope_end
+        if not inside_own and any(s.id != own.id and s.scope_end > s.scope_start and s.scope_start <= span.start
+                                  and span.end <= s.scope_end for s in inventory.services):
+            why.append(f'{reconcile.quote(span, 80)} lies in another documented service')
+            continue
+        return ''
+    return '; '.join(why) + '.'
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -1080,10 +1132,12 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
       the code with both readings - a doubt about this act is never released by a second reader;
     - a passage read as about another TIME (an earlier visit, a planned repeat) does not decide: the inventory reads
       time per clause and per service, and an unrelated historical reference never invalidates a current service;
-      except where that reading rests on the passage's SECTION alone (routing reads it inside a plan or history section,
-      "3. Upcoming procedures" over "4. Polyp removed by EMR at a tertiary center.") and the inventory reads the same
-      passage as the very act the code accounts for: the two readers then disagree about that passage's own time, so it
-      holds (never excludes);
+      except where the inventory reads that same passage as the very act the code accounts for (routing reads it inside
+      a plan or history section, "3. Upcoming procedures" over "4. Polyp removed by EMR at a tertiary center.", or by a
+      cue of its own clause, "Last colonoscopy: 9 mm polyp removed with hot snare.") or, for a code matched to a service
+      with no act, as that service's own statement (an attached prior report's title): the two readers then disagree
+      about that passage's own time, so it holds, never excludes (_another_time_on_the_act; P2 READ-HOLD, R8 D9, D6,
+      D10);
     - a passage about something else (a fragment of a findings sentence) does not decide;
     - where the documented service is not performed but the routing-era reading is positive, the code is held, never
       newly excluded.
@@ -1095,7 +1149,7 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
-            old.state == 'not_performed' and own and _section_time(doubt) and _on_matched_act(doubt, found))
+            old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
         if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
             # The routing-era reader left a negation unresolved ("was complete and was not discontinued") in a passage
             # the documented-service reader reads, clause by clause, as this service's own positive statement: the doubt
@@ -1117,11 +1171,13 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         return found
     if found.reason == 'act_missing' and old.state in checks.POSITIVE and old.decisive is not None \
             and old.decisive.origin == 'evidence' and old.decisive.start is not None \
-            and not _elsewhere(old.decisive, found, inventory) and _states_unread_act(old.decisive, found, code, text):
+            and not _elsewhere(old.decisive, found, inventory) and _states_unread_act(old.decisive, found, code, text) \
+            and _own_passage_may_stand(old.decisive, found, code, text, inventory):
         # The documented service is performed and the code's own passage states its act (the routing-era reader reads
         # it performed: a form row, a check box, a phrasing this reader does not parse); the inventory does not read
         # that act at all - it neither denies it nor gives the passage to another service - so the code's own reading
-        # stands, and says so.
+        # stands, and says so. Only where nothing in that passage says the act was not done (_own_passage_may_stand:
+        # P2 READ-HOLD); otherwise the inventory's act_missing hold stays.
         positive_state = 'incomplete' if found.service.status == 'incomplete' else 'performed'
         return replace(found, state=positive_state, reason='own_passage', question='',
                        detail=f'The {reconcile.service_label(found.service)} is documented as {found.service.status}; '
@@ -1576,6 +1632,28 @@ def _section_time(reading: checks.Reading) -> bool:
         and all(cue.startswith(checks.SECTION_CUE_PREFIX) for cue in reading.cues)
 
 
+def _another_time_on_the_act(doubt: checks.Reading, found: reconcile.Match, text: str) -> bool:
+    """The third hold arm of _second_opinion (P2 READ-HOLD, R8 D9 with D6's and D10's engine halves): the routing-era
+    reading of the code's own passage is planned or historical, by its section (_section_time, as before) or by a cue
+    of its own clause ("historical: Last", "historical: 2026-09-02 is before the service date", "planned: tomorrow") -
+    never a clause cue in a passage whose own words say today ("The polyp seen at the prior colonoscopy was removed
+    with a hot snare today.": the inventory read its "today") - and the passage is what the matched status rests on:
+    the evidence of a matched act (_on_matched_act), or, for a match with no act (a base or a service code), the
+    service's own statement (_on_service_statement). Hold-only: the code is held with both readings, never excluded;
+    an unrelated historical passage still never decides against a current service."""
+    if doubt.status not in ('planned', 'historical') or doubt.start is None:
+        return False
+    if not _section_time(doubt) and gi_services.TODAY_WORDS.search(text, doubt.start, doubt.end):
+        return False
+    return _on_matched_act(doubt, found) or (not found.acts and _on_service_statement(doubt, found))
+
+
+def _on_service_statement(reading: checks.Reading, found: reconcile.Match) -> bool:
+    """Whether the passage overlaps the matched service's own evidence (its statement of performance, its report
+    title)."""
+    return any(reading.start < ev.end and ev.start < reading.end for ev in found.service.evidence)
+
+
 def _on_matched_act(reading: checks.Reading, found: reconcile.Match) -> bool:
     """Whether the passage overlaps the evidence of an act the code accounts for (the matched performed acts)."""
     return reading.start is not None and any(reading.start < ev.end and ev.start < reading.end
@@ -1652,8 +1730,61 @@ def _states_unread_act(reading: checks.Reading, found: reconcile.Match, code: st
         return False
     if any(reading.start < t.end and t.start < reading.end for a in found.service.acts for t in a.evidence):
         return False
+    # lead integration L3 (cux-lead.json; P1 rule 2): the act mentions services._acts_in reads, not the raw ACTS
+    # patterns - an attributive act compound ("biopsy-proven Barrett esophagus", "a biopsy-confirmed adenoma")
+    # presupposes an earlier act and states none today, so it never stands for the act this code accounts for
+    return any(kind in kinds for kind, _, _ in gi_services._acts_in(text, reading.start, reading.end))
+
+
+def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:
+    """Whether the routing-era reading of the code's own passage may stand for an act the inventory does not read (the
+    own-passage release), package P2 READ-HOLD (R8 section 1.3). Hold-only: a gate that fails leaves the inventory's
+    act_missing hold (held with its question, never excluded).
+    - D1 (candidate_rb): only a 'performed' reading - never 'incomplete' ("was attempted", "was unsuccessful", which the
+      release had turned into the service's 'performed') - and never a passage that states the act failed, was abandoned
+      or only attempted, or yielded nothing (cues.UNDONE_ACT: "Hot snare polypectomy failed.", "no tissue was
+      obtained"). Never a worded reading only (candidate_ra): the pinned "Cecal biopsies x2." is read by its section
+      alone and still stands.
+    - D4: only where the documented-service reader's own placement rule (services._family_for_act, with no report
+      part) puts every act kind of the code the passage names, at every anatomy it names, in the matched service's
+      family alone among the services documented as done or in doubt today. Fail-closed: an act no one service owns
+      ("Biopsies were taken with cold forceps." in a combined EGD and colonoscopy report) is held for every family's
+      code, the correct one too.
+    - D5: never inside a non-physician role part (_in_another_roles_part: a pathology, nursing, anesthesia, radiology or
+      facility entry). Not the narrower-looking repairs (the service's scope, or no section-default cue): both break
+      the pinned "Cecal biopsies x2." control."""
+    if reading.status != 'performed':
+        return False
+    if gi_cues.UNDONE_ACT.search(text, reading.start, reading.end):
+        return False
+    if _in_another_roles_part(reading, text):
+        return False
+    return _placed_in_matched_family(reading, found, code, text, inventory)
+
+
+def _in_another_roles_part(reading: checks.Reading, text: str) -> bool:
+    """D5: whether the passage starts inside a part services.parts cuts for another role than the physician's (a
+    pathology, nursing, anesthesia, radiology or facility entry: services.ROLE_HEADINGS), whose acts reconcile already
+    never counts. Read only on the own-passage release path (one parts() reading per such passage)."""
+    return any(p.role != 'physician' and p.start <= reading.start < p.end for p in gi_services.parts(text))
+
+
+def _placed_in_matched_family(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:
+    """D4: whether services._family_for_act places each act kind of ``code`` that the passage names, at each anatomy
+    region the passage names (none named: no region), in found.service.family alone; the candidate owners are the
+    documented non-E/M services read as performed, incomplete or uncertain (a planned or earlier procedure owns no act
+    of today's report). Bounded: the passage's acts and anatomy, once each."""
+    if inventory is None:
+        return True
+    profile = reconcile.catalogue.code_profile(code)
+    covers = set(profile.covers) if profile is not None else set()
     passage = text[reading.start:reading.end]
-    return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+    kinds = [kind for kind, pattern in gi_services.ACTS if kind in covers and pattern.search(passage)]
+    regions = {region for _, region, _, _ in gi_services._anatomy_in(text, reading.start, reading.end)} or {''}
+    present = list(dict.fromkeys(s.family for s in inventory.services if s.family != 'gi.office_em'
+                                 and s.status in ('performed', 'incomplete', 'uncertain')))
+    return bool(kinds) and all(gi_services._family_for_act(kind, region, '', present) == found.service.family
+                               for kind in kinds for region in regions)
 
 
 def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bool:
@@ -1705,7 +1836,7 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
         return True  # the visit's own E/M documentation, whatever routing read it as (validation:4, engine._other_service)
     # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ..."), or, for a procedure,
     # about no other service at all
-    if _status_signal(reading, passage) and (
+    if _status_signal(reading, passage, code) and (
             (service.scope_start <= reading.start and reading.end <= service.scope_end)
             or (service.family not in checks.EM_FAMILIES and inventory is not None
                 and not _other_named(reading, found, passage, inventory, routing))):
@@ -1715,7 +1846,7 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
 
 
-def _status_signal(reading: checks.Reading, passage: str) -> bool:
+def _status_signal(reading: checks.Reading, passage: str, code: str = '') -> bool:
     """Whether a passage states a status of its own: a status word ("completed", "not performed", "aborted"), a hedge
     ("?", "unclear", "possible"), or a routing-era reading from a check-box or status-option row ("Yes \u2610 No
     \u2612", "\u2612 No", "Carried out \u2610 Not carried out \u2612") - structural signals, so the hold no longer depends on
@@ -1726,7 +1857,30 @@ def _status_signal(reading: checks.Reading, passage: str) -> bool:
         return True
     if gi_services.HEDGE_WORDS.search(passage) and not gi_services.OBSERVED.search(passage):
         return True
+    if (reading.status in ('negated', 'cancelled') or any(cue.startswith(DOUBT_PREFIX) for cue in reading.cues)) \
+            and _denies_an_act_of(code, passage):
+        # P2 READ-HOLD, R8 D3: the routing-era reader's own denial, cancellation or unresolved negation of a passage that
+        # states an act the code accounts for, or an act of no named kind ("No polyps were removed.", "The polyp was
+        # not removed.", "We did not remove the polyp."): a status of its own, so a denial in the matched service's own
+        # report holds with both readings instead of "not about the documented colonoscopy, so it does not decide".
+        # Never a denial of a finding ("No gastric ulcer or mass was identified.") or of another act ("so no clip was
+        # needed" cited for a snare code: h4-04's 43251 stays READY)
+        return True
     return any('box' in cue.lower() for cue in reading.cues)
+
+
+def _denies_an_act_of(code: str, passage: str) -> bool:
+    """Whether a passage read as denied states an act ``code`` accounts for (an act kind of its profile's covers,
+    services.ACTS), or an act of no named kind by its predicate (a participle, services.ACT_VERB / BARE_PARTICIPLE, or a
+    denied act verb, cues.DENIED_ACT_VERB). A passage naming only another act kind, or no act at all, is no status of
+    this code's act (P2 READ-HOLD, R8 D3)."""
+    profile = reconcile.catalogue.code_profile(code)
+    covers = set(profile.covers) if profile is not None else set()
+    named = {kind for kind, pattern in gi_services.ACTS if pattern.search(passage)}
+    if named:
+        return bool(named & covers)
+    return bool(gi_services.ACT_VERB.search(passage) or gi_services.BARE_PARTICIPLE.search(passage)
+                or gi_cues.DENIED_ACT_VERB.search(passage))
 
 
 def _other_named(reading: checks.Reading, found: reconcile.Match, passage: str, inventory,
@@ -2091,29 +2245,18 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
-    rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
+    rows = endoscopic_rows((s.code, s.evaluation.reference.pfs if s.evaluation else None) for s in active)
     # A reinstated procedure holds an E/M as a selected one does (review:0). On a procedure day the E/M is held
     # already; otherwise record which reinstatements would hold which E/Ms, for review to gate approval on.
     reinstatable = [s for s in selections if s.excluded and s.evaluation is not None and _procedural(s)]
     visits = [s for s in selections if s.family in checks.EM_FAMILIES and s.evaluation is not None
               and checks.separate_em_statement(s.evaluation.finding) is None]
     gate = bool(reinstatable and visits and not (labels or possible_labels))
-    bases = []
-    for s in active:
-        profile = reconcile.catalogue.code_profile(s.code)
-        match = s.evaluation.match if s.evaluation is not None else None
-        if profile is None or not profile.base or match is None:
-            continue
-        others = tuple(t.code for t in active if t is not s and t.family == s.family
-                       and (reconcile.catalogue.code_profile(t.code) or reconcile.catalogue.CodeProfile('')).covers
-                       and t.evaluation is not None and t.evaluation.match is not None
-                       and t.evaluation.match.service.id == match.service.id)
-        entry = reconcile.catalogue.entry(s.family)
-        reportable = [a for a in match.service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
-                      and entry is not None and a.kind in entry.acts and not reconcile._bundled(match.service, a)]
-        if others or reportable:
-            bases.append((s.code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
-    return _Encounter(bases_included=tuple(bases), provider=provider, context=context, sources=sources,
+    members = [(s.code, s.family, s.evaluation.match.service if s.evaluation is not None and s.evaluation.match is not None
+                else None) for s in active]
+    bases = base_included(members)
+    within = base_within(members)
+    return _Encounter(bases_included=bases, bases_within=within, provider=provider, context=context, sources=sources,
                       date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       possible_labels=tuple(possible_labels),
@@ -2121,6 +2264,112 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
                       if_reinstated=tuple((s.code, s.profile.label if s.profile.supported else '')
                                           for s in reinstatable) if gate else (),
                       gated_visits=tuple(s.code for s in visits) if gate else ())
+
+
+# --- the combination rules the review overlay re-applies over the current decisions (CORE-UX-DESIGN.md 4) -----------
+# One implementation each: the engine reads them over its own active selections (_encounter, _proposal), and the
+# read-time review overlay (studio.validation.review_view) over the effective set a reviewer's decisions leave - a
+# second copy of either would drift from this one.
+
+def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Engine @4's base rule. ``members``: (code, family, the documented service it was matched to or None) of every
+    ACTIVE code, in order. A family's base (diagnostic) code matched to a documented service is held, never excluded,
+    beside another active code of its family matched to the same service that accounts for one of its interventions
+    (its profile covers an act), or when that service documents a performed, reportable act no profile rule bundles:
+    (base code, the other codes - or, with none, the labels of those acts), in member order."""
+    bases = []
+    for index, (code, family, service) in enumerate(members):
+        profile = reconcile.catalogue.code_profile(code)
+        if profile is None or not profile.base or service is None:
+            continue
+        others = tuple(other for position, (other, other_family, other_service) in enumerate(members)
+                       if position != index and other_family == family
+                       and (reconcile.catalogue.code_profile(other) or reconcile.catalogue.CodeProfile('')).covers
+                       and other_service is not None and other_service.id == service.id)
+        entry = reconcile.catalogue.entry(family)
+        reportable = [a for a in service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
+                      and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
+        if others or reportable:
+            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
+    return tuple(bases)
+
+
+def base_within(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """P2 READ-HOLD, R8 D15 (r1 missed-14), the second base rule, over the same ``members`` as base_included: a base code
+    whose matched documented service is the endoscopic portion of another (DocumentedService.included_in: an EGD inside
+    an upper EUS) is held, as the base rule holds a base beside a same-family intervention: (base code, the codes of the
+    active codes matched to that service that include the examination - reconcile's own inclusion test,
+    catalogue.includes_examination: an EGD-with-EUS code - or () when that service has no active code at all, the code
+    it asks for including the examination, reconcile.inclusion_asks_no_code). No entry - no hold - when the code is no
+    base, its service is part of no other, or that service's active codes include no such examination (a sigmoidoscopy
+    EUS code: the EGD is a service of its own). Bounded: one pass over the members per base code."""
+    held = []
+    for index, (code, family, service) in enumerate(members):
+        profile = reconcile.catalogue.code_profile(code)
+        if profile is None or not profile.base or service is None or not service.included_in:
+            continue
+        including = [other for position, (other, _other_family, other_service) in enumerate(members)
+                     if position != index and other_service is not None and other_service.id == service.included_in]
+        if not including:
+            held.append((code, ()))
+            continue
+        codes = tuple(other for other in including if reconcile.catalogue.includes_examination(other, service.kind))
+        if codes:
+            held.append((code, codes))
+    return tuple(held)
+
+
+def base_within_hold(code: str, family: str, key: str, within: Sequence[str], service) -> tuple[Check, ClarificationSpec]:
+    """The services.base_included check and the base_included question of a base code base_within holds (D15): its
+    service is the endoscopic portion of an endoscopic ultrasound documented with it (``within``: that service's codes
+    that include the examination, possibly none)."""
+    service_name = reconcile.service_label(service) if service is not None else 'service'
+    coded = f', which {", ".join(within)} {"accounts" if len(within) == 1 else "account"} for' if within else ''
+    reason = (f'The documented {service_name} is the endoscopic portion of the endoscopic ultrasound documented with '
+              f'it{coded}; that examination is normally included in it, not reported separately (internal profile '
+              'rule; NCCI procedure-to-procedure edits are not connected). Held for the reviewer, not excluded.')
+    return (Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
+                  reconcile.SOURCE),
+            ClarificationSpec(scope='proposal', fact='base_included', family=family, proposal_key=key, reason=reason,
+                              question=f'Is {code} reported separately from '
+                                       f'{", ".join(within) or "the endoscopic ultrasound"} for this examination?'))
+
+
+def base_hold(code: str, family: str, key: str, included: Sequence[str], service) -> tuple[Check, ClarificationSpec]:
+    """The services.base_included check and the base_included question of a base code the base rule holds beside
+    ``included`` (base_included's other codes or act labels); ``service``: the documented service it was matched to."""
+    service_name = reconcile.service_label(service) if service is not None else 'service'
+    if all(other[:1].isdigit() for other in included):
+        reason = (f'The documented {service_name} has interventions that {", ".join(included)} account for; its '
+                  'diagnostic examination is normally included in them (internal profile rule; NCCI procedure-to-'
+                  'procedure edits are not connected). Held for the reviewer, not excluded.')
+    else:
+        reason = (f'The documented {service_name} includes {", ".join(included)}, which this diagnostic code does '
+                  'not account for (internal profile rule). Held for the reviewer, not excluded.')
+    return (Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
+                  reconcile.SOURCE),
+            ClarificationSpec(scope='proposal', fact='base_included', family=family, proposal_key=key, reason=reason,
+                              question=f'Is {code} reported separately from {", ".join(included)} for this examination?'))
+
+
+def endoscopic_rows(pairs) -> dict:
+    """code -> PFS row, of every (code, PFS row or None) pair of an active code that has a row: what the CMS PFS
+    endoscopic-family check reads of the other codes (checks.endoscopic_check's ``active``)."""
+    return {code: pfs for code, pfs in pairs if pfs}
+
+
+# The acts a separate-lesion (distinct-procedure) modifier consideration can concern, beside another code's act.
+DISTINCT_LESION_KINDS = reconcile.REMOVAL_KINDS + ('biopsy', 'ablation', 'injection', 'tattoo')
+
+
+def distinct_lesions(service, acts) -> tuple[tuple[str, ...], tuple]:
+    """(the documented lesions of ``acts`` - a code's matched acts - sorted; every performed act of ``service`` on
+    another documented lesion that a separate-lesion modifier can concern, DISTINCT_LESION_KINDS) - the reading
+    _service_considerations words and the review overlay's modifier review pairs with the other codes."""
+    lesions = tuple(sorted({a.lesion for a in acts if a.lesion}))
+    others = tuple(a for a in service.acts if a.status == 'performed' and a.lesion and a.lesion not in lesions
+                   and a.kind in DISTINCT_LESION_KINDS)
+    return lesions, others
 
 
 def _procedural(s: _Selection) -> bool:
@@ -2248,20 +2497,15 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         considerations += _service_considerations(s, m)
     included = dict(enc.bases_included).get(s.code)
     if included and not s.excluded:
-        service_name = reconcile.service_label(m.service) if m else 'service'
-        if all(code[:1].isdigit() for code in included):
-            reason = (f'The documented {service_name} has interventions that {", ".join(included)} account for; its '
-                      'diagnostic examination is normally included in them (internal profile rule; NCCI procedure-to-'
-                      'procedure edits are not connected). Held for the reviewer, not excluded.')
-        else:
-            reason = (f'The documented {service_name} includes {", ".join(included)}, which this diagnostic code does '
-                      'not account for (internal profile rule). Held for the reviewer, not excluded.')
-        found.append(Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
-                           reconcile.SOURCE))
-        clarifications.append(ClarificationSpec(scope='proposal', fact='base_included', family=s.family,
-                                                proposal_key=key, reason=reason,
-                                                question=f'Is {s.code} reported separately from {", ".join(included)} '
-                                                         'for this examination?'))
+        held, question = base_hold(s.code, s.family, key, included, m.service if m else None)
+        found.append(held)
+        clarifications.append(question)
+    within = dict(enc.bases_within).get(s.code)
+    if within is not None and not included and not s.excluded:
+        # P2 READ-HOLD, R8 D15: the base code of a service read as the endoscopic portion of another (base_within)
+        held, question = base_within_hold(s.code, s.family, key, within, m.service if m else None)
+        found.append(held)
+        clarifications.append(question)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
@@ -2375,11 +2619,9 @@ def _service_considerations(s: _Selection, m: reconcile.Match) -> list[str]:
     connected): separate lesions within one endoscopic family, and screening that became therapeutic."""
     out = []
     service = m.service
-    lesions = {a.lesion for a in m.acts if a.lesion}
-    others = [a for a in service.acts if a.status == 'performed' and a.lesion and a.lesion not in lesions
-              and a.kind in reconcile.REMOVAL_KINDS + ('biopsy', 'ablation', 'injection', 'tattoo')]
+    lesions, others = distinct_lesions(service, m.acts)
     if lesions and others:
-        here = '; '.join(reconcile.lesion_words(service, l) for l in sorted(lesions))
+        here = '; '.join(reconcile.lesion_words(service, l) for l in lesions)
         there = '; '.join(sorted({reconcile.lesion_words(service, a.lesion) for a in others}))
         out.append(f'Separate lesions are documented: this code\'s act is on {here}, and another act is on {there}. '
                    'If an NCCI procedure-to-procedure edit pairs the two codes, a distinct-lesion modifier (59 or XS) '

@@ -25,7 +25,7 @@ from tests import test_harness2_pipeline as hp
 from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
 from tests.test_pipeline_api import drain
 
-APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
+APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 # What node evaluates an expression over: app.js's exports, the payload, and the page's visible text and parts.
 PRELUDE = r"""
 const app = require(process.argv[1]);
@@ -73,7 +73,7 @@ class R2WordingCase(hp.ColonCase):
     review; both codes are held on the extent."""
 
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -276,7 +276,7 @@ class PhaseOneFinalRowsTests(h2.Harness2Case):
     before (the page then says only that this assessment read none)."""
 
     def peer(self):
-        response = self.client_for(self.reviewer).get(f'/api/encounters/{self.encounter.pk}')
+        response = self.client_for(self.reviewer).get(f'/ops/api/encounters/{self.encounter.pk}')
         self.assertEqual(response.status_code, 200, response.content)
         return {row['name']: row['peer'] for row in response.json()['harness']['participants']}, response.json()
 

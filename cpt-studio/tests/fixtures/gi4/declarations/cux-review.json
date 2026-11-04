@@ -1,0 +1,54 @@
+{
+ "package": "P3 REVIEW (cux-review)",
+ "summary": "Core repair and customer interface, package P3 (CORE-UX-DESIGN.md section 4): a pure, read-time review overlay (studio/validation/review_view.py) that recomputes, over the CURRENT decisions and member answers, the combination gates the engine computes once over its own active set - the diagnostic-base rule (services.base_included and its base_included question) and the CMS PFS endoscopic-family check (pfs.endoscopic_base) - and every gate and reader that reads a proposal's status or actions reads it (review._actions/_allowed/approve_withheld_by/record_decision, readiness/_assessment_blockers, coding_completeness, _review_state/refresh_state, serializers._proposal_json, the report snapshot, review.effective_view for the customer API, review.approved_items for the approved export). The base rule and the endoscopic-family inputs are extracted from engine._encounter/_proposal into functions the engine itself calls, so there is one implementation. A structured distinct-lesion modifier review (options 59 or XS, never both, never prefilled) is recomputed over the effective set at read time; the reviewer may choose one modifier per approval, stored on Decision.modifiers (migration 0009_cux_review, additive, database default '[]'). The member-answer effect (P5's data, P3's rule) is wired through review._member_answers, which returns [] in this package.",
+ "base": "c9f20a148a1f21aa2aaa53e477da0a26c07e268f",
+ "declared_before_code": true,
+ "declared_at": "2026-11-03",
+ "engine_output": "BYTE-IDENTICAL. The engine's AssessmentResult (every proposal's bucket, status, checks with their details, clarifications, modifier_considerations strings, fingerprint, support; every encounter check, question and the completeness record) is unchanged on every input: the extracted base rule, the extracted base_included check/question builder and the distinct-lesion helper return exactly what the inline code returned, and _service_considerations still renders the same strings from the structured form. Nothing new is stored by the engine: the structured modifier review exists only in the read-time overlay view.",
+ "cues_added": [],
+ "movements": {},
+ "movements_note": "H2 (freeze): NONE. No file the request side reads is touched (studio/gi/context.py, studio/gi/sections.py and every constant they read are unchanged), so NEW-SEND = NEW-TAKE = 0 and every request is byte-identical. studio/validation/engine.py, checks.py (new modifier-review helpers only) and review.py are read only by the assess child and the review layer.",
+ "replay": "EQUAL",
+ "replay_note": "H1: python -m ops.gi4.replay --fixtures --base c9f20a148 --head <P3 head> must print no difference in any member state of any regression document (h4-01..h4-06, h2-08, h2-10): the overlay is not read by the assess child, and the engine extraction is byte-identical.",
+ "battery": [],
+ "battery_note": "H4: python -m ops.gi4.battery --base c9f20a148 --head <P3 head> --declare this file must show 0 movements and 0 new violations. The battery reads engine output, which does not move; the overlay changes statuses only at read time after a reviewer decision or a member answer, which no battery row has.",
+ "regression": {
+  "h4-01": "no movement in any member state",
+  "h4-02": "no movement in any member state",
+  "h4-03": "no movement in any member state",
+  "h4-04": "no movement in any member state",
+  "h4-05": "no movement in any member state",
+  "h4-06": "no movement in any member state",
+  "h2-08": "no movement in any member state",
+  "h2-10": "no movement in any member state"
+ },
+ "h3": "no MUST or SHOULD cell moves: the corpus judge reads engine output, which is byte-identical",
+ "h7": "no reader changes and the assess child does no new work (the base rule is the same loop, now in a function); not re-measured beyond the replay/battery timings",
+ "overlay": {
+  "positive_control": "With no decisions and no member answers the overlay reproduces every stored proposal status, every stored check (id, label, status, detail, source) and every stored open proposal-scoped question byte for byte, on every proposal of every battery row and every regression document in every member state (DB-free test), and on the D14 shapes of R3 2.3 (box_misread, denied, selected). The operator API (serializers._proposal_json), readiness, coding completeness, the encounter state and both report renders are therefore unchanged for every encounter with no decision and no answer.",
+  "effective_set": "selected proposals without a current REJECT, plus excluded reinstatable proposals with a current REINSTATE or APPROVE, minus proposals a member answer makes detail_unavailable (none in this package)",
+  "recomputed_after_decisions": [
+   "services.base_included check and base_included question on a base code (held iff another code of the effective set of its family covers an intervention of the same documented service, or that service documents a performed, reportable, non-bundled act: the engine's own rule, unchanged); added when newly held, released when no longer held, re-worded when the codes it names change",
+   "pfs.endoscopic_base on every decidable code that carries it, from the assessment's own retrieval facts (kept as stored, and marked not recomputed, when the retrieval does not carry the PFS row of every code whose pfs.presence passed)",
+   "review.reinstatement on a reinstated code the overlay newly holds (its stored waits plus the added question)"
+  ],
+  "D14": "Reinstating 45385 beside a selected 45378 holds 45378 at read time (needs_clarification, approve withheld by services.base_included, question 'Is 45378 reported separately from 45385 for this examination?'); an APPROVE already recorded on 45378 becomes a readiness blocker until revoked, so the reviewed report waits. Rejecting the therapeutic code releases the base only per the engine's own rule (a documented performed reportable act keeps it held). The same holds for a reinstated base beside a selected therapeutic code.",
+  "not_recomputed": [
+   "separate_em / em.same_day_procedure on an E/M when a same-day procedure is rejected (kept: a hold is never released here; recorded limit)",
+   "every other per-code check (scope, evidence, routing, service.status, evidence.support, required facts, pfs.presence, mue.units, units.duplicate, participants.*) - none depends on another proposal's decision"
+  ]
+ },
+ "modifier_review": {
+  "moves": "NOTHING STORED. The engine's modifier_considerations strings are byte-identical (they are rendered from the same structured distinct-lesion reading). The overlay view gains a read-time modifier_review per proposal: {kind: 'distinct_lesion', codes, lesions, options: ['59', 'XS'], text, sources: [{key, title, release, section, page}]}, present only while another code of the effective set accounts for an act on a different documented lesion of the same service, and dropped when that code leaves the effective set. Its sources cite only the dated CMS claims-manual passage the assessment's own retrieval carries (Pub. 100-04 ch. 12, item 13 example) and only for the 45380/45385 pair it describes; its text says NCCI procedure-to-procedure edits and payer modifier policy are not checked and that no modifier is added unless the reviewer chooses one.",
+  "operator_report": "unchanged for every encounter whose decisions carry no chosen modifier and whose checks no decision recomputed; a chosen modifier adds one line under its decision; a recomputed check adds one note line"
+ },
+ "decision_modifiers": "Decision.modifiers (JSONField, default list, database default '[]'::jsonb): the reviewer's ONE chosen modifier on an APPROVE ('59' or 'XS'), only when the overlay offers a modifier review for that proposal; [] otherwise. Never prefilled, never both, never a free list. Carried with the decision onto a same-fingerprint proposal; an approval whose chosen modifier the current view no longer offers becomes a readiness blocker until revoked.",
+ "migration": "0009_cux_review (depends on 0008): AddField decision.modifiers JSONField(default=list) + RunSQL ALTER TABLE studio_decision ALTER COLUMN modifiers SET DEFAULT '[]'::jsonb (the 0007 pattern); ops/install.py migration_verdict must read it safe",
+ "register": {
+  "D14": "toward held, at read time in the review layer (no stored engine output moves): the reinstated therapeutic code's diagnostic base is held again, an approval already on it blocks the reviewed report until revoked"
+ },
+ "mara": "no movement of any engine output (the overlay changes nothing with no decisions); with 43239, 45380 and 45385 in the effective set the overlay offers a modifier_review on 45380 and 45385 once the reader (P1) binds the COL-1 biopsy and the COL-2 snare to their lesions",
+ "pins_expected_to_move": [],
+ "tests_expected_to_move": "none expected; any existing test whose pin moves is recorded in a dated amendment below, with the reason, before it is changed",
+ "amendment_20261104_after_code": "Recorded AFTER the code (2026-11-04, head f5def1c23), as measured: H1 replay EQUAL, H4 battery 0 movements and 0 new violations, H2 freeze GATE HOLDS (cues 324/324, NEW-SEND 0, NEW-TAKE 0, requests changed 0), H3 corpus judge no movement, and sha256_json of the whole AssessmentResult equal on all 111 battery and replay assess calls - exactly as declared. One existing pin moves, as any added migration moves it: ops/test_install_harness2.MigrationReceiptTests.test_the_image_phase_accepts_0008_and_its_receipt_says_why asserts the after-baseline migration list is exactly 0006-0008; 0009_cux_review is a fourth (its verdict safe, the gate passes and the build runs). That file is package P7's, so it is not edited here: the list is re-pinned at integration once the three 0009 migrations (P3, P4, P5) are renumbered into one chain. No other test pin moved (Django 5,312 tests, ops 313 with that one failure, verification 37, node 91)."
+}

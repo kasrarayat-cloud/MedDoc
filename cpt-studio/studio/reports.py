@@ -20,6 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, candidates, participants, review
+from . import answers as member_answers  # the details flow (P5)
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
@@ -164,19 +165,24 @@ def _decision(decision):
     if decision is None:
         return None
     carried = bool(decision.carried_from_id)
-    return {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
-            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
-            'note': decision.note, 'acknowledgement': decision.acknowledgement,
-            'carried_from': str(decision.carried_from_id) if carried else None,
-            'carried_at': _ts(decision.created_at) if carried else None}
+    out = {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
+           'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
+           'note': decision.note, 'acknowledgement': decision.acknowledgement,
+           'carried_from': str(decision.carried_from_id) if carried else None,
+           'carried_at': _ts(decision.created_at) if carried else None}
+    if getattr(decision, 'modifiers', None):  # the reviewer's chosen modifier (CORE-UX-DESIGN.md 4), only when chosen
+        out['modifiers'] = [str(m) for m in decision.modifiers]
+    return out
 
 
-def _list_for(proposal, decision, kind):
+def _list_for(proposal, decision, kind, view=None):
     if proposal.bucket == Proposal.ALTERNATIVE:
         return 'alternative'
     action = decision.action if decision else None
     if action == Decision.REJECT:
         return 'rejected'
+    if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
+        return 'excluded'  # a needed detail answered as unavailable: excluded by the review overlay, never approved
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
     if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
@@ -194,20 +200,23 @@ def _reinstated(proposal, decision):
             and decision.action != Decision.CONFIRM)
 
 
-def _item(proposal, decision, kind, text):
+def _item(proposal, decision, kind, text, view=None):
+    """``view``: the proposal's effective review view (review.effective_view): its status and checks as the current
+    decisions leave them (CORE-UX-DESIGN.md 4); with no decision and no member answer, the stored ones."""
     exact = review.exact_evidence(proposal.evidence, text)
+    status = view.status if view is not None else proposal.status
     item = {
-        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind),
+        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind, view),
         'bucket': proposal.bucket, 'code': proposal.code, 'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
-        'status': proposal.status, 'status_label': review.status_label(proposal.status),
+        'status': status, 'status_label': review.status_label(status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
         'reinstated': _reinstated(proposal, decision),
         'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
-        'checks': [_check(c) for c in proposal.checks or []],
+        'checks': [_check(c) for c in (view.checks if view is not None else proposal.checks or [])],
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
         'support': _support(proposal.support or {}, text),
@@ -217,6 +226,12 @@ def _item(proposal, decision, kind, text):
     listed = review.listed_by(proposal)
     if listed:  # a participant's alternative's listers (refutation round 5, D12); none in a Corti-only snapshot
         item['listed_by'] = listed
+    if view is not None and view.recomputed:  # checks the review overlay recomputed after the decisions
+        item['recomputed'] = list(view.recomputed)
+    if view is not None and view.stale:  # checks it could not recompute although the decisions moved what they read
+        item['stale'] = list(view.stale)
+    if view is not None and view.reason:
+        item['review_reason'] = view.reason
     return item
 
 
@@ -700,9 +715,11 @@ def snapshot(encounter, kind):
         raise ReportNotReady(ready['blockers'])
     revision = assessment.revision
     current = review.current_decisions(assessment)
-    questions = list(assessment.clarifications.filter(state=Clarification.OPEN).select_related('proposal')
-                     .order_by('created_at', 'pk'))
-    items = [_item(p, current.get(p.pk), kind, revision.text) for p in assessment.proposals.order_by('position')]
+    # the review overlay (CORE-UX-DESIGN.md 4): statuses, checks and open questions as the current decisions leave them
+    views = review.effective_view(assessment, current)
+    questions = review.open_questions_of(assessment, views)
+    items = [_item(p, current.get(p.pk), kind, revision.text, views.get(p.key))
+             for p in assessment.proposals.order_by('position')]
     if kind == REVIEWED and any(item['list'] == 'undecided' for item in items):
         raise ReportNotReady(['A proposed code has no approve or reject decision'])
     workspace = encounter.workspace
@@ -728,7 +745,8 @@ def snapshot(encounter, kind):
                                 review.reviewed_completeness(assessment, current)),
         'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
-        'clarifications': [_clarification(q) for q in questions],
+        'clarifications': [{key: question.get(key) for key in ('id', 'scope', 'family', 'fact', 'question', 'reason',
+                                                                'code')} for question in questions],
         'not_verified': _not_verified(items, assessment),
         'provider_runs': _provider_runs(encounter, assessment),
         'reference_sources': _reference_sources(assessment),
@@ -785,6 +803,9 @@ def _decision_lines(item, kind):
                  'reviewed report']
     else:
         lines = [f'{pad}Current decision: {_decision_words(decision)}']
+    if decision.get('modifiers'):
+        lines.append(f'{pad}Modifier chosen by the reviewer: {", ".join(decision["modifiers"])} (not validated against '
+                     'NCCI procedure-to-procedure edits or payer modifier policy)')
     if decision['acknowledgement']:
         lines.append(f'{pad}Acknowledgement: {_indent(decision["acknowledgement"], pad + "  ")}')
     if decision['note']:
@@ -986,6 +1007,12 @@ def _checks_section(snap):
         if item['checks']:
             lines.append(f'  {item["code"]} ({item["list"]})')
             lines += [_check_line(check) for check in item['checks']]
+            if item.get('recomputed'):
+                lines.append(f'    Recomputed over the current review decisions: {", ".join(item["recomputed"])}; the '
+                             'other checks were made when the assessment ran.')
+            if item.get('stale'):
+                lines.append(f'    Not recomputed over the current review decisions (what it reads was not recorded '
+                             f'with the assessment): {", ".join(item["stale"])}; it predates them.')
     encounter_checks = snap['assessment']['encounter_checks']
     if encounter_checks:
         lines.append('  Encounter')
@@ -1762,14 +1789,21 @@ def _filename(snap, fmt):
     return f'CPT-Studio-{snap["kind"]}-{snap["encounter"]["id"][:8]}-r{snap["revision"]["number"]}-{stamp}.{fmt}'
 
 
-def generate(encounter, kind, fmt, user):
-    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest."""
+def generate(encounter, kind, fmt, user, *, operator=False):
+    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest. This is the
+    operator's full report (audience 'operator'; CORE-UX-DESIGN.md 5): a member of the workspace may make one through
+    this function, and a platform operator through /ops/ (``operator=True``: a grant, never a membership, is checked).
+    Customers are served generate_customer's report instead."""
     if fmt not in RENDERERS:
         raise ValueError('Choose a TXT or CSV report.')
     if kind not in KINDS:
         raise ValueError('Choose a draft or reviewed report.')
-    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
-                                                         active=True).exists()):
+    if operator:
+        from .operator import is_operator  # local import: the operator module's views import this one
+        if not is_operator(user):
+            raise PermissionDenied('Only a platform operator can generate an operator report here.')
+    elif not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                           active=True).exists()):
         raise PermissionDenied('Only an active member of this workspace can generate its reports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
@@ -1778,7 +1812,225 @@ def generate(encounter, kind, fmt, user):
         artifact = ReportArtifact.objects.create(
             encounter=locked, assessment_id=snap['assessment']['id'], kind=kind, fmt=fmt,
             filename=_filename(snap, fmt), content=content, sha256=hashlib.sha256(content).hexdigest(),
-            snapshot_sha256=snapshot_digest(snap), generated_by=user)
+            snapshot_sha256=snapshot_digest(snap), generated_by=user, audience=ReportArtifact.OPERATOR)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
-                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt)
+                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt, audience=ReportArtifact.OPERATOR)
+    return artifact
+
+
+# --- the customer report (CORE-UX-DESIGN.md 5): cpt-studio-customer-report@1 ----------------------------------------
+#
+# Built from the customer contract (studio.customer_api), never from the operator snapshot above: the suggested codes
+# with their status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations (the
+# draft), or the approved items only (the approved export), then the concise limitations, between two SYNTHETIC
+# banners. No participant, model, usage, hash, rule id, run id, engine or profile version, check id or source key
+# appears. A customer artifact stores the digest of its DECISION MARKER in snapshot_sha256 (customer_marker: the
+# assessment, the current decisions and the member's standing answers it was made from), so a download can tell whether
+# an approved export still matches the persisted decisions (customer_artifact_current) - and nothing that is not a
+# decision (a later run, a job, a reference check, new wording) ever makes one stale (critic C8).
+
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+APPROVED = ReportArtifact.APPROVED
+CUSTOMER_KINDS = (DRAFT, APPROVED)
+CUSTOMER_HEADLINES = {DRAFT: 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
+CUSTOMER_TITLES = {DRAFT: 'Suggested codes — not approved', APPROVED: 'Approved codes'}
+# CORE-UX-DESIGN.md 5's columns, and review_label last (refutation round 2, L3-6): the agent-executed synthetic review
+# label on every row of an approval agent review took part in - the approver an agent, or an agent's reinstatement
+# behind it (fidelity:8, as the page labels it: customer_api) - in the draft as in the approved export, so a row read
+# alone in a spreadsheet still says it (truth rule 7; session decisions (h) and (i) of 2026-11-03: "everywhere").
+CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers',
+                        'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text',
+                        'evidence_page', 'evidence_start', 'evidence_end', 'review_label')
+
+
+class CustomerExportNotReady(ValueError):
+    """The approved export was asked for before it is available."""
+
+    def __init__(self, blockers):
+        self.blockers = list(blockers)
+        super().__init__('The approved export is not available yet.')
+
+
+def _customer_quote(quote):
+    return {'text': quote['text'], 'page': quote.get('page'), 'start': quote['start'], 'end': quote['end']}
+
+
+def customer_snapshot(encounter, kind):
+    """Everything a customer report shows, read from persisted rows through the customer contract."""
+    from . import customer_api  # local import: the customer layer reads this module
+
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    encounter = Encounter.objects.select_related('workspace').get(pk=encounter.pk)
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        raise ValueError('There is no assessment of the current revision to report yet.')
+    revision = assessment.revision
+    current = review.current_decisions(assessment)
+    ready = customer_api.readiness(encounter, assessment, current)
+    if kind == APPROVED and not ready['approved']:
+        raise CustomerExportNotReady(ready['blockers'])
+    views = customer_api.views_of(assessment, current)  # the review overlay: statuses as the decisions leave them
+    snap = {'format_version': CUSTOMER_FORMAT, 'kind': kind,
+            'encounter': {'id': str(encounter.pk), 'title': encounter.title},
+            'revision': {'id': str(revision.pk), 'number': revision.number}, 'assessment': str(assessment.pk),
+            'date_of_service': member_answers.service_date_block(encounter)['value'],
+            'limitations': customer_api.limitations(assessment, revision)}
+    if kind == APPROVED:
+        items = customer_api.approved_export_items(assessment, current, views)
+        snap['items'] = [{'number': number, 'code': item['code'], 'units': item['units'],
+                          'modifiers': list(item['modifiers']), 'status': 'approved', 'approver': item['approver'],
+                          'approver_kind': item['approver_kind'], 'agent': bool(item['agent']),
+                          'decided_at': item['decided_at'], 'decision': item['decision_id'], 'summary': item['summary'],
+                          'quotes': [_customer_quote(q) for q in item['evidence']]}
+                         for number, item in enumerate(items, start=1)]
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    else:
+        rows, _ = customer_api.code_rows(assessment, current, views)
+        # a draft's agent flag is the page's own label (customer_api._status: an approval agent review took part in),
+        # so the draft says it wherever the page does, by the one rule the page applies
+        snap['items'] = [{'number': row['number'], 'code': row['code'], 'units': row['units'],
+                          'modifiers': list(row['modifiers']), 'status': row['status'],
+                          'status_label': row['status_label'], 'sub_label': row['sub_label'],
+                          'agent': row['status'] == 'approved' and row['sub_label'] == customer_api.AGENT_SUB_LABEL,
+                          'summary': row['summary'], 'decision': row['_decision'],
+                          'quotes': [_customer_quote(q) for q in row['why']['quotes']]}
+                         for row in rows]
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    return snap
+
+
+def customer_marker(encounter):
+    """What a customer export was made from, and nothing else: the live assessment, the encounter's current context
+    (the member's saved detail values), the current decisions on that assessment (their ids and sequences, in recording
+    order) and the member's standing answers to its revision (their ids). A decision, a revocation, an invalidation, a
+    saved or withdrawn answer or a new assessment changes it; a later run, a queued job, a reference check, a second
+    review that was not read or a change of wording never does. None while no assessment is live."""
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        return None
+    current = review.current_decisions(assessment)
+    return {'assessment': str(assessment.pk), 'context': str(encounter.current_context_id or ''),
+            'decisions': [[str(decision.pk), decision.sequence]
+                          for decision in sorted(current.values(), key=lambda decision: decision.sequence)],
+            'answers': sorted(str(answer.pk) for answer in member_answers.standing_answers(assessment.revision_id))}
+
+
+def customer_marker_digest(encounter):
+    """sha256 of customer_marker(encounter), stored with a customer artifact as its snapshot_sha256; None while no
+    assessment is live."""
+    marker = customer_marker(encounter)
+    return None if marker is None else sha256_json(marker)
+
+
+def customer_artifact_current(report) -> bool:
+    """Whether a customer artifact still matches the persisted decisions it was made from: its stored marker digest
+    equals the encounter's now."""
+    marker = customer_marker_digest(report.encounter)
+    return marker is not None and report.snapshot_sha256 == marker
+
+
+def _customer_header(snap, generated):
+    # the SYNTHETIC banner opens the file as it closes it (CORE-UX-DESIGN.md 5: "SYNTHETIC banner at both ends";
+    # refutation round 2, L3-1), then the headline; the agent line wherever agent review took part in an approval listed
+    lines = [SYNTHETIC_LINE, CUSTOMER_HEADLINES[snap['kind']]]
+    if snap.get('agent_review'):
+        lines.append(AGENT_LINE)
+    return lines + [f'Report format: {snap["format_version"]}', f'Encounter: {snap["encounter"]["title"]}',
+                    f'Date of service: {snap["date_of_service"] or "not established"}',
+                    f'Generated: {generated["at"]} by {generated["by"]}']
+
+
+def _modifier_words(modifiers):
+    return ', '.join(modifiers) if modifiers else 'none'
+
+
+def render_customer_txt(snap, generated) -> bytes:
+    kind = snap['kind']
+    lines = _customer_header(snap, generated) + ['', CUSTOMER_TITLES[kind]]
+    if not snap['items']:
+        lines.append('   No code was suggested for this document.')
+    for item in snap['items']:
+        if kind == APPROVED:
+            lines.append(f'{item["number"]}. {item["code"]} — units {item["units"]} — modifiers: '
+                         f'{_modifier_words(item["modifiers"])}')
+            lines.append(f'   Approved by {item["approver"]} ({item["approver_kind"]}) at {item["decided_at"]}')
+            if item['agent']:
+                lines.append(f'   {AGENT_LINE}')
+        else:
+            lines.append(f'{item["number"]}. {item["code"]} — {item["status_label"]} — units {item["units"]} — '
+                         f'modifiers: {_modifier_words(item["modifiers"])}')
+            if item['sub_label']:
+                lines.append(f'   {item["sub_label"]}')
+        lines.append(f'   {item["summary"]}')
+        for quote in item['quotes']:
+            page = f'page {quote["page"]}' if quote.get('page') else 'page not known'
+            where = f'{page}, characters {quote["start"]}–{quote["end"]}' if kind == APPROVED else page
+            lines.append(f'   Quote: "{quote["text"]}" ({where})')
+    lines += ['', 'Limitations', *[f'- {item}' for item in snap['limitations']]]
+    return (_join(lines) + f'\n\n{SYNTHETIC_LINE}\n').encode('utf-8')
+
+
+def render_customer_csv(snap, generated) -> bytes:
+    """RFC 4180 as the operator CSV: every field quoted, formula-leading cells neutralised, CRLF, UTF-8. A banner row
+    (``report_format`` = the SYNTHETIC line) follows the header and closes the file; every other row is one quotation
+    of one code (a code with none has one row with empty evidence cells), its number repeated. The approval cells
+    (approved_by, approver_kind - the approver's own kind - and approved_at) are the approved export's; review_label
+    carries the agent-executed synthetic review label on each row of an approval agent review took part in, in both
+    kinds."""
+    approved = snap['kind'] == APPROVED
+    base = {'report_format': snap['format_version'], 'encounter_title': snap['encounter']['title'],
+            'date_of_service': snap['date_of_service'] or ''}
+    banner = {column: '' for column in CUSTOMER_CSV_COLUMNS}
+    banner['report_format'] = SYNTHETIC_LINE
+    rows = [banner]
+    for item in snap['items']:
+        cells = {**base, 'number': item['number'], 'code': item['code'], 'units': item['units'],
+                 'modifiers': ';'.join(item['modifiers']), 'status': item['status'],
+                 'approved_by': item['approver'] if approved else '',
+                 'approver_kind': item['approver_kind'] if approved else '',
+                 'approved_at': item['decided_at'] if approved else '', 'summary': item['summary'],
+                 'review_label': AGENT_LINE if item.get('agent') else ''}
+        for quote in item['quotes'] or [None]:
+            rows.append({**cells, 'evidence_text': quote['text'] if quote else '',
+                         'evidence_page': (quote.get('page') or '') if quote else '',
+                         'evidence_start': quote['start'] if quote else '', 'evidence_end': quote['end'] if quote else ''})
+    rows.append(banner)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
+    writer.writerow([neutralise(column) for column in CUSTOMER_CSV_COLUMNS])
+    for row in rows:
+        writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell)
+                         for cell in (row[column] for column in CUSTOMER_CSV_COLUMNS)])
+    return buffer.getvalue().encode('utf-8')
+
+
+CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
+
+
+def generate_customer(encounter, kind, fmt, user):
+    """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the digest of
+    its decision marker (customer_marker), read under the same encounter lock as the snapshot. Any active member of the
+    workspace may make one (as before, viewers included)."""
+    if fmt not in CUSTOMER_RENDERERS:
+        raise ValueError('Choose a TXT or CSV export.')
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                         active=True).exists()):
+        raise PermissionDenied('Only an active member of this workspace can create its exports.')
+    with transaction.atomic():
+        locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        snap = customer_snapshot(locked, kind)
+        now = timezone.now()
+        generated = {'at': _ts(now), 'by': user.label()}
+        content = CUSTOMER_RENDERERS[fmt](snap, generated)
+        stamp = now.astimezone(dt_timezone.utc).strftime('%Y%m%dT%H%M%S')
+        artifact = ReportArtifact.objects.create(
+            encounter=locked, assessment_id=snap['assessment'], kind=kind, fmt=fmt,
+            filename=f'CPT-Studio-{kind}-r{snap["revision"]["number"]}-{stamp}.{fmt}', content=content,
+            sha256=hashlib.sha256(content).hexdigest(), snapshot_sha256=customer_marker_digest(locked),
+            generated_by=user, audience=ReportArtifact.CUSTOMER)
+        audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
+                     assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
     return artifact

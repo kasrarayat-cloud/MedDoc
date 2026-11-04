@@ -27,6 +27,7 @@ from studio.reference import passages as reference_passages
 from studio.reference import tools
 from studio.types import PeerReview, RawExchange, sha256_json, to_jsonable
 from tests.support import docgen
+from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import (OfflineMixin, astra_tool_call, astra_with, code, empty_reading,
@@ -220,7 +221,7 @@ EMPTY_PEER = peer_answer()
 
 
 @override_settings(**LIVE, **BOTH)
-class Harness2Case(OfflineMixin, TestCase):
+class Harness2Case(OperatorReads, OfflineMixin, TestCase):
     """Corti is ScriptedCorti; Astra and Fable are LoopParticipants (configured by the settings' modes), each answering
     its first reading after one tool call and its peer review at once, unless a test scripts otherwise."""
     corti_codes = (('99213', TIME_QUOTE),)
@@ -546,8 +547,8 @@ class RefusalWordingTests(Harness2Case):
                                      'characters, is not repeated).'))
         owner_client = Client()
         owner_client.force_login(owner)
-        shown = [json.dumps(self.client.get(f'/api/encounters/{encounter_id}').json()),
-                 json.dumps(owner_client.get(f'/api/encounters/{encounter_id}/trace').json()),
+        shown = [json.dumps(self.client.get(f'/ops/api/encounters/{encounter_id}').json()),
+                 json.dumps(owner_client.get(f'/ops/api/encounters/{encounter_id}/trace').json()),
                  json.dumps([a.encounter_checks for a in self.assessments(encounter_id)]),
                  json.dumps([a.participants for a in self.assessments(encounter_id)])]
         for kind in ('draft',):
@@ -1094,7 +1095,7 @@ class PeerSendDoorTests(Harness2Case):
         records = self.records(self.encounter(encounter_id).current_assessment)
         self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('unknown', 'blocked'))
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra[0].pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -1252,7 +1253,7 @@ class SweepStopResumeTests(Harness2Case):
         peer = self.runs_of(encounter_id, 'astra', 'peer_review')[0]
         self.assertEqual((job.state, peer.state, peer.exchanges.count()), ('unknown', 'unknown', 0))
         self.assertIsNone(jobs.claim_next())  # a send in flight settles nothing further: it is reconciled first
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(peer.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()
@@ -1274,8 +1275,10 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(self.encounter(encounter_id).state, 'stopped')
         response = self.client.post(f'/api/encounters/{encounter_id}/resume')
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.json(), {'resumed': 'astra_peer'})
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5): the response names no stage (a stage kind names a participant); the resumed stage is read from its row
+        self.assertEqual(response.json(), {'resumed': True})
         resumed = self.jobs_of(encounter_id)[-1]
+        self.assertEqual(resumed.kind, 'astra_peer')
         self.assertTrue(resumed.idempotency_key.startswith(f'{job.idempotency_key}:resume:'))
         drain()
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
@@ -1334,7 +1337,7 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('unknown', 'blocked'))
         self.assertEqual(self.runs_of(encounter_id, purpose='peer_review'), [])
         astra = self.runs_of(encounter_id, 'astra', 'independent')[0]
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': str(astra.pk), 'note': RECONCILE_NOTE})
         self.assertEqual(response.status_code, 201, response.content)
         drain()

@@ -74,6 +74,10 @@ TIMEOUT_SECONDS = 30
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_CREDENTIALS_BYTES = 64 * 1024
 USER_AGENT = 'cpt-studio-verify-login/1 (login-only check of a synthetic demonstration account)'
+# Decision (l) (2026-11-03; studio/client_contract.py): the customer API answers 409 client_outdated to a call that does
+# not name the current customer page build, as a tab left open on the previous release would; this check calls it
+# as the current page does (tests/test_cux_client_contract.py pins this value to the server's).
+CLIENT_HEADER, CLIENT_VERSION = 'X-CPT-Studio-Client', 'customer-2026-11-03'
 WITHHELD = '[password withheld]'
 
 
@@ -211,9 +215,11 @@ class Secret:
 # --- HTTP -----------------------------------------------------------------------------------------------------------
 
 class Response:
-    def __init__(self, status: int, location: str | None, set_cookies: list[str], content_type: str, body: bytes):
+    def __init__(self, status: int, location: str | None, set_cookies: list[str], content_type: str, body: bytes,
+                 headers=()):
         self.status, self.location, self.set_cookies, self.content_type, self.body = (
             status, location, set_cookies, content_type, body)
+        self.headers = list(headers)  # every (name, value) the answer carried (ops/scan_customer.py scans them)
 
     def json(self):
         try:
@@ -235,7 +241,9 @@ class Transport:
         self.tls = ssl.create_default_context() if self.https else None
         self.requests: list[dict] = []
 
-    def send(self, method: str, path: str, *, headers: dict, body: bytes | None = None) -> Response:
+    def send(self, method: str, path: str, *, headers: dict, body: bytes | None = None, read_body: bool = True) -> Response:
+        """read_body False: the answer's status and headers only, its body left unread (ops/scan_customer.py reads an
+        uploaded original's headers, never the document itself, which may be larger than MAX_BODY_BYTES)."""
         entry = {'method': method, 'path': path, 'status': None, 'location': None, 'at': utc_now()}
         self.requests.append(entry)
         if self.https:
@@ -243,15 +251,16 @@ class Transport:
         else:
             connection = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
         try:
-            connection.request(method, path, body=body, headers={'User-Agent': USER_AGENT, **headers})
+            connection.request(method, path, body=body,
+                               headers={'User-Agent': USER_AGENT, CLIENT_HEADER: CLIENT_VERSION, **headers})
             answer = connection.getresponse()
-            data = answer.read(MAX_BODY_BYTES + 1)
+            data = answer.read(MAX_BODY_BYTES + 1) if read_body else b''
             entry['status'] = answer.status
             entry['location'] = answer.getheader('Location')
             if len(data) > MAX_BODY_BYTES:
                 raise RequestFailed(f'{method} {path}: the answer is over {MAX_BODY_BYTES} bytes')
             return Response(answer.status, entry['location'], answer.msg.get_all('Set-Cookie') or [],
-                            answer.getheader('Content-Type') or '', data)
+                            answer.getheader('Content-Type') or '', data, answer.getheaders())
         except (OSError, http.client.HTTPException) as exc:
             entry['error'] = f'{type(exc).__name__}: {exc}'
             raise RequestFailed(f'{method} {path}: {entry["error"]}') from None
@@ -369,8 +378,11 @@ def session_checks(status: int | None, data, username: str, workspace: str) -> l
     return [
         check('session.read', 'hard', read, f'GET {SESSION_PATH} answered HTTP {status}'
               + ('' if read else ', not 200 with a JSON object')),
-        check('session.username', 'hard', read and user.get('username') == username,
-              f'username {json.dumps(user.get("username"))}; signed in as {json.dumps(username)}{unread}'),
+        check('session.username', 'hard', read and (user.get('username') == username if 'username' in user
+                                                    else isinstance(user.get('label'), str) and bool(user.get('label'))),
+              (f'username {json.dumps(user.get("username"))}; signed in as {json.dumps(username)}' if 'username' in user or not read
+               else f'the session serves no username (the customer contract keeps it out); it is the session this fresh '
+                    f'sign-in as {json.dumps(username)} set, labelled {json.dumps(user.get("label"))}') + unread),
         check('session.actor_kind', 'hard', read and user.get('actor_kind') == HUMAN,
               f'actor kind {json.dumps(user.get("actor_kind"))}; a {HUMAN} account is expected{unread}'),
         check('session.role', 'hard', read and data.get('role') == REVIEWER,

@@ -24,6 +24,7 @@ from studio.types import NormalizedResponse, ProviderCode
 from studio.validation import engine
 from studio.validation.engine import assess
 from tests import test_harness2_pipeline as hp
+from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
@@ -159,7 +160,7 @@ class CortiOnlyRetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceM
         self.assertSaysNoCodeWasChecked(encounter_id, '2025-03-02', OUTSIDE_WHY)
 
 
-class RetrievalFailureEntryTests(TestCase):
+class RetrievalFailureEntryTests(OperatorReads, TestCase):
     """jobs.retrieval_failure states what the engine's record says of the codes: that their checks read the CMS facts
     only when told an installed CMS reference file applied (the assess stage reads it from the engine's
     reference_sources); otherwise that none was checked, and why. The fallbacks the API and the page say for every
@@ -235,7 +236,7 @@ class FirstReadingUnlocatedTests(R2WordingCase):
         self.assertEqual(said, [f'Astra did not propose it: {LISTED_FIRST}'])
         self.assertEqual(browser(f'statusLine(cardOf(page(), {card}), "Proposed by")', detail),
                          'Corti, Astra (after peer review), Fable (independent reading)')
-        trace = _owner(self, 'owner_r3truth2').get(f'/api/encounters/{self.encounter_id}/trace').json()
+        trace = _owner(self, 'owner_r3truth2').get(f'/ops/api/encounters/{self.encounter_id}/trace').json()
         (row,) = [item for item in trace['reconciliation'] if item['code'] == '45385' and 'astra' in item['positions']
                   and item['proposed_by'] == snare['proposed_by']]
         self.assertEqual(row['positions']['astra']['detail'], LISTED_FIRST)
@@ -368,7 +369,7 @@ class ReuseExchangesTests(hp.Harness2Case):
         # control: the retained run's own entry is as before
         self.assertIn('    Exchanges: 2 · tool calls: 1', self.astra_lines(first))
         # and the owner's trace agrees: the reuse holds no exchange of its own
-        trace = _owner(self, 'owner_r3truth4').get(f'/api/encounters/{second}/trace').json()
+        trace = _owner(self, 'owner_r3truth4').get(f'/ops/api/encounters/{second}/trace').json()
         (traced,) = [item for participant in trace['participants'] for item in participant['runs']
                      if item['id'] == str(reuse.pk)]
         self.assertEqual((traced['exchanges'], traced['reused_from']), ([], str(retained.pk)))
@@ -508,10 +509,10 @@ class FailedExchangeCostTests(hp.Harness2Case):
         self.assertTrue(run.usage)  # exchange 1's, which pricing alone would price as the run's
         self.assertIsNone(review.estimated_cost(run))
         self.assertEqual(review.unpriced_exchanges(run), [(2, 'failed')])
-        trace = self.owner.get(f'/api/encounters/{encounter_id}/trace').json()
+        trace = self.owner.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         traced = [item['estimated_cost_usd'] for participant in trace['participants'] for item in participant['runs']
                   if item['id'] == str(run.pk)]
-        row = next(item for item in self.owner.get(f'/api/encounters/{encounter_id}').json()['harness']['participants']
+        row = next(item for item in self.owner.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['participants']
                    if item['name'] == 'astra')
         self.assertEqual((traced, row['run_id'], row['estimated_cost_usd']), ([None], str(run.pk), None))
         lines = _block(_section(_txt(self.encounter(encounter_id)), 'REVIEW PARTICIPANTS'), '  - Astra · ')
@@ -521,7 +522,7 @@ class FailedExchangeCostTests(hp.Harness2Case):
 
 # --- falsegreen-10: corti_relation 'second_review' and 'selected_apart' as the serializer serves them ---------------
 
-class SecondReviewRelationTests(TestCase):
+class SecondReviewRelationTests(OperatorReads, TestCase):
     """corti_relation 'second_review' through the real engine: Corti selects 45385; its bounded second review lists
     45380 only as a candidate (alt2:0); Astra proposes 45380 from the biopsy passage. The engine's result is persisted
     as the assess stage persists it and served by the real API; the page words the relation as the engine's rationale
@@ -558,7 +559,7 @@ class SecondReviewRelationTests(TestCase):
         self.assertEqual((listed.code, listed.support.get('origin')), ('45380', 'second_review'))
         client = Client()
         client.force_login(self.reviewer)
-        detail = client.get(f'/api/encounters/{self.encounter.pk}').json()
+        detail = client.get(f'/ops/api/encounters/{self.encounter.pk}').json()
         # moved by refutation round 6 (R6-MEANING, the session's D14): Astra's 45380 is its alternative (altp:0), never
         # a selected card: the serializer still serves 'second_review', which the page's status-line wording words as
         # before; its rationale gives CPT Studio's reason, where _Harness._lead had worded the second review

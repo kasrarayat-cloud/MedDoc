@@ -1,0 +1,20 @@
+{
+  "user": {
+    "id": "5e6f7a8b-1111-4c2d-9e3f-4a5b6c7d8e9f",
+    "label": "CPT Studio review agent (automated agent)",
+    "initials": "CS",
+    "actor_kind": "agent"
+  },
+  "workspace": {
+    "id": "2b3c4d5e-2222-4f6a-8b7c-9d0e1f2a3b4c",
+    "name": "Gastroenterology"
+  },
+  "role": "reviewer",
+  "can_review": true,
+  "acknowledgement": "I am an automated agent. This agent-executed synthetic review is not clinical approval or billing advice.",
+  "counts": {
+    "documents": 1,
+    "queue": 0
+  },
+  "synthetic_only": true
+}

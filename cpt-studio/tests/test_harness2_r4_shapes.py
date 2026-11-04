@@ -149,13 +149,13 @@ class ShapesCase(PeerMaterialCase):
             ('cms_code_facts', RAW_ARGUMENTS)])
         client = Client()
         client.force_login(self.owner)
-        trace = client.get(f'/api/encounters/{encounter_id}/trace')
+        trace = client.get(f'/ops/api/encounters/{encounter_id}/trace')
         self.assertEqual(trace.status_code, 200)
-        detail = self.client.get(f'/api/encounters/{encounter_id}')
+        detail = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(detail.status_code, 200)
         files = {}
         for fmt in ('txt', 'csv'):
-            made = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'draft', 'fmt': fmt})
+            made = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'draft', 'fmt': fmt})
             self.assertEqual(made.status_code, 201, made.content)
             got = self.client.get(made.json()['download_url'])
             self.assertEqual(got.status_code, 200)

@@ -14,8 +14,10 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from studio import jobs, models, review, serializers
+from studio import jobs, models, operator, review, serializers
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
+from tests.support import operator as operator_access
 from tests.support import pipeline_factories as pf
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
 from tests.test_pipeline_api import drain
@@ -42,7 +44,7 @@ def record(name, state, *, run=None, codes=(), not_coded=(), reason='', unverifi
             'not_coded': [{'code': code, 'reason': why, 'quote': quote} for code, why, quote in not_coded]}
 
 
-class FieldCase(TestCase):
+class FieldCase(OperatorReads, TestCase):
     """A hand-built assessment with participant records, proposals of each origin and a retrieval trace."""
 
     def setUp(self):
@@ -60,7 +62,7 @@ class FieldCase(TestCase):
     def detail(self, user=None):
         client = Client()
         client.force_login(user or self.s.reviewer)
-        response = client.get(f'/api/encounters/{self.s.encounter.pk}')
+        response = client.get(f'/ops/api/encounters/{self.s.encounter.pk}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -338,9 +340,9 @@ class EstimatedCostTests(FieldCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class HarnessBlockTests(HarnessCase):
+class HarnessBlockTests(OperatorReads, HarnessCase):
     def detail(self, encounter_id):
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -449,7 +451,7 @@ class HarnessBlockTests(HarnessCase):
         stored = self.encounter(encounter_id).current_assessment.participants
         self.assertIn(DESCRIPTOR_LIKE, [item['code'] for record in stored if record['name'] == 'astra'
                                         for item in record['codes']])
-        response = self.client.get(f'/api/encounters/{encounter_id}')
+        response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
         data = response.json()
         data['assessment'].pop('summary')  # this suite's engine wrapper notes there what it was given
@@ -499,20 +501,26 @@ class HarnessBlockTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class FrontendContractTests(HarnessCase):
-    """The website's contract constants (tests.test_frontend) are the serializer's own keys (refutation r1 FG-5)."""
+class FrontendContractTests(OperatorReads, HarnessCase):
+    """The operator console's contract constants (tests.test_frontend) are the operator serializer's own keys as /ops/
+    serves them (refutation r1 FG-5; CORE-UX-DESIGN.md 5), and the customer contract (tests.test_customer_surface, the
+    contract of CORE-UX-DESIGN.md 7) is exactly what /api/ serves the same member - none of the operator's keys."""
 
     def test_the_contract_constants_are_the_keys_the_api_serves(self):
         from tests import test_frontend as contract
+        from tests.test_customer_surface import OPERATOR_ONLY, assert_contract
 
         owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
-        client = Client()
-        client.force_login(owner)
+        client = operator_access.client(owner)
         with mock.patch('studio.jobs.reference_passages', fake_passages([])):
             encounter_id = self.create()
             drain()
-        detail = client.get(f'/api/encounters/{encounter_id}').json()
-        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        customer = client.get(f'/api/encounters/{encounter_id}').json()
+        assert_contract(self, customer)
+        self.assertFalse(OPERATOR_ONLY & set(customer))
+        self.assertEqual(client.get(f'/api/encounters/{encounter_id}/trace').status_code, 404)
+        detail = client.get(f'/ops/api/encounters/{encounter_id}').json()
+        trace = client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         runs = [run for participant in trace['participants'] for run in participant['runs']]
         readings = [run['reading'] for run in runs if run['reading'] is not None]
         retrieval = [item for proposal in detail['assessment']['proposals'] for item in proposal['retrieval']]
@@ -536,7 +544,7 @@ class FrontendContractTests(HarnessCase):
         self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
 
 
-class FailedRetrievalTests(HarnessCase):
+class FailedRetrievalTests(OperatorReads, HarnessCase):
     """A retrieval that raises (refutation round 1, parity-1) through the real pipeline: the assessment stands as made,
     and the harness block says reference validation failed with the note the assessment recorded - never 'not_run' or
     'done' - with Corti only (I1) and with both participants after peer review; the owner's trace serves the one failed
@@ -550,8 +558,8 @@ class FailedRetrievalTests(HarnessCase):
             drain()
         client = Client()
         client.force_login(owner)
-        detail = client.get(f'/api/encounters/{encounter_id}').json()
-        trace = client.get(f'/api/encounters/{encounter_id}/trace').json()
+        detail = client.get(f'/ops/api/encounters/{encounter_id}').json()
+        trace = client.get(f'/ops/api/encounters/{encounter_id}/trace').json()
         return self.encounter(encounter_id), detail, trace
 
     def assertShownFailed(self, encounter, detail, trace):
@@ -581,12 +589,12 @@ class FailedRetrievalTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class ActivityTests(HarnessCase):
+class ActivityTests(OperatorReads, HarnessCase):
     def test_participant_attempts_are_named_and_corti_s_read_as_before(self):
         self.adapters['astra'].outcome = 'failed'
         encounter_id = self.create()
         drain()
-        summaries = [row['summary'] for row in self.client.get(f'/api/encounters/{encounter_id}').json()['activity']]
+        summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['activity']]
         self.assertIn('Astra request started', summaries)
         self.assertIn('Astra request failed (HTTP 529)', summaries)
         self.assertIn('Fable response recorded', summaries)
@@ -595,7 +603,7 @@ class ActivityTests(HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class TraceTests(HarnessCase):
+class TraceTests(OperatorReads, HarnessCase):
     def setUp(self):
         super().setUp()
         self.owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
@@ -605,21 +613,28 @@ class TraceTests(HarnessCase):
         client = Client()
         if user is not None:
             client.force_login(user)
-        return client.get(f'/api/encounters/{encounter_id}/trace')
+        return client.get(f'/ops/api/encounters/{encounter_id}/trace')
 
-    def test_owner_only(self):
+    def test_the_trace_is_an_operator_s_never_a_workspace_role_s(self):
+        # moved by the customer interface change (CORE-UX-DESIGN.md 5; owner directive 2026-11-03, section 2: a tenant
+        # owner must not automatically gain platform-operator access): this pinned the owner-only trace at /api/ (owner
+        # 200, reviewer and viewer 403); the trace is now an operator's at /ops/, and every role without a grant gets
+        # the answer an unknown URL gets (tests.test_operator.MatrixTests holds every role and URL to it)
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.get(self.owner, encounter_id).status_code, 200)
-        self.assertEqual(self.get(self.reviewer, encounter_id).status_code, 403)
-        self.assertEqual(self.get(self.viewer, encounter_id).status_code, 403)
+        self.assertEqual(self.get(self.owner, encounter_id).status_code, 200)  # an owner who is an operator
         outsider = f.member(f.workspace('Other synthetic workspace'), f.user('outsider'),
                             role=models.Membership.OWNER)
-        self.assertEqual(self.get(outsider, encounter_id).status_code, 404)
-        self.assertEqual(self.get(None, encounter_id).status_code, 401)
+        for user in (self.owner, self.reviewer, self.viewer, outsider):
+            client = Client()
+            client.force_login(user)  # granted by OperatorReads, then the grant ends: a member and nothing more
+            operator.revoke(user, 'Synthetic test: the member holds no operator grant.', 'tests')
+            self.assertEqual(client.get(f'/ops/api/encounters/{encounter_id}/trace').status_code, 404, user.username)
+            self.assertEqual(client.get(f'/api/encounters/{encounter_id}/trace').status_code, 404, user.username)
+        self.assertEqual(Client().get(f'/ops/api/encounters/{encounter_id}/trace').status_code, 404)
         client = Client()
-        client.force_login(self.owner)
-        self.assertEqual(client.post(f'/api/encounters/{encounter_id}/trace').status_code, 405)
+        client.force_login(self.owner)  # granted again
+        self.assertEqual(client.post(f'/ops/api/encounters/{encounter_id}/trace').status_code, 405)
 
     def test_the_trace_shows_each_run_its_reading_the_retrieval_and_the_reconciliation(self):
         recorded = []

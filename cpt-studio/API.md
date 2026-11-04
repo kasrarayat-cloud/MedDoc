@@ -842,3 +842,374 @@ carries a `decision`. **Amended after refutation round 4 (d7-4; HARNESS.md 12.10
 ## GET /api/encounters/{id}/original
 
 The original upload's bytes, as an attachment (404 for pasted text).
+
+## Core repair and customer interface (2026-11-03): P3 REVIEW
+
+**`POST /api/encounters/{id}/decisions` takes `"modifiers"`**: `[]` (or absent, or `null`), `["59"]` or `["XS"]` - the
+reviewer's ONE chosen modifier, on an `approve` only, where the proposal's separate-lesion modifier review offers it
+(`review.effective_view`, below). 400 for any other shape or value (`["59", "XS"]`, `"XS"`, `["xs"]`, a modifier with
+another action); 409 "No modifier review is offered for <code>: approve it with no modifier." where none is offered.
+Approving with no modifier is always allowed. → `201 {decision, "modifiers": [...]}`. Nothing is prefilled.
+
+**Statuses, checks and actions are the review overlay's** (`studio/validation/review_view.py`, ARCHITECTURE.md's section
+of the same name): in `assessment.proposals[]`, `status`, `status_label`, `checks`, `allowed_actions` and
+`approve_withheld_by` are what the current decisions (and member answers) leave. After a reinstatement of 45385 beside a
+selected 45378, 45378 reads `needs_clarification`, its checks carry `services.base_included`, `allowed_actions` is
+`["reject"]` and `approve_withheld_by` is `"services.base_included"`. With no decision they are exactly the stored ones;
+the key set is unchanged. `readiness.blockers` can list "<base> was approved, but <code> was reinstated: its diagnostic
+examination is normally included in that intervention; revoke one of the decisions" and "<code> was approved with
+modifier XS, but the separate-lesion modifier review no longer applies to it; revoke the approval and decide it again".
+Reports: an approval's chosen modifier is printed under its decision ("Modifier chosen by the reviewer: XS (not
+validated against NCCI procedure-to-procedure edits or payer modifier policy)"), and CHECKS notes the checks recomputed
+over the current review decisions. The structured modifier review, the chosen modifier and the approved items are served
+to the customer by the customer API (package P4), from `review.effective_view(assessment)` and
+`review.approved_items(assessment)`.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+**This section supersedes the customer-facing shapes above where they differ** (CORE-UX-DESIGN.md 5, 7). The sections
+above describe the full serializer, which is now the **operator** serializer: served only under `/ops/api/` to platform
+operators. A workspace member - owner, reviewer or viewer - is served the customer contract, built by allowlist in
+`studio/customer_api.py`: every key is written out, nothing stored is passed through, and no provider or model name,
+usage, credit, request id, run id, hash, rule id, source key, trace link or engine sentence appears.
+
+**Customer endpoints (`/api/`).**
+
+- `GET /api/session` → `{user: {id, label, initials, actor_kind}, workspace: {id, name}, role, can_review,
+  acknowledgement, counts: {documents, queue}, synthetic_only}` (no `provider_mode`, no `release`).
+- `GET /api/encounters` → `{encounters: [{id, title, state, state_label, service_date, date_conflict, open_details,
+  created_at, kind}]}`.
+- `GET /api/encounters/{id}` → exactly the contract of CORE-UX-DESIGN.md 7: `id, title, created_at, updated_at, state,
+  state_label, permissions{can_review}, document{kind, name, media_type, size, page_count, revision, text, pages,
+  reading{status, label, messages}, original_url}, service_date{value, source, document_value, document_quote,
+  entered_value, conflict, can_use_document_date}, progress{phase, busy, steps[{key, label, state, started_at,
+  finished_at}], active_detail, started_at, finished_at, server_time, slow, message, can_stop, can_resume, can_leave,
+  error}, checks[{key, label, state}], codes[{id, number, code, units, modifiers, modifier_review, status,
+  status_label, sub_label, summary, why{quotes[{text, start, end, page, exact}], qualifications}, detail_ids,
+  allowed_actions, decision}], other_codes[{code, reason}], not_separately_coded[{label, reason}], details_needed[...],
+  unresolved, limitations, readiness{draft, approved, blockers}, reports[{id, kind, fmt, filename, generated_at,
+  generated_by, download_url, current}], activity[{event, summary, actor, actor_kind, at}]`. States: `processing,
+  action_needed, awaiting_detail, ready, reviewed, no_codes, stopped, failed, being_confirmed`; code statuses `ready,
+  needs_detail, approved, excluded`. `activity` lists only allowlisted events under customer keys (`document_added`,
+  `decision_recorded`, `report_created`, ...); provider events, operator reads and operator reports never appear.
+  Committed examples: `tests/fixtures/customer/*.json` (generated from the real serializer).
+- `POST /api/encounters/{id}/decisions` → `201 {proposal_id, code, decision{action, by, by_kind, at, note,
+  modifiers}}`.
+- `POST /api/encounters/{id}/resume` → `201 {"resumed": true}` (never the stage's kind).
+- `POST /api/encounters/{id}/reports` `{"kind": "draft"|"approved", "fmt": "txt"|"csv"}` ("reviewed" is read as
+  "approved") → `201 {id, kind, fmt, filename, generated_at, generated_by, download_url, current}`; the approved
+  export answers 409 with `details.blockers` (customer wording) until `readiness.approved`. Format
+  `cpt-studio-customer-report@1`: the draft lists the numbered suggested codes ("Suggested codes — not approved") with
+  status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations with their page;
+  the approved export lists the approved items only, each with units, modifiers, approver, "Agent-executed synthetic
+  review — not clinical approval" for an agent's approval, the decision time and its quotations with page and character
+  offsets; then the limitations; a SYNTHETIC banner opens and closes the file. CSV columns: `report_format,
+  encounter_title, date_of_service, number, code, units, modifiers, status, approved_by, approver_kind, approved_at,
+  summary, evidence_text, evidence_page, evidence_start, evidence_end` (one row per quotation of a code; a banner row,
+  `report_format` = the SYNTHETIC line, follows the header and ends the file; formula-leading cells neutralised).
+- `GET /api/reports/{id}/download` → a customer artifact of the caller's workspace as stored, **without**
+  `X-Content-SHA256`. Any other artifact (an operator report, or one recorded before the `audience` column existed:
+  they name the review participants) answers 404; an approved export whose snapshot no longer matches the persisted
+  decisions answers `409 {"error": "This export no longer matches the saved decisions; create a new one."}`. Stored
+  artifacts are never modified.
+- `GET /api/encounters/{id}/original` → the original as stored, without `X-Content-SHA256`.
+- **Removed:** `GET /api/encounters/{id}/trace` and `POST /api/encounters/{id}/reconcile` answer 404 for everyone.
+- **Errors** use a fixed customer vocabulary (`customer_api.customer_error`): a refusal raised below the API is passed
+  through only when it is a known customer sentence, re-worded when it names the machinery, and otherwise answered
+  "This action is not available right now." No stored or exception text reaches a member.
+
+**Operator diagnostics (`/ops/`).** Every URL answers anyone without a platform-operator grant exactly what an unknown
+URL answers (Django's 404) - signed out, any workspace role, any workspace's owner, a revoked operator. A grant is a
+user-level row (`OperatorGrant`, ended by an `OperatorRevocation`) recorded only by `manage.py grant_operator
+--username U --reason-file F` and `revoke_operator ...`; no role confers it and no URL records one. An operator with no
+membership signs in on the same login page and lands on `/ops/`.
+
+| method + path | serves |
+|---|---|
+| `GET /ops/` | the operator console (`templates/studio/ops.html`, one script `/ops/assets/ops.js`) |
+| `GET /ops/assets/ops.js`, `/ops/assets/ops.css` | the console bundle (today's website, API base `/ops/api/`), from `studio/operator/`, never `static/` |
+| `GET /ops/api/session` | the console's session (`serializers.session_json`'s shape; role `operator`) |
+| `GET /ops/api/encounters[?workspace=<uuid>]` | every workspace's rows: `serializers.encounter_summary` + `workspace{id, name}` + `provider_runs` (count) |
+| `GET /ops/api/encounters/{id}` | the full `serializers.encounter_detail` (the operator's own membership when they hold one, else read-only) |
+| `GET /ops/api/encounters/{id}/trace` | `serializers.trace_json` |
+| `GET` / `POST /ops/api/encounters/{id}/reports` | every artifact with `audience`, `sha256`, `snapshot_sha256`; POST makes the operator report (`cpt-studio-report@4`) |
+| `GET /ops/api/reports/{id}/download` | any artifact, stored bytes, `X-Content-SHA256` |
+| `GET /ops/api/encounters/{id}/original` | the original with `X-Content-SHA256` |
+| `POST /ops/api/encounters/{id}/reconcile` | `{"provider_run_id", "note"}` as before (reconciliation is operator work) |
+
+An operator's reads of an encounter are audited as `operator.viewed` (once per operator, encounter and view in ten
+minutes); they are never part of an encounter's activity, the customer's or the operator's.
+
+## Core repair and customer interface (2026-11-03): P5 FLOW
+
+Endpoints and blocks the customer interface reads for directive sections 4 and 5. Every sentence below is from fixed
+tables in `studio/answers.py` and `studio/progress.py`: no stored question, reason, note, job error or run error text
+is passed through.
+
+**`POST /api/encounters` - `client_key`** (optional multipart field): a UUID the page generates per upload attempt. A
+repeated POST of the same attempt - the same member, within 24 hours, the same file (sha256) or pasted text - answers
+201 with the first encounter's `id` and creates nothing. Another member's same key is their own new encounter. 409 for a
+key used for another document, in another workspace or more than 24 hours ago ("This upload was already received. Open
+it from your documents." / "This upload key was already used for a different document. Reload the page and upload
+again."); 400 for a key that is not a UUID. Two concurrent POSTs of one attempt are settled by the database's unique
+index on (member, key): the second answers with the first's id.
+
+**`POST /api/encounters/{id}/details`** `{"answers": [{"id": "<detail id>", "fact": "<fact>", "value": "<value>"}]}` -
+one save for every row of "A few details needed" (owner or reviewer; 403 otherwise; 404 outside the workspace):
+- a `date` row takes `YYYY-MM-DD`, or `use_document` where offered (clears the member's date: the document's own date
+  then stands); a `choice` row takes one of its listed values, `use_document` where offered, or `not_documented` where
+  `allow` lists it; a `confirm` row (a clinical fact) takes only `not_documented` or `cannot_confirm`;
+- context values go through ONE context change and its re-assessment (as `POST .../context` makes it); the other two
+  values are stored as the member's answers (append-only, attributed, audited `detail.answered`), read by the review
+  overlay with no re-assessment and nothing sent;
+- 201 `{"saved": n, "unchanged": m, "answer_ids": [...], "reassessing": bool}` when something was saved; 200 with
+  `saved` 0 when the save changed nothing (a repeated identical save makes nothing); 400 `{"error"}` for an answer the
+  row does not allow ("Only "Not documented" or "Cannot confirm" can be recorded for this detail. A clinical detail is
+  added to the documentation by the physician.", "Choose one of the answers offered for this detail.", ...); 409 while
+  processing runs or for a detail no longer asked.
+
+**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer (the detail is asked again);
+201 `{"revoked": "<answer id>"}`; 404 for another document's answer; 409 while processing runs or when already
+withdrawn. A later answer to the same detail withdraws the earlier one itself.
+
+**Blocks** (built by `answers.details_needed(encounter, assessment, view)`, `answers.service_date_block(encounter)`,
+`progress.encounter_progress(encounter, now)` and `progress.checks_summary(encounter)` with DESIGN section 7's keys):
+`details_needed` rows are one per open question, de-duplicated by (fact, family, code), with a stable `id` across
+re-assessments; `service_date` shows the document's own date and quote only where the document gives one date of its
+own, beside the member's entered date; `progress` folds the jobs into four plain steps and one phase (`queued`,
+`processing`, `action_needed`, `awaiting_detail`, `completed`, `partial`, `failed`, `stopped`, `being_confirmed`), never
+a percentage or an estimate, "taking longer than usual" only from the stage's own deadline; `checks` states Document
+review, Independent checks and Coding validation. None of them writes anything.
+
+**Operator command `manage.py reassess_retained --encounter <uuid> --tag <release> [--username U] [--dry-run]`**:
+one re-assessment from the retained answers (the final assessment's runs re-read by id), nothing sent, one job per tag;
+refused, with the reason, while busy or stopped or when the final assessment is not current. Audit
+`assessment.refreshed` ("Results were refreshed with updated software").
+
+## Core repair and customer interface (2026-11-03): P6 UI
+
+What the customer page (`studio/static/studio/app.js`) sends and relies on. It reads only the customer encounter
+contract (build design section 7) and the customer session and list; it reads no other endpoint and has no
+diagnostics route. Fixtures: `tests/fixtures/customer/`.
+
+**Every request** carries `X-CPT-Studio-Client: customer-2026-11-03`. A server that no longer serves this build of the
+page answers HTTP 409 with `{"error": "<sentence>", "error_code": "client_outdated"}`; the page shows "CPT Studio was
+updated — reload the page to continue." with a Reload button and stops polling. This is a client contract; the server
+side belongs to the integration. A page loaded before this release sends no header and does not know `error_code`; it
+shows the body's `error` sentence, so that sentence should itself say the page must be reloaded.
+
+**Errors.** The page shows the body's `error` sentence when it is a non-empty string, else a fixed sentence per status
+(400, 403, 404, 409, 413, 429, other), never a status code. A refused download appends `details.blockers` (plain
+sentences).
+
+**`POST /api/encounters`** (multipart): `file` or `text`, optional `service_date`, `synthetic_attestation=yes`, and
+`client_key` — a version-4 UUID per upload attempt, kept when the same attempt is retried and replaced when its file,
+text or date changes. On 201 `{"id"}` the page shows the upload acknowledgement before its first read of the document.
+
+**`POST /api/encounters/{id}/details`**: `{"answers": [{"id": "<details_needed[].id>", "fact": "<details_needed[].fact>",
+"value": "<value>"}]}` — one request for every row the member answered. `value` is one of the row's choice values,
+`not_documented` or `cannot_confirm` (only where the row's `allow` lists it), `use_document` (a date row whose
+`document_value` is set), or `YYYY-MM-DD` (a date row). **`POST /api/encounters/{id}/details/{answer_id}/revoke`** with
+`{}` withdraws a saved answer (`details_needed[].saved.answer_id`).
+
+**`POST /api/encounters/{id}/decisions`**: as before, plus `"modifiers": []`, `["59"]` or `["XS"]` on an approval of a code
+with a `modifier_review` whose `options` offer it (one at most, never prefilled; not sent for any other action or code).
+
+**`POST /api/encounters/{id}/reports`**: `{"kind": "draft" | "approved", "fmt": "txt" | "csv"}`; the page downloads the
+answer's `download_url`, which must match `/api/reports/<uuid>/download`. The approved options are disabled, with
+`readiness.blockers` listed, while `readiness.approved` is not `true`. A `reports[]` entry whose `current` is not `true`
+is listed without a link ("No longer matches the saved decisions").
+
+**`POST /api/encounters/{id}/addenda`**: `{"text", "clarification_id": "<details_needed[].id>", "synthetic_attestation":
+"yes"}`, offered only on a row with `addendum_allowed: true` ("Add to the documentation (physician)"); the server
+accepts a details row id there (2026-11-04): the open confirmation row of the live assessment it names, answering the
+stored clarification that row shows (none for a question only the review overlay asks); any other row id answers 404
+"That detail is not open on this document." A clarification's own id is read as before. **`/stop`** and **`/resume`**: `{}`, offered when `progress.can_stop` (while busy) or
+`progress.can_resume`, and `permissions.can_review`.
+
+**Polling.** `GET /api/encounters/{id}` while `progress.busy` is true or `progress.phase` is `queued`, `processing` or
+`being_confirmed`: 2.5 s backing off to 15 s, and to 30 s after failed reads. A failed read shows "Reconnecting…";
+coming back to the tab or back online reads at once. Elapsed time is `server_time` − `started_at`, advanced by the
+browser's clock between reads; no percentage or forecast is shown. No step is animated unless the phase is `queued` or
+`processing` and `busy` is true.
+
+**Labels the page fixes itself** (a served label is used only for a value it does not know): the code statuses (Ready
+for review, Needs a detail, Approved, Excluded), the states, the four stages and the three checks. An approved code whose
+`decision.by_kind` is `agent` always reads "Agent-executed synthetic review — not clinical approval", whatever
+`sub_label` says.
+
+**DOM hooks beyond design section 8.** `li.result-row` also carries `data-units` and `data-modifiers` (space-separated);
+`.result-foot` holds `details.why-code` and `.result-actions`; a `.why-quote` button's text is the exact quote (the
+typographic quotes and "page N" are drawn by CSS from `data-page`), and a quote not found at its offsets is
+`span.why-quote.unlocated` with no `data-evidence`; source marks are `.evidence-mark[data-keys]` with keys
+`<code id>:q<n>` and `date:document`; `#reviewModifierField` is hidden unless approving a code with a modifier review;
+`#updateNotice`, `#uploadStatus`; `section.progress-panel.progress-done[data-phase]` for `completed`, `partial` and
+`awaiting_detail`; `[data-elapsed][data-since]` ticks while busy and carries `data-until` once finished. The edit-context
+dialog is gone (`#contextDialog`, `#contextServiceDate`, `#contextSetting`, `#contextBilling`, `#saveContext`,
+`button[data-action="edit-context"]`): context answers go through the details panel.
+
+## Core repair and customer interface (2026-11-03): integration wiring
+
+What changed when the packages' functions replaced P4's stand-ins (appended; the sections above stand as written,
+corrected here where this changes them):
+
+- **Every customer status, action and question reads the review overlay** (`review.effective_view`): a code's status,
+  its questions, the approve gate, a decision the overlay no longer supports (its readiness blocker, worded for the
+  member), the separate-lesion `modifier_review` (`sources`: the dated CMS source, title, release, effective date and
+  page) and the one-sentence `summary` (CPT Studio's own reading: structured fields and act labels, never a support
+  detail). A code whose needed detail a member answered `not_documented` or `cannot_confirm` is `excluded` ("A needed
+  detail is not documented" / "could not be confirmed"), offers no action and needs no decision until the answer is
+  withdrawn - in both APIs, readiness and the reports (`review._member_answers` reads `answers.saved_answers`).
+- **`details_needed`, `service_date`, `progress` and `checks`** are P5's (`answers.details_needed` over the overlay,
+  `answers.service_date_block`, `progress.encounter_progress`, `progress.checks_summary`); `can_stop`, `can_resume`,
+  `progress.error.action` and a row's `addendum_allowed` are offered only to a member whose role may take them. While a
+  member's date conflicts with the document, the date is the one detail asked; a save answering anything else is 409
+  ("That detail is no longer needed. ..."). `state` reads `action_needed` as soon as the phase does.
+- **`readiness.approved`** is `review.readiness` over the overlay (every suggested code approved, rejected, its exclusion
+  confirmed, or its detail answered as unavailable; nothing processing; a settled result) with an approved code to list
+  (session decision (f) of 2026-11-03: no partial approved export).
+- **An approved export is stale (download 409; `reports[].current` false) exactly when its decision marker moves**:
+  the live assessment, the current context, the current decisions (ids and sequence) and the standing member answers
+  (ids). A customer artifact's `snapshot_sha256` holds that marker's digest (`reports.customer_marker`), not a digest of
+  the report's content: a queued stage, a later run, an operator report or new wording never makes one stale. This
+  replaces the P4 section's "whose snapshot no longer matches".
+- **`counts.queue` in the customer session** keeps the review queue's rule above (`queue_reasons`), joined with the
+  customer queue's states (`action_needed`, `awaiting_detail`, `ready`), so it never counts fewer than the page's queue
+  lists. The page lists only those states (the list rows carry no queue reasons), so its badge can count more than its
+  queue shows: an open item. **Closed 2026-11-04 (session decision (o))**: each list row carries `in_queue` (boolean,
+  `customer_api.in_queue`: one of the three customer states, or what `queue_reasons` holds waiting), the page's queue
+  lists exactly the rows marked `in_queue: true`, and `counts.queue` counts exactly those rows. The rule is unchanged;
+  the page now lists what it counts.
+- **`progress.phase` `paused`** (decision (j) of 2026-11-03, wired 2026-11-04): while the document is busy and the
+  worker's newest heartbeat (`WorkerBeat`, written every `jobs.HEARTBEAT_SECONDS` by a thread of the worker) is older
+  than `jobs.WORKER_SILENT_SECONDS` (120 s), the phase is `paused` and the message says processing is paused and the
+  document is saved, promising nothing more; `slow` is false and Stop is still offered. No beat ever recorded claims
+  nothing (the stage's own phase). The page draws it with no animated step and no running clock, and keeps polling.
+- **`recheck`** (session decision (n), 2026-11-04): `{"available": bool, "can_request": bool}` beside `unresolved`. The
+  installed page offered the bounded second review ("Ask the provider once more"); the customer page keeps it, worded by
+  function: "Check what is still open again" under "Still open", shown only while `can_request` is `true`, posting
+  `POST /api/encounters/{id}/second-review` `{}` (201 `{"second_review": "queued"}`; a refusal answers 409 in the
+  customer error vocabulary). `available` is `jobs.second_review_status`'s (a documented service left without a supported
+  code and no bound standing: the predicate the POST accepts an ask by); `can_request` is `available` for an owner or
+  reviewer, never for a viewer. An assessment never queues one (owner decision 2026-10-27), and the offer sends
+  nothing.
+- **"Taking longer than usual"** (`progress.slow`) is past 60% of the bound each stage really has where it runs
+  (`progress.stage_bound`: extract 240 s, analyze 60 s, document review and its second review 150 s, assess 120 s, an
+  independent check's stage 580 s), a display threshold only; no sentence promises an automatic stop or start.
+- **Customer fixtures** (`tests/fixtures/customer/*.json`) are all generated from the serializer
+  (`CPT_STUDIO_WRITE_FIXTURES=1 manage.py test tests.test_customer_fixtures`), including Mara from Corti's retained
+  response, read in process.
+
+## Core repair and customer interface (2026-11-04): refutation round 2, overlay and customer repairs
+
+Appended notes; nothing above is rewritten. Each names its finding (`refute-r2`) and the test that holds it
+(`tests/test_cux_r2_overlay.py` unless named).
+
+- **A member answer excludes the code it answers and nothing else (L7-01; session decision (e)).** "Not documented" or
+  "Cannot confirm" on a code's detail makes that code `excluded` (sub label "A needed detail is not documented" / "...
+  could not be confirmed"); no other code's `status`, `details_needed` row, `detail_ids` or `allowed_actions` moves. A
+  code an answer excluded still holds every code its presence held - a diagnostic base beside it keeps its own "how the
+  codes are reported" row, and of two E/M levels that hold each other the other keeps its row and never gains `approve`
+  - and a reinstated same-day procedure it excluded still holds the office visit. Only a recorded decision (a rejection,
+  a revoked reinstatement) releases such a hold, by the engine's own rule, as before. (The overlay reads two sets:
+  `review_view`'s module docstring.)
+- **A reinstated code that cannot be approved yet says "Needs a detail" (L3-8).** While its stored check names what
+  approval waits for (the same facts a selected code of its family is asked: how far the examination reached, a
+  separately identifiable visit, ...), the code row reads `needs_detail` / "Needs a detail" (sub label "Reinstated in
+  review"), and `details_needed` carries one `confirm` row per wait (`affects: [code]`, "Not documented" / "Cannot
+  confirm", `addendum_allowed`), whose ids are the row's `detail_ids`. A wait this release does not word asks for the
+  documentation itself (fact `documentation`). "Not documented" there excludes the reinstated code, leaving only Revoke;
+  readiness then treats it as resolved. The operator view's `status` of that proposal is `needs_clarification`.
+- **One approval, one kind, one label (L3-6).** `sub_label` is "Agent-executed synthetic review — not clinical
+  approval" exactly when `decision.by_kind` is `agent`, i.e. when the approver is an automated agent
+  (`customer_api.agent_approval`); the approved export's `approver_kind` and its agent line follow the same rule. A
+  person's approval of a code an agent reinstated is the person's (`by_kind` `human`, no agent label); the agent's
+  reinstatement stays in the activity, the Decision rows and the operator report.
+- **"Why this code?" and the approved export's evidence are one rule (L3-7, L3-10): `review.evidence_spans`.** Passages
+  are quoted only where the code's support reading records its act as shown (`support.status` `pass` or `warn`): CPT
+  Studio's located passages first (`support.source`, then the matched acts the reading gives as performed or
+  incomplete), then the provider's exact passages the support records as supporting; at most four. A code whose act is
+  denied or in doubt (`not_applicable`), a `fail`, or a code with no support reading quotes nothing, on the page and in
+  the export alike - so an approved item can carry no quotation. The draft export reads the page's quotes.
+- **The operator view's decision carries `modifiers`** (L3-3): `[]` or the one modifier the reviewer chose, on
+  `assessment.proposals[].decision` and `decisions.history[]` of `/ops/api/encounters/{id}`.
+- **A modifier review's `sources` never carry a source key** (L4-4): a source is shown by its title, release, effective
+  date and page; a cited source this release does not bundle has no title here and is left out of `sources`.
+- **Every `/ops/` URL answers a non-operator exactly what an unknown URL answers** (L4-2, L4-3; `tests/test_operator.py`):
+  status, body, every header and every cookie, for GET and POST, signed in or out, with a stale session cookie, CSRF
+  enforced. The CSRF check of an operator route runs after the operator gate (an operator's write still needs the
+  token: 403 without it), the gate leaves a non-operator's session unread (no `Vary: Cookie`), and `/ops` (no slash) is
+  an unknown URL for everyone, operators included (no redirect to `/ops/`).
+
+## Core repair and customer interface (2026-11-04): refutation round 2, integration
+
+What the round-2 repairs change in the contract beyond the overlay owner's section above, as the integrator merged
+them.
+
+- **Progress and state** (the progress owner):
+  - An unreconciled unknown outcome, or a run left 'sending', outranks extraction_failed, processing_failed and
+    provider_failed (`review.RESUBMIT_STATES`). The document reads provider_unknown / being_confirmed, with no
+    "upload again", until it is reconciled. Stop and provider_not_run read as before.
+  - `partial` also covers a document review that is unavailable: a re-check that did not complete (message
+    `progress.RECHECK_INCOMPLETE`) or a response refused whole. A blocked or skipped stage never reads done.
+  - A step queued after a finished one says `progress.NEXT_STEP_QUEUED`, and the page titles it "Waiting for the next
+    step".
+  - `run_worker` beats until its loop returns, `--once` included, never stopping on the SIGTERM drain flag.
+  - A reservation its stage left behind is settled not_sent (`jobs._send`, `jobs.mark_stale`), never shown as being
+    confirmed.
+- **Details** (the details owner):
+  - A date row may take the value `clear` (removes the entered date), offered only where the document gives no
+    single date of its own.
+  - A date row may carry `saved` with `answer_id` `''`: a member's date in effect, corrected or removed through the
+    same row, with no revoke.
+  - An upload date that chose between the document's own dates is asked back as a confirmation, with both documented
+    dates as choices. While it is open the approved export waits (`readiness.blockers`: 'Confirm the date of service
+    under "A few details needed".').
+  - A service fact's row has the id `detail_id(fact, family, '')`, lists every code holding on it in `affects`,
+    stores its answer per code, and a revoke withdraws it for all of them.
+  - `POST /addenda` accepts the date row's id where `addendum_allowed` is true.
+  - `detail.answered` audit rows for the date carry the revision and the value, plus `confirmed: true` for a
+    confirmation.
+  - "Action needed" names a conflict with the document's own date only where the document states one; otherwise it
+    says the date is not settled and where to settle it.
+- **Customer reports** (the tools owner): the customer TXT starts with the SYNTHETIC line, then the headline. The
+  customer CSV gains a last column, `review_label`: "Agent-executed synthetic review — not clinical approval" on each
+  row of an agent's approval, draft and approved, and empty otherwise. An approval is labelled exactly when its
+  approver is an agent (`customer_api.agent_approval`), so a person's approval of a code an agent reinstated carries
+  the human kind and no label.
+- **Activity**: a re-check whose request did not succeed adds `check_not_completed` ("The check of what is still open
+  could not be completed").
+- **Quotations**: "Why this code?" and the approved export's evidence are one rule (`review.evidence_spans`): nothing
+  unless the support reading is 'pass' or 'warn'; then CPT Studio's located passages, the matched acts' evidence and
+  the supporting provider passages. The walk and the download check accept exactly those.
+
+## Core repair and customer interface (2026-11-04): refutation round 3, integration
+
+The bounded round 3, over the round-2 repairs, held the head to one standard: never read a document worse than the
+installed revision 41e03656df61, and keep the round-2 improvements. What its repairs change in the contract:
+
+- **Details and state** (the overlay-r3 owner):
+  - Every details save (confirm, clear, correct, any value) leaves the stored encounter state equal to the derived
+    one, so the list, the queue and the badge never read a stale "Ready for review".
+  - An office visit the same-day gate holds (em.same_day_if_reinstated, while a same-day procedure is reinstated or
+    approved) is asked separate_em: a confirm row with `affects` [the visit], both answers and the addendum. It reads
+    needs_detail (operator status needs_clarification), and approve stays withheld. "Not documented" or "Cannot
+    confirm" there excludes the visit, and readiness then names no same-day blocker for it.
+- **Activity:** `check_not_completed` is written for a re-check whose request failed or was not sent, when it ends. For
+  one whose outcome was unknown it is written only when that outcome is reconciled, never while it is being
+  confirmed.
+- **Progress** (the progress-r3 owner): a step reads every finished stage's recorded outcome. A document review or
+  re-check whose request failed, was not sent, was not resent or found sending disabled reads failed. An unknown
+  outcome or a blocked send reads stopped. A check's own failure leaves its step done (I10). The queued message and the
+  title share one rule (`progress.next_step_queued`): a step the panel shows done, including one kept from an earlier
+  run.
+- **Operator view** (the tools-r3 owner and the integration):
+  - Each proposal carries `overlay_reason`: the overlay's reason beside `status`, `detail_unavailable` while a
+    member's answer excludes the code, else `''`.
+  - Each proposal carries `customer`, the operator view's statement of the customer page for the code:
+    `{number, status, status_label, sub_label, reviewer_actions}` as `GET /api/encounters/<id>` serves it to a member
+    who may review. It is null where the page does not list the code.
+  - Each pipeline stage carries `step_outcome`: the state it gives its customer step (`progress._step_outcome`), or
+    null while it runs or when it did nothing for the step.
+  - The walk and the download check judge the customer page and the exports against these fields. They never
+    re-derive them, and they cannot verify without them.

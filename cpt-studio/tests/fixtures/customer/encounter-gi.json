@@ -1,0 +1,298 @@
+{
+ "id": "c9000000-0000-4000-8000-000000000001",
+ "title": "Synthetic EGD and two-lesion colonoscopy",
+ "created_at": "2026-11-01T09:03:00Z",
+ "updated_at": "2026-11-01T09:03:02Z",
+ "state": "ready",
+ "state_label": "Ready for review",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 707,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report\nDate of service: 2026-10-21\nPlace of service: hospital outpatient endoscopy unit\nProcedures: EGD with biopsy; colonoscopy with biopsy and snare polypectomy.\nEGD: The endoscope was advanced to the second portion of the duodenum. Cold forceps biopsies were taken from the gastric antrum.\nColonoscopy: The colonoscope was advanced to the cecum; the appendiceal orifice was identified.\nLesion A - ascending colon: a 3 mm sessile polyp was removed with cold biopsy forceps.\nLesion B - sigmoid colon: a 9 mm sessile polyp was removed with a cold snare. A clip was placed to prevent bleeding.\nPlan: Repeat colonoscopy in 3 years.\n",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 707
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Text read",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": "2026-10-21",
+  "source": "document",
+  "document_value": "2026-10-21",
+  "document_quote": {
+   "text": "Date of service: 2026-10-21",
+   "start": 84,
+   "end": 111
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "completed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": null,
+  "finished_at": null,
+  "server_time": "2026-11-01T09:03:05Z",
+  "slow": false,
+  "message": "Your results are ready.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "not_run"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [
+  {
+   "id": "c9000000-0000-4000-8000-000000000002",
+   "number": 1,
+   "code": "43239",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "approved",
+   "status_label": "Approved",
+   "sub_label": "Agent-executed synthetic review — not clinical approval",
+   "summary": "The upper endoscopy documents forceps biopsy (cold forceps) at the gastric antrum.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Cold forceps biopsies were taken from the gastric antrum.",
+      "start": 312,
+      "end": 369,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "revoke"
+   ],
+   "decision": {
+    "action": "approve",
+    "by": "Reviewbot (automated agent)",
+    "by_kind": "agent",
+    "at": "2026-11-01T09:03:03Z",
+    "note": "",
+    "modifiers": []
+   }
+  },
+  {
+   "id": "c9000000-0000-4000-8000-000000000003",
+   "number": 2,
+   "code": "45380",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": {
+    "options": [
+     "59",
+     "XS"
+    ],
+    "text": "Separate lesions are documented: 45380 is for the forceps biopsy (cold biopsy forceps) of the 3 mm sessile polyp in the ascending colon; 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
+    "sources": []
+   },
+   "status": "ready",
+   "status_label": "Ready for review",
+   "sub_label": "",
+   "summary": "The colonoscopy documents forceps biopsy (cold biopsy forceps) of the 3 mm sessile polyp in the ascending colon.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Lesion A - ascending colon: a 3 mm sessile polyp was removed with cold biopsy forceps.",
+      "start": 466,
+      "end": 552,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": [
+     "Separate lesions are documented: 45380 is for the forceps biopsy (cold biopsy forceps) of the 3 mm sessile polyp in the ascending colon; 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
+    ]
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ],
+   "decision": null
+  },
+  {
+   "id": "c9000000-0000-4000-8000-000000000004",
+   "number": 3,
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": {
+    "options": [
+     "59",
+     "XS"
+    ],
+    "text": "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon; 45380 is for the forceps biopsy (cold biopsy forceps) of the 3 mm sessile polyp in the ascending colon. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.",
+    "sources": []
+   },
+   "status": "ready",
+   "status_label": "Ready for review",
+   "sub_label": "",
+   "summary": "The colonoscopy documents snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Lesion B - sigmoid colon: a 9 mm sessile polyp was removed with a cold snare.",
+      "start": 553,
+      "end": 630,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": [
+     "Separate lesions are documented: 45385 is for the snare removal (cold snare) of the 9 mm sessile polyp in the sigmoid colon; 45380 is for the forceps biopsy (cold biopsy forceps) of the 3 mm sessile polyp in the ascending colon. Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one."
+    ]
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ],
+   "decision": null
+  },
+  {
+   "id": "c9000000-0000-4000-8000-000000000005",
+   "number": 4,
+   "code": "45378",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "excluded",
+   "status_label": "Excluded",
+   "sub_label": "Excluded by a documentation check",
+   "summary": "Colonoscopy: suggested from this document.",
+   "why": {
+    "quotes": [],
+    "qualifications": [
+     "The document does not show this service as performed on the date of service."
+    ]
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "reinstate",
+    "confirm"
+   ],
+   "decision": null
+  }
+ ],
+ "other_codes": [
+  {
+   "code": "45381",
+   "reason": "Listed as an alternative only; not suggested for approval."
+  }
+ ],
+ "not_separately_coded": [
+  {
+   "label": "Clip placement at the sigmoid colon (Colonoscopy)",
+   "reason": "A clip placed to prevent bleeding is not reported as a separate service."
+  }
+ ],
+ "details_needed": [],
+ "unresolved": [],
+ "recheck": {
+  "available": false,
+  "can_request": false
+ },
+ "limitations": [
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document.",
+  "These results come from a recorded test response, not a live check."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "45380 has no decision yet.",
+   "45385 has no decision yet.",
+   "45378 was excluded by a documentation check: confirm the exclusion or reinstate it."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:03:01Z"
+  },
+  {
+   "event": "decision_recorded",
+   "summary": "Review decision recorded",
+   "actor": "Reviewbot (automated agent)",
+   "actor_kind": "agent",
+   "at": "2026-11-01T09:03:04Z"
+  }
+ ]
+}
