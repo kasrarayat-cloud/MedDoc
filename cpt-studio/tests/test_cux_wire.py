@@ -7,18 +7,25 @@ details flow and progress, and P4's customer contract.
 - The approved customer export is stale exactly when its DECISION MARKER moves (the live assessment, the current
   context, the current decisions, the standing answers), never for anything that is not a decision: a queued job, a run
   no assessment reads, an operator report, new customer wording (critic C8).
+- "Taking longer than usual" is drawn from the bound each stage really has where it runs, and its wording promises no
+  stop the page does not make (critic C4).
 
 DB-backed; synthetic data only; nothing is sent (the engine's own results are persisted, as P3's suite persists them).
 """
+import inspect
 import json
+import re
+from datetime import timedelta
 from unittest import mock
 
+from django.conf import settings
 from django.test import Client, TestCase
 
 from studio import answers, customer_api, jobs, models, progress, reports, review
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
+from tests.test_cux_flow import ProgressCase
 from tests.test_cux_review import allowed, decide, persist
 
 COLON = 'gi.colonoscopy'
@@ -206,3 +213,44 @@ class ApprovedExportMarkerTests(WireCase):
         self.report, self.marker = fresh, reports.customer_marker(s.encounter)
         jobs.change_context(s.encounter, s.reviewer, {'setting': 'office'})  # a member's saved detail value
         self.assertStale()
+
+
+class SlowWordingTests(ProgressCase):
+    """"Taking longer than usual" from the bounds that are enforced (critic C4), worded as a display threshold."""
+
+    def progress(self, now):
+        self.enc.refresh_from_db()
+        return progress.encounter_progress(self.enc, now)
+
+    def test_each_stage_s_bound_is_the_one_enforced_where_it_runs(self):
+        self.assertEqual({kind: progress.stage_bound(kind) for kind in (
+            'extract', 'analyze', 'predict', 'review2', 'assess', 'astra', 'fable', 'astra_peer', 'fable_peer')}, {
+            'extract': 240, 'analyze': 60, 'predict': 150, 'review2': 150, 'assess': 120,
+            'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580})
+        # read where each is enforced, so a change there moves the threshold with it
+        self.assertIn('timeout_s=settings.EXTRACTION_TIMEOUT_SECONDS', inspect.getsource(jobs._limits))
+        self.assertIn('deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30', inspect.getsource(jobs._send))
+        self.assertIn("seconds=settings.JOB_DEADLINE_SECONDS['assess']", inspect.getsource(jobs.stage_assess))
+        self.assertIn('settings.JOB_DEADLINE_SECONDS.get(job.kind', inspect.getsource(jobs._check_loop_time))
+        self.assertEqual(settings.EXTRACTION_TIMEOUT_SECONDS, 240)
+        self.assertNotEqual(settings.JOB_DEADLINE_SECONDS['extract'], progress.stage_bound('extract'))
+        self.assertNotEqual(settings.JOB_DEADLINE_SECONDS['predict'], progress.stage_bound('predict'))
+
+    def test_slow_past_sixty_percent_of_the_real_bound_overdue_past_it(self):
+        for kind, before in (('extract', ()), ('predict', ('extract', 'analyze'))):
+            with self.subTest(kind):
+                models.Job.objects.filter(encounter=self.enc).delete()
+                self.chain(*before)
+                running = self.job(kind, 'running', 2 * len(before))
+                bound = progress.stage_bound(kind)
+                for share, slow, message in ((0.59, False, progress.MESSAGES['processing']),
+                                             (0.61, True, progress.SLOW_MESSAGES[kind]),
+                                             (1.01, True, progress.OVERDUE)):
+                    out = self.progress(now=running.started_at + timedelta(seconds=share * bound))
+                    self.assertEqual((out['phase'], out['slow'], out['message']), ('processing', slow, message), share)
+
+    def test_no_slow_wording_implies_a_limit_the_page_enforces(self):
+        promised = re.compile(r'(?i)automatic|\bwill (?:be )?(?:stop|end|cancel|start)|\blimit|deadline|time ?out|'
+                              r'timed out|expire|cut off|\bstopped\b')
+        for message in [*progress.SLOW_MESSAGES.values(), progress.OVERDUE, progress.QUEUE_SLOW, progress.TAKING_TURN]:
+            self.assertIsNone(promised.search(message), message)

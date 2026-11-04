@@ -10,9 +10,10 @@ Read-only over the rows: the jobs, the runs, the context and the live assessment
 so a page that polls it can never cause a paid request (R6 4.5). Every sentence is from the fixed tables below: never a
 job's or a run's error text (they name providers and carry technical payloads), never a percentage, a remaining time or
 an estimate - the only times it gives are the ones recorded (when each step started and finished) and the server's
-clock, from which the page shows the time elapsed. "Taking longer than usual" is said only from the stages' own
-deadlines (settings.JOB_DEADLINE_SECONDS, jobs.QUEUE_DEADLINE): a step past SLOW_SHARE of its bound says what it is
-waiting for.
+clock, from which the page shows the time elapsed. "Taking longer than usual" is a display threshold drawn from the
+bound each stage really has where it runs (stage_bound; jobs.QUEUE_DEADLINE for a stage not yet started): a step past
+SLOW_SHARE of its bound says what it is waiting for. The wording never implies a limit it enforces: the threshold is
+the page's, not a stop.
 """
 from django.conf import settings
 from django.utils import timezone
@@ -71,10 +72,9 @@ SLOW_MESSAGES = {
     Job.ASSESS: 'Coding validation is taking longer than usual for this document.',
     **{kind: 'The independent checks are taking longer than usual. They are still running.' for kind in CHECK_KINDS},
 }
-OVERDUE = ('This step is taking much longer than it should. If it does not finish soon, it will be stopped '
-           'automatically, and nothing will be sent twice.')
-QUEUE_SLOW = ('Waiting longer than usual to start: other documents are being processed first. It will start '
-              'automatically.')
+OVERDUE = ('This step is taking much longer than usual. You can leave this page and come back; your document is '
+           'saved.')
+QUEUE_SLOW = 'Waiting longer than usual to start: other documents are being processed first.'
 ERRORS = {
     'extraction_failed': ('We could not read the text of this document. Upload a clearer copy, or paste the text '
                           'instead.', 'new_document'),
@@ -205,13 +205,31 @@ def date_held(encounter):
             and is_member_conflict((context.facts or {}).get('service_date')))
 
 
+def stage_bound(kind):
+    """The seconds a running stage of ``kind`` really has - the bound enforced where it runs, never a figure nothing
+    reads - from which "taking longer than usual" is drawn (critic C4): the extraction child's timeout
+    (EXTRACTION_TIMEOUT_SECONDS, 240 s: jobs._limits), the routing child's (JOB_DEADLINE_SECONDS['analyze'], 60 s), the
+    coding service's send deadline (PROVIDER_READ_TIMEOUT_SECONDS + 30, 150 s: jobs._send, for the document review and
+    its second review alike), the assess child's (JOB_DEADLINE_SECONDS['assess'], 120 s) and an independent check's
+    stage budget (JOB_DEADLINE_SECONDS for its kind, 580 s: jobs._check_loop_time). JOB_DEADLINE_SECONDS' extract,
+    predict and review2 entries are read nowhere, so they are never used. None for a kind with no bound."""
+    if kind == Job.EXTRACT:
+        return settings.EXTRACTION_TIMEOUT_SECONDS
+    if kind in SENDING_KINDS:
+        return settings.PROVIDER_READ_TIMEOUT_SECONDS + 30
+    if kind in (Job.ANALYZE, Job.ASSESS) + CHECK_KINDS:
+        return settings.JOB_DEADLINE_SECONDS.get(kind)
+    return None
+
+
 def _slow(active, now):
-    """(slow, message): a running step past SLOW_SHARE of its stage's own deadline (past the deadline itself: OVERDUE),
-    or a step queued past SLOW_SHARE of the start-by window; (False, '') otherwise and for a step with no bound."""
+    """(slow, message): a running step past SLOW_SHARE of its stage's real bound (stage_bound; past the bound itself:
+    OVERDUE), or a step queued past SLOW_SHARE of the start-by window; (False, '') otherwise and for a step with no
+    bound. A display threshold only: nothing here stops, expires or requeues a stage."""
     if active is None:
         return False, ''
     if active.state == Job.RUNNING and active.started_at is not None:
-        bound = settings.JOB_DEADLINE_SECONDS.get(active.kind)
+        bound = stage_bound(active.kind)
         if not bound:
             return False, ''
         elapsed = (now - active.started_at).total_seconds()

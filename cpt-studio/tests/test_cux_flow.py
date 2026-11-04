@@ -698,7 +698,10 @@ class ProgressFoldTests(ProgressCase):
     def test_slow_only_from_the_stage_s_own_bound(self):
         self.chain('extract', 'analyze')
         predict = self.job('predict', 'running', 4)
-        bound = progress.settings.JOB_DEADLINE_SECONDS['predict']
+        # the coding service's send deadline, the bound that is enforced (150 s; JOB_DEADLINE_SECONDS['predict'], 180 s,
+        # is read nowhere: critic C4)
+        bound = progress.stage_bound('predict')
+        self.assertEqual(bound, progress.settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
         for share, slow, message in ((0.5, False, progress.MESSAGES['processing']),
                                      (0.7, True, progress.SLOW_MESSAGES['predict']),
                                      (1.1, True, progress.OVERDUE)):
