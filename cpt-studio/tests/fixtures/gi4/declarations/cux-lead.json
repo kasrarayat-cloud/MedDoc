@@ -11,15 +11,115 @@
   "L3": "engine._states_unread_act: the passage names the act when services._acts_in(text, reading.start, reading.end) finds a kind the code covers (attributive compounds left out, earlier kinds claim their text), not when any raw ACTS pattern of such a kind matches the passage."
  },
  "cues_added": [],
- "battery_rows_added": ["R8 D7 H1 separate same-day note", "R8 L3 biopsy-proven Barrett, no act today", "R8 L3 biopsy-confirmed adenoma, no act today", "R8 L3 control, biopsy-proven Barrett and a biopsy today"],
+ "battery_rows_added": [
+  "R8 D7 H1 separate same-day note",
+  "R8 L3 biopsy-proven Barrett, no act today",
+  "R8 L3 biopsy-confirmed adenoma, no act today",
+  "R8 L3 control, biopsy-proven Barrett and a biopsy today"
+ ],
  "battery": [
-  ["R8 D7 H1 separate same-day note", "45380", "selected/ready", "selected/needs_clarification"],
-  ["R8 L3 biopsy-proven Barrett, no act today", "43239", "selected/ready", "selected/needs_clarification"],
-  ["R8 L3 biopsy-confirmed adenoma, no act today", "43239", "selected/ready", "selected/needs_clarification"]
+  [
+   "R8 D7 H1 separate same-day note",
+   "45380",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 L3 biopsy-proven Barrett, no act today",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 L3 biopsy-confirmed adenoma, no act today",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ]
  ],
  "battery_note": "The four rows are new; their base cells are measured on the base tree with the rows added (the declared 'from'). The control row (a real biopsy stated today beside 'biopsy-proven') must not move: 43239 stays READY. Every other row of the battery: 0 movements.",
  "replay": "EQUAL predicted for the 8 regression documents in every member state: none carries a 'Label: <service>' line, a non-physician part with a procedure-line title, or an own-passage release resting on an attributive compound. Any movement is a finding, measured and amended (dated, after code) before it is accepted.",
  "mara": "tests/fixtures/cux/mara: unchanged - 43239, 45380 and 45385 READY, 0 questions, the clip under the colonoscopy (MaraEndToEndTests). Mara has no 'Label: <service>' line; its own passages state acts with predicates.",
  "h2": "No frozen constant edited: LABELLED_NOTE is P2's addition (already declared in cux-hold); no pattern is added or widened.",
- "not_changed": ["services.ACTS", "services.BARE_PARTICIPLE", "services.SERVICES", "services.HEDGE_WORDS", "services.labelled_service_heading (P2's, as tested)", "services._acts_in (P1's, as tested)", "studio/gi/sections.py", "studio/gi/context.py", "studio/gi/cues.py", "studio/validation/reconcile.py", "the request side"]
+ "not_changed": [
+  "services.ACTS",
+  "services.BARE_PARTICIPLE",
+  "services.SERVICES",
+  "services.HEDGE_WORDS",
+  "services.labelled_service_heading (P2's, as tested)",
+  "services._acts_in (P1's, as tested)",
+  "studio/gi/sections.py",
+  "studio/gi/context.py",
+  "studio/gi/cues.py",
+  "studio/validation/reconcile.py",
+  "the request side"
+ ],
+ "amendment_20261104T0305Z_after_code_offers": {
+  "note": "After code, measured: the four lead rows' second-review offers (tests/test_gi4_po.offers_of, own answer and empty answer) on d43d1e363 (rows added, code unchanged) and on the head are identical - no cell gains or loses an offer. Recorded so tests/test_cux_hold.RegisterOfferTests reads every 'R8 ' row's offers.",
+  "offer_battery": {
+   "R8 D7 H1 separate same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 L3 biopsy-confirmed adenoma, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 L3 biopsy-proven Barrett, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 L3 control, biopsy-proven Barrett and a biopsy today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   }
+  }
+ },
+ "after_measurement_20261104T0300Z": {
+  "battery": "python -m ops.gi4.battery --base d43d1e363 --head . --declare cux-lead.json: base 95 rows / 135 codes / 5 violations, head 2 violations; 3 movements, 0 undeclared, 0 new violations - exactly the declared three.",
+  "replay": "python -m ops.gi4.replay --fixtures --base d43d1e363 --head .: EQUAL (h4-03's four date.sends-only-the-truth HARD failures are on base and head alike).",
+  "h2": "python -m ops.gi4.freeze --base d43d1e363 --head . --declare cux-lead.json: cue patterns 324/324 unchanged, sections.layout identical over 5723 texts, date channel 0 new over 44014, requests 0 changed over 19780, mention counts 0 changed - GATE HOLDS.",
+  "probe": "Lead probe (scratch-lead2/probe_lead.py): H1 45380 ready -> needs_clarification with the biopsy now gi.flex_sig's; F4C's pathology-heading snare act gone, 45385 still held, 45380 ready; 'biopsy-proven' and 'biopsy-confirmed' 43239 ready -> needs_clarification; the control (a biopsy stated today) stays ready."
+ }
 }

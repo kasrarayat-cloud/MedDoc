@@ -1049,6 +1049,15 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             cuts.append((ls, family, role, Span(ls + line.index(stripped), ls + line.index(stripped) + len(stripped),
                                                 stripped), 'role'))
             continue
+        labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
+                                            date_starts=date_starts, documented=documented)
+        if labelled is not None:
+            # lead integration L1 (R8 D7, cux-lead.json): "Separate note: Flexible sigmoidoscopy (fictional),
+            # 2026-10-14" opens a report part of its one service, so the colonoscopy's part no longer runs over it
+            family = labelled[0]
+            cuts.append((ls, family, 'physician', labelled[1], 'report'))
+            kind_now = 'report'
+            continue
         numbered = PART_NUMBER.match(line)
         body = line[numbered.end():] if numbered else line
         m = REPORT_TITLE.match(body) or TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body)
@@ -1127,16 +1136,7 @@ def labelled_service_heading(text: str, ls: int, le: int, *, service_date: Optio
     the heading after the label, with _heading_time's other-time and doubt checks), on a line with no plan, history or
     earlier-span word and no history or plan heading. None otherwise. Bounded: at most 100 characters of the line.
 
-    NOT called on this branch: parts() is package P1's. The one wiring line, in parts() right after the role-heading
-    check (before ``numbered = PART_NUMBER.match(line)``), is:
-
-        labelled = labelled_service_heading(text, ls, le, service_date=service_date, dates=dates,
-                                            date_starts=date_starts, documented=documented)
-        if labelled is not None:
-            family = labelled[0]
-            cuts.append((ls, family, 'physician', labelled[1], 'report'))
-            kind_now = 'report'
-            continue
+    Called by parts() right after the role-heading check (lead integration L1, cux-lead.json).
     """
     line = text[ls:le]
     stripped = line.strip()
@@ -4402,7 +4402,10 @@ def _on_procedure_line(text: str, pos: int, part: _Part) -> bool:
     line = text[line_start:line_end if line_end >= 0 else len(text)]
     if PROCEDURE_FIELD.match(line):
         return True
-    if part.title is not None and part.title.start <= pos < part.title.end:
+    if part.title is not None and part.title.start <= pos < part.title.end and part.role == 'physician':
+        # lead integration L2 (R8 D6, cux-lead.json): a pathology, nursing, anesthesia or radiology entry's heading
+        # ("PATHOLOGY ADDENDUM - 2026-09-02 hot snare polypectomy specimen") is no procedure title of today's report,
+        # as _studies_reported reads only a physician part's title
         return True
     prev_end = line_start - 1
     prev_start = text.rfind('\n', 0, max(prev_end, 0)) + 1

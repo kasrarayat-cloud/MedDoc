@@ -1730,8 +1730,10 @@ def _states_unread_act(reading: checks.Reading, found: reconcile.Match, code: st
         return False
     if any(reading.start < t.end and t.start < reading.end for a in found.service.acts for t in a.evidence):
         return False
-    passage = text[reading.start:reading.end]
-    return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+    # lead integration L3 (cux-lead.json; P1 rule 2): the act mentions services._acts_in reads, not the raw ACTS
+    # patterns - an attributive act compound ("biopsy-proven Barrett esophagus", "a biopsy-confirmed adenoma")
+    # presupposes an earlier act and states none today, so it never stands for the act this code accounts for
+    return any(kind in kinds for kind, _, _ in gi_services._acts_in(text, reading.start, reading.end))
 
 
 def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:

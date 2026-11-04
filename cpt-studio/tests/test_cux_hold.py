@@ -657,7 +657,7 @@ class NarrowEvidenceHoldTests(SimpleTestCase):
 
 class LabelledServiceHeadingTests(SimpleTestCase):
     """D7 (R8 1.3): services.labelled_service_heading, the helper P1's parts() calls - this package does not own
-    parts(), so it is NOT wired on this branch and the register's H1 row does not move here. A 'Label: <service>'
+    parts(); the lead's integration wires it (cux-lead.json L1; tests/test_cux_lead.py). A 'Label: <service>'
     line - a note, procedure or addendum label, then a heading naming exactly one family with only that service's name,
     heading vocabulary, attributes and today's date (_bare_service_heading) - opens a report part; never a bare
     'Procedure:' field (the trap R8 1.3 records: widening TITLE_FIELD made 'Procedure: Colonoscopy' a report title), a
@@ -701,8 +701,13 @@ class RegisterOfferTests(SimpleTestCase):
 
     def test_every_register_row_offers_as_declared(self):
         from tests.test_gi4_po import offers_of
-        declared = next(value['offer_battery'] for key, value in reversed(list(DECLARATION.items()))
-                        if isinstance(value, dict) and 'offer_battery' in value)
+        declared = dict(next(value['offer_battery'] for key, value in reversed(list(DECLARATION.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
+        # the lead integration's register rows (R8 D7, R8 L3) carry their offers in their own declaration (cux-lead.json)
+        lead = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-lead.json')
+                          .read_text(encoding='utf-8'))
+        declared.update(next(value['offer_battery'] for key, value in reversed(list(lead.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
         names = [n for n in battery.CASES if n.startswith('R8 ')]
         self.assertEqual(sorted(declared), sorted(names))
         for name in names:
