@@ -811,6 +811,197 @@ R2V_RESIDUALS = {
         _r2v_exam('Patient not evaluated in person today.'), [('99204', R8_TWIN, 'no_ready')]),
 }
 R2V_RESIDUAL_USER = {'R8 R2 V residual R12, not evaluated in person': {'service_date': '2026-10-26'}}
+# --- reader repair, round 3 (2026-11-04; tests/fixtures/gi4/declarations/cux-r3-reader.json): refutation round 3's lens
+# A findings against the round-2 reader repairs - a same-day note under a numbered, 'Subsequent' or 'Follow-on' heading
+# (A1), a labelled lesion's denial at another site of its own segment (A2), a label or specimen in a combined report's
+# narrative after another examination is told (A3), a cecal polypectomy whose site is in the sentence before it after a
+# separate sigmoidoscopy note (A4), a postmodified evaluation beside the E/M absence statement (A5), a header line
+# naming another, separately reported service (A6) and a label restated without its site (A7) - each with its controls.
+# Prefix 'R8 R3 ' (a register row: the round-4 counts leave it out; tests/test_cux_hold.RegisterOfferTests reads its
+# offers from cux-r3-reader.json).
+R3_FORCEPS_Q = 'a 2 mm polyp was removed with cold forceps.'
+R3_COMBINED = R2_HEAD + 'EGD and colonoscopy report\n'
+R3_COLON_LESION = 'A 6 mm polyp in the sigmoid colon was removed with a cold snare and sent as specimen 1.'
+R3_GASTRO = 'The gastroscope was advanced to the second part of the duodenum.'
+R3_IT = 'It was removed with a cold snare.'
+R3_THE_POLYP = 'The polyp was removed with a cold snare.'
+R3_ANTRUM = 'Cold forceps biopsies were taken from the gastric antrum.'
+R3_XREF = 'Additional procedure: EGD performed today (separate report)'
+R3_EGD_TODAY = 'Second procedure: EGD performed today'
+R3_HOT = 'A 6 mm polyp was removed with a hot snare.'
+R3_SIGMOID_POLYP = 'A 4 mm sessile polyp was found in the sigmoid colon.'
+R3_SITELESS_BX = 'Biopsies were taken with cold forceps.'
+R3_MARA_LIKE = (R2_HEAD + 'Upper endoscopy and colonoscopy report\nUPPER ENDOSCOPY\n' + R3_GASTRO + ' ' + R3_ANTRUM
+                + '\nCOLONOSCOPY\nThe colonoscope was advanced to the cecum.\nCOL-1 - ascending colon: a 2 mm polyp was '
+                'removed with cold forceps. No snare resection was performed on COL-1.\nCOL-2 - sigmoid colon: an 8 mm '
+                'polyp was removed with a cold snare. No biopsy forceps were used on COL-2.\nSPECIMENS\n{rows}')
+R3_ROWS = 'COL-1: ascending colon\n2 mm polyp; cold forceps removal\nCOL-2: sigmoid colon\n8 mm polyp; cold-snare removal\n'
+R3_MARA_Q = [('43239', R3_ANTRUM, 'done'), ('45380', R3_FORCEPS_Q, 'done'), ('45385', R2_LABELS_Q, 'done')]
+R3_EM_EVAL = 'An evaluation for new-onset jaundice was performed today.'
+
+
+def _r3_header(line, *body):
+    """R8's titled colonoscopy report with ``line`` under its procedure field, then ``body``."""
+    return _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + line + '\n'), *body)
+
+
+def _r3_em(*lines):
+    """Reader-em round 2's upper endoscopy body with ``lines`` after it."""
+    return _r8(R2_EM_BODY, *lines)
+
+
+CASES.update({
+    # A1 (L1c): a same-day note under a numbered, a 'Subsequent procedure:' or a 'Follow-on procedure:' heading is the
+    # note's (R8 D7, as 'Separate note:' reads); a numbered line in a list or over shared findings opens no colonoscopy
+    'R8 R3 A1a numbered procedure heading over a same-day note': (
+        R2_COLON_FS.format(heading='Procedure 2: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    'R8 R3 A1b subsequent procedure heading over a same-day note': (
+        R2_COLON_FS.format(heading='Subsequent procedure: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    'R8 R3 A1c follow-on procedure heading over a same-day note': (
+        R2_COLON_FS.format(heading='Follow-on procedure: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    "R8 R3 A1d numbered procedure heading, the note's own biopsy code": (
+        R2_COLON_FS.format(heading='Procedure 2: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45331', R8_FS_BIOPSY, 'done')]),
+    "R8 R3 A1e subsequent procedure heading, the note's own biopsy code": (
+        R2_COLON_FS.format(heading='Subsequent procedure: Flexible sigmoidoscopy (fictional), 2026-10-14'),
+        [('45385', R8_CO_SNARE, 'done'), ('45331', R8_FS_BIOPSY, 'done')]),
+    'R8 R3 A1 control, one numbered procedure line over shared findings': (
+        R2_HEAD + 'Upper endoscopy and colonoscopy report\nProcedure 2: Colonoscopy\n' + R2_LISTED,
+        [('43239', 'Biopsies were taken with cold forceps.', 'done'),
+         ('45380', 'Biopsies were taken with cold forceps.', 'not_done')]),
+    'R8 R3 A1 control, a numbered procedure line naming an EGD performed today': (
+        _r3_header('Procedure 2: EGD performed today', R3_SIGMOID_POLYP, R3_IT), [('45385', R3_IT, 'done')]),
+    # A2 (R1c): a denial naming a label and a site of the lesion's own segment that is not its recorded site
+    'R8 R3 A2a snare denial on a label, a landmark of its own segment': (
+        R2_LABELS + 'No snare was used on COL-2, just above the rectosigmoid junction.\n',
+        [('45385', R2_LABELS_Q, 'no_ready'), ('45380', R3_FORCEPS_Q, 'done')]),
+    'R8 R3 A2b snare denial on a label, the left colon': (
+        R2_LABELS + 'No snare was used on COL-2 in the left colon.\n', [('45385', R2_LABELS_Q, 'no_ready')]),
+    'R8 R3 A2c forceps denial on a label, near the hepatic flexure': (
+        R2_LABELS + 'No forceps were used on COL-1 near the hepatic flexure.\n',
+        [('45380', R3_FORCEPS_Q, 'no_ready'), ('45385', R2_LABELS_Q, 'done')]),
+    'R8 R3 A2 control, a denial on a label at its own site': (
+        R2_LABELS + 'No snare was used on COL-1 in the ascending colon.\n', [('45385', R2_LABELS_Q, 'done')]),
+    # A3 (R1a): a label or specimen in a combined report's narrative, after another examination is told
+    'R8 R3 A3a specimen number restarted in a combined narrative': (
+        R3_COMBINED + 'The colonoscope was advanced to the cecum. ' + R3_COLON_LESION + '\n' + R3_GASTRO
+        + ' The stomach showed patchy erythema. ' + R2_SPECIMEN + '\n',
+        [('43239', R2_SPECIMEN, 'done'), ('45380', R2_SPECIMEN, 'not_done')]),
+    'R8 R3 A3b specimen number restarted in a combined narrative, 43239 only': (
+        R3_COMBINED + 'The colonoscope was advanced to the cecum. ' + R3_COLON_LESION + '\n' + R3_GASTRO
+        + ' The stomach showed patchy erythema. ' + R2_SPECIMEN + '\n', [('43239', R2_SPECIMEN, 'done')]),
+    'R8 R3 A3c colon label named in passing in a combined narrative': (
+        R2_HEAD + 'Colonoscopy and EGD report\nThe colonoscope was advanced to the cecum.\nCOL-1 - sigmoid colon: an 8 mm '
+        'polyp was removed with a cold snare.\n' + R3_GASTRO + ' The antrum showed patchy erythema. ' + R2_PASSING + '\n',
+        [('43239', R2_PASSING, 'done'), ('45380', R2_PASSING, 'not_done')]),
+    'R8 R3 A3 control, a labelled clip and denial in a combined narrative': (
+        R3_COMBINED + R3_GASTRO + ' ' + R3_ANTRUM + '\nThe colonoscope was advanced to the cecum.\nCOL-1 - sigmoid colon: '
+        'an 8 mm polyp was removed with a cold snare.\nOne clip was placed at the COL-1 resection site. No biopsy forceps '
+        'were used on COL-1.\n',
+        [('43239', R3_ANTRUM, 'done'), ('45385', R2_LABELS_Q, 'done')]),
+    'R8 R3 A3 control, the colonoscope told again before the labelled act': (
+        R2_HEAD + 'Colonoscopy and EGD report\nThe colonoscope was advanced to the cecum.\nCOL-1 - sigmoid colon: an 8 mm '
+        'polyp was seen.\n' + R3_GASTRO + ' The antrum was normal.\nThe colonoscope was then reinserted.\nCOL-1 was removed '
+        'with a cold snare.\n', [('45385', 'COL-1 was removed with a cold snare.', 'done')]),
+    # A4 (L1e): the cecal polyp's snare told in the sentence after its site, after a separate sigmoidoscopy note
+    'R8 R3 A4a cecal polyp, its snare in the next sentence': (
+        _r8(B + R2_NOTE, '', 'A 5 mm polyp was seen in the cecum. ' + R3_IT),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_IT, 'done'), ('45338', R3_IT, 'not_done')]),
+    'R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only': (
+        _r8(B + R2_NOTE, '', 'A 5 mm polyp was seen in the cecum. ' + R3_IT),
+        [('45378', R8_CECUM, 'done'), ('45338', R3_IT, 'not_done')]),
+    'R8 R3 A4c cecal polyp found, the polyp removed on the next line': (
+        _r8(B + R2_NOTE, '', 'A 5 mm cecal polyp was found.', R3_THE_POLYP),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_THE_POLYP, 'done'), ('45338', R3_THE_POLYP, 'not_done')]),
+    'R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence': (
+        _r8(B + R2_NOTE, 'A 5 mm polyp was seen in the sigmoid colon. ' + R3_IT),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_IT, 'not_done'), ('45338', R3_IT, 'done')]),
+    # A5 (R8b-2): an evaluation stated with a postmodifier beside the E/M absence statement
+    'R8 R3 A5a evaluation for a problem beside the absence statement': (
+        _r3_em(R3_EM_EVAL, R2_EM_MARA), [('43239', R2_EM_BIOPSY, 'done'), ('99213', R3_EM_EVAL[:-1], 'unsupported')]),
+    'R8 R3 A5b history and examination for a problem': (
+        _r3_em('A history and examination for new-onset jaundice were performed today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'),
+         ('99213', 'A history and examination for new-onset jaundice were performed today', 'unsupported')]),
+    'R8 R3 A5c consultation regarding a problem': (
+        _r3_em('A consultation regarding her new-onset jaundice was also provided today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'),
+         ('99213', 'A consultation regarding her new-onset jaundice was also provided today', 'unsupported')]),
+    'R8 R3 A5d assessment of a problem, an appositive': (
+        _r3_em('An assessment of her new-onset jaundice, a separate problem, was documented today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'),
+         ('99213', 'An assessment of her new-onset jaundice, a separate problem, was documented today', 'unsupported')]),
+    'R8 R3 A5e focused history and physical for a problem': (
+        _r3_em('A focused history and physical for new-onset jaundice was obtained today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'),
+         ('99213', 'A focused history and physical for new-onset jaundice was obtained today', 'unsupported')]),
+    'R8 R3 A5f a GI consultation for a problem': (
+        _r3_em('A GI consultation for new-onset jaundice was performed today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'),
+         ('99213', 'A GI consultation for new-onset jaundice was performed today', 'unsupported')]),
+    'R8 R3 A5g the absence statement before the evaluation': (
+        _r3_em(R2_EM_MARA, R3_EM_EVAL), [('43239', R2_EM_BIOPSY, 'done'), ('99213', R3_EM_EVAL[:-1], 'unsupported')]),
+    'R8 R3 A5 control, an evaluation word inside a biopsy statement': (
+        _r3_em('Cold forceps biopsies for evaluation of eosinophilic esophagitis were obtained from the distal esophagus.',
+               R2_EM_MARA), [('43239', R2_EM_BIOPSY, 'done'), ('99213', R2_EM_MARA[:-1], 'not_done')]),
+    'R8 R3 A5 control, an evaluation for a problem planned in clinic': (
+        _r3_em('An evaluation for new-onset jaundice will be performed in clinic next week.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', R2_EM_MARA[:-1], 'not_done')]),
+    'R8 R3 A5 control, an assessment of the mucosa beside the absence statement': (
+        _r3_em('An assessment of the gastric mucosa was documented today.', R2_EM_MARA),
+        [('43239', R2_EM_BIOPSY, 'done'), ('99213', R2_EM_MARA[:-1], 'not_done')]),
+    # A6 (L1d, L1f): a header line naming another, separately reported service, then the running report's own text
+    'R8 R3 A6a header cross-reference to a same-day EGD, a lesion and its snare': (
+        _r3_header(R3_XREF, R3_SIGMOID_POLYP, R3_IT), [('45385', R3_IT, 'done')]),
+    'R8 R3 A6b header cross-reference to a same-day EGD, a site-less biopsy': (
+        _r3_header(R3_XREF, R3_SITELESS_BX), [('45380', R3_SITELESS_BX, 'done')]),
+    'R8 R3 A6c header line naming a same-day EGD, a site-less snare': (
+        _r3_header('Separate procedure: EGD, performed the same day', 'A 4 mm polyp was removed with a cold snare.'),
+        [('45385', 'A 4 mm polyp was removed with a cold snare.', 'done')]),
+    "R8 R3 A6d an upper endoscopy report's cross-reference to a same-day colonoscopy": (
+        _r8(R8_EGD_DX.replace('Procedure: EGD\n', 'Procedure: EGD\nSecond procedure: Colonoscopy performed the same day, '
+                                                  'see separate note\n'), R3_HOT), [('43251', R3_HOT, 'done')]),
+    'R8 R3 A6e a labelled line naming an EGD performed today, the colonoscopy narrative after it': (
+        _r3_header(R3_EGD_TODAY, R3_SIGMOID_POLYP, R3_IT), [('45385', R3_IT, 'done')]),
+    'R8 R3 A6f a labelled line naming an EGD performed today, a site-less biopsy': (
+        _r3_header(R3_EGD_TODAY, R3_SITELESS_BX), [('45380', R3_SITELESS_BX, 'done')]),
+    'R8 R3 A6 control, a refused note label whose text denies the running instrument': (
+        R8_COLON + R8_CO_SNARE + '\n\nSeparate note: Flexible sigmoidoscopy (fictional) on 2026-10-14\nThe colonoscope '
+        'was not reinserted.\nThe flexible sigmoidoscope was advanced to 60 cm in the descending colon.\n' + R8_FS_BIOPSY
+        + '\n', [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    # A7 (R1b): a label restated without its site (a specimen table's row), by its size
+    'R8 R3 A7a specimen row restating COL-2 by its size': (
+        R3_MARA_LIKE.format(rows=R3_ROWS.replace('COL-2: sigmoid colon\n8 mm polyp; ', 'COL-2: 8 mm polyp\n')),
+        R3_MARA_Q),
+    'R8 R3 A7b specimen row restating COL-1 by its size': (
+        R3_MARA_LIKE.format(rows=R3_ROWS.replace('COL-1: ascending colon\n2 mm polyp; ', 'COL-1: 2 mm polyp\n')),
+        R3_MARA_Q),
+    'R8 R3 A7 control, the specimen rows with their sites': (R3_MARA_LIKE.format(rows=R3_ROWS), R3_MARA_Q),
+    'R8 R3 A7 control, a label restated by its size under another examination': (
+        R2_HEAD + 'Colonoscopy and EGD report\nCOLONOSCOPY\nThe colonoscope was advanced to the cecum.\nP1 - sigmoid colon: '
+        'a 4 mm polyp was removed with cold forceps.\nUPPER ENDOSCOPY\n' + R3_GASTRO + ' \nStomach:\nP1: a 4 mm sessile '
+        'polyp. P1 was removed with a hot snare.\n',
+        [('43251', 'P1 was removed with a hot snare.', 'MAY'), ('45385', 'P1 was removed with a hot snare.', 'not_done')]),
+    'R8 R3 A7 control, a label restated by its size under a stomach heading': (
+        R2_HEAD + 'Colonoscopy and EGD report\nCOLONOSCOPY\nThe colonoscope was advanced to the cecum.\nP1 - sigmoid colon: '
+        'a 4 mm polyp was removed with cold forceps.\nUPPER ENDOSCOPY\nStomach:\nP1: a 4 mm sessile polyp. P1 was removed '
+        'with a hot snare.\n',
+        [('43251', 'P1 was removed with a hot snare.', 'MAY'), ('45385', 'P1 was removed with a hot snare.', 'not_done')]),
+})
+# Measured and recorded, never repaired here (cux-r3-reader.json residuals_measured): A8, R8 D8's indication line with
+# its heading written with a dash ('Indication - ...'). Routing's layout (sections.layout, H2-frozen: gi-context@4) reads
+# no indication section there, and V05 reads the layout's indication sections only. Its honest truth makes it a
+# violation, so it stays out of CASES (a register row carries none); tests/test_cux_r3_reader.py reads it with run_row.
+R3_RESIDUALS = {
+    'R8 R3 residual A8, an indication heading written with a dash': (
+        _r2v_indication('Indication - surveillance after a sigmoid polyp was removed with a hot snare'),
+        [('45380', R8_TODAY_BX, 'done'),
+         ('45385', ('Indication - surveillance after a sigmoid polyp was removed with a hot snare', R8_CECUM),
+          'not_done')]),
+}
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')
