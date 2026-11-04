@@ -1071,8 +1071,10 @@ corrected here where this changes them):
   (ids). A customer artifact's `snapshot_sha256` holds that marker's digest (`reports.customer_marker`), not a digest of
   the report's content: a queued stage, a later run, an operator report or new wording never makes one stale. This
   replaces the P4 section's "whose snapshot no longer matches".
-- **`counts.queue` in the customer session** counts the encounters in the customer queue's states (`action_needed`,
-  `awaiting_detail`, `ready`), the list the page shows; the operator session keeps the `queue_reasons` rule above.
+- **`counts.queue` in the customer session** keeps the review queue's rule above (`queue_reasons`), joined with the
+  customer queue's states (`action_needed`, `awaiting_detail`, `ready`), so it never counts fewer than the page's queue
+  lists. The page lists only those states (the list rows carry no queue reasons), so its badge can count more than its
+  queue shows: an open item.
 - **"Taking longer than usual"** (`progress.slow`) is past 60% of the bound each stage really has where it runs
   (`progress.stage_bound`: extract 240 s, analyze 60 s, document review and its second review 150 s, assess 120 s, an
   independent check's stage 580 s), a display threshold only; no sentence promises an automatic stop or start.
