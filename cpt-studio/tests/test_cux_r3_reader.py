@@ -34,8 +34,13 @@ from tests.test_cux_hold import row, state
 
 DECLARATION = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-r3-reader.json')
                          .read_text(encoding='utf-8'))
-DECLARED = {(name, code): (before, after) for name, code, before, after in DECLARATION['battery']}
-UNMOVED = {tuple(key.split(' | ')): cell for key, cell in DECLARATION['unmoved'].items()}
+# the rows declared before code, and those its after-code amendment adds (dated, measured: never a key above it changed)
+AFTER_CODE = DECLARATION.get('after_code_20261104', {})
+ROWS = DECLARATION['battery_rows_added'] + AFTER_CODE.get('battery_rows_added', [])
+DECLARED = {(name, code): (before, after)
+            for name, code, before, after in DECLARATION['battery'] + AFTER_CODE.get('battery', [])}
+UNMOVED = {tuple(key.split(' | ')): cell
+           for key, cell in list(DECLARATION['unmoved'].items()) + list(AFTER_CODE.get('unmoved', {}).items())}
 HELD = 'selected/needs_clarification'
 EM = {'setting', 'patient_status', 'em_basis'}
 
@@ -51,7 +56,7 @@ class R3RowsTests(SimpleTestCase):
     recorded (measured, not repaired)."""
 
     def test_the_rows(self):
-        names = DECLARATION['battery_rows_added']
+        names = ROWS
         self.assertEqual(sorted(names), sorted(n for n in battery.CASES if n.startswith('R8 R3 ')))
         for name in names:
             result = row(name)
@@ -282,6 +287,28 @@ class AnaphoraBeyondTheNoteTests(SimpleTestCase):
                 self.assertEqual(found['45385'], READY)
                 self.assertEqual(found['45338'], held('performed_status'))
 
+    def test_a_site_less_act_after_a_cecal_polyp_is_the_colonoscopy_s(self):
+        # after code: no back-reference at all - "A cold snare polypectomy was performed." after the cecal polyp names no
+        # site, lesion or service; until the note's own instrument is told again, it is placed as the polyp is
+        for body in ('A 5 mm polyp was seen in the cecum. A cold snare polypectomy was performed.\n',
+                     '\nA 5 mm polyp was seen in the cecum.\nA cold snare polypectomy was performed.\n'):
+            with self.subTest(body):
+                text = R07 + body
+                self.assertEqual(acts(inventory(text), 'gi.flex_sig'), [])
+                quote = 'A cold snare polypectomy was performed.'
+                found = outcomes(run(text, [('45378', CECUM), ('45385', quote), ('45338', quote)]))
+                self.assertEqual(found['45385'], READY)
+                self.assertEqual(found['45338'], held('performed_status'))
+
+    def test_controls_the_note_s_instrument_again_or_a_polyp_of_another_time(self):
+        for body in ('A 5 mm polyp was seen in the cecum.\nThe flexible sigmoidoscope was then withdrawn to the rectum.\n'
+                     'A cold snare polypectomy was performed.\n',
+                     'A 5 mm polyp in the cecum was removed at a prior colonoscopy in 2023.\nA cold snare polypectomy was '
+                     'performed.\n'):
+            with self.subTest(body):
+                text = R07 + body
+                self.assertEqual([a.kind for a in acts(inventory(text), 'gi.flex_sig')], ['snare'])
+
     def test_the_back_reference_is_the_last_lesion_the_part_names(self):
         # "The polyp" after a rectal polyp and then a cecal one is the cecal polyp (the note's own rectal polyp is not
         # the one it names); after the cecal one and then a rectal one it is the rectal polyp, the note's
@@ -377,6 +404,22 @@ class RunningInstrumentTests(SimpleTestCase):
                 text = colon_header(label, 'Biopsies were taken with cold forceps.')
                 self.assertEqual(outcomes(run(text, [('45380', 'Biopsies were taken with cold forceps.')]))['45380'],
                                  READY)
+
+    def test_the_running_instrument_s_own_clause_is_read(self):
+        # after code: the instrument's own clause decides ("without difficulty" denies nothing; a "no" of another
+        # clause of the sentence is that clause's)
+        for line in ('The colonoscope was advanced without difficulty to the cecum.',
+                     'The colonoscope was advanced to the cecum and no polyps were seen in the rectum.',
+                     'Once the EGD was finished, the colonoscope was advanced to the cecum and the examination was '
+                     'completed.'):
+            with self.subTest(line):
+                plain = COLON.replace(CECUM, line) + ('A 4 mm sessile polyp was found in the sigmoid colon.\nIt was '
+                                                      'removed with a cold snare.\n')
+                text = plain.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\nAdditional procedure: EGD '
+                                     'performed today (separate report)\n')
+                self.assertEqual([a.kind for a in acts(inventory(text), 'gi.colonoscopy')], ['snare'])
+                codes = [('45385', 'It was removed with a cold snare.')]
+                self.assertEqual(outcomes(run(text, codes)), outcomes(run(plain, codes)))  # as with no header line
 
     def test_an_upper_endoscopy_report_s_own_snare(self):
         text = (B + 'Upper endoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory '

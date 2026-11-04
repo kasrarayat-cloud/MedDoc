@@ -991,6 +991,33 @@ CASES.update({
         'with a hot snare.\n',
         [('43251', 'P1 was removed with a hot snare.', 'MAY'), ('45385', 'P1 was removed with a hot snare.', 'not_done')]),
 })
+# Added after code (cux-r3-reader.json, its after-code amendment): A4's class without a back-reference (a polypectomy
+# naming no site, lesion or service after the cecal polyp) and A6's running instrument in a clause of its own, each with
+# its controls; their 'from' cells measured on e020145e1's code with the rows added.
+R3_POLYPECTOMY = 'A cold snare polypectomy was performed.'
+CASES.update({
+    'R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence': (
+        _r8(B + R2_NOTE, '', 'A 5 mm polyp was seen in the cecum. ' + R3_POLYPECTOMY),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_POLYPECTOMY, 'done'), ('45338', R3_POLYPECTOMY, 'not_done')]),
+    'R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only': (
+        _r8(B + R2_NOTE, '', 'A 5 mm polyp was seen in the cecum.', R3_POLYPECTOMY),
+        [('45378', R8_CECUM, 'done'), ('45338', R3_POLYPECTOMY, 'not_done')]),
+    "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy": (
+        _r8(B + R2_NOTE, 'A 5 mm polyp was seen in the cecum.', 'The flexible sigmoidoscope was then withdrawn to the '
+            'rectum.', R3_POLYPECTOMY),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_POLYPECTOMY, 'MAY'), ('45338', R3_POLYPECTOMY, 'MAY')]),
+    'R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy': (
+        _r8(B + R2_NOTE, 'A 5 mm polyp in the cecum was removed at a prior colonoscopy in 2023.', R3_POLYPECTOMY),
+        [('45378', R8_CECUM, 'done'), ('45385', R3_POLYPECTOMY, 'not_done'), ('45338', R3_POLYPECTOMY, 'done')]),
+    'R8 R3 A6g header cross-reference, the colonoscope advanced without difficulty': (
+        _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + R3_XREF + '\n').replace(
+            R8_CECUM, 'The colonoscope was advanced without difficulty to the cecum.'), R3_SIGMOID_POLYP, R3_IT),
+        [('45385', R3_IT, 'done')]),
+    "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence": (
+        _r8(R8_COLON.replace('Procedure: Colonoscopy\n', 'Procedure: Colonoscopy\n' + R3_XREF + '\n').replace(
+            R8_CECUM, 'The colonoscope was advanced to the cecum and no polyps were seen in the rectum.'),
+            R3_SIGMOID_POLYP, R3_IT), [('45385', R3_IT, 'done')]),
+})
 # Measured and recorded, never repaired here (cux-r3-reader.json residuals_measured): A8, R8 D8's indication line with
 # its heading written with a dash ('Indication - ...'). Routing's layout (sections.layout, H2-frozen: gi-context@4) reads
 # no indication section there, and V05 reads the layout's indication sections only. Its honest truth makes it a

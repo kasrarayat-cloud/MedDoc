@@ -1243,19 +1243,25 @@ def _instrument_family(word: str) -> str:
     return next((f for name, f in INSTRUMENT_FAMILY if name in word), '')
 
 
-# The words that leave an instrument's statement no plain statement of its examination (L1d-r3): a negation or a
-# negated contraction, a hedge, a cancellation, a plan or a history word in its sentence.
-_NOT_PLAIN = (NEGATION_WORD, re.compile(NEG_CONTRACTION, re.I), HEDGE_WORDS, CANCEL_WORDS, PLAN_WORDS, HISTORY_WORDS)
+# The words that leave an instrument's statement no plain statement of its examination (L1d-r3): a negation of the
+# instrument or of its predicate ("No colonoscope was used.", "The colonoscope was not reinserted.") - "without" is no
+# such word ("advanced without difficulty") - a hedge, a cancellation, a plan or a history word, read in the instrument's
+# own clause: from the last clause break before it to the first one after it, within its sentence.
+_RESUME_NEGATION = re.compile(r"\b(?:no|not|never|none|neither|nor)\b|n['\u2019]t\b", re.I)
+_NOT_PLAIN = (_RESUME_NEGATION, HEDGE_WORDS, CANCEL_WORDS, PLAN_WORDS, HISTORY_WORDS)
+_CLAUSE_BREAK = re.compile(r'[,;:]|\b(?:and|but|although|though|while|whereas|because|since|after|before|until|which|'
+                           r'where|whereupon)\b', re.I)
 
 
 def _tells_running_examination(text: str, ls: int, le: int, family: str) -> bool:
     """Whether the line [ls, le) tells the examination of ``family`` - the running part a note label line interrupted -
     by its instrument, and no other family's (reader repair, round 3, L1d-r3; refutation A6: "Additional procedure: EGD
     performed today (separate report)" in a colonoscopy report's head, then "The colonoscope was advanced to the cecum
-    and the examination was completed."): some mention of that family's instrument stands in a sentence of the line
-    with no negation, hedge, cancellation, plan or history word ("The colonoscope was not reinserted." tells nothing), and
-    no other family's instrument is named on the line (a bare 'endoscope' names none). Bounded: the line's first
-    SENTENCE_READ_CHARS characters, one instrument pass and one pass of each word pattern per sentence read."""
+    and the examination was completed."): some mention of that family's instrument stands in a clause with no negation,
+    hedge, cancellation, plan or history word (_NOT_PLAIN: "The colonoscope was not reinserted." tells nothing; "The
+    colonoscope was advanced to the cecum and no polyps were seen." tells it), and no other family's instrument is named
+    on the line (a bare 'endoscope' names none). Bounded: the line's first SENTENCE_READ_CHARS characters, one instrument
+    pass, and per mention one clause-break pass and one pass of each word pattern over its clause."""
     end = min(le, ls + SENTENCE_READ_CHARS)
     plain = False
     for m in INSTRUMENTS.finditer(text, ls, end):
@@ -1263,9 +1269,12 @@ def _tells_running_examination(text: str, ls: int, le: int, family: str) -> bool
         if named and named != family:
             return False
         if named and not plain:
-            left = max(text.rfind(mark, ls, m.start()) for mark in '.;!?') + 1 or ls
-            right = min((i for i in (text.find(mark, m.end(), end) for mark in '.;!?') if i >= 0), default=end)
-            plain = not any(pattern.search(text, max(left, ls), right) for pattern in _NOT_PLAIN)
+            start = max(max(text.rfind(mark, ls, m.start()) for mark in '.;!?') + 1, ls)
+            stop = min((i for i in (text.find(mark, m.end(), end) for mark in '.;!?') if i >= 0), default=end)
+            breaks = [b.end() for b in _CLAUSE_BREAK.finditer(text, start, m.start())]
+            after = _CLAUSE_BREAK.search(text, m.end(), stop)
+            left, right = (breaks[-1] if breaks else start), (after.start() if after else stop)
+            plain = not any(pattern.search(text, left, right) for pattern in _NOT_PLAIN)
     return plain
 
 
@@ -4243,9 +4252,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         def_starts = [row[0] for row in def_rows]
         label_index: dict[str, Optional[Lesion]] = {}
         label_lines: dict[str, int] = {}  # the definition line that bound each label
-        # L1e-r3 (round 3, A4): the last lesion each part a note label opened names of its own (a site or a size), by
-        # the part's start: (whether it lies beyond the note's reach, the lesion recorded for it or None)
-        note_last: dict[int, tuple[bool, Optional[Lesion]]] = {}
+        # L1e-r3 (round 3, A4): the last lesion each part a note label opened names of its own today (a site or a size;
+        # never denied, of another time or planned), by the part's start: (whether it lies beyond the note's reach, the
+        # lesion recorded for it or None, where it is named)
+        note_last: dict[int, tuple[bool, Optional[Lesion], int]] = {}
         # R1c-r3 (round 3, A2): a denial's second reading at the labelled lesion R1c unbinds it from (service draft,
         # act), added once every act is read so no other act's id moves
         second_readings: list = []
@@ -4301,7 +4311,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         # L1e: a lesion beyond the note's reach is the interrupted part's, as before the note
                         lesion_part_family = part.host if part.host in drafts else ''
                     elif not lc_sites and not lm.group('size') and lead in ('this', 'that', 'the', 'it') \
-                            and note_last.get(part.start, (False, None))[0] and part.host in drafts:
+                            and note_last.get(part.start, (False, None, 0))[0] and part.host in drafts:
                         # L1e-r3 (reader repair, round 3; refutation A4): "The polyp was removed with a cold snare."
                         # after "A 5 mm cecal polyp was found." in a note's part names the polyp before it, which lies
                         # beyond the note's reach: the sentence's acts naming no site go with it (below), as installed
@@ -4327,8 +4337,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                 anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
                 size = re.sub(r'\s+', ' ', (lm.group('size') or '').strip())
-                if part.noted and (anat or size):
-                    note_last[part.start] = (beyond, None)  # L1e-r3: the last lesion the note's part names, so far
+                if part.noted and (anat or size) and (status or lesion_status(clause, lm, part)) not in (
+                        'negated', 'historical', 'planned'):
+                    note_last[part.start] = (beyond, None, lm.start())  # L1e-r3: the part's last lesion, so far
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
@@ -4365,7 +4376,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     sentence_lesions.append(lesion)
                     own_lesions.add(lesion.id)
                     if part.noted:
-                        note_last[part.start] = (beyond, lesion)  # L1e-r3
+                        note_last[part.start] = (beyond, lesion, lm.start())  # L1e-r3
                     last_named[lesion.id] = lm.start()
                     placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
                     if label and label not in label_index:  # rule 1: a label resolves to the lesion it heads, only
@@ -4384,11 +4395,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         own_lesions.add(existing.id)
                         last_named[existing.id] = lm.start()
                     if part.noted and (anat or size):
-                        note_last[part.start] = (beyond, existing)  # L1e-r3
+                        note_last[part.start] = (beyond, existing, lm.start())  # L1e-r3
                 else:
                     unrecorded[fam] = lm.start()  # a lesion named that this reader does not record
             if not sentence_lesions and ANAPHORA.match(text, ss, se):
-                beyond_last = note_last.get(part.start, (False, None)) if part.noted else (False, None)
+                beyond_last = note_last.get(part.start, (False, None, 0)) if part.noted else (False, None, 0)
                 if beyond_last[0] and part.host in drafts:
                     # L1e-r3 (reader repair, round 3; refutation A4): in a note's part, "It was removed with a cold
                     # snare." after "A 5 mm polyp was seen in the cecum." refers to that polyp, which L1e placed by the
@@ -4422,6 +4433,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # L1e-r3 (round 3, A4): an act naming no site, in a sentence referring back to a lesion beyond the
                     # note's reach, is that lesion's: the interrupted part's, as before the note
                     act_part_family = part.host if part.host in drafts else ''
+                elif part.noted and not anat and not lesion_matches and not named_here and part.host in drafts \
+                        and _beyond_since(note_last.get(part.start), part.noted, instrument_marks, instrument_starts,
+                                          ms):
+                    # L1e-r3, after code: "A cold snare polypectomy was performed." after "A 5 mm polyp was seen in
+                    # the cecum." in the note's part - an act naming no site, no lesion and no service, told after the
+                    # part's last lesion lies beyond the note's reach and before the note's own instrument is told
+                    # again - is placed as that lesion is, by the interrupted part, as installed reads it
+                    act_part_family = part.host
                 elsewhere: list = []  # R1c-r3: the labelled lesion R1c unbinds the clause from for a site of its own
                 bound = _bound_lesion(text, clause, own_anat, label_index, drafts, elsewhere)
                 at_label = elsewhere[0] if elsewhere else None  # R1c-r3's lesion for a denial's second reading
@@ -5004,6 +5023,15 @@ def _told_after(marks: Sequence[tuple[int, str]], mark_starts: Sequence[int], le
     told_at, family = marks[at]
     own = next((f for f, d in drafts.items() if d.id == lesion.service), '')
     return family != own and told_at >= lesion.evidence[0].start
+
+
+def _beyond_since(last, noted: str, marks: Sequence[tuple[int, str]], mark_starts: Sequence[int], pos: int) -> bool:
+    """Whether a note's part's last lesion (``last``: note_last's entry) lies beyond the note's reach and the note's own
+    instrument (``noted``'s) is not told again between it and ``pos`` (L1e-r3, after code). One bisection."""
+    if last is None or not last[0]:
+        return False
+    at = bisect.bisect_left(mark_starts, pos) - 1
+    return not (at >= 0 and marks[at][1] == noted and marks[at][0] >= last[2])
 
 
 def _restatement_context(text: str, plist=None, starts=None, marks=None):
