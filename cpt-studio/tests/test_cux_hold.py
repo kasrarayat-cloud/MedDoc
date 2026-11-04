@@ -131,6 +131,7 @@ UNMOVED = {
     ('R8 D3 declared:1 period-ended row, No checked', '45378'): HELD,
     ('R8 D4 F7N EGD biopsy line, colonoscopy denies', '45378'): HELD,
     ('R8 D4 F1 EGD snare line, colonoscopy normal', '45378'): HELD,
+    ('R8 D5 F4B pathology specimen line', '45380'): READY,
 }
 
 
@@ -332,3 +333,34 @@ class AnotherProceduresSentenceTests(SimpleTestCase):
                 'Plan: EGD next month.\n')
         item = proposal(run(text, [sel('45380', span(text, 'Biopsies x2.'))]), '45380')
         self.assertEqual(item.status, 'ready')  # a planned EGD owns no act of today's report
+
+
+TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
+
+
+class AnotherRolesEntryTests(SimpleTestCase):
+    """D5 (R8 1.3): the own-passage release never stands inside a non-physician role part (services.parts: a pathology,
+    nursing, anesthesia, radiology or facility entry, cut by ROLE_HEADINGS) - reconcile already counts only physician
+    and unknown acts. Not the narrower-looking repairs the trap names: limiting the release to the service's scope or
+    refusing a section-default-only cue both break the pinned "Cecal biopsies x2." control (outside the scope, read by
+    its section), which FailedActIsNeverReleasedTests keeps."""
+
+    def test_d5_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D5 ')
+
+    def test_a_pathology_entry_never_stands_for_todays_act(self):
+        for heading, line in (('PATHOLOGY ADDENDUM (specimens from the colonoscopy of 2026-09-02)',
+                               'Sigmoid colon polyp, hot snare polypectomy: tubular adenoma.'),
+                              ('Surgical pathology report', 'Sigmoid colon polyp, hot snare polypectomy: tubular '
+                                                            'adenoma.')):
+            with self.subTest(heading):
+                text = HEAD + CECUM + '\n' + TODAY_BX + '\n\n' + heading + '\n' + line + '\n'
+                item = proposal(run(text, [sel('45380', span(text, TODAY_BX)), sel('45385', span(text, line))]),
+                                '45385')
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+
+    def test_control_the_physicians_own_unread_phrasing_still_stands(self):
+        text = HEAD + CECUM + '\n' + TODAY_BX + '\nSigmoid colon polyp, hot snare polypectomy x1.\n'
+        line = 'Sigmoid colon polyp, hot snare polypectomy x1.'
+        item = proposal(run(text, [sel('45380', span(text, TODAY_BX)), sel('45385', span(text, line))]), '45385')
+        self.assertEqual(item.status, 'ready')

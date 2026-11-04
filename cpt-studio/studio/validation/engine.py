@@ -1672,12 +1672,24 @@ def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code
       part) puts every act kind of the code the passage names, at every anatomy it names, in the matched service's
       family alone among the services documented as done or in doubt today. Fail-closed: an act no one service owns
       ("Biopsies were taken with cold forceps." in a combined EGD and colonoscopy report) is held for every family's
-      code, the correct one too."""
+      code, the correct one too.
+    - D5: never inside a non-physician role part (_in_another_roles_part: a pathology, nursing, anesthesia, radiology or
+      facility entry). Not the narrower-looking repairs (the service's scope, or no section-default cue): both break
+      the pinned "Cecal biopsies x2." control."""
     if reading.status != 'performed':
         return False
     if gi_cues.UNDONE_ACT.search(text, reading.start, reading.end):
         return False
+    if _in_another_roles_part(reading, text):
+        return False
     return _placed_in_matched_family(reading, found, code, text, inventory)
+
+
+def _in_another_roles_part(reading: checks.Reading, text: str) -> bool:
+    """D5: whether the passage starts inside a part services.parts cuts for another role than the physician's (a
+    pathology, nursing, anesthesia, radiology or facility entry: services.ROLE_HEADINGS), whose acts reconcile already
+    never counts. Read only on the own-passage release path (one parts() reading per such passage)."""
+    return any(p.role != 'physician' and p.start <= reading.start < p.end for p in gi_services.parts(text))
 
 
 def _placed_in_matched_family(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:

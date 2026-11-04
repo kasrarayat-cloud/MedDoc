@@ -49,6 +49,7 @@ R8_COLON7N = ('Colonoscopy: The colonoscope was advanced to the cecum and the ex
               'normal. No biopsies were taken.')
 R8_COLON1 = ('Colonoscopy: The colonoscope was advanced to the cecum and the examination was completed. The colon was '
              'normal. No polyps were seen.')
+R8_TODAY_BX = 'A 4 mm polyp in the transverse colon was biopsied with cold forceps.'
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -390,6 +391,12 @@ CASES = {
         + R8_COLON1 + '\n',
         [('43251', 'The polyp was removed with a hot snare.', 'done'), ('45378', R8_COLON1, 'done'),
          ('45385', 'The polyp was removed with a hot snare.', 'not_done')]),
+    # D5: a pathology addendum's specimen line
+    'R8 D5 F4B pathology specimen line': (
+        R8_COLON + R8_TODAY_BX + '\n\nPATHOLOGY ADDENDUM (specimens from the colonoscopy of 2026-09-02)\nSigmoid colon '
+        'polyp, hot snare polypectomy: tubular adenoma.\n',
+        [('45380', R8_TODAY_BX, 'done'), ('45385', 'Sigmoid colon polyp, hot snare polypectomy: tubular adenoma.',
+                                         'not_done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}
