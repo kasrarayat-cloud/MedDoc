@@ -121,5 +121,11 @@
   "replay": "python -m ops.gi4.replay --fixtures --base d43d1e363 --head .: EQUAL (h4-03's four date.sends-only-the-truth HARD failures are on base and head alike).",
   "h2": "python -m ops.gi4.freeze --base d43d1e363 --head . --declare cux-lead.json: cue patterns 324/324 unchanged, sections.layout identical over 5723 texts, date channel 0 new over 44014, requests 0 changed over 19780, mention counts 0 changed - GATE HOLDS.",
   "probe": "Lead probe (scratch-lead2/probe_lead.py): H1 45380 ready -> needs_clarification with the biopsy now gi.flex_sig's; F4C's pathology-heading snare act gone, 45385 still held, 45380 ready; 'biopsy-proven' and 'biopsy-confirmed' 43239 ready -> needs_clarification; the control (a biopsy stated today) stays ready."
+ },
+ "amendment_20261104T0335Z_after_code_labels": {
+  "note": "After code, a label change only (not declared before code; recorded here with its measurement): every reader that reads differently from installed 41e03656df61 moves its label by one, the round-4 install's practice (tests/test_gi4_state.RoundFourLabelTests): gi-routing@5 -> @6 (P1 rule 8, P2's D12/D13), gi-services@2 -> @3 with reconcile.INVENTORY_SOURCE (P1 rules 1-4 and 8, P2's holds, L1, L2), cpt-studio-validation@5 -> @6 (P2's holds, the D15 base rule, L3). gi-context@4 stays: its facts are unchanged (the H2 freeze above). No stage branches on the three (only CONTEXT_VERSION remakes), and no fingerprint reads a label (test_a_label_moves_no_fingerprint), so the bump alone invalidates no decision; a decision that does not carry now says 're-assessed by another engine version' (review._what_differs) instead of naming a context value.",
+  "replay": "python -m ops.gi4.replay --fixtures --base 917afcb02 --head .: 3 differences, exactly /versions/engine, /versions/inventory and /versions/routing; every reading EQUAL.",
+  "battery": "python -m ops.gi4.battery --base 917afcb02 --head .: 0 movements, 0 new violations.",
+  "parity": "tests/test_harness_engine_parity PINNED re-pinned (all 11 digests: each result carries the engine label). With the three labels set back to @5/@2/@5, every case equals its round-4 pin but two-codes-a-plan-code-and-hcpcs, whose content moved with P2's performed_status hold (cux-hold.json; build/hold REPORT 148)."
  }
 }

@@ -10,6 +10,7 @@ only the fields the H1 replay and the H4 battery compare. ``cases`` uses only wh
 imports a name the harness added, except inside a test.
 
 Re-pin only with a declaration of the change: a moved digest is a change to every Corti-only assessment.
+Re-pinned 2026-11-04 for the core repair (the PINNED comment says what moved and why).
 """
 from datetime import date
 
@@ -118,19 +119,23 @@ def cases():
     }
 
 
-# sha256_json(assess(**cases()[name])) as the round-4 engine (01f39cd5d) computed it.
+# sha256_json(assess(**cases()[name])) as the core-repair engine (cpt-studio-validation@6, gi-services@3, gi-routing@6;
+# 2026-11-04) computes it. Re-pinned beside tests/fixtures/gi4/declarations/cux-lead.json: with the core repair's
+# three labels set back to installed 41e03656df61's (@5, @2, @5) every case equals its round-4 pin (01f39cd5d) but
+# two-codes-a-plan-code-and-hcpcs, whose 45378 gains P2's performed_status hold beside base_included (cux-hold.json;
+# its status unchanged); every other digest moved by the labels alone.
 PINNED = {
-    'a-conflict-in-the-record': '56bfb9d670246f8e273f2ef0c94233156e4ad42adcd55f3b41d9c127e3a41790',
-    'member-date-conflict-answered': 'b8d9143f2a191a43e1996232248d9eea5f4aed11edead710662c810082a39f6a',
-    'member-date-conflict-failed': '11dce38a21d7bfe99e71c8308dfa51554cc3c8acfddcf92096bc74fd37021e30',
-    'polypectomy-and-a-candidate': '6266883946d2e024d60921333824f731023392849c7362a7c543828f4c2670b1',
-    'provider-failed': '7911a61ccac8af8588aabc73da8f235785e41374b99d43c2e5c498d4248c1561',
-    'provider-not-run': '77b709b85f84c42e370be5b5da651253a7e4671fd77ef677931649aae72ac09e',
-    'provider-unknown': '91241f08d5cba8050805be354e299074269af844ee311b284669e68ef223a0e0',
-    'response-refused': '87c30945c50d030b6ef3d8e2c3efa2122b01ebfde990160430b02a1117b86d15',
-    'second-review': '2f6ea32af604ae231507c52c3201a96f625b40ca5fd717eabc0334f1366ed009',
-    'two-codes-a-plan-code-and-hcpcs': '44fb2821e53e3ecf3bf7281b283da9276d5047e662b80b3e31b6cecf6f2d428e',
-    'visit-beside-a-procedure': '49eca85a58b6e13c6190293adae2702d68f4bd4d102e600039f5d948db650598',
+    'a-conflict-in-the-record': '3dd3f13e7262eb0151eae3da06ca2c993f408ff3abc125518b3cfff6db3986b1',
+    'member-date-conflict-answered': 'df71c3807895c254fb7e147c70d813b5a15f769ed3757ce22eaf7dc9c09e9e91',
+    'member-date-conflict-failed': '2b3dfb5841cf0b44b9174d3ccfcd819b665b5b09a23791542dea375ee18d5734',
+    'polypectomy-and-a-candidate': '08c620687f4f510577a74b94833478a6ad61dda21e9d796edd55a388c80cdecb',
+    'provider-failed': '826a8e6b351b3428568282790c5bc9a11a8741f26cb942131fac36a0635c1b1c',
+    'provider-not-run': '303981b83fc05559534fe8fbf683c2fdae92a744f3d511d89c2a6205967ee970',
+    'provider-unknown': '41c0234ca9f048722851e40d5a0da58ae98c536fb4505d610477ee83297d977b',
+    'response-refused': '0f26542f1e56a17f40cf55f4358443fd1bccda8ebed129b90a908831cfb2787b',
+    'second-review': '447848d09d49f13d39c8c2614474acbb2fad7dead0a09e67a8963b637e7686e7',
+    'two-codes-a-plan-code-and-hcpcs': 'cdb9178aa19209ff098b1b0c6f1c837500e94a7fd82bd91dc48cae8a414089d0',
+    'visit-beside-a-procedure': '4a818c01c0c879c0c7ba90e33428feacb85eb95ee0d255715b35befb4a186189',
 }
 
 
