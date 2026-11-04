@@ -1,0 +1,10 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Lower Endoscopy Report
+Date of service: 2026-10-27
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the appendiceal orifice was photographed.
+A 5 mm sessile polyp in the hepatic flexure was removed with cold forceps.
+A 10 mm polyp in the descending colon was removed en bloc with a hot snare.
+The cold forceps removal is not a biopsy of the snared descending colon polyp.

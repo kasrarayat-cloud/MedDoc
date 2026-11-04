@@ -6537,6 +6537,34 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     return [f for f in facts if f], bool(incomplete) or short
 
 
+# Core repair 2026-11-03 (P1, rule 8; R2-routing-status 1.4): a visit mention inside an explicit statement that no
+# separate office E/M service is documented (cues.EM_ABSENCE, the pattern the documented-service reader reads too) reads
+# negated for this encounter; where another E/M statement of the note reads performed, the denial is held instead
+# (EM_ABSENT_CONTRADICTED), so a note that contradicts itself still asks. A sentence carrying a date other than the
+# service date, a hedge or a condition (any cue _cue_reading reads) keeps its reading.
+EM_ABSENT_CUE = 'negated: an explicit statement that no separate office E/M service is documented'
+EM_ABSENT_CONTRADICTED = ('uncertain: the note states that no separate office E/M service is documented, and another '
+                          'E/M statement of it reads as performed')
+
+
+def _em_absent(an: Analysis, m: Mention) -> bool:
+    """Whether the visit mention [m.start, m.end) lies inside an explicit E/M absence statement (cues.EM_ABSENCE) of its
+    sentence, and that sentence names no date other than the service date. Bounded: the pattern and the date test once
+    per sentence (an.memo), then one bisection per mention - a sentence of many visit mentions is read once, not once
+    for each of them."""
+    ss, se = an.lay.sentence_for(m.start, m.end)
+    key = ('em_absence', ss, se)
+    found = an.memo.get(key)
+    if found is None:
+        spans = [x.span() for x in cues.EM_ABSENCE.finditer(an.text, ss, se)]
+        dated = bool(spans) and all(an.service_date is not None and d.precision == 'day'
+                                    and ctx.compare_to_service(d, an.service_date) == 0 for d in an.dates_in(ss, se))
+        found = an.memo[key] = ([a for a, _ in spans], spans, dated)
+    starts, spans, dated = found
+    at = bisect.bisect_right(starts, m.start) - 1  # the matches never overlap: only the last one starting at or before
+    return dated and at >= 0 and m.end <= spans[at][1]
+
+
 # GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
 # says so is quoted after it), and of an E/M time or decision-making statement held because a time it names may be
 # another date's.
@@ -6552,6 +6580,10 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     cue = _cue_reading(an, m.start, m.end, em=True)
     if cue and cue.status != 'performed':
         return cue
+    if m.kind == 'em-visit' and cue is None and _em_absent(an, m):
+        # core repair 2026-11-03 (P1, rule 8): an explicit statement that no separate office E/M service is documented
+        # negates the visit it names (an affirmative E/M statement elsewhere still outranks it: _route)
+        return Reading('negated', (EM_ABSENT_CUE,), 'cue')
     if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
         reading = _default_reading(an, m.start, m.end)
     else:
@@ -8218,6 +8250,13 @@ def _route(an: Analysis) -> RoutingResult:
     an.references = _references(an, attributed)
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
+    absent = {m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)}  # a set: one look per other reading
+    if absent and any(r.status in ('performed', 'incomplete', 'uncertain') for m, r in base.items() if m not in absent):
+        # rule 8 (core repair 2026-11-03): any other E/M statement that reads the visit as done or open (performed, or
+        # held - a telephone visit, a hedged one) outranks the absence statement, which is then held: the note
+        # contradicts itself, so the family stays open and its questions are asked
+        base = {m: (Reading('uncertain', (EM_ABSENT_CONTRADICTED,) + r.cues, 'cue', doubt=True)
+                    if r.cues[:1] == (EM_ABSENT_CUE,) else r) for m, r in base.items()}
     em_facts = _em_facts(an, base)
     has_basis = any(f.name == 'em_basis' for f in em_facts)
     findings: dict[str, FamilyFinding] = {}

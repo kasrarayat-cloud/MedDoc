@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report
+Date of service: 2026-10-26
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: EGD
+The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the gastric antrum.
+No separately identifiable office visit or outpatient evaluation and management service was provided on this date.
+Plan: follow the biopsy results.

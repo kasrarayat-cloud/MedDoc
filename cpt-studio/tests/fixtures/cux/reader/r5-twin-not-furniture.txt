@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Northgate Digestive Clinic (fictional)
+EGD and Colonoscopy Report
+Date of service: 2026-10-31
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Page 1
+UPPER ENDOSCOPY
+The gastroscope was advanced to the second part of the duodenum. Cold forceps biopsies were taken from the gastric antrum.
+COLONOSCOPY
+The colonoscope was advanced to the cecum. A 7 mm sigmoid polyp was removed with a cold snare and retrieved.
+
+Recovery Area Notes
+Vital signs were stable.
+A hemoclip was placed to close the polypectomy defect.
+Impression: antral biopsies; one sigmoid polyp removed.

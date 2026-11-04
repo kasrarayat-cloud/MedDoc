@@ -358,6 +358,45 @@ SUBORDINATOR = _rx(r'\b(?:if|unless|until|because|since|when|whenever|once|so\s+
 COORDINATED_PREDICATE = _rx(r'(?:,\s*)?\s+(?:and|or)\s+$')
 
 
+def _copular_negation(text: str, cs: int, ce: int, neg: int, pos: int, end: int) -> Optional[Reading]:
+    """Core repair 2026-11-03 (P1, rule 3; R1-services-binding section 9): the reading a copular negation gives the mention
+    at [pos, end), or None to read it as before. "S was/were/is/are not a/an/the/any N (of|for) O" classifies S: its "not"
+    negates the act N names, at O ("The forceps removal was not a biopsy of ... the snare-treated sigmoid lesion" denies
+    a biopsy of that lesion). It never negates a mention in S - S refers to an act stated elsewhere, so the clause states
+    no act of S (COPULAR_SUBJECT_CUE) - nor one in O or O's modifiers (COPULAR_OBJECT_CUE: "the snared lesion" is an
+    attribute); and "not a second/another/repeat/separate/further/additional N" denies only another occurrence, as "No
+    other/further N" does (NEG_OTHER's reading). Fail-closed: read only where the copular "not" is the clause's one
+    negated predicate (any other "not" in it, "The biopsy, which was not a routine one, was not performed", reads as
+    before), and verbal negation ("The polyp was not removed with a snare.") is no copular negation."""
+    m = COPULAR_NOT.match(text, neg, ce)
+    if m is None or sum(1 for _ in NOT_VERB.finditer(text[cs:ce])) != 1:
+        return None
+    if end <= neg:
+        return Reading('uncertain', (COPULAR_SUBJECT_CUE,))
+    if pos < m.end():
+        return None
+    of = COPULAR_OBJECT_START.search(text, m.end(), ce)
+    if of is not None and pos >= of.start():
+        return Reading('uncertain', (COPULAR_OBJECT_CUE,))
+    if COPULAR_ANOTHER.search(text, m.end(), pos):
+        return Reading('uncertain', ('no other/further: denies only acts beyond the documented ones',))
+    return None
+
+
+# Rule 3's vocabulary: a copula, "not" (or its contraction) and a determiner, read at the "not" NOT_VERB found; the word
+# that opens the nominal's object; and the words that make the nominal another occurrence.
+COPULAR_NOT = _rx(r"(?:was|were|is|are)(?:\s+not|n['’]t)\s+(?:a|an|the|any)\b")
+COPULAR_OBJECT_START = _rx(r'\b(?:of|for)\b')
+COPULAR_ANOTHER = _rx(r'\b(?:second|another|repeat|separate|further|additional|other)\b')
+COPULAR_SUBJECT_CUE = 'uncertain: the subject of a copular negation ("was not a ..."), an act stated elsewhere'
+# "not a second upper endoscopy", "no repeat colonoscopy", "never another EGD": what the service's name is governed by
+# when the clause denies another occurrence of it (rule 3), read in the 60 characters before the name
+ANOTHER_OCCURRENCE_BEFORE = _rx(r'\b(?:not|no|never)\s+(?:(?:a|an|any)\s+)?(?:second|another|repeat|separate|further|'
+                                r'additional|other)\s+(?:[\w-]+\s+){0,2}$')
+ANOTHER_OCCURRENCE_CUE = 'uncertain: names another occurrence of the service, which the clause denies'
+COPULAR_OBJECT_CUE = 'uncertain: inside the object of a copular negation ("was not a biopsy of ..."), never denied'
+
+
 def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
     """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end``."""
     if neg < end:
@@ -556,6 +595,8 @@ LESION = _rx(r'(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d
              r'raised|pale|nonbleeding|non-bleeding|bleeding|hypoechoic|irregular|ulcerated|clean-based|semi-?pedunculated|'
              r'serrated|small|large|diminutive|lateral\s+spreading|laterally\s+spreading|polypoid|submucosal|'
              r'subepithelial|carpet-?like)[\s,]+){0,3})(?P<noun>' + LESION_NOUN + r')\b')
+# the leads of a lesion mention that describes a lesion of its own (with a size, or a number): the inventory records it
+CREATING_LEADS = ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several', 'multiple', 'a separate', 'another')
 SPECIMEN = _rx(r'\b(?:specimen|jar|container|bottle|pot)s?\s+(?P<label>[A-Z0-9]{1,2})\b|\((?:jar|specimen|container)\s+'
                r'(?P<label2>[A-Z0-9]{1,2})\)')
 ANAPHORA = _rx(r'\W*(?:(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])\s+)?(?:this|that|the|it|its)\b(?:\s+(?:\d+(?:\.\d+)?\s*(?:mm|cm)\s+)?'
@@ -671,6 +712,10 @@ NOTE_STRUCTURE = re.compile(r'^[ \t]*(?:impression|assessment|plan|exam(?:inatio
                             r'HPI|chief\s+complaint|ROS|review\s+of\s+systems|medications|allergies)\b[^\n]{0,40}?[:\-]',
                             re.A | re.I | re.M)
 from studio.gi.cues import EM_VISIT  # noqa: E402  (routing's own visit-statement words)
+# Rule 8 (core repair 2026-11-03): the E/M branch's cue when the document states, in so many words, that no separate
+# office E/M service is documented (cues.EM_ABSENCE) - distinct from EM_ROUTINE's, which calls today's history and
+# examination routine procedure-related work.
+EM_ABSENT_SERVICE_CUE = 'negated: an explicit statement that no separate office E/M service is documented'
 EM_ROUTINE = _rx(r'\broutine\s+pre-?procedur(?:e|al)\s+(?:history|assessment|evaluation|H&P|update)'
                  r'|\bno\s+separate\s+(?:problem-oriented\s+)?(?:evaluation|E/M|office[- ]visit)'
                  r'|\bnot\s+a\s+separate(?:ly\s+identifiable)?\s+(?:E/M|evaluation|visit)')
@@ -785,10 +830,13 @@ class ServiceInventory:
 class _Part:
     start: int
     end: int
-    family: str  # the service a report part is about; '' outside a report
+    family: str  # the service a report part is about; '' outside a report, and in a combined report (below)
     role: str
     title: Optional[Span]
     kind: str  # report | history | plan | indication | other
+    # core repair 2026-11-03 (P1, rule 4): the part is inside a combined report - under a report title naming two or more
+    # separate services, which binds no single family (parts)
+    combined: bool = False
 
 
 def _lines(text: str) -> list[tuple[int, int]]:
@@ -948,7 +996,7 @@ def _documented_today(text: str, lines, service_date: Optional[date], dates, dat
     return frozenset(found)
 
 
-def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tuple[_Part, ...]:
+def parts(text: str, *, service_date: Optional[date] = None, dates=None, pages: Sequence = ()) -> tuple[_Part, ...]:
     """The document cut into report parts (a part about one service, from its title to the next title), role parts
     (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text. A history or plan part
     never runs into today's report: a history part ends at the line routing's sections read as a procedure heading
@@ -957,7 +1005,16 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     page 1]") interrupts a history or plan part as text of no time, its lines opening no part, until the blank line
     that ends the block, where the part resumes (routing reads both the same way: gi/sections layout). A sentence
     whose history words are its own subject ("Prior studies have been inconclusive.") opens a history part only where
-    the layout opens a section on its line: it is no heading of what follows (refutation 7c8, formats-5 a)."""
+    the layout opens a section on its line: it is no heading of what follows (refutation 7c8, formats-5 a).
+
+    Core repair 2026-11-03 (P1; R1-services-binding section 9). Rule 4: a report title naming two or more separate
+    services ("Upper endoscopy and colonoscopy | Outpatient professional record") is a combined title: it binds no single
+    family - its part, and every untitled part that falls back to it, is a report part of none (``combined``), whose acts
+    each service's own heading, an act's own site or its lesion's label places - never the first service named
+    (_family_named). A title naming an examination and the service that includes it (an EGD with its EUS: _included)
+    names one service, as before. Rule 5 (minimal): a bare service heading (rule f below) keeps its lines over a field
+    label whose value follows on the next line, over a table's cells written one per line, and over page furniture
+    (_furniture; ``pages`` are the revision's page spans); every other heading still ends it."""
     lay = _sections.layout(text)
     by_start = sorted(lay.sections, key=lambda section: section.start)
     layout_starts = [section.start for section in by_start]
@@ -968,6 +1025,9 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     dates = gi_context.find_dates(text) if dates is None else dates
     date_starts = [d.start for d in dates]
     documented = _documented_today(text, lines, service_date, dates, date_starts)
+    furniture = _furniture(text, lines, pages)
+    title_marks: list[tuple[int, bool]] = []  # (start, combined) of each report title's cut (rule 4)
+    field_value = -1  # rule 5: the line that holds the value of the field label read last inside a section
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
         stripped = line.strip()
@@ -983,8 +1043,9 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             cuts.append((ls, '', 'physician', None, 'other'))
             continue
         if cuts[-1][4] == 'history' and _opens_todays_report(text, lines, index):
-            # today's procedure line ends the history before it ("History:" ... "Procedure: Colonoscopy ...")
-            cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+            # today's procedure line ends the history before it ("History:" ... "Procedure: Colonoscopy ...");
+            # kind_now is 'other' until a report title, 'report' after one (a combined one too: rule 4)
+            cuts.append((ls, family, 'physician', None, kind_now))
         if PAGE_HEADER.match(stripped) and stripped.count('|') >= 2:
             continue
         role = next((r for r, p in ROLE_HEADINGS if p.match(line)), None)
@@ -998,9 +1059,13 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
         named, _ = _family_named(line) if m else ('', '')
         field_m = PROCEDURE_FIELD.match(line)
         if m and named and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line):
-            family = named
+            if ls in furniture and cuts[-1][4] == 'section':
+                continue  # rule 5: the report title repeated in a page's running header never ends a service's section
+            combined = _names_separate_services(line)  # rule 4: a combined title binds no single family
+            family = '' if combined else named
             s = ls + line.index(stripped)
             cuts.append((ls, family, 'physician', Span(s, s + len(stripped), stripped), 'report'))
+            title_marks.append((ls, combined))
             kind_now = 'report'
             continue
         if not m and GENERIC_HEADING.match(line) and not PLAN_WORDS.search(line) and not HISTORY_WORDS.search(line) \
@@ -1016,9 +1081,16 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                              'section'))
                 continue
             if cuts[-1][4] == 'section':
+                # rule 5: page furniture, a field label over its value (and that value) and a table cell never end the
+                # section
+                if ls in furniture or index == field_value:
+                    continue
+                if _section_structure(text, lines, index):
+                    field_value = index + 1
+                    continue
                 # A bare service heading ("Colonoscopy") owns the lines up to the next heading; the encounter's shared
                 # sections after it (Complications, Impression, Plan) belong to no one service.
-                cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+                cuts.append((ls, family, 'physician', None, kind_now))
                 continue
         if HISTORY_HEADING.match(line):
             if stripped.endswith(('.', '!', '?')) and _sections._own_clause(stripped) \
@@ -1030,19 +1102,23 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                 continue
             cuts.append((ls, family, 'physician', None, 'history'))
             continue
-        if PLAN_HEADING.match(line) and not family:
+        if PLAN_HEADING.match(line) and kind_now != 'report':  # no report title above it, combined or not
             cuts.append((ls, family, 'physician', None, 'plan'))
             continue
         if GENERIC_HEADING.match(line) and cuts[-1][4] == 'role':
-            cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
+            cuts.append((ls, family, 'physician', None, kind_now))
         del field_m
     out = []
+    mark_starts = [start for start, _ in title_marks]
     for i, (start, fam, role, title, kind) in enumerate(cuts):
         end = cuts[i + 1][0] if i + 1 < len(cuts) else len(text)
         if kind == 'section':
             kind = 'report'
+        # rule 4: a part of no family after a combined report title is that combined report's
+        at = bisect.bisect_right(mark_starts, start) - 1
+        combined = not fam and at >= 0 and title_marks[at][1]
         if end > start:
-            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind))
+            out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind, combined))
     return _time_parts(text, out, lay)
 
 
@@ -1093,6 +1169,113 @@ def labelled_service_heading(text: str, ls: int, le: int, *, service_date: Optio
         return None
     s = ls + line.index(stripped)
     return family, Span(s, s + len(stripped), stripped)
+
+
+# Core repair 2026-11-03 (P1, rule 4): the services a title names, less the examination a service it also names
+# includes (an EGD with its EUS: _included reads the EGD as the EUS's endoscopic portion, one service).
+INCLUDED_EXAMINATION = {'gi.eus': frozenset(('gi.egd',))}
+
+
+def _names_separate_services(line: str) -> bool:
+    """Whether a report title line names two or more separate services (rule 4: a combined report title)."""
+    named = {family for family, _, pattern in SERVICES + TITLE_SERVICES if pattern.search(line)}
+    named -= {f for g in named for f in INCLUDED_EXAMINATION.get(g, ())}
+    return len(named) >= 2
+
+
+# Core repair 2026-11-03 (P1, rule 5): what never ends a bare service heading's section.
+PAGE_HEAD_LINES = 8  # non-empty lines read at the head of each page for its running header (bounded work per page)
+PAGE_FOOT_LINES = 3  # and at its foot for its running footer
+FIELD_LABEL_CHARS = 40  # a field label or a table cell is short
+FIELD_VALUE_CHARS = 80  # and so is a field's value on the next line
+_SENTENCE_STOP = re.compile(r'[.!?]["\')\]]*[ \t]*$')
+
+
+def _furniture(text: str, lines: Sequence[tuple[int, int]], pages: Sequence = ()) -> frozenset:
+    """The starts of the lines that are page furniture (rule 5): a page-number line (cues.page_number_line); a report
+    title line that repeats an earlier report title word for word (the title in each page's running header); and, with
+    the revision's page spans, a line among a page's first PAGE_HEAD_LINES or last PAGE_FOOT_LINES non-empty lines that
+    an earlier page prints at the same edge (_edge_key: page and date numbers masked) - the first page's own lines are
+    the document's, never furniture. Bounded: one pass over the lines, and the edge lines of each page."""
+    out = set()
+    titles = set()
+    for ls, le in lines:
+        line = text[ls:le]
+        stripped = line.strip()
+        if not stripped or len(stripped) > 100:
+            continue
+        if _cues.page_number_line(line):
+            out.add(ls)
+            continue
+        body = line[PART_NUMBER.match(line).end():] if PART_NUMBER.match(line) else line
+        if REPORT_TITLE.match(body) or TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body):
+            key = _edge_key(line)
+            if key in titles:
+                out.add(ls)
+            titles.add(key)
+    seen = {'top': set(), 'bottom': set()}
+    for p in sorted(pages or (), key=lambda p: p.start):
+        if not 0 <= p.start <= p.end <= len(text):
+            continue
+        top = _edge_lines(text, p.start, p.end, True)[:PAGE_HEAD_LINES]
+        if len(top) == EDGE_LINES + 1:  # _edge_lines stops at EDGE_LINES + 1: read the rest of the head here
+            pos = top[-1][1] + 1
+            while len(top) < PAGE_HEAD_LINES and pos < min(p.end, p.start + EDGE_REACH):
+                newline = text.find('\n', pos, p.end)
+                le = p.end if newline < 0 else newline
+                if text[pos:le].strip():
+                    top.append((pos, le))
+                if newline < 0:
+                    break
+                pos = newline + 1
+        bottom = _edge_lines(text, p.start, p.end, False)[:PAGE_FOOT_LINES]
+        for edge, edge_lines in (('top', top), ('bottom', bottom)):
+            keys = []
+            for ls, le in edge_lines:
+                key = _edge_key(text[ls:le])
+                if key in seen[edge]:
+                    out.add(ls)
+                keys.append(key)
+            seen[edge].update(keys)
+    return frozenset(out)
+
+
+def _plain_short_line(text: str, ls: int, le: int, limit: int) -> bool:
+    """A non-empty line of at most ``limit`` characters with no sentence stop, naming no service and no act: a field's
+    label or value, or a table cell (rule 5). Bounded: one line."""
+    line = text[ls:le]
+    stripped = line.strip()
+    return 0 < len(stripped) <= limit and not _SENTENCE_STOP.search(stripped) \
+        and not any(pattern.search(line) for _, _, pattern in SERVICES) and not _acts_in(text, ls, le) \
+        and not ACT_VERB.search(line)
+
+
+def _section_structure(text: str, lines: Sequence[tuple[int, int]], index: int) -> bool:
+    """Whether the heading-shaped line ``index`` inside a bare service heading's section is the section's own structure
+    (rule 5): a field label whose value follows on the very next line ("Extent" / "Complete to cecum and terminal
+    ileum", "Preparation quality" / "BBPS: right 2, ...") or a table header cell written one cell per line over the next
+    cell ("Lesion" / "Location / size"). Never a heading routing's layout reads (a findings, impression or plan heading
+    still ends the section), never one naming a site (a site heading - "Large Bowel", "Stomach" - still ends it: the
+    other tract's acts may follow under it), never one over a sentence ("Polypectomy" / "A hot snare was used ...": the
+    A1 heading-lapse class, pi.json PI-A1-HEADING-LAPSE-REBINDS). The label and its value or next cell name no service
+    and no act and end with no sentence stop. Bounded: the line and the next."""
+    ls, le = lines[index]
+    if not _plain_short_line(text, ls, le, FIELD_LABEL_CHARS) or _anatomy_in(text, ls, le) \
+            or _layout_heading(text, ls, le):
+        return False
+    nxt = lines[index + 1] if index + 1 < len(lines) else None
+    if nxt is None or not _plain_short_line(text, nxt[0], nxt[1], FIELD_VALUE_CHARS):
+        return False
+    nxt_line = text[nxt[0]:nxt[1]]
+    return not (REPORT_TITLE.match(nxt_line) or TITLE_FIELD.match(nxt_line) or _layout_heading(text, *nxt))
+
+
+def _layout_heading(text: str, ls: int, le: int) -> bool:
+    """Whether routing's layout reads the line [ls, le) as a heading of a section of its own kind (findings, impression,
+    plan, history, indication, procedure, technique ...); a heading of kind 'other' ("Bowel preparation", "Sedation") is a
+    field label of the report like any other (rule 5)."""
+    heading = _sections._heading(text, ls, le)
+    return heading is not None and heading[0] != 'other'
 
 
 def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
@@ -1158,7 +1341,7 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
             if pieces and pieces[-1].kind == kind:
                 pieces[-1] = replace(pieces[-1], end=b)
             else:
-                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind))
+                pieces.append(_Part(a, b, p.family, p.role, p.title if a == p.start else None, kind, p.combined))
         out.extend(pieces)
     return tuple(out)
 
@@ -1245,7 +1428,8 @@ def _time_kind(p: _Part, pos: int, timed_kind, own_end: Optional[int]) -> str:
         # under an unterminated "Indication: surveillance")
         return 'indication'
     if p.kind in ('history', 'plan') and own_end is not None and pos >= own_end:
-        return 'report' if p.family else 'other'  # the history or plan this module's heading opened has ended
+        # the history or plan this module's heading opened has ended: back to the report it is in (a combined one too)
+        return 'report' if p.family or p.combined else 'other'
     return p.kind
 
 
@@ -1939,6 +2123,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if denied:
         return Reading('negated', (denied,))
     for not_verb in NOT_VERB.finditer(whole):
+        copular = _copular_negation(text, cs, ce, cs + not_verb.start(), pos, end)
+        if copular is not None:
+            return copular  # rule 3: "S was not a N of O" denies N at O, never an act in S or in O
         if _not_on_another_predicate(text, cs + not_verb.start(), end) \
                 and not _cues.PURPOSE_WHETHER.match(text, end, cs + not_verb.start()):
             # (P2 READ-HOLD, R8 D3: a purpose phrase between the act and its own negated predicate - "Biopsies to
@@ -2035,7 +2222,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     answered = _field_answer(text, pos, end, service_date)
     if answered is not None:
         return answered
-    if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
+    near_before = before[-40:]
+    # an attributive act compound's participle ("the snare-treated lesion") is no act predicate (rule 2)
+    if ACT_VERB.search(whole) or _predicate_participle(text, after, end) \
+            or _predicate_participle(text, near_before, pos - len(near_before)) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
         if other_time and not today:
             # stated done, but a time in its clause is something else's: its own time is not established (held)
@@ -2702,7 +2892,7 @@ def _act_frame(text: str, service_date: Optional[date], pages: tuple = ()):
     per document, date and pages, however many codes ask states_an_act_done of it (one linear pass)."""
     flow = reflow(text, pages)
     dates = gi_context.find_dates(flow)
-    plist = parts(flow, service_date=service_date, dates=dates)
+    plist = parts(flow, service_date=service_date, dates=dates, pages=pages)
     return flow, dates, plist, [p.start for p in plist], _sentences(flow)
 
 
@@ -2843,6 +3033,9 @@ class _ServiceDraft:
     report_title: Optional[Span] = None
     scopes: list = field(default_factory=list)  # (start, end) of report parts and passages that document it
     kind_settled: bool = False  # the kind was set by the report title or a performed mention, not a passing one
+    # rule 4 (core repair 2026-11-03): the combined report titles that name this service (and others): they document it
+    # and are the scope of none of the services they name (_finish)
+    shared: list = field(default_factory=list)
 
 
 def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, int]]:
@@ -2872,14 +3065,64 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
 
 
 def _acts_in(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
-    """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took."""
+    """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took. An act word
+    that heads an attributive participle compound ("the snare-treated lesion": _attributive_compound) describes a noun
+    and is no act mention; it still claims its text, so no later kind reads it either."""
     found: list[tuple[str, int, int]] = []
+    attributive: list[tuple[str, int, int]] = []
     for kind, pattern in ACTS:
         for m in pattern.finditer(text, start, end):
-            if any(a < m.end() and m.start() < b for _, a, b in found):
+            if any(a < m.end() and m.start() < b for _, a, b in found + attributive):
                 continue
-            found.append((kind, m.start(), m.end()))
+            (attributive if _attributive_compound(text, m.start(), m.end()) else found).append(
+                (kind, m.start(), m.end()))
     return sorted(found, key=lambda x: x[1])
+
+
+# Core repair 2026-11-03 (P1, rule 2; R1-services-binding section 9): an act word that is the first element of a
+# hyphenated participle compound used attributively - "the snare-treated sigmoid lesion", "biopsy-proven Barrett
+# esophagus", "a clip-closed defect", "the APC-treated area", "snare-resected polyps" - describes a noun. It presupposes
+# the act; it neither states nor denies it (Mara: "The forceps removal was not a biopsy of, or a completion step for, the
+# snare-treated sigmoid lesion." had read a denied snare at the snared lesion, a false conflict). The compound's
+# participle is no act predicate for any other mention either (_predicate_participle). A compound that is itself the
+# predicate of an auxiliary or a subject ("The polyp was snare-resected", "was not snare-resected", "we snare-resected
+# it") states or denies the act and is read as before. ACTS and BARE_PARTICIPLE are unchanged (mention_count reads them).
+# a participle after the hyphen: two letters or more before its -ed / -en / -wn, and never a noun ending in -men
+# ("biopsy-specimen", "stent-lumen") or a short noun ("polypectomy-bed")
+COMPOUND_PARTICIPLE_AFTER = re.compile(r'-(?![A-Za-z]*men\b)[A-Za-z]{2,}(?:ed|en|wn)\b')
+COMPOUND_PREDICATE_BEFORE = _rx(r"(?:\b(?:was|were|is|are|be|been|being|get|gets|got|gotten|getting)|n['’]t)"
+                                r"(?:\s+(?:not|never))?(?:\s+(?:then|also|subsequently|successfully|completely|each|"
+                                r"[\w-]+ly))?\s*$"
+                                r"|\b(?:we|I|they|he|she)\s+(?:(?:then|also|[\w-]+ly)\s+)?$")
+COMPOUND_REACH = 40  # characters before an act word read for the auxiliary or subject a predicate compound has
+
+
+def _attributive_compound(text: str, start: int, end: int) -> bool:
+    """Whether the act word at [start, end) is the first element of a hyphenated participle compound used attributively
+    (rule 2 above): a participle follows it after a hyphen, and no auxiliary or subject makes the compound a predicate.
+    Bounded: the word after it and COMPOUND_REACH characters before it."""
+    if COMPOUND_PARTICIPLE_AFTER.match(text, end) is None:
+        return False
+    return COMPOUND_PREDICATE_BEFORE.search(text, max(0, start - COMPOUND_REACH), start) is None
+
+
+def _compound_participle(text: str, at: int) -> bool:
+    """Whether a participle starting at ``at`` is the second element of an attributive act compound (rule 2): a hyphen
+    right before it, after an act word that the compound does not make a predicate. Bounded: one act word before it."""
+    if at < 2 or text[at - 1] != '-':
+        return False
+    for _kind, pattern in ACTS:
+        for m in pattern.finditer(text, max(0, at - 1 - COMPOUND_REACH), at - 1):
+            if m.end() == at - 1 and _attributive_compound(text, m.start(), m.end()):
+                return True
+    return False
+
+
+def _predicate_participle(text: str, segment: str, offset: int) -> bool:
+    """BARE_PARTICIPLE.search(segment) for ``segment`` = text[offset:...], leaving out the participle of an attributive
+    act compound (rule 2: "the snare-treated lesion" states no act for any mention). With no such compound in the
+    segment it is exactly BARE_PARTICIPLE.search(segment)."""
+    return any(not _compound_participle(text, offset + m.start()) for m in BARE_PARTICIPLE.finditer(segment))
 
 
 def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
@@ -3114,7 +3357,7 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
     token = _ORIGINAL.set(text)
     try:
         inventory = _build(flow, service_date=service_date, routing=routing, context_facts=context_facts,
-                           located=located)
+                           located=located, pages=pages)
     finally:
         _ORIGINAL.reset(token)
     return _restore_spans(inventory, text) if flow != text else inventory
@@ -3594,11 +3837,11 @@ def _restore_spans(obj, text: str):
 
 
 def _build(text: str, *, service_date: Optional[date], routing=None, context_facts=None,
-           located: Optional[list] = None) -> ServiceInventory:
+           located: Optional[list] = None, pages: Sequence = ()) -> ServiceInventory:
     problems: list[str] = []
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
-    plist = parts(text, service_date=service_date, dates=dates)
+    plist = parts(text, service_date=service_date, dates=dates, pages=pages)  # rule 5: page furniture by the pages
     starts = [p.start for p in plist]
     sentences = _sentences(text)
     blocks = form_field_blocks(text)
@@ -3622,6 +3865,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     performed_families: list[str] = []  # families with a performed reading (a title, a statement, an instrument)
     encounter_intents: list[str] = []
     routine_em: list[Span] = []
+    em_absent: list[Span] = []  # rule 8 (core repair 2026-11-03): sentences stating no separate office E/M is documented
     placements = _Placements()  # how each statement of an act is placed, for pairing them (_conflicts)
     # A sentence (or its first SENTENCE_READ_CHARS) is cut into clauses once, and every mention read in it shares the
     # cut (refutation r1, cost-6: each named service and each instrument cut its whole sentence again - 299 names at
@@ -3681,12 +3925,21 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     encounter_intents.append(stated)
         if EM_ROUTINE.search(text, ss, se):
             routine_em.append(_span(text, ss, se))
+        elif _cues.EM_ABSENCE.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)):
+            em_absent.append(_span(text, ss, se))  # rule 8: an explicit statement that no separate office E/M is documented
     try:
         for family, kind, ms, me, ss, se in sorted(named, key=lambda x: x[2]):
             part = _part_at(plist, starts, ss)
             cls = clauses_of(ss, se)
             clause = _clause_for(cls, ms)
-            title = part.title is not None and part.title.start <= ms < part.title.end and part.family == family
+            # rule 4: a combined report title gives its title reading to the one service it gave it before (the first its
+            # line names, _family_named) and to no other: a title naming a service is no statement that it was done today
+            # where the body says it was planned, cancelled or not done (a second service's performed title reading had
+            # turned such a colonoscopy from excluded to held, and a planned one toward ready); every other service it
+            # names is read by its own statements, sections and instruments, as before
+            title = part.title is not None and part.title.start <= ms < part.title.end and (
+                part.family == family or (part.combined and part.kind == 'report' and not part.family
+                                          and family == _family_named(part.title.text)[0]))
             in_report = part.kind == 'report' and part.family == family
             if title:
                 reading = Reading('performed', (f'section: report title "{part.title.text}"',))
@@ -3694,13 +3947,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=in_report)
                 hypothetical = hypothetical_reading(reading)  # a hypothetical is a hedge: never promoted below
+                # rule 3 (core repair 2026-11-03): "not a second/another/repeat <service>" denies another occurrence and
+                # is never performance evidence of the service ("That examination was a prior service, not a second
+                # upper endoscopy on 2026-11-03.")
+                another = ANOTHER_OCCURRENCE_BEFORE.search(text, max(clause[0], ms - 60), ms) is not None
+                if another:
+                    reading = Reading('uncertain', reading.cues + (ANOTHER_OCCURRENCE_CUE,))
                 if reading.status == 'uncertain' and in_report and not HEDGE_WORDS.search(text, *clause) \
-                        and not hypothetical and not _row_hold(reading):
+                        and not hypothetical and not _row_hold(reading) and not another:
                     reading = Reading('performed', reading.cues + ('performed: named inside its own current report',))
                 line_start = text.rfind('\n', 0, ms) + 1
                 line_end = text.find('\n', ms)
-                if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and PROCEDURE_FIELD.match(
-                        text[line_start:line_end if line_end >= 0 else len(text)]):
+                if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and not another \
+                        and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)]):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
@@ -3710,7 +3969,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 d.scopes.append((part.start, part.end))
             if title and d.report_title is None:
                 d.report_title = part.title
-            bounded_span = _span(text, *_bounded_clause(text, clause, ms, me))
+            if title and part.combined:
+                d.shared.append((part.title.start, part.title.end))
+            # rule 4: a combined title's reading is the title itself, never the text its sentence runs on into
+            bounded_span = part.title if title and part.combined else _span(text, *_bounded_clause(text, clause, ms, me))
             d.statuses.append((reading.status, reading.cues, bounded_span))
             if located is not None:
                 located.append(('service', family, kind, reading.status, ms, me))
@@ -3853,6 +4115,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # the encounter's denials: no service named for them, each with the one service its part's heading names, if any
         # (see below)
         unplaced: list[tuple[Act, str]] = []
+        # rule 1 (core repair 2026-11-03): the document's lesion label definitions, the labels that resolve (one place
+        # each), and the index of the labels bound to a recorded lesion (None once two lesions would take one label)
+        label_defs = _label_definitions(text)
+        unique_labels = _unique_labels(label_defs)
+        def_rows = sorted((ls, sep_end, label) for label, defs in label_defs.items() for ls, sep_end, _ in defs)
+        def_starts = [row[0] for row in def_rows]
+        label_index: dict[str, Optional[Lesion]] = {}
+        label_lines: dict[str, int] = {}  # the definition line that bound each label
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -3863,6 +4133,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             lesion_matches = list(LESION.finditer(text, ss, read_end))
             if not mentions and not lesion_matches:
                 continue
+            described: Optional[list[int]] = None  # rule 1: _described_starts of this sentence, read when first needed
             cls = clauses_of(ss, read_end)
             anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
@@ -3908,8 +4179,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
-                creatable = (size or lead in ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several',
-                                              'multiple', 'a separate', 'another') or lead.isdigit())
+                # rule 1: the label whose definition heads this mention; a lesion restated under another definition line
+                # of a label it is bound to (a specimen table's "COL-1: ascending colon" over "2 mm polyp") is that
+                # lesion, never a new one - only in its own service and only where its size and its site agree with it
+                # (a lesion the binding definition's own sentence goes on to describe, "and another polyp ...", is
+                # another lesion)
+                label, label_line, label_end = _heading_label(def_rows, def_starts, ss, lm.start()) if def_rows \
+                    else (None, -1, -1)
+                under = label_index.get(label) if label and label_lines.get(label) != label_line else None
+                if existing is None and under is not None and under.service == d.id \
+                        and (not size or not under.size or size.replace(' ', '') == under.size.replace(' ', '')) \
+                        and (not anat or _regions_compatible(anat[0][1], under.region)):
+                    existing = under
+                creatable = (size or lead in CREATING_LEADS or lead.isdigit())
                 if existing is None and creatable and anat and (status or lesion_status(clause, lm, part)) not in (
                         'negated', 'historical', 'planned'):
                     if lm.group('noun').lower().rstrip('s') in ('stricture', 'ring', 'erosion') and not size:
@@ -3931,6 +4213,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     own_lesions.add(lesion.id)
                     last_named[lesion.id] = lm.start()
                     placements.lesions[lesion.id] = _covers_of(text, anat)  # every site its clause names
+                    if label and label not in label_index:  # rule 1: a label resolves to the lesion it heads, only
+                        # where its definition line describes that lesion alone (two lesions on it, in one clause or in
+                        # two: which one the label names is not told, so it resolves to neither)
+                        alone = _defines_one_lesion(text, label_line, label_end)
+                        label_index[label] = lesion if label in unique_labels and alone else None
+                        label_lines[label] = label_line
+                    elif label and label_lines.get(label) != label_line:
+                        label_index[label] = None  # another definition of the label heads another lesion: neither
+                    # (a second lesion its own definition's sentence goes on to describe is no lesion the label heads)
                 elif existing is not None:
                     sentence_lesions.append(existing)
                     if size or anat or (_noun_key(lm.group('noun')) == _noun_key(existing.noun)
@@ -3951,9 +4242,24 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # Acts in this sentence.
             for kind, ms, me in mentions:
                 clause = _clause_for(cls, ms)
-                anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
+                own_anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]]
+                anat = own_anat or anatomy_all
                 region = anat[0][1] if anat else ''
-                fam = _family_for_act(kind, region, part_family, present_families, binding_families)
+                # rule 1: a lesion label (or one lesion's specimen) named in the act's own clause binds the act to that
+                # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
+                # or a site of the clause's own that the lesion's tract cannot hold, leave it to the rules below
+                bound = _bound_lesion(text, clause, own_anat, label_index, drafts)
+                if bound is not None:
+                    if described is None:
+                        described = _described_starts(text, lesion_matches, ss, read_end)
+                    if _lesions_described(described, clause[0], clause[1]):
+                        bound = None  # a clause naming a lesion of its own (not a label's word) is placed as before
+                if bound is not None:
+                    anat = own_anat
+                    region = (own_anat[0][1] if own_anat else '') or bound.region
+                    fam = next(f for f, dd in drafts.items() if dd.id == bound.service)
+                else:
+                    fam = _family_for_act(kind, region, part_family, present_families, binding_families)
                 if not fam or fam not in drafts:
                     # Neither its part, its sentence nor its site tells which of the documented services the statement
                     # is about. A checklist item's own field or check box that denies it today is then the encounter's
@@ -3962,9 +4268,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # No - none used" under a report of an upper endoscopy and a colonoscopy had been dropped, and with
                     # it the conflict with the physician's tattoo). Anything else - prose, whose denial may be scoped
                     # to a site or a lesion the reader does not see - stays unattributed, as before, and so does a
-                    # history, plan or indication part (another occasion's).
+                    # history, plan or indication part (another occasion's). Rule 4 (core repair 2026-11-03): in a
+                    # combined report - a title naming several services binds none of them - a site-less, label-less
+                    # prose denial is the encounter's too ("No biopsies were taken." over an EGD and a colonoscopy, R1
+                    # probe 8c): set beside every service that documents the act done, never dropped, as the combined
+                    # title's first service once took it and its genuine conflict was kept.
                     if part.kind in ('history', 'plan', 'indication') or not drafts \
-                            or not _field_or_box_line(text, ms, me):
+                            or not (_field_or_box_line(text, ms, me) or (part.combined and part.kind == 'report')):
                         continue
                     fam = ''
                 if kind == 'snare' and re.match(r'[ \t]*site\b', text[me:me + 8], FLAGS):
@@ -3973,6 +4283,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue  # "a common bile duct dilated to 11 mm", "upstream duct dilation": a finding
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=part.kind == 'report')
+                if reading.cues[:1] in ((COPULAR_SUBJECT_CUE,), (COPULAR_OBJECT_CUE,)):
+                    continue  # rule 3: the subject or the object of a copular negation states no act of its own
                 bc = _bounded_clause(text, clause, ms, me)
                 clause_text = text[bc[0]:bc[1]]
                 row_lo = max(text.rfind('\n', max(0, ms - ROW_REACH), ms) + 1, ms - ROW_REACH, 0)
@@ -3983,8 +4295,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # a form field's denying answer is its item's predicate ("Biopsy: No", "Tattoo placed: None")
                 fielded = reading.status == 'negated' and reading.cues[:1] != () \
                     and reading.cues[0].startswith('field:')
-                has_act_verb = bool(ACT_VERB.search(clause_text) or BARE_PARTICIPLE.search(clause_text) or boxed
-                                    or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
+                # an attributive act compound's participle is no act predicate (rule 2: "the snare-treated lesion")
+                has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
+                                    or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
@@ -4016,14 +4329,18 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
-                if not fam and (not _own_mark_denies(text, ms, me, reading, service_date) or _dates_in(dates, *bc)
-                                or HISTORY_WORDS.search(clause_text) or PLAN_WORDS.search(clause_text)):
+                combined_denial = part.combined and part.kind == 'report' and reading.status in ('negated', 'cancelled')
+                if not fam and (not (_own_mark_denies(text, ms, me, reading, service_date) or combined_denial)
+                                or _dates_in(dates, *bc) or HISTORY_WORDS.search(clause_text)
+                                or PLAN_WORDS.search(clause_text)):
                     continue  # no service named, and no item's own denial today (a date or time word: another's?)
                 if fam:
                     d = drafts[fam]
                     d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam
                                     else (ss, se))
-                lesion = _lesion_for(sentence_lesions, ms) if fam else None
+                lesion = bound if bound is not None else (_lesion_for(sentence_lesions, ms) if fam else None)
+                if lesion is not None and fam and lesion.service != drafts[fam].id:
+                    lesion = None  # an act and its lesion are bound together: never at another service's lesion (rule 1)
                 role = part.role
                 labelled = next((r for r, pattern in ROLE_LABEL if pattern.match(text[ss:se])), None)
                 if labelled:
@@ -4047,8 +4364,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                           anatomy=tuple(dict.fromkeys(a[0] for a in anat)), region=region,
                           technique=_technique(text, *bc, near=ms), lesion=lesion.id if lesion else '',
                           evidence=(_span(text, *bc),), cues=reading.cues, detail=_detail(text, *bc, kind))
-                placements.note(act, _covers_of(text, anat),
-                                lesion is not None and lesion.id in own_lesions and one_place)
+                placements.note(act, _covers_of(text, anat), bound is not None
+                                or (lesion is not None and lesion.id in own_lesions and one_place))
                 if not fam:
                     unplaced.append((act, _heading_service(part, drafts)))
                     continue
@@ -4092,7 +4409,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
     services = _included([s for s in services if s is not None])
-    em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1)
+    em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1, em_absent)
     if em is not None:
         services.append(em)
     services = tuple(services)
@@ -4202,9 +4519,12 @@ def _on_procedure_line(text: str, pos: int, part: _Part) -> bool:
                     'procedure(s)', 'procedures performed today')
 
 
-def _em_service(text: str, routing, context_facts, services, routine_em, sentences, number) -> Optional[DocumentedService]:
+def _em_service(text: str, routing, context_facts, services, routine_em, sentences, number,
+                em_absent=()) -> Optional[DocumentedService]:
     """The office/outpatient E/M service the document documents for this date, from routing's E/M reading, or for a
-    note routing reads no E/M in, from the note's own evaluation wording (a sparse note still documents a visit)."""
+    note routing reads no E/M in, from the note's own evaluation wording (a sparse note still documents a visit).
+    ``em_absent``: the sentences stating that no separate office E/M service is documented (cues.EM_ABSENCE, rule 8 of
+    the core repair 2026-11-03), read where routing reads the visit negated by that same statement."""
     finding = routing.finding('gi.office_em') if routing is not None and hasattr(routing, 'finding') else None
     procedures_done = [s for s in services if s.status in POSITIVE]
     facts = {f.name: f for f in (finding.facts if finding is not None else ())}
@@ -4244,6 +4564,13 @@ def _em_service(text: str, routing, context_facts, services, routine_em, sentenc
         cues.append('negated: the document calls today\'s history and examination routine procedure-related work and '
                     'documents no separate E/M')
         evidence = list(routine_em[:2])
+    elif procedures_done and em_absent and 'separate_em' not in facts and status == 'negated' and any(
+            EM_ABSENT_SERVICE_CUE in m.cues for m in finding.mentions):
+        # rule 8: routing read the visit negated by this very statement (cues.EM_ABSENCE; its cue is this one) - never
+        # where another E/M statement made routing hold the visit (a contradictory note stays open and asks), and never
+        # where another wording had already negated it (that reading stands as it was)
+        cues.append(EM_ABSENT_SERVICE_CUE)
+        evidence = list(em_absent[:2])
     elif routine_em and not procedures_done and status == 'historical':
         pass
     if not evidence and status in POSITIVE + ('uncertain',):
@@ -4352,6 +4679,157 @@ def _lesion_for(lesions: Sequence[Lesion], pos: int) -> Optional[Lesion]:
         if any(ev.start <= pos for ev in lesion.evidence):
             best = lesion
     return best or lesions[0]
+
+
+# --- core repair 2026-11-03 (P1, rule 1; R1-services-binding section 9): lesion labels and specimen labels -----------
+# A lesion introduced under a label - "COL-1 - ascending colon: A 2 mm sessile polyp ...", "P1: transverse colon, 6 mm
+# polyp", "Polyp 2 - sigmoid colon: ...", "Lesion A: a 10 mm ulcer ..." - keeps the label, and a later mention of the same
+# label in an act's clause ("No snare resection was performed on COL-1.", "One clip was placed at the COL-2 resection
+# site.") is about that lesion: the act binds to it, to its service and to its region, before any other rule places the
+# act (Mara: the denials and the clip written against COL-1 and COL-2 had gone to the upper endoscopy through a
+# section's lapse, and "No biopsy forceps were used on COL-2." contradicted the gastric biopsies). So does a specimen
+# reference equal to exactly one lesion's specimen ("specimen D", "(container C)"). Fail-closed: a label is one exact,
+# case-sensitive token (COL-1 is never COL-10 or col-1); a definition must head a lesion description (the label at the
+# start of its line, a separator, then a site or a lesion noun in its clause); a label whose definitions name disjoint
+# sites, or that two different lesions would take, resolves to nothing; an act whose own clause names two labels, a
+# label and another lesion's specimen, or a site the lesion's tract cannot hold, is read exactly as before. The index is
+# the reader's own (never part of the inventory: no record changes shape for a document without labels).
+_LABEL_TOKEN = (r'(?:[A-Z]{1,5}-\d{1,2}|[A-Z]{1,2}\d{1,2}|(?:Polyp|POLYP|Lesion|LESION|Site|SITE|Mass|MASS|Nodule|NODULE|'
+                r'Ulcer|ULCER)[ \t]+#?[ \t]*(?:\d{1,2}|[A-Z])|#[ \t]?\d{1,2})')
+LESION_LABEL_DEF = re.compile(r'[ \t\-*•]*(?P<label>' + _LABEL_TOKEN + r')(?:[ \t]*:[ \t]*|[ \t]+[-–—][ \t]+'
+                              r'|[ \t]*[–—][ \t]*)', re.A)
+LESION_LABEL_REF = re.compile(r'(?<![\w#-])(?P<label>' + _LABEL_TOKEN + r')(?![\w-])', re.A)
+LESION_NOUN_RX = _rx(r'\b' + LESION_NOUN + r'\b')
+LABEL_DEF_CHARS = 300  # a definition line is read in its first part (bounded work per line)
+_DEF_CLAUSE_END = re.compile(r'[.;]')  # where a definition's clause ends
+
+
+def _label_key(token: str) -> str:
+    """A label token with its inner spacing normalised ("Polyp  2" is "Polyp 2"); the case is kept (labels are exact)."""
+    return ' '.join(token.replace('#', '# ').split()).replace('# ', '#')
+
+
+def _label_definitions(text: str) -> dict[str, list[tuple[int, int, frozenset]]]:
+    """{label: [(line start, end of the label's separator, the regions its clause names)]} for every line that opens
+    with a lesion label, a separator and, in the clause after it, a site or a lesion noun (rule 1). One pass over the
+    lines, each read in its first LABEL_DEF_CHARS characters."""
+    out: dict[str, list[tuple[int, int, frozenset]]] = {}
+    for ls, le in _lines(text):
+        m = LESION_LABEL_DEF.match(text, ls, min(le, ls + LABEL_DEF_CHARS))
+        if m is None:
+            continue
+        stop = _DEF_CLAUSE_END.search(text, m.end(), min(le, ls + LABEL_DEF_CHARS))
+        ce = stop.start() if stop else min(le, ls + LABEL_DEF_CHARS)
+        sites = _anatomy_in(text, m.end(), ce)
+        if not sites and LESION_NOUN_RX.search(text, m.end(), ce) is None:
+            continue
+        out.setdefault(_label_key(m.group('label')), []).append(
+            (ls, m.end(), frozenset(region for _, region, _, _ in sites)))
+    return out
+
+
+def _regions_compatible(a: str, b: str) -> bool:
+    """Whether two regions can be one place for a lesion label's purpose: the same region, or both in one tract."""
+    return not a or not b or a == b or (a in UPPER and b in UPPER) or (a in LOWER and b in LOWER)
+
+
+def _unique_labels(definitions: dict) -> frozenset:
+    """The labels whose every definition names sites of one place (_regions_compatible, pairwise): a label defined over
+    disjoint sites is ambiguous and resolves to nothing."""
+    out = set()
+    for label, defs in definitions.items():
+        regions = set().union(*(r for _, _, r in defs))
+        if all(_regions_compatible(a, b) for a in regions for b in regions):
+            out.add(label)
+    return frozenset(out)
+
+
+def _heading_label(definitions_by_start: list, starts: list, ss: int, pos: int) -> tuple[Optional[str], int, int]:
+    """(the label whose definition heads the lesion mentioned at ``pos`` in the sentence starting at ``ss``, the start
+    of that definition's line, the end of its separator): the last definition line that starts in the sentence at or
+    before the mention (its separator ending before it); (None, -1, -1) when there is none."""
+    i = bisect.bisect_right(starts, pos) - 1
+    if i < 0:
+        return None, -1, -1
+    ls, sep_end, label = definitions_by_start[i]
+    return (label, ls, sep_end) if ss <= ls and sep_end <= pos else (None, -1, -1)
+
+
+def _labels_in(text: str, start: int, end: int, index: dict) -> set:
+    """The lesions the bound labels named in [start, end) resolve to, and the ambiguous labels named there (None)."""
+    out = set()
+    for m in LESION_LABEL_REF.finditer(text, start, end):
+        key = _label_key(m.group('label'))
+        if key in index:
+            out.add(index[key])
+    return out
+
+
+def _described_starts(text: str, lesion_matches: Sequence, ss: int, end: int) -> list[int]:
+    """The starts, in order, of a sentence's lesion mentions (its LESION matches over [ss, end)) that are no label's own
+    word ("Polyp A", "Lesion 1"), for rule 1's count of the lesions a clause describes. One label scan of the sentence
+    and one pass over its matches (both in order)."""
+    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, ss, end)]
+    out: list[int] = []
+    i = 0
+    for m in lesion_matches:
+        p = m.start('noun')  # "the Polyp B": the mention's noun is the label's own word, whatever leads it
+        while i < len(labels) and labels[i][1] <= p:
+            i += 1
+        if i < len(labels) and labels[i][0] <= p:
+            continue  # the label's own word
+        out.append(m.start())
+    return out
+
+
+def _defines_one_lesion(text: str, ls: int, sep_end: int) -> bool:
+    """Whether a label definition's line, from its separator to its end, describes exactly one lesion: one lesion mention
+    that is no label's own word and that the inventory records as a lesion of its own (a size, an indefinite or a
+    numeric lead, CREATING_LEADS) - within LABEL_DEF_CHARS of the line's start; a longer line is prose under a label,
+    and which of its lesions the label names is not told (rule 1). Bounded: LABEL_DEF_CHARS characters, scanned once
+    per pattern."""
+    bound = min(len(text), ls + LABEL_DEF_CHARS)
+    le = text.find('\n', sep_end, bound)
+    if le < 0:
+        if bound < len(text):
+            return False
+        le = len(text)
+    labels = [m.span() for m in LESION_LABEL_REF.finditer(text, sep_end, le)]
+    count = 0
+    for m in LESION.finditer(text, sep_end, le):
+        if any(a <= m.start('noun') < b for a, b in labels):
+            continue  # the label's own word ("the Polyp B")
+        lead = (m.group('lead') or '').strip().lower()
+        lead = re.sub(r'\s+', ' ', lead)
+        if m.group('size') or lead in CREATING_LEADS or lead.isdigit():
+            count += 1
+    return count == 1
+
+
+def _lesions_described(starts: Sequence[int], start: int, end: int) -> int:
+    """How many of a sentence's described lesion mentions (_described_starts) start in [start, end): two bisections."""
+    return bisect.bisect_left(starts, end) - bisect.bisect_left(starts, start)
+
+
+def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index: dict, drafts) -> Optional[Lesion]:
+    """The one lesion an act's clause names by its label, or by a specimen reference that equals exactly one recorded
+    lesion's specimen (rule 1), else None: no such name, two different lesions named, an ambiguous label named, or a
+    site of the clause's own that the lesion's tract cannot hold. Bounded: the clause once per pattern, and the recorded
+    lesions only when the clause names a specimen. A specimen reference binds only a clause that names no site of its own
+    (the act is then placed by its site, as before): the label is the explicit name, the specimen the weaker one."""
+    named = _labels_in(text, clause[0], clause[1], index) if index else set()
+    specimens = set() if own_anat else {m.group('label') or m.group('label2')
+                                        for m in SPECIMEN.finditer(text, clause[0], clause[1])}
+    for specimen in specimens:
+        holders = [lesion for d in drafts.values() for lesion in d.lesions if lesion.specimen == specimen]
+        if len(holders) == 1:
+            named.add(holders[0])
+    if len(named) != 1 or None in named:
+        return None
+    lesion = next(iter(named))
+    if any(not _regions_compatible(region, lesion.region) for _, region, _, _ in own_anat):
+        return None
+    return lesion
 
 
 def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_intents) -> Optional[DocumentedService]:
@@ -4474,7 +4952,10 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
     lesions = tuple(_disposition(lesion, d.acts) for lesion in d.lesions)
     evidence = tuple(_dedupe_spans(([d.report_title] if d.report_title else []) + [s[2] for s in positive]))[:6]
     completion_evidence = tuple(_dedupe_spans(completion_spans))[:4]
-    spans = list(d.scopes) + [(e.start, e.end) for e in evidence]
+    # rule 4: a combined report title (and its mention's clause) documents each service it names, and is the scope of
+    # none of them: a whole document under one running title is no one service's text
+    spans = list(d.scopes) + [(e.start, e.end) for e in evidence
+                              if not any(a <= e.start and e.end <= b for a, b in d.shared)]
     scope_start = min((a for a, _ in spans), default=0)
     scope_end = max((b for _, b in spans), default=0)
     return DocumentedService(

@@ -3281,3 +3281,49 @@ queues the assess stage's AGAIN mode, which re-reads the final assessment's runs
 Migration `0009_cux_flow` is additive under the installer's gate (two new tables, two nullable columns, one index). An
 older release reading the new schema never reads the answer tables (it asks those questions again) and only ever writes
 NULL in the new columns, which the partial unique index excludes.
+
+## Core repair and customer interface (2026-11-03): P1 READ-BIND
+
+The shared reader (`studio/gi/services.py`, with one E/M pattern in `studio/gi/cues.py` read by routing's E/M base
+reading in `studio/gi/detect.py`, and one gate in `studio/validation/engine.py`) binds each statement to the procedure,
+lesion and scope its document gives it. Declared before code: `tests/fixtures/gi4/declarations/cux-bind.json`; tests:
+`tests/test_cux_bind.py` with the class documents under `tests/fixtures/cux/reader/` and Mara end to end
+(`tests/fixtures/cux/mara/`). The rules, each fail-closed (where its structure is not met the installed reading
+stands):
+
+- An attributive act compound ("the snare-treated lesion", "biopsy-proven Barrett esophagus") is no act statement, and
+  its participle is no act predicate for any other mention; a predicate compound ("was snare-resected") reads as
+  before.
+- A lesion introduced under a label ("COL-1 - ascending colon: ...") keeps it in the reader's own index, but only
+  where the label's definition line (within `LABEL_DEF_CHARS`) describes that one lesion: a line describing two
+  lesions, in one clause or two, resolves the label to nothing. A later exact, case-sensitive mention of the label in
+  an act's clause, or a specimen reference equal to exactly one lesion's specimen in a clause naming no site of its
+  own, binds the act to that lesion, its service and its region first. An ambiguous label, two labels, a clause that
+  names a lesion of its own beside the label ("COL-1 or the 3 mm polyp"), or a site the lesion's tract cannot hold
+  leaves the act to the other rules. The label is not part of the inventory record.
+- A report title naming two or more separate services is a combined title: it binds no single family; its title
+  reading stays with the one service it gave it before (the first it names) and every other named service is read by
+  its own statements, sections and instruments (a title is no statement that a service the body cancels, defers or
+  denies was done); the title is the scope of none; a site-less, label-less prose denial in such a part is set beside
+  every service that documents the act done.
+- A copular negation ("S was not a N of O") negates only N, at O: no act is read in S or in O's modifiers; "not a
+  second/another/repeat N" denies only another occurrence and is never performance evidence. Verbal negation is
+  unchanged.
+- A bare service heading's section is not ended by a field label over its value, a table header cell, or page furniture
+  (page-number lines, a repeated report title, and with the revision's pages a line an earlier page prints at the same
+  edge); every other heading still ends it.
+- An explicit statement that no separate office E/M service is documented (`cues.EM_ABSENCE`) negates the office E/M
+  for both readers; any other E/M statement read as done or held outranks it, and billing wordings read as before.
+- Office E/M documentation questions are not asked when the visit is uncertain only by the procedure-day hold
+  (`detect.EM_WITHOUT_BASIS`) and no E/M code is proposed for a decision; the service still counts as not established.
+
+`services._same_subject` is unchanged: a site-less, lesion-less denial inside one service's part still pairs with every
+act of its kind. Measured on ea4887f89 against c9f20a148 (the declaration's `after_measurement_20261104`): H1 replay
+EQUAL, H4 battery 0 movements, H2 gate holds with nothing moved, H3 no cell moved, the R8 register unchanged, H7 linear
+within the stage limits.
+
+Limits, as measured: a site-less act in a combined report's own part (no section of its service, no site in its
+sentence) is now unattributed, so its code is held where the first named service used to take it, sometimes rightly;
+rule 5's structure test costs about twice the installed inventory time on a document made only of field labels; and
+`engine._states_unread_act` still searches the raw act patterns over a code's own passage, so an attributive compound
+there ("biopsy-proven") can still release the code although the inventory reads no act.
