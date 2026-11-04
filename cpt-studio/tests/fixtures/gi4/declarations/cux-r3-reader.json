@@ -1134,5 +1134,1250 @@
     "own": []
    }
   }
+ },
+ "after_code_20261104": {
+  "provenance": "Written 2026-11-04 AFTER the code and its measurement, as a record: it changes no key above it (each value is identical; the only bytes added before this key are the separating comma, checked when it was appended). Declaration commit 5ecdd0ace5ae (2026-11-04T10:36:48Z, declared_before_code, committed alone); the 42 rows, their offers measured before code and RegisterOfferTests' read of this file in 369428308825 (10:37:46Z); the code in 0d9378e43cde (10:52:37Z), 3e8d69cc8ebf (11:06:01Z), 336652d895d3 (11:35:04Z) and 5682264cde42 (11:39:45Z), the last three the after-code changes below. Each harness tool ran offline on sealed git-archive exports of e020145e1 (base) and of 5682264cde42 (head), with this tree's harness. On 0d9378e43cde the same tools gave 31 movements (exactly the 31 declared before code), replay EQUAL and GATE HOLDS; on 3e8d69cc8ebf and 336652d895d3 37 movements, EQUAL and GATE HOLDS (scratch-r3-reader/logs).",
+  "added_after_code": {
+   "L1c-r3": "Implemented as declared, then narrowed after code: measured against installed, the undated restored spellings reopened two shapes round 2's L1c had closed - a combined report's 'Procedure 2: Colonoscopy' (or 'Subsequent' / 'Follow-on procedure: Colonoscopy') over shared findings telling no other instrument made the shared biopsy the colonoscopy's (45380 READY; held on e020145e1 and installed), and an upper endoscopy report's undated 'Subsequent procedure: colonoscopy with cold snare polypectomy' or 'Procedure 2: Colonoscopy performed today' over its own site-less biopsy held 43239 (READY on e020145e1 and installed). 'Procedure N', 'subsequent' and 'follow-on' are therefore note labels only on a line that names the service date itself (services.DATED_NOTE_LABEL, _names_service_date: a day-precise date mention equal to it) - the R8 D7 note form every A1 input carries; undated they read as round 2 read them. Measured after that commit, a dated 'Procedure 2: Colonoscopy (fictional), 2026-11-03' in a combined report's head still opened a colonoscopy part over the shared findings (45380 READY; held on e020145e1 and installed): the three spellings now also need the line to interrupt a report of one service (the running part has a family), as R8 D7's note does (5682264cde42). Three control rows pin it (unmoved). LABELLED_NOTE itself is the restored pattern.",
+   "R1c-r3": "Declared as 'subject to R1a'; implemented WITHOUT R1a on the second reading. A second reading only adds a conflict (hold-only), and R1a on it would let 'No snare was used on COL-2 in the descending colon.' inside the upper endoscopy's section pair with nothing (its site reading lies at no snare): a release. tests/test_cux_r3_reader.LabelledDenialAtAnotherSiteTests.test_the_second_reading_also_in_another_service_s_part pins it. Implementation note: the variable first named 'labelled' was shadowed by pass 3's own role label; found by the first test run (no second reading was ever queued) and renamed at_label before the first code commit.",
+   "L1e-r3": "Implemented as declared and widened after code, each step toward the installed reading or holding: (a) 'the last lesion named in that part' is the last lesion mention the part names of its own today (a site or a size; never denied, historical or planned), recorded or not - the lesion reader records no 'A 5 mm cecal polyp' (no size read before an anatomy adjective), so 'The polyp was removed ...' after it is the colonoscopy's act with no lesion; (b) a definite back-reference in the lesion loop ('the polyp', naming no size or site) follows it too, rather than the note family's last lesion; (c) measured after the first code commit against installed: 'A cold snare polypectomy was performed.' after the cecal polyp - an act naming no site, lesion or service, no back-reference - stayed the note's (45338 READY beside 45378, installed 45385 READY): it is now placed by the interrupted part until the note's own instrument is told again (rows R8 R3 A4d, A4e and two controls).",
+   "L1d-r3": "The plain-statement check read the instrument's whole sentence; measured after the first code commit, 'The colonoscope was advanced without difficulty to the cecum.' ('without') and '... to the cecum and no polyps were seen in the rectum.' (another clause's 'no') resumed nothing, so the colonoscopy's own snare stayed held (installed READY). It now reads the instrument's own clause (from the last clause break before it to the first after it, within its sentence) with a negation list that names no 'without' (rows R8 R3 A6g, A6h)."
+  },
+  "battery_rows_added": [
+   "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings",
+   "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings",
+   "R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report",
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy",
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy",
+   "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence",
+   "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only",
+   "R8 R3 A6g header cross-reference, the colonoscope advanced without difficulty",
+   "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence"
+  ],
+  "battery": [
+   [
+    "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence",
+    "45338",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence",
+    "45385",
+    "selected/needs_clarification",
+    "selected/ready"
+   ],
+   [
+    "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only",
+    "45338",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only",
+    "45378",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R3 A6g header cross-reference, the colonoscope advanced without difficulty",
+    "45385",
+    "selected/needs_clarification",
+    "selected/ready"
+   ],
+   [
+    "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence",
+    "45385",
+    "selected/needs_clarification",
+    "selected/ready"
+   ]
+  ],
+  "unmoved": {
+   "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings | 43239": "selected/needs_clarification",
+   "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings | 45380": "selected/needs_clarification",
+   "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings | 43239": "selected/needs_clarification",
+   "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings | 45380": "selected/needs_clarification",
+   "R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report | 43239": "selected/ready",
+   "R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report | 45380": "selected/needs_clarification",
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy | 45338": "selected/ready",
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy | 45378": "selected/needs_clarification",
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy | 45385": "selected/needs_clarification",
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy | 45338": "selected/ready",
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy | 45378": "selected/needs_clarification",
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy | 45385": "selected/needs_clarification",
+   "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence | 45378": "selected/needs_clarification"
+  },
+  "battery_note": "The 9 rows added after code (19 codes; 2 violations on e020145e1's code with the rows added - A4d's and A4e's 45338 READY where the truth says not done today - and none on the head), their 'from' cells measured on e020145e1's code with the rows added (scratch-r3-reader/out/rows-ac2-base.json): 6 movements, each toward the installed reading; the controls, the three L1c-r3 controls among them, unmoved.",
+  "releases_after_code": "A4d 45385 (the cecal polyp's site-less polypectomy is the colonoscopy's, as installed) and A6g and A6h 45385 (the running report's own snare, as installed and c47d71a34); no other release.",
+  "H4_battery": "python -m ops.gi4.battery --base <e020145e1 export> --head <5682264cde42 export> --declare <the 51 movements of scratch-r2-variants/gen/combined-decl.json plus this file's 31 and the 6 above>: base {'rows': 206, 'codes': 323, 'violations': 22, 'judged': 309, 'ready': 101, 'excluded': 21, 'held': 201}, head {'rows': 206, 'codes': 323, 'violations': 2, 'judged': 309, 'ready': 101, 'excluded': 14, 'held': 208}; 37 movements, 0 undeclared, 0 new violations - exactly the 37 declared. The 155 earlier rows do not move; the 2 violations left are the known S2/S3 exclusions (scratch-r3-reader/logs/battery-2.log).",
+  "H1_replay": "python -m ops.gi4.replay --fixtures --base <e020145e1 export> --head <5682264cde42 export>: EQUAL (h4-03's four date.sends-only-the-truth HARD failures are on base and head alike, as recorded before).",
+  "H2_freeze": [
+   "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+   "sections.layout over 5723 texts: identical",
+   "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+   "(c) requests over 19780 primary and dated requests: changed 0",
+   "(d) mention counts over 5723 texts: changed 0",
+   "== GATE HOLDS"
+  ],
+  "offers": {
+   "note": "Re-measured on the final code over all 156 'R8 ' rows (scratch-r3-reader/probes/offers.py; base: e020145e1's code with the rows added): four cells move, every one a row of this file's, and no earlier declaration's row moves. A1d and A1e lose the own-answer not-covered colonoscopy biopsy (the biopsy is the note's, which 45331 covers, as under 'Separate note:'); A4b and A4e gain the own-answer not-covered colonoscopy snare (the cecal snare given back to the colonoscopy is covered by no proposed code when only 45338 is proposed - R8 R2 R07b's after-code reading, as installed).",
+   "moved_against_base": {
+    "R8 R3 A1d numbered procedure heading, the note's own biopsy code": {
+     "base": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": [
+       [
+        "gi.colonoscopy",
+        "biopsy",
+        "not_covered",
+        true
+       ]
+      ]
+     },
+     "head": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": []
+     }
+    },
+    "R8 R3 A1e subsequent procedure heading, the note's own biopsy code": {
+     "base": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": [
+       [
+        "gi.colonoscopy",
+        "biopsy",
+        "not_covered",
+        true
+       ]
+      ]
+     },
+     "head": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": []
+     }
+    },
+    "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only": {
+     "base": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": []
+     },
+     "head": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": [
+       [
+        "gi.colonoscopy",
+        "snare",
+        "not_covered",
+        true
+       ]
+      ]
+     }
+    },
+    "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only": {
+     "base": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": []
+     },
+     "head": {
+      "empty": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        true
+       ],
+       [
+        "gi.flex_sig",
+        "",
+        "no_proposal",
+        true
+       ]
+      ],
+      "own": [
+       [
+        "gi.colonoscopy",
+        "snare",
+        "not_covered",
+        true
+       ]
+      ]
+     }
+    }
+   }
+  },
+  "offer_battery": {
+   "R8 R3 A1 control, a dated numbered procedure line in a combined report's head over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, a numbered procedure line in a combined report's head over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, a numbered procedure line naming an EGD performed today": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1 control, an undated subsequent procedure line in an upper endoscopy report": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1 control, one numbered procedure line over shared findings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1a numbered procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1b subsequent procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1c follow-on procedure heading over a same-day note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A1d numbered procedure heading, the note's own biopsy code": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A1e subsequent procedure heading, the note's own biopsy code": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A2 control, a denial on a label at its own site": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A2a snare denial on a label, a landmark of its own segment": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A2b snare denial on a label, the left colon": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A2c forceps denial on a label, near the hepatic flexure": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A3 control, a labelled clip and denial in a combined narrative": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A3 control, the colonoscope told again before the labelled act": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3a specimen number restarted in a combined narrative": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3b specimen number restarted in a combined narrative, 43239 only": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A3c colon label named in passing in a combined narrative": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A4 control, a cecal polyp of another time before a site-less polypectomy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4 control, a sigmoid polyp and its snare in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4 control, the note's instrument told again before a site-less polypectomy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4a cecal polyp, its snare in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4b cecal polyp, its snare in the next sentence, 45338 only": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A4c cecal polyp found, the polyp removed on the next line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4d cecal polyp, a site-less polypectomy in the next sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A4e cecal polyp, a site-less polypectomy on the next line, 45338 only": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A5 control, an assessment of the mucosa beside the absence statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5 control, an evaluation for a problem planned in clinic": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5 control, an evaluation word inside a biopsy statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5a evaluation for a problem beside the absence statement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5b history and examination for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5c consultation regarding a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5d assessment of a problem, an appositive": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5e focused history and physical for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5f a GI consultation for a problem": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A5g the absence statement before the evaluation": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A6 control, a refused note label whose text denies the running instrument": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A6a header cross-reference to a same-day EGD, a lesion and its snare": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6b header cross-reference to a same-day EGD, a site-less biopsy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6c header line naming a same-day EGD, a site-less snare": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6d an upper endoscopy report's cross-reference to a same-day colonoscopy": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6e a labelled line naming an EGD performed today, the colonoscopy narrative after it": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6f a labelled line naming an EGD performed today, a site-less biopsy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6g header cross-reference, the colonoscope advanced without difficulty": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A6h header cross-reference, a denial in another clause of the instrument's sentence": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, a label restated by its size under a stomach heading": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, a label restated by its size under another examination": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R3 A7 control, the specimen rows with their sites": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A7a specimen row restating COL-2 by its size": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R3 A7b specimen row restating COL-1 by its size": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   }
+  },
+  "installed_comparison": "Every 'R8 R3 ' row read on the installed 41e03656d's code (scratch-r3-reader/out/rows-inst.json against rows-final-head.json): 30 cells differ; the three L1c-r3 controls read as installed. None reads worse than installed by this round's code: A1a-c and A2a-c (installed READY where the truth says not done: held), A1d/A1e 45331, the A3 controls, A7a/A7b and the A7 sited control (installed's recorded R8 D7 and Mara defects: READY, truth done), and the A4 controls (installed READY on 45385 where the note's own act is 45338). The cells where the head holds what installed made READY are all unmoved from this base and declared costs: the A1 control's and A3a-c's 43239 (rule 4: a combined title binds no family and the gastric biopsy names no site - cux-bind.json's recorded cost), the A7 control's 43251 under another examination (MAY; R1b's unresolved label, as on this base), and the A5 controls' 99213 (rule 8: Mara's absence statement, no evaluation stated - the core repair's declared reading).",
+  "mara": "tests/test_cux_bind.MaraEndToEndTests: 43239, 45380 and 45385 READY, 0 proposal questions, 0 office E/M questions, 0 conflicts, the clip bundled under the colonoscopy, the distinct-lesion consideration (unchanged); and the A7 Mara variants (COL-2's and COL-1's specimen rows restated without their sites, the retained response) read exactly as Mara does (tests/test_cux_r3_reader.RestatedLabelTests).",
+  "mutation_proofs": {
+   "method": "scratch-r3-reader/mut/mutate.py, in place (only this owner edits these files): each mutant's anchor occurs exactly once, the mutant is applied and checked in the file, compiled in memory (no bytecode written), its tests run on the throwaway server (they must fail and must have run), the file restored and its sha256 compared with the one taken before. 31 mutants, one per guard. On 3e8d69cc8ebf's code 27 of the first 28 were killed at once and M26 (the current-status filter on the note part's last lesion) SURVIVED: its control used a sized lesion, whose own time an earlier check already reads; the control gained the unsized form, which kills it (committed in 336652d895d3). On the final code (5682264cde42) all 31 were run again: 31 killed (the results below, r3a160-r3a190), every restore equal (services.py 1955abc2a8500e01..., cues.py f13f4c00ceed313a...).",
+   "results": [
+    "M1 L1c-r3 the round-2 LABELLED_NOTE | applied=True KILLED (Ran 4 tests; failures=8) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a160]",
+    "M2 L1d-r3 no resume after a refused label | applied=True KILLED (Ran 1 test; failures=5) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a161]",
+    "M3 L1d-r3 no resume in an accepted label (L1f) | applied=True KILLED (Ran 1 test; failures=2) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a162]",
+    "M4 L1d-r3 any statement is plain | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a163]",
+    "M5 L1d-r3 another family on the line resumes too | applied=True KILLED (Ran 1 test; failures=3) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a164]",
+    "M6 L1e-r3 no back-reference in the lesion loop | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a165]",
+    "M7 L1e-r3 no anaphora to the beyond-reach lesion | applied=True KILLED (Ran 1 test; failures=2) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a166]",
+    "M8 L1e-r3 the anaphoric act stays the note part's | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a167]",
+    "M9 L1e-r3 only a recorded lesion is the part's last | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a168]",
+    "M10 R1c-r3 no second reading | applied=True KILLED (Ran 1 test; failures=4) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a169]",
+    "M11 R1c-r3 a second reading for an act done too | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a170]",
+    "M12 R1c-r3 _bound_lesion reports no lesion | applied=True KILLED (Ran 1 test; failures=4) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a171]",
+    "M13 R1a-r3 no instrument guard | applied=True KILLED (Ran 1 test; failures=3) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a172]",
+    "M14 R1a-r3 a denial unbound too | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a173]",
+    "M15 R1a-r3 an instrument before the lesion counts | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a174]",
+    "M16 R8b-r3 no postmodified alternative | applied=True KILLED (Ran 2 tests; failures=24) restore sha256 f13f4c00ceed313a==f13f4c00ceed313a: True [r3a175]",
+    "M17 R8b-r3 the noun need not head its sentence | applied=True KILLED (Ran 1 test; failures=1) restore sha256 f13f4c00ceed313a==f13f4c00ceed313a: True [r3a176]",
+    "M18 R8b-r3 any of-phrase | applied=True KILLED (Ran 1 test; failures=1) restore sha256 f13f4c00ceed313a==f13f4c00ceed313a: True [r3a177]",
+    "M19 R1b-r3 a site-less restatement never resolves (R1b) | applied=True KILLED (Ran 1 test; failures=4) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a178]",
+    "M20 R1b-r3 no size test | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a179]",
+    "M21 R1b-r3 no part context | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a180]",
+    "M22 R1b-r3 no section heading context | applied=True KILLED (Ran 1 test; failures=2) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a181]",
+    "M23 R1b-r3 no instrument context for a sizeless one | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a182]",
+    "M24 L1e-r3 no placement of a site-less act after a beyond-reach lesion | applied=True KILLED (Ran 1 test; failures=2) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a183]",
+    "M25 L1e-r3 the note instrument told again changes nothing | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a184]",
+    "M26 L1e-r3 a lesion of another time is the part last | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a185]",
+    "M27 L1d-r3 the whole sentence decides | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a186]",
+    "M28 L1d-r3 without is a negation | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a187]",
+    "M29 L1c-r3 an undated restored label is a note label | applied=True KILLED (Ran 1 test; failures=7) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a188]",
+    "M30 L1c-r3 a dated restored label is no note label | applied=True KILLED (Ran 1 test; failures=3) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a189]",
+    "M31 L1c-r3 a dated restored label opens a part in a combined head | applied=True KILLED (Ran 1 test; failures=1) restore sha256 1955abc2a8500e01==1955abc2a8500e01: True [r3a190]"
+   ]
+  },
+  "limits": [
+   "A3's 43239 stays held in a combined narrative whose gastric biopsy names no site (installed READY by the combined title's first service): rule 4's declared cost; reading it would need a context rule (the A1 or rule 6 class, closed by session decision (c) of 2026-11-03).",
+   "Pre-existing on e020145e1, not changed here: a 'Note 2: Colonoscopy', 'Part 2: Colonoscopy' or 'Second procedure: Colonoscopy' line (the spellings round 2 kept as labels) alone in a combined report's head, over shared findings telling no other instrument, opens a colonoscopy part, so the shared biopsy is the colonoscopy's (45380 READY; held on installed): the F03 class that round 2's list rule and L1f leave. The restored spellings do not join it (L1c-r3).",
+   "R1a-r3 reads instruments, not service names: an examination told only by its name ('The EGD showed ...') between a colon lesion and a labelled act does not unbind it; and an instrument named in a denial ('The gastroscope was not used.') counts as told (hold-direction).",
+   "L1d-r3: a header line naming another service, followed by the running report's findings with no instrument told (only 'Findings: ...'), stays L1d's (held; installed holds it too, for its extent); an instrument told only in a clause with a plan, history, hedge or cancellation word does not resume the running part.",
+   "L1e-r3 reads the flexible sigmoidoscopy's reach only (NOTE_REACH, as L1e), and the note's own instrument told again ends it; a definite back-reference to a lesion two lesions back ('the first polyp') reads the part's last lesion.",
+   "R1b-r3: a restatement giving no size, told after another tract's instrument, leaves the label unresolved (R1b's reading); sizes are compared as written ('8 mm' and '0.8 cm' differ: unresolved).",
+   "R1c-r3: a clause naming a site of another tract than the labelled lesion's still unbinds the label as before (core repair R1); the second reading is added in the lesion's own service, so the inventory lists the denial twice (once at its site, once at the lesion), one statement read both ways.",
+   "R8b-r3 is a closed list (the opener, the article, at most three adjectives, five prepositions and 'of' with a possessive pronoun); a postmodified evaluation outside it reads as before (the absence statement negates the visit).",
+   "A8 is not repaired (residuals_measured): its input still reads 45385 READY, as installed reads it."
+  ],
+  "tests": {
+   "reproduction": "tests/test_cux_r3_reader.py written before the code and run on e020145e1's code (r3a3): 23 tests, 89 failures and 5 errors - every finding reproduced (scratch-r3-reader/logs/repro-before.log); on the final code 30 tests, OK (r3a194).",
+   "db_free_set": "the 50 modules of build/bind/logs/dbfree-detect-modules.txt (the reader set the round-2 owners ran) plus tests.test_cux_r3_reader, test_cux_r2_bind, test_cux_r2_em, test_cux_r2_variants, test_cux_bind, test_cux_hold, test_cux_lead, test_gi4_battery, test_gi4_state, test_harness_engine_parity and test_harness2_r2_parity - 61 modules on the throwaway server 127.0.0.1:55461 (r3a192): 1353 tests in 294 s, OK (skipped=2). tests.test_gi4_mutants among them: every registered mutant anchor still occurs once.",
+   "db_backed_set": "the 51 modules of build/bind/logs/db-modules.txt not in the set above (tests.test_harness_pipeline among them), plus tests.test_cux_review and tests.test_customer_fixtures (r3a193): 1720 tests in 947 s, OK; tests.test_customer_fixtures passes on its committed fixtures (none regenerated or changed).",
+   "unit_pins": "Moved, as declared: tests.test_cux_r2_bind.ProcedureListTests' LABELLED_NOTE pin (rewritten as test_the_helper_reads_a_numbered_procedure_line_as_a_note_label). No other pin moved: the parity digests, tests/test_harness_pipeline and tests/test_gi4_battery's pins pass."
+  },
+  "cost": "Not measured with ops.gi4.cost (none of its 12 shapes carries these rules' shapes); probed instead (scratch-r3-reader/probes/cost_r3.py, offline, routing and the inventory read cold at 4 doubling sizes up to 324,149 characters, the final head's export and base): a refused label over 2,000 negated colonoscope lines, over 2,000 sigmoidoscope lines, 2,000 site-less label restatements after the gastroscope, 2,000 labelled acts after the gastroscope, 2,000 cecal polyps with anaphoric and site-less acts in a note's part, 2,000 evaluation nouns with 160-character postmodifiers: every doubling ratio 1.58-2.43 on the head (base 1.35-2.27); each step over 2.3 is followed by one under 1.7, and every shape is linear end to end. At the largest size the head took 3.077, 3.246, 2.087, 2.706, 6.070 and 2.923 s against the base's 3.154, 3.872, 2.193, 2.980, 5.927 and 3.684 s - each run beside two test runs, so the timings are noisy (scratch-r3-reader/logs/cost-final.log)."
  }
 }
