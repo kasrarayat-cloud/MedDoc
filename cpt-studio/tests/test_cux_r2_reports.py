@@ -480,16 +480,14 @@ class ConstantsTests(SimpleTestCase):
 
     def test_the_walk_and_the_download_check_name_what_the_server_names(self):
         source = VERIFY_BROWSER.read_text(encoding='utf-8')
-
-        def constant(name):
-            found = re.findall(rf"^const {name} = '([^']*)';", source, re.M)
-            self.assertEqual(len(found), 1, name)
-            return found[0]
-
-        self.assertEqual(constant('NOT_FINAL_BLOCKER'), review.NOT_FINAL_BLOCKER)
-        self.assertEqual(constant('SAME_DAY_EM_GATE'), review.SAME_DAY_EM_GATE)
-        self.assertEqual(constant('SAME_DAY_PROCEDURE'), review.SAME_DAY_PROCEDURE)
+        # refutation round 3 (B-02, B-03): the walk no longer copies the server's review rule - its not-final blocker,
+        # the same-day E/M gate's check ids - to re-derive what the server accepts; it reads the operator view's
+        # statement of the customer page (serializers.customer_codes), so no copy of those words is left to drift
+        for name in ('NOT_FINAL_BLOCKER', 'SAME_DAY_EM_GATE', 'SAME_DAY_PROCEDURE'):
+            self.assertNotRegex(source, re.compile(rf'^const {name} = ', re.M), name)
+        self.assertRegex(source, re.compile(r'^const CODE_STATUSES = ', re.M))  # the probe reads lines: it can match
         vocabulary = json.loads((ROOT / 'ops' / 'verification' / 'customer-contract.json').read_text(encoding='utf-8'))['vocabulary']
+        self.assertEqual(vocabulary['code_statuses'], customer_api.STATUS_LABELS)  # the walk's CODE_STATUSES
         self.assertEqual(vocabulary['none_approved_blocker'], customer_api.NONE_APPROVED)
         self.assertEqual(vocabulary['agent_sub_label'], customer_api.AGENT_SUB_LABEL)
         self.assertEqual(customer_api.AGENT_SUB_LABEL, reports.AGENT_LINE)

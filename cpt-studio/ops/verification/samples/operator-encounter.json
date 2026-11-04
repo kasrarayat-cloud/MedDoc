@@ -533,6 +533,16 @@
         "reinstated_by": null,
         "allowed_actions": [],
         "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": {
+          "number": 1,
+          "status": "approved",
+          "status_label": "Approved",
+          "sub_label": "Agent-executed synthetic review — not clinical approval",
+          "reviewer_actions": [
+            "revoke"
+          ]
+        },
         "proposed_by": [
           "corti",
           "astra",
@@ -647,6 +657,16 @@
         "reinstated_by": null,
         "allowed_actions": [],
         "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": {
+          "number": 2,
+          "status": "approved",
+          "status_label": "Approved",
+          "sub_label": "Agent-executed synthetic review — not clinical approval",
+          "reviewer_actions": [
+            "revoke"
+          ]
+        },
         "proposed_by": [
           "corti",
           "astra",
@@ -720,6 +740,8 @@
         "reinstated_by": null,
         "allowed_actions": [],
         "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": null,
         "proposed_by": [
           "corti",
           "astra",
@@ -793,6 +815,8 @@
         "reinstated_by": null,
         "allowed_actions": [],
         "approve_withheld_by": null,
+        "overlay_reason": "",
+        "customer": null,
         "proposed_by": [
           "corti",
           "astra",

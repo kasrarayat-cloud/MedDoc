@@ -24,17 +24,31 @@ const BIOPSY = 'Cold forceps biopsies were taken from the rectum and from the no
 const ACROSS = '2. Normal mucosa from 20 cm to 50 cm; biopsies taken at 40 cm.\n\nPlan';
 const EXTENT = 'advanced under direct visualization to 50 cm from the anal verge';
 const HISTORY = 'A colonoscopy two years ago was normal.';
+const AGENT_REVIEW = 'Agent-executed synthetic review — not clinical approval';
+const STATUS_WORDS = { ready: 'Ready for review', needs_detail: 'Needs a detail', approved: 'Approved', excluded: 'Excluded' };
 
+// What the server states the customer page shows for a code - the operator view's "customer" (serializers.customer_codes:
+// customer_api.code_rows' row, with the actions a member who may review is allowed) - which the walk judges the page by.
+function statement(status, sub, actions, number = null) {
+  return { number, status, status_label: STATUS_WORDS[status], sub_label: sub, reviewer_actions: actions };
+}
+
+// A selected, ready, undecided proposal is listed Ready for review with approve and reject (exact evidence assumed); any
+// other is not listed unless a test says what the page shows for it (extra.customer).
 function proposal(id, code, extra = {}) {
   const flex = code.startsWith('4533');
-  return {
+  const out = {
     id, key: id, bucket: 'selected', code, code_kind: 'cpt1', family: flex ? 'gi.flex_sig' : 'gi.colonoscopy',
     family_label: flex ? 'Flexible sigmoidoscopy' : 'Colonoscopy', eyebrow: flex ? 'FLEXIBLE SIGMOIDOSCOPY' : 'COLONOSCOPY',
     supported: true, profile_version: 'x@1', status: 'ready', status_label: 'Ready for review', exclusion_reason: '',
     reinstatable: false, descriptor: { status: 'withheld', label: 'Description withheld.' }, evidence: [], rationale: '',
     units: 1, checks: [], modifier_considerations: [], clarification_ids: [], decision: null, decision_state: 'undecided',
-    allowed_actions: ['approve', 'reject'], ...extra,
+    allowed_actions: ['approve', 'reject'], overlay_reason: '', ...extra,
   };
+  if (!('customer' in extra)) {
+    out.customer = out.bucket === 'selected' && out.status === 'ready' && !out.decision ? statement('ready', '', ['approve', 'reject']) : null;
+  }
+  return out;
 }
 
 function encounter(overrides = {}) {
@@ -73,6 +87,7 @@ function decided(enc, id, action, note) {
     created_at: '2026-10-23T21:00:00Z', revision_number: 1 };
   p.decision_state = action === 'approve' ? 'approved' : 'rejected';
   p.allowed_actions = ['revoke'];
+  p.customer = action === 'approve' ? statement('approved', AGENT_REVIEW, ['revoke']) : statement('excluded', 'Rejected in review', ['revoke']);
   enc.decisions.history.push({ ...p.decision, invalidated: null });
   return enc;
 }
@@ -373,9 +388,11 @@ test('summarize records the state without the revision text', () => {
 // --- round 5: a confirmed exclusion has no code card (pipeline:3); the walk confirms only must_not_code (pipeline:5)
 
 function withExcluded(enc, id, code, family, extra = {}) {
+  const listed = extra.reinstatable !== false;  // an exclusion nobody may decide is not on the page
   enc.assessment.proposals.push(proposal(id, code, { bucket: 'excluded', status: 'excluded', family, reinstatable: true,
     exclusion_reason: 'Documented as planned, not as performed on the date of service.',
-    allowed_actions: ['reinstate', 'confirm'], ...extra }));
+    allowed_actions: ['reinstate', 'confirm'],
+    customer: listed ? statement('excluded', 'Excluded by a documentation check', ['reinstate', 'confirm']) : null, ...extra }));
   return enc;
 }
 
@@ -385,6 +402,7 @@ function confirmed(enc, id) {
     reviewer_kind: 'agent', created_at: '2026-10-23T21:00:00Z', revision_number: 1 };
   p.decision_state = 'exclusion_confirmed';
   p.allowed_actions = ['revoke'];
+  p.customer = statement('excluded', 'Exclusion confirmed in review', ['revoke']);
   return enc;
 }
 
@@ -405,8 +423,13 @@ test('planConfirmations confirms only the families must_not_code names', () => {
   const opsAgent = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', { allowed_actions: [] });
   assert.deepEqual(vb.planConfirmations(opsAgent, [{ family: 'gi.colonoscopy' }], {}).map(d => d.code), ['45378']);
   assert.deepEqual(vb.planConfirmations(opsAgent, [{ family: 'gi.colonoscopy' }], {}, false), []);
-  const notFinal = withExcluded(encounter({ readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } }), 'p-plan', '45378', 'gi.colonoscopy');
+  // refutation round 3 (B-02, B-03): what the server states it accepts, and nothing else - none on an assessment that is
+  // not the final one (review._allowed), none where the view states nothing
+  const notFinal = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy',
+    { customer: statement('excluded', 'Excluded by a documentation check', []) });
   assert.deepEqual(vb.planConfirmations(notFinal, [{ family: 'gi.colonoscopy' }], {}), []);
+  const unstated = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', { customer: undefined });
+  assert.deepEqual(vb.planConfirmations(unstated, [{ family: 'gi.colonoscopy' }], {}), []);
 });
 
 test('a STOP file in the evidence directory stops the batch before the next upload', () => {
@@ -1338,6 +1361,9 @@ function decidedBy(enc, id, action, note, account = ACCOUNT) {
     acknowledgement: action === 'approve' ? account.acknowledgement : '', carried_from: null, invalidated: null, revision_number: 1 };
   p.decision_state = DECIDED_STATES[action];
   p.allowed_actions = ['revoke'];
+  p.customer = { approve: statement('approved', account.actor_kind === 'agent' ? AGENT_REVIEW : '', ['revoke']),
+    reject: statement('excluded', 'Rejected in review', ['revoke']),
+    confirm: statement('excluded', 'Exclusion confirmed in review', ['revoke']) }[action] || p.customer;
   enc.decisions.history.push(clone(p.decision));
   return enc;
 }
@@ -1936,21 +1962,28 @@ test('scanFile and scanHeaders: a customer report quoting the document is clean;
   assert.deepEqual(hitIds(vb.scanHeaders({ 'x-content-sha256': 'ab'.repeat(32) }, ctx, 'GET /api/reports/x/download')), ['long_hex', 'sha256']);
 });
 
-test('expectedCustomerStatus and expectedCodeRows: the contract\'s status mapping and order', () => {
-  const at = { created_at: '2026-11-03T22:05:00+00:00' };
+test('expectedCustomerStatus and expectedCodeRows: the status is the server\'s statement of the page, and the contract\'s order', () => {
+  // refutation round 3 (B-02, B-03): the status and sub label are what the operator view states the page shows
+  // (serializers.customer_codes), never re-derived from the overlay's facts - which read a reinstated code whose detail a
+  // member answered unavailable as ready; whatever the facts say, the statement is the answer
+  const reinstated = { bucket: 'excluded', status: 'excluded', decision: { action: 'reinstate' }, overlay_reason: 'detail_unavailable' };
   const cases = [
-    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'agent', ...at } }, { status: 'approved', sub: SUB, human: false }],
-    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'human', ...at } }, { status: 'approved', sub: null, human: true }],
-    [{ bucket: 'selected', status: 'ready', decision: { action: 'reject', reviewer_kind: 'agent' } }, { status: 'excluded', sub: 'Rejected in review' }],
-    [{ bucket: 'excluded', status: 'excluded', decision: { action: 'reinstate' } }, { status: 'ready', sub: null }],
-    [{ bucket: 'excluded', status: 'needs_clarification', decision: { action: 'reinstate' } }, { status: 'needs_detail', sub: null }],
-    [{ bucket: 'excluded', status: 'excluded', decision: { action: 'confirm' } }, { status: 'excluded', sub: null }],
-    [{ bucket: 'excluded', status: 'excluded', decision: null }, { status: 'excluded', sub: null }],
-    [{ bucket: 'selected', status: 'needs_clarification', decision: null }, { status: 'needs_detail', sub: null }],
-    [{ bucket: 'selected', status: 'excluded', decision: null }, { status: 'excluded', sub: null }],  // a detail answered "not documented"
-    [{ bucket: 'selected', status: 'ready', decision: null }, { status: 'ready', sub: null }],
+    [{ ...reinstated, customer: statement('excluded', 'A needed detail is not documented', ['revoke']) }, { status: 'excluded', sub: 'A needed detail is not documented' }],
+    [{ ...reinstated, status: 'needs_clarification', overlay_reason: '', customer: statement('needs_detail', 'Reinstated in review', ['reject', 'revoke']) },
+      { status: 'needs_detail', sub: 'Reinstated in review' }],
+    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'agent' }, customer: statement('approved', SUB, ['revoke']) }, { status: 'approved', sub: SUB }],
+    [{ bucket: 'selected', status: 'ready', decision: { action: 'approve', reviewer_kind: 'human' }, customer: statement('approved', '', ['revoke']) }, { status: 'approved', sub: '' }],
+    [{ bucket: 'selected', status: 'ready', decision: null, customer: statement('ready', '', ['approve', 'reject']) }, { status: 'ready', sub: '' }],
   ];
   for (const [p, want] of cases) assert.deepEqual(vb.expectedCustomerStatus(p), want, JSON.stringify(p));
+  // no statement, or none in the contract's shape: nothing to judge against (cannot verify)
+  const ready = statement('ready', '', ['approve', 'reject']);
+  for (const customer of [undefined, null, 'ready', {}, { ...ready, status: 'Ready for review' }, { ...ready, status: 'needs_clarification' },
+    { ...ready, sub_label: null }, { ...ready, reviewer_actions: 'approve' }, { ...ready, reviewer_actions: [1] }]) {
+    assert.equal(vb.expectedCustomerStatus({ bucket: 'selected', status: 'ready', decision: null, customer }), null, JSON.stringify(customer));
+    assert.equal(vb.serverCustomer({ customer }), null, JSON.stringify(customer));
+  }
+  assert.equal(vb.expectedCustomerStatus(null), null);
   const op = { assessment: { proposals: [
     { id: 'x-excl', bucket: 'excluded', reinstatable: true, decision: null },
     { id: 'a-sel', bucket: 'selected', decision: null },
@@ -2055,37 +2088,33 @@ test('the operator sample is what ops-agent reads: no membership, no action of i
   assert.deepEqual(op.assessment.proposals.map(p => p.allowed_actions), [[], [], [], []]);
 });
 
-test('serverActions: what the server accepts from the member, from the operator view\'s facts, never the operator\'s own actions (L3-5)', () => {
+test('serverActions: what the server states a reviewing member may record, never the operator\'s own actions (L3-5, B-02, B-03)', () => {
   const op = OP();
   const [p80, p85, p78, p39] = op.assessment.proposals;
-  assert.deepEqual([vb.serverActions(p80, op), vb.serverActions(p85, op)], [['revoke'], ['revoke']]);  // approved
-  assert.deepEqual([vb.serverActions(p78, op), vb.serverActions(p39, op)], [[], []]);  // an alternative; an exclusion nobody may decide
-  const undecided = OP();
-  for (const p of undecided.assessment.proposals) if (p.bucket === 'selected') Object.assign(p, { decision: null, decision_state: 'undecided' });
-  const [u80] = undecided.assessment.proposals;
-  assert.deepEqual(vb.serverActions(u80, undecided), ['approve', 'reject']);
-  assert.deepEqual(vb.serverActions({ ...u80, status: 'needs_clarification' }, undecided), ['reject']);
-  assert.deepEqual(vb.serverActions({ ...u80, evidence: [{ ...u80.evidence[0], exact: false }] }, undecided), ['reject']);  // no exact evidence: no approve
-  assert.deepEqual(vb.serverActions({ ...u80, status: 'excluded' }, undecided), []);  // a detail answered unavailable: nothing to decide
-  assert.deepEqual(vb.serverActions(u80, undecided, false), []);  // a member who may not review
-  assert.deepEqual(vb.serverActions(u80, { ...undecided, readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } }), []);
-  assert.deepEqual(vb.serverActions(u80, { ...undecided, readiness: { draft: false, reviewed: false, blockers: [] } }), []);
-  // an excluded, reinstatable code: reinstate (with exact evidence) and confirm; once reinstated, approve only where
-  // nothing withholds it; a confirmation is undone only
-  const excluded = { ...p39, reinstatable: true, decision: null };
-  assert.deepEqual(vb.serverActions(excluded, undecided), ['reinstate', 'confirm']);
-  const reinstated = { ...excluded, decision: { action: 'reinstate' } };
-  assert.deepEqual(vb.serverActions(reinstated, undecided), ['approve', 'reject', 'revoke']);
-  assert.deepEqual(vb.serverActions({ ...reinstated, approve_withheld_by: 'services.base_included' }, undecided), ['reject', 'revoke']);
-  assert.deepEqual(vb.serverActions({ ...excluded, decision: { action: 'confirm' } }, undecided), ['revoke']);
-  // the same-day E/M gate: held while a reinstated same-day procedure stands
-  const visit = { ...u80, code: '99213', checks: [{ id: vb.SAME_DAY_EM_GATE, status: 'warn' }] };
-  const procedure = { ...excluded, checks: [{ id: vb.SAME_DAY_PROCEDURE, status: 'warn' }], decision: { action: 'reinstate' } };
-  const sameDay = { ...undecided, assessment: { ...undecided.assessment, proposals: [visit, procedure] } };
-  assert.deepEqual(vb.serverActions(visit, sameDay), ['reject']);
-  assert.equal(vb.sameDayHeld(visit, { ...sameDay, assessment: { proposals: [visit, { ...procedure, decision: null }] } }), false);
-  // the operator's own allowed_actions are never read: the same facts, the same answer, whatever they say
-  assert.deepEqual(vb.serverActions({ ...u80, allowed_actions: ['revoke'] }, undecided), ['approve', 'reject']);
+  assert.deepEqual([vb.serverActions(p80), vb.serverActions(p85)], [['revoke'], ['revoke']]);  // approved
+  assert.deepEqual([p78.customer, p39.customer], [null, null]);  // an alternative; an exclusion nobody may decide: not on the page
+  assert.deepEqual([vb.serverActions(p78), vb.serverActions(p39)], [null, null]);
+  // refutation round 3: the statement is the answer, whatever the facts beside it would have suggested - a reinstated
+  // code whose detail a member answered unavailable (status excluded, nothing withholding approve) accepts revoke only
+  // (B-02), and one still waiting on its detail (status needs_clarification) accepts reject and revoke (B-03)
+  const answered = { ...p39, reinstatable: true, decision: { action: 'reinstate' }, approve_withheld_by: null, overlay_reason: 'detail_unavailable',
+    customer: statement('excluded', 'A needed detail is not documented', ['revoke']) };
+  assert.deepEqual(vb.serverActions(answered), ['revoke']);
+  const waiting = { ...answered, status: 'needs_clarification', approve_withheld_by: 'review.reinstatement', overlay_reason: '',
+    customer: statement('needs_detail', 'Reinstated in review', ['reject', 'revoke']) };
+  assert.deepEqual(vb.serverActions(waiting), ['reject', 'revoke']);
+  assert.deepEqual(vb.serverActions(waiting, false), []);  // a member who may not review is allowed nothing
+  // the operator's own allowed_actions are never read
+  assert.deepEqual(vb.serverActions({ ...waiting, allowed_actions: ['approve', 'reject', 'revoke'] }), ['reject', 'revoke']);
+  assert.deepEqual(vb.serverActions({ ...waiting, customer: null, allowed_actions: ['revoke'] }), null);
+  // no statement: cannot verify (null), except for a member who may not review, who is allowed nothing anyway
+  assert.equal(vb.serverActions({ ...p80, customer: undefined }), null);
+  assert.deepEqual(vb.serverActions({ ...p80, customer: undefined }, false), []);
+  assert.deepEqual(vb.serverActions(null), []);
+  // a copy: changing what the walk was told never changes the statement
+  const told = vb.serverActions(p80);
+  told.push('approve');
+  assert.deepEqual(p80.customer.reviewer_actions, ['revoke']);
 });
 
 test('checkCustomerVsOperator judges the offered actions by what the server accepts from the customer (L3-5)', () => {
@@ -2106,7 +2135,9 @@ test('checkCustomerVsOperator judges the offered actions by what the server acce
   // before any decision: approve and reject are what the server accepts; reinstate never is on a selected code
   const op = OP();
   const enc = CUST();
-  for (const p of op.assessment.proposals) if (p.bucket === 'selected') Object.assign(p, { decision: null, decision_state: 'undecided' });
+  for (const p of op.assessment.proposals) {
+    if (p.bucket === 'selected') Object.assign(p, { decision: null, decision_state: 'undecided', customer: statement('ready', '', ['approve', 'reject'], p.customer.number) });
+  }
   op.decisions.history = [];
   op.readiness = { draft: true, reviewed: false, blockers: ['45380 has no decision'] };
   enc.codes.forEach(code => Object.assign(code, { status: 'ready', status_label: 'Ready for review', sub_label: '', modifiers: [], decision: null,
@@ -2116,6 +2147,85 @@ test('checkCustomerVsOperator judges the offered actions by what the server acce
   enc.codes[0].allowed_actions = ['approve', 'reject', 'reinstate'];
   assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), ['customer.codes.actions']);
   assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.actions').reason, /45380 offers reinstate \(the server accepts approve, reject from this member\)/);
+});
+
+// --- refutation round 3 (2026-11-04): the page is judged against the server's statement of it (B-02, B-03) -----------
+
+// 45385 as a reinstated code (a reviewer brought back a documentation check's exclusion), in the operator view the walk
+// reads and on the genuine customer page, with what the server states the page shows for it.
+function reinstated45385(customerStatement, page, facts = {}) {
+  const op = OP();
+  const p = op.assessment.proposals[1];
+  const reinstate = { ...p.decision, id: 'd-85-reinstate', action: 'reinstate', note: 'Synthetic reinstatement.', acknowledgement: '', modifiers: [] };
+  Object.assign(p, { bucket: 'excluded', status: 'excluded', reinstatable: true, decision: reinstate, decision_state: 'reinstated',
+    approve_withheld_by: null, overlay_reason: '', customer: customerStatement, ...facts });
+  op.decisions.history[1] = clone(reinstate);
+  const cust = CUST();
+  Object.assign(cust.codes[1], { status: customerStatement.status, status_label: customerStatement.status_label, sub_label: customerStatement.sub_label,
+    modifiers: [], allowed_actions: [...customerStatement.reviewer_actions],
+    decision: { action: 'reinstate', by: reinstate.reviewer, by_kind: reinstate.reviewer_kind, at: reinstate.decided_at, note: reinstate.note, modifiers: [] },
+    ...page });
+  return { op, cust };
+}
+
+test('B-02: a reinstated code whose needed detail a member answered unavailable - Excluded, revoke only - passes genuine and fails forged', () => {
+  // the server: Excluded, "A needed detail is not documented", revoke only; the facts beside it (bucket excluded, status
+  // excluded, a reinstate decision, nothing withholding approve) are what a re-derivation read as ready with approve
+  const answered = statement('excluded', 'A needed detail is not documented', ['revoke'], 2);
+  const { op, cust } = reinstated45385(answered, { why: { quotes: [], qualifications: [] } }, { overlay_reason: 'detail_unavailable' });
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(cust, op)), []);
+  // forged: shown ready and offering approve (the server refuses approve with 409)
+  const forged = clone(cust);
+  Object.assign(forged.codes[1], { status: 'ready', status_label: 'Ready for review', sub_label: 'Reinstated in review', allowed_actions: ['approve', 'reject', 'revoke'] });
+  const results = vb.checkCustomerVsOperator(forged, op);
+  assert.deepEqual(failed(results), ['customer.codes.status', 'customer.codes.actions']);
+  assert.match(checkOf(results, 'customer.codes.status').reason, /45385 ready \(the server shows excluded\)/);
+  assert.match(checkOf(results, 'customer.codes.actions').reason, /45385 offers approve, reject \(the server accepts revoke from this member\)/);
+  // each half alone fails alone: approve offered on the right status; the right actions under another reason
+  const offer = clone(cust);
+  offer.codes[1].allowed_actions = ['approve', 'revoke'];
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(offer, op)), ['customer.codes.actions']);
+  const relabelled = clone(cust);
+  relabelled.codes[1].sub_label = 'Excluded by a documentation check';
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(relabelled, op)), ['customer.codes.status']);
+});
+
+test('B-03: a reinstated code still waiting on its detail - Needs a detail, reject and revoke - passes genuine and fails forged', () => {
+  // the server: Needs a detail ("Reinstated in review"), reject and revoke; a re-derivation read revoke only, because the
+  // overlay serves the code as needs_clarification while the server's rule reads the stored exclusion
+  const waiting = statement('needs_detail', 'Reinstated in review', ['reject', 'revoke'], 2);
+  const { op, cust } = reinstated45385(waiting, {}, { status: 'needs_clarification', approve_withheld_by: 'review.reinstatement' });
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(cust, op)), []);
+  const forged = clone(cust);
+  forged.codes[1].allowed_actions = ['approve', 'reject', 'revoke'];
+  const results = vb.checkCustomerVsOperator(forged, op);
+  assert.deepEqual(failed(results), ['customer.codes.actions']);
+  assert.match(checkOf(results, 'customer.codes.actions').reason, /45385 offers approve \(the server accepts reject, revoke from this member\)/);
+  const viewer = clone(cust);
+  viewer.permissions.can_review = false;  // offered to a member who may not review: the server accepts nothing from them
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(viewer, op)), ['customer.codes.actions']);
+  viewer.codes.forEach(code => { code.allowed_actions = []; });
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(viewer, op)), []);
+});
+
+test('an operator view that does not state the page cannot verify a status or an action, and never passes the page', () => {
+  for (const strip of [p => { delete p.customer; }, p => { p.customer = null; }, p => { p.customer = { ...p.customer, status: 'approve' }; },
+    p => { p.customer = { ...p.customer, reviewer_actions: undefined }; }]) {
+    const op = OP();
+    strip(op.assessment.proposals[0]);
+    const results = vb.checkCustomerVsOperator(CUST(), op);
+    assert.deepEqual(failed(results), ['customer.codes.status', 'customer.codes.actions'], strip.toString());
+    for (const id of ['customer.codes.status', 'customer.codes.actions']) {
+      assert.match(checkOf(results, id).reason, /^cannot verify: the operator view does not state .* for 45380$/, `${strip}: ${id}`);
+    }
+  }
+  // a member who may not review is allowed nothing whatever the view states: offered nothing, that is verified
+  const op = OP();
+  delete op.assessment.proposals[0].customer;
+  const viewer = CUST();
+  viewer.permissions.can_review = false;
+  viewer.codes.forEach(code => { code.allowed_actions = []; });
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(viewer, op)), ['customer.codes.status']);
 });
 
 test('checkCustomerVsOperator never reads a missing modifier as none: the comparison could not run (L3-3)', () => {
@@ -2137,7 +2247,11 @@ test('checkCustomerVsOperator never reads a missing modifier as none: the compar
 test('checkCustomerVsOperator accepts the one documented readiness difference: nothing approved, approved export withheld (L3-9)', () => {
   // every code rejected: the review is complete, and the approved export - approved codes only - has nothing to list
   const op = OP();
-  for (const p of op.assessment.proposals) if (p.decision) Object.assign(p.decision, { action: 'reject', modifiers: [] });
+  for (const p of op.assessment.proposals) {
+    if (!p.decision) continue;
+    Object.assign(p.decision, { action: 'reject', modifiers: [] });
+    p.customer = statement('excluded', 'Rejected in review', ['revoke'], p.customer.number);
+  }
   op.readiness = { draft: true, reviewed: true, blockers: [] };
   const enc = CUST();
   enc.codes.forEach(code => Object.assign(code, { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review', modifiers: [],
@@ -2189,26 +2303,24 @@ test('checkCustomerVsOperator accepts exactly the passages the server\'s one rul
 
 // customer_api.agent_approval (refutation round 2, L3-6): an approval is labelled agent review exactly when its approver
 // is an agent - a person's approval of a code an agent reinstated is the person's, with no label
-test('expectedCustomerStatus labels agent review exactly when the approver is an agent, never a person\'s approval of an agent\'s reinstatement (L3-6)', () => {
-  const at = { created_at: '2026-11-03T22:05:00+00:00' };
-  const human = { action: 'approve', reviewer: 'Reviewer Four', reviewer_kind: 'human', ...at };
-  const reinstated = { bucket: 'excluded', status: 'excluded', decision: human, reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent' } };
-  assert.deepEqual(vb.expectedCustomerStatus(reinstated), { status: 'approved', sub: null, human: true });
-  assert.equal(vb.agentReviewed(reinstated), false);
-  const agents = { ...reinstated, decision: { ...human, reviewer: SAMPLE_AGENT, reviewer_kind: 'agent' } };
-  assert.deepEqual(vb.expectedCustomerStatus(agents), { status: 'approved', sub: SUB, human: false });
-  assert.equal(vb.agentReviewed(agents), true);
-  assert.equal(vb.agentReviewed({ bucket: 'selected', decision: { ...human, action: 'reject' } }), false);
-  // the person's approval with no label passes; the same approval labelled an agent's fails
+test('checkCustomerVsOperator holds the agent label to the server\'s statement: an agent\'s approval only, never a person\'s approval of an agent\'s reinstatement (L3-6)', () => {
+  // customer_api.agent_approval: labelled agent review exactly when the approver is an agent; the operator view states
+  // the label the page shows (serializers.customer_codes), and the walk judges the page by it
   const op = OP();
-  Object.assign(op.assessment.proposals[1], { reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent', decided_at: '2026-11-03T22:04:00+00:00' } });
+  Object.assign(op.assessment.proposals[1], { reinstated_by: { reviewer: SAMPLE_AGENT, reviewer_kind: 'agent', decided_at: '2026-11-03T22:04:00+00:00' },
+    customer: statement('approved', '', ['revoke'], 2) });
   Object.assign(op.assessment.proposals[1].decision, { reviewer: 'Reviewer Four', reviewer_kind: 'human' });
   const enc = CUST();
   Object.assign(enc.codes[1].decision, { by: 'Reviewer Four', by_kind: 'human' });
   enc.codes[1].sub_label = '';
   assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), []);
-  enc.codes[1].sub_label = SUB;
-  assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.status').reason, /45385 sub label|a human approval labelled as an agent's/);
+  enc.codes[1].sub_label = SUB;  // the person's approval labelled an agent's
+  assert.deepEqual(failed(vb.checkCustomerVsOperator(enc, op)), ['customer.codes.status']);
+  assert.match(checkOf(vb.checkCustomerVsOperator(enc, op), 'customer.codes.status').reason, /45385 sub label "Agent-executed synthetic review — not clinical approval" \(the server shows ""\)/);
+  // the agent's approval unlabelled fails the same way
+  const unlabelled = CUST();
+  unlabelled.codes[0].sub_label = '';
+  assert.match(checkOf(vb.checkCustomerVsOperator(unlabelled, OP()), 'customer.codes.status').reason, /45380 sub label "" \(the server shows "Agent-executed/);
 });
 
 test('planDecisions plans from the actions the server accepts from the walking member, not the operator\'s own (L3-5)', () => {
@@ -2217,8 +2329,19 @@ test('planDecisions plans from the actions the server accepts from the walking m
   const plan = vb.planDecisions(enc, { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES);
   assert.deepEqual(plan.decisions.map(d => [d.code, d.action]), [['45331', 'approve'], ['45380', 'reject']]);
   assert.deepEqual(vb.planDecisions(enc, { reject: null }, NOTES, { canReview: false }).decisions, []);
-  const notFinal = encounter({ readiness: { draft: true, reviewed: false, blockers: [vb.NOT_FINAL_BLOCKER] } });
-  assert.deepEqual(vb.planDecisions(notFinal, { reject: null }, NOTES).decisions, []);
+  // refutation round 3 (B-02, B-03): only what the server states it accepts - none on an assessment that is not the
+  // final one (review._allowed: the statement then allows nothing), none where the view states nothing
+  const notFinal = encounter();
+  for (const p of notFinal.assessment.proposals) if (p.customer) p.customer.reviewer_actions = [];
+  assert.deepEqual(vb.planDecisions(notFinal, { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES).decisions, []);
+  const unstated = encounter();
+  for (const p of unstated.assessment.proposals) delete p.customer;
+  assert.deepEqual(vb.planDecisions(unstated, { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES).decisions, []);
+  // reject only (approve withheld): such a code is not one the screen offers to approve, so it is neither approved nor
+  // taken as the designated rejection
+  const withheld = encounter();
+  for (const p of withheld.assessment.proposals) if (p.customer) p.customer.reviewer_actions = ['reject'];
+  assert.deepEqual(vb.planDecisions(withheld, { reject: { family: 'gi.colonoscopy', prefer_codes: ['45380'] } }, NOTES).decisions.map(d => [d.code, d.action]), []);
 });
 
 test('readCustomerDom reads the DOM contract\'s hooks, and checkResultList holds each row to the API', () => {
@@ -2843,7 +2966,8 @@ function pendingOperator() {
   assert.equal(op.permissions.can_review, false);
   for (const p of op.assessment.proposals) {
     if (p.bucket !== 'selected') continue;
-    Object.assign(p, { decision: null, decision_state: 'undecided', allowed_actions: [] });
+    Object.assign(p, { decision: null, decision_state: 'undecided', allowed_actions: [],
+      customer: statement('ready', '', ['approve', 'reject'], p.customer.number) });  // what the page shows a reviewer
   }
   op.decisions.history = [];
   op.readiness = { draft: true, reviewed: false, blockers: ['45380 has no decision.'] };
@@ -2920,6 +3044,8 @@ function fakeSite({ leak = {} } = {}) {
       created_at: at, decided_at: at, carried_at: null, acknowledgement: body.acknowledgement, carried_from: null, invalidated: null, revision_number: 1, modifiers };
     p.decision_state = body.action === 'approve' ? 'approved' : 'rejected';
     p.allowed_actions = [];  // ops-agent's own: none
+    p.customer = body.action === 'approve' ? statement('approved', SUB, ['revoke'], p.customer.number)
+      : statement('excluded', 'Rejected in review', ['revoke'], p.customer.number);
     state.operator.decisions.history.push(clone(p.decision));
     Object.assign(code, body.action === 'approve'
       ? { status: 'approved', status_label: 'Approved', sub_label: SUB } : { status: 'excluded', status_label: 'Excluded', sub_label: 'Rejected in review' });

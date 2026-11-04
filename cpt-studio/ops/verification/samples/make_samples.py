@@ -13,7 +13,10 @@ the product: the product's own fixtures are its serializers' (tests/fixtures/cus
 
 The operator view is what the walk's operator account reads: ops-agent holds a grant and NO membership (CORE-UX-DESIGN.md
 9, decision (h)), so the view allows no review action of its own (studio.operator.ReadOnlyAccess) - the tools judge the
-customer's actions by what the server accepts from the customer, never by the operator's (refutation round 2, L3-5).
+customer's actions by what the server accepts from the customer, never by the operator's (refutation round 2, L3-5). Each
+code the customer page lists carries the view's statement of that page ('customer': serializers.customer_codes - its
+number, status, labels and the actions a member who may review is allowed), which the tools judge the page and the
+exports against (refutation round 3, B-02 and B-03).
 
 The customer reports are never written in a grammar of this script's own (refutation round 2, L3-1: they once were, and
 every genuine export failed the checks the samples passed). This script writes the report SNAPSHOTS
@@ -108,7 +111,15 @@ def op_decision(pid: str, code: str, modifiers: list) -> dict:
             'revision_number': 1, 'modifiers': modifiers}
 
 
-def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=None, reinstatable=False) -> dict:
+def op_customer(number: int) -> dict:
+    """What the customer page shows for an agent's approval, as the operator view states it (serializers.customer_codes:
+    customer_api.code_rows' row - Approved, labelled agent review, revoke only for a member who may review)."""
+    return {'number': number, 'status': 'approved', 'status_label': 'Approved', 'sub_label': AGENT_SUB,
+            'reviewer_actions': ['revoke']}
+
+
+def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=None, reinstatable=False,
+                customer=None) -> dict:
     return {'id': pid, 'key': f'{code}:{pid[-4:]}', 'bucket': bucket, 'code': code, 'code_kind': 'cpt1',
             'family': 'gi.egd' if code.startswith('43') else 'gi.colonoscopy',
             'family_label': 'Upper GI endoscopy' if code.startswith('43') else 'Colonoscopy',
@@ -127,7 +138,7 @@ def op_proposal(pid, code, bucket, status, evidence, *, decision=None, support=N
             if code in ('45380', '45385') else [],
             'support': support or {}, 'clarification_ids': [], 'decision': decision,
             'decision_state': 'approved' if decision else 'undecided', 'reinstated_by': None,
-            'allowed_actions': [], 'approve_withheld_by': None,
+            'allowed_actions': [], 'approve_withheld_by': None, 'overlay_reason': '', 'customer': customer,
             'proposed_by': ['corti', 'astra', 'fable'], 'listed_by': [], 'corti_relation': '',
             'participant_positions': [], 'reference_check': {'state': 'checked', 'detail': ''}, 'retrieval': [],
             'phases': {'astra': 'independent'}, 'confirmed': []}
@@ -151,9 +162,9 @@ def run(name: str, provider: str, purpose: str, model: str, returned: str, usage
 def operator_encounter() -> dict:
     proposals = [
         op_proposal(P80, '45380', 'selected', 'ready', [span(COL1)], decision=op_decision(P80, '45380', []),
-                    support=support_for(COL1, SUMMARIES[P80])),
+                    support=support_for(COL1, SUMMARIES[P80]), customer=op_customer(1)),
         op_proposal(P85, '45385', 'selected', 'ready', [span(COL2)], decision=op_decision(P85, '45385', ['XS']),
-                    support=support_for(COL2, SUMMARIES[P85])),
+                    support=support_for(COL2, SUMMARIES[P85]), customer=op_customer(2)),
         op_proposal(P78, '45378', 'alternative', 'informational', [span(CECUM)]),
         op_proposal(P39, '43239', 'excluded', 'excluded', [span(PLAN)]),
     ]
