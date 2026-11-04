@@ -1024,8 +1024,11 @@ def _assessment_blockers(encounter, assessment):
             continue
         reviewable += 1
         view = views.get(proposal.key)
-        if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision):
-            # Also when this E/M was approved before the procedure was brought back.
+        if (reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision)
+                and not (view is not None and view.reason == DETAIL_UNAVAILABLE)):
+            # Also when this E/M was approved before the procedure was brought back. A visit a member's answer
+            # excluded (its separate_em row answered 'Not documented' or 'Cannot confirm', refutation round 3 B-05) is
+            # resolved (decision (f)): it names no same-day blocker, and its approval stays blocked by the view's own.
             blockers.append(_same_day_blocker(proposal, reinstated))
         if view is not None and view.blocker:
             blockers.append(view.blocker)

@@ -295,6 +295,10 @@ class SameDayHeldVisitApiTests(ApiCase):
         self.ready_means_approvable(doc)
         stored, derived = state_pair(s.encounter)
         self.assertEqual(stored, derived)
+        # the visit the answer excluded is resolved (decision (f)): readiness names no same-day blocker for it any more
+        # (integration of round 3, the overlay owner's request), while the procedure still waits on its own question
+        self.assertFalse([blocker for blocker in review.readiness(s.encounter)['blockers'] if '99213' in blocker],
+                         review.readiness(s.encounter)['blockers'])
 
 
 class SameDayHeldVisitPipelineTests(PipelineCase):
