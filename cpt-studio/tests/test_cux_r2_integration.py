@@ -3,7 +3,8 @@
 - The approved export waits while the date row asks the member to confirm an upload date that chose between the
   document's own dates (L7-02 hardening): a readiness blocker with its customer sentence; confirmed, it is gone.
 - "Action needed" names a conflict with the document's own date only where the document states one (L7-03's class).
-- A re-check that could not be completed is said in the activity (L5-5), with no provider's name.
+- A re-check that could not be completed is said in the activity (L5-5), with no provider's name - once its outcome is
+  known: failed or not sent at once, an unknown one when it is reconciled (refutation round 3, C-R3-2 and C-R3-3).
 - The page titles a step waiting its turn after a finished one "Waiting for the next step" (L5-7), as the server's
   message says.
 
@@ -69,7 +70,9 @@ class RecheckOutcomeActivityTests(PipelineCase):
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run='r', state='failed',
                      http_status=None, usage={}, latency_ms=1.0, purpose='primary')
         said = [entry for entry in customer_api.activity(encounter) if entry['event'] == 'check_not_completed']
-        self.assertEqual(len(said), 3)  # failed, unknown, not sent - never the succeeded one, never the primary run
+        # failed and not sent - never the succeeded one, never the primary run, and never an outcome still unknown,
+        # which is being confirmed: refutation round 3, C-R3-2 (its reconciliation says it: tests/test_cux_r3_overlay)
+        self.assertEqual(len(said), 2)
         self.assertEqual({entry['summary'] for entry in said}, {customer_api.RECHECK_NOT_COMPLETED[1]})
         for word in ('Corti', 'provider', 'second review'):
             self.assertNotIn(word.lower(), customer_api.RECHECK_NOT_COMPLETED[1].lower())

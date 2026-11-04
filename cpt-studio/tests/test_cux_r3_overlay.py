@@ -1,6 +1,7 @@
 """Refutation round 3 of the core repair and customer interface (2026-11-04), repair owner "overlay-r3": the details
-save's stored state and the office visit a reinstated same-day procedure holds. Each finding is reproduced first
-by the test that names it (refute-r3: lens B's B-01 and B-05, lens C's C-R3-1).
+save's stored state, the office visit a reinstated same-day procedure holds, and the re-check's activity line. Each
+finding is reproduced first by the test that names it (refute-r3: lens B's B-01 and B-05, lens C's C-R3-1, C-R3-2 and
+C-R3-3).
 
 - B-01 / C-R3-1: every details save - a confirmation of the date, a removal, a correction, a value, an answer - leaves
   the stored list state (Encounter.state: what the document, the list, the review queue and its badge read) equal to
@@ -9,15 +10,24 @@ by the test that names it (refute-r3: lens B's B-01 and B-05, lens C's C-R3-1).
 - B-05: an office visit that a reviewer's reinstatement of a same-day procedure holds is asked what it waits for - a
   significant, separately identifiable visit (fact separate_em), as beside a procedure the engine selected - and reads
   "Needs a detail" with the row that asks it: never "Ready for review" beside no approve.
+- C-R3-2: while a re-check's outcome is being confirmed the activity never says it could not be completed.
+- C-R3-3: a re-check whose unknown outcome was reconciled says once that it could not be completed, whichever path
+  left the outcome unknown (a read that timed out after sending, a worker that died mid-send, an outcome that could
+  not be recorded), as the progress panel says it then.
 
 Synthetic data only; every provider is an in-process fake (no network).
 """
+import hashlib
 import json
 from dataclasses import replace
+from datetime import timedelta
+from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
-from studio import answers, customer_api, models, review
+from studio import answers, audit, customer_api, jobs, models, progress, review
+from studio.types import RawExchange
 from studio.validation import checks
 from tests.support import pipeline_factories as pf
 from tests.test_cux_r2_details import HEAD, NO_DATE, TWO_DATES, PipelineCase
@@ -25,7 +35,10 @@ from tests.test_cux_r2_overlay import (EM, NO_COLONOSCOPY, OFFICE_READY_DENIED, 
                                        shape_of)
 from tests.test_cux_review import actions, decide
 from tests.test_pipeline_api import drain
+from tests.test_repairs_7c8_p1reports import COLONOSCOPY
+from tests.test_repairs_gi2_present import BIOPSY, SNARE, Harness
 from tests.test_repairs_r4c_lead_review import excluded_em_result, selected_em_result
+from tests.test_services_second_review import TwoPassProvider
 
 SAME_DAY_WORDS = customer_api.WITHHELD_WORDS[review.SAME_DAY_EM_GATE]
 # the visit with no basis for its level, beside two documented dates: its basis is asked and the date confirmed
@@ -307,3 +320,155 @@ class SameDayHeldVisitPipelineTests(PipelineCase):
         self.assertFalse([code['code'] for code in doc['codes']
                           if code['status'] == 'ready' and 'approve' not in code['allowed_actions']])
         self.assertEqual((doc['state'], self.encounter(encounter_id).state), ('awaiting_detail', 'needs_clarification'))
+
+
+# --- C-R3-2 and C-R3-3: the re-check's activity line ------------------------------------------------------------------
+
+NOT_COMPLETED = customer_api.RECHECK_NOT_COMPLETED[0]
+
+
+def said(encounter):
+    return [entry['event'] for entry in customer_api.activity(encounter)].count(NOT_COMPLETED)
+
+
+class RecheckActivityRowsTests(TestCase):
+    """The rows the line is read from: the re-check's own outcome where it is known at the send (failed, not sent),
+    and the reconciliation of one whose outcome was unknown - never the unknown outcome itself."""
+
+    def test_the_line_follows_the_outcome_once_it_is_known(self):
+        s = pf.scenario()
+        for state in ('unknown', 'succeeded'):
+            audit.record(s.workspace, 'provider.finished', encounter=s.encounter, run='r', state=state,
+                         http_status=None, usage={}, latency_ms=1.0, purpose='second_review')
+        self.assertEqual(said(s.encounter), 0)  # being confirmed, or answered
+        for state in ('failed', 'not_sent'):
+            audit.record(s.workspace, 'provider.finished', encounter=s.encounter, run='r', state=state,
+                         http_status=None, usage={}, latency_ms=1.0, purpose='second_review')
+        self.assertEqual(said(s.encounter), 2)
+        primary = pf.provider_run(s.encounter, s.revision, state='unknown')
+        second = pf.provider_run(s.encounter, s.revision, state='unknown')
+        models.ProviderRun.objects.filter(pk=second.pk).update(purpose=models.ProviderRun.SECOND_REVIEW)
+        audit.record(s.workspace, 'provider.reconciled', encounter=s.encounter, actor=s.reviewer, run=str(second.pk))
+        self.assertEqual(said(s.encounter), 2)  # a row naming a run no reconciliation settled says nothing
+        models.ProviderRun.objects.filter(pk__in=(primary.pk, second.pk)).update(reconciled_at=timezone.now(),
+                                                                               reconciled_by=s.reviewer)
+        audit.record(s.workspace, 'provider.reconciled', encounter=s.encounter, actor=s.reviewer, run=str(primary.pk))
+        self.assertEqual(said(s.encounter), 3)  # the re-check's reconciliation only, never the document review's
+        for bad in ('not-a-run', str(pf.provider_run(pf.scenario().encounter, s.revision).pk), None):
+            audit.record(s.workspace, 'provider.reconciled', encounter=s.encounter, actor=s.reviewer, run=bad)
+        self.assertEqual(said(s.encounter), 3)  # a row naming no run of this document's says nothing
+        entries = [entry for entry in customer_api.activity(s.encounter) if entry['event'] == NOT_COMPLETED]
+        self.assertEqual({(entry['summary'], entry['actor']) for entry in entries},
+                         {(customer_api.RECHECK_NOT_COMPLETED[1], 'CPT Studio')})
+
+
+class RecheckActivityPathTests(Harness):
+    """End to end: the re-check asked from the customer page (session decision (n)) and each way it can end."""
+
+    NOTE = 'Synthetic reconciliation: the outcome was settled from the vendor console.'
+
+    def ask(self, provider):
+        self.use(provider)
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.approve(encounter_id, '45385')
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        return encounter_id
+
+    def second(self, encounter_id):
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose='second_review')
+        return run
+
+    def doc(self, encounter_id):
+        reply = self.client.get(f'/api/encounters/{encounter_id}')
+        self.assertEqual(reply.status_code, 200, reply.content)
+        return reply.json()
+
+    def events(self, doc):
+        return [entry['event'] for entry in doc['activity']]
+
+    def reconcile(self, encounter_id):
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(self.second(encounter_id).pk), 'note': self.NOTE})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+
+    def assert_confirming_then_said_once(self, encounter_id):
+        doc = self.doc(encounter_id)
+        self.assertEqual(doc['progress']['phase'], 'being_confirmed')
+        self.assertNotIn(NOT_COMPLETED, self.events(doc))  # C-R3-2: never while it is being confirmed
+        self.reconcile(encounter_id)
+        doc = self.doc(encounter_id)
+        self.assertEqual((doc['progress']['phase'], doc['progress']['message']), ('partial', progress.RECHECK_INCOMPLETE))
+        events = self.events(doc)
+        self.assertEqual(events.count(NOT_COMPLETED), 1, events)  # C-R3-3: said once it is settled
+        self.assertLess(events.index('check_requested'), events.index(NOT_COMPLETED))
+
+    def test_a_read_that_timed_out_after_sending(self):
+        encounter_id = self.ask(TwoPassProvider(first=[SNARE], later=[BIOPSY], outcomes=['succeeded', 'unknown']))
+        drain()
+        self.assertEqual((self.second(encounter_id).state, self.second(encounter_id).sent), ('unknown', True))
+        self.assert_confirming_then_said_once(encounter_id)
+
+    def test_a_worker_that_died_mid_send(self):
+        provider = TwoPassProvider(first=[SNARE], later=[BIOPSY])
+        encounter_id = self.ask(provider)
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.REVIEW2)
+
+        class Died(BaseException):
+            """A worker death after the request left: run_job's handler never sees it."""
+
+        def dying(request, *, deadline_s):
+            provider.requests.append(request)
+            raise Died()
+
+        with mock.patch.object(provider, 'send', side_effect=dying), self.assertRaises(Died):
+            jobs.run_job(job)
+        earlier = timezone.now() - timedelta(hours=1)
+        models.Job.objects.filter(pk=job.pk).update(started_at=earlier)
+        models.ProviderRun.objects.filter(pk=self.second(encounter_id).pk).update(
+            created_at=earlier + timedelta(seconds=1))
+        jobs.mark_stale()
+        self.assertEqual(self.second(encounter_id).state, 'unknown')
+        self.assertFalse(models.AuditEvent.objects.filter(encounter_id=encounter_id, event='provider.finished',
+                                                          data__purpose='second_review').exists())
+        self.assert_confirming_then_said_once(encounter_id)
+
+    def test_an_outcome_that_could_not_be_recorded(self):
+        encounter_id = self.ask(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        real = jobs._finish_run
+
+        def failing(run, exchange):
+            if run.purpose == models.ProviderRun.SECOND_REVIEW:
+                raise RuntimeError('synthetic: the outcome write failed')
+            return real(run, exchange)
+
+        with mock.patch('studio.jobs._finish_run', side_effect=failing), self.assertLogs('studio.jobs', 'ERROR'):
+            drain()
+        self.assertEqual((self.second(encounter_id).state, self.second(encounter_id).sent), ('unknown', True))
+        self.assert_confirming_then_said_once(encounter_id)
+
+    def test_control_an_answered_re_check_says_nothing(self):
+        encounter_id = self.ask(TwoPassProvider(first=[SNARE], later=[BIOPSY, SNARE]))
+        drain()
+        self.assertEqual(self.second(encounter_id).state, 'succeeded')
+        self.assertNotIn(NOT_COMPLETED, self.events(self.doc(encounter_id)))
+
+    def test_control_a_failed_re_check_says_it_once_when_it_ends(self):
+        class Refused(TwoPassProvider):
+            """The re-check is sent and answered HTTP 503: a recorded failure."""
+
+            def send(self, request, *, deadline_s):
+                if self.requests:
+                    self.requests.append(request)
+                    return RawExchange(outcome='failed', sent=True, http_status=503, response_bytes=b'{}',
+                                       response_sha256=hashlib.sha256(b'{}').hexdigest(), error='synthetic 503')
+                return super().send(request, deadline_s=deadline_s)
+
+        encounter_id = self.ask(Refused(first=[SNARE], later=[BIOPSY]))
+        drain()
+        self.assertEqual(self.second(encounter_id).state, 'failed')
+        events = self.events(self.doc(encounter_id))
+        self.assertEqual(events.count(NOT_COMPLETED), 1, events)
+        self.assertLess(events.index('check_requested'), events.index(NOT_COMPLETED))
