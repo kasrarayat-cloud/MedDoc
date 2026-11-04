@@ -235,5 +235,281 @@
   "the request side",
   "the reader labels (the head already differs from the installed revision)"
  ],
- "cost": "Linear, bounded: V05 reads each indication section's heading line once more, the read _statement_line_end already makes (bounded by the section); V06 is a character class in place of one character; V12 widens one alternative of one pattern pass and adds one span comparison per in-person match read (CLAUSE_REACH-bounded, as before). Probed after code on the battery rows and the R05 cost probe (scratch-r2-variants/probes/probe_cost.py: common indication lines beside acts done today, with and without their final full stop - every act done today must stay READY)."
+ "cost": "Linear, bounded: V05 reads each indication section's heading line once more, the read _statement_line_end already makes (bounded by the section); V06 is a character class in place of one character; V12 widens one alternative of one pattern pass and adds one span comparison per in-person match read (CLAUSE_REACH-bounded, as before). Probed after code on the battery rows and the R05 cost probe (scratch-r2-variants/probes/probe_cost.py: common indication lines beside acts done today, with and without their final full stop - every act done today must stay READY).",
+ "offers_before_code_20261104": {
+  "note": "Measured before code (not a prediction): the 24 rows' second-review offers, tests/test_gi4_po.offers_of with the row's own answer and with an empty one, on e25286af0's code with the rows added (scratch-r2-variants/probes/offers.py against the sealed export; out/offers-base.json). Committed with the rows, before code, so tests/test_cux_hold.RegisterOfferTests reads them; the 'offers' key above says what the code is expected to move, and an after-code amendment records the head's.",
+  "offer_battery": {
+   "R8 R2 V R05 control, a biopsy today under an unterminated indication": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, a snare today under the unterminated line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the dash-form line with its period": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the unterminated line in an untitled note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05a indication line without its period, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05b dash-form indication line cited alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash attributive compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash compound and a biopsy today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash predicate compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 em dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash compound, biopsy-confirmed adenoma": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash field label answered No": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 V R06 non-breaking hyphen compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06a en dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12 control, seen in-person today": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, history": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12b wasn't seen in person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12c the contraction with a curly apostrophe, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12d isn't seen in person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12e the patient wasn't seen, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12f two spaces in the phrase, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12g non-breaking hyphen in in-person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   }
+  }
+ }
 }

@@ -718,6 +718,11 @@ class RegisterOfferTests(SimpleTestCase):
                          .read_text(encoding='utf-8'))
         declared.update(next(value['offer_battery'] for key, value in reversed(list(em2.items()))
                              if isinstance(value, dict) and 'offer_battery' in value))
+        # the variant repair's (R8 R2 V) in cux-r2-variants.json: its latest record (the head's, after code)
+        variants = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations'
+                               / 'cux-r2-variants.json').read_text(encoding='utf-8'))
+        declared.update(next(value['offer_battery'] for key, value in reversed(list(variants.items()))
+                             if isinstance(value, dict) and 'offer_battery' in value))
         names = [n for n in battery.CASES if n.startswith('R8 ')]
         self.assertEqual(sorted(declared), sorted(names))
         for name in names:

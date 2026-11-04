@@ -706,6 +706,111 @@ R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (
 R8_USER.update({name: {'service_date': '2026-10-06'} for name in (
     'R8 D13 named EGD control, h4-03 as written', 'R8 D13 named EGD, we stopped in the stomach',
     'R8 D13 named EGD, stopped in the stomach, two passages', 'R8 D13 named EGD control, two passages')})
+# --- variant repair, round 2 (2026-11-04; tests/fixtures/gi4/declarations/cux-r2-variants.json): refutation round 2's
+# L1/R05, L1/R06 and L1/R12 - a form a reader already declares, written in a variant spelling or layout - each with its
+# controls. Prefix 'R8 R2 V ' (a register row: the round-4 counts leave it out; tests/test_cux_hold.RegisterOfferTests
+# reads its offers from cux-r2-variants.json). R05: R8 D8's indication line inside a titled report without its final
+# period. R06: P1 rule 2's attributive act compound (the lead's L3) written with a Unicode hyphen or dash. R12: R8 D12's
+# "not seen in person" (cues.NOT_IN_PERSON) hyphenated, contracted or written with two spaces.
+R2V_IND = 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare'  # R8_INDICATION, no final period
+R2V_IND_DASH = 'Indication: surveillance - sigmoid polyp removed with hot snare'
+R2V_TODAY_SNARE = 'A 9 mm polyp in the sigmoid colon was removed with a hot snare.'
+R2V_BIOPSY_TODAY = 'Cold forceps biopsies were taken from the distal esophagus.'
+R2V_PREDICATE = 'A 7 mm polyp in the sigmoid colon was snare–resected.'
+R2V_EXAM = 'Vital Signs and Exam\n'
+
+
+def _r2v_indication(line, *after):
+    """R8 D8's titled colonoscopy report with ``line`` as its indication line, and ``after`` at its end."""
+    return _r8(R8_DIAG + line + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX + '\n', *after)
+
+
+def _r2v_barrett(dash):
+    """The lead's L3 sentence with ``dash`` joining its compound."""
+    return f'Surveillance of biopsy{dash}proven Barrett esophagus was performed.'
+
+
+def _r2v_exam(line):
+    """R8 D12's h4-01 time-only twin with ``line`` as the first line under its examination heading."""
+    return _r8_edit(R8_EM, (R2V_EXAM, R2V_EXAM + line + '\n'))
+
+
+CASES.update({
+    # R05 (R8 D8): the heading line of an indication section is never today's statement, with or without its final
+    # punctuation; the lines after it read as before (today's report inside a titled one, the indication outside one)
+    'R8 R2 V R05a indication line without its period, the reach sentence cited': (
+        _r2v_indication(R2V_IND), [('45380', R8_TODAY_BX, 'done'), ('45385', (R2V_IND, R8_CECUM), 'not_done')]),
+    'R8 R2 V R05b dash-form indication line cited alone': (
+        _r2v_indication(R2V_IND_DASH), [('45380', R8_TODAY_BX, 'done'), ('45385', R2V_IND_DASH, 'not_done')]),
+    'R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited': (
+        _r2v_indication(R2V_IND + ';'),
+        [('45380', R8_TODAY_BX, 'done'), ('45385', (R2V_IND + ';', R8_CECUM), 'not_done')]),
+    'R8 R2 V R05 control, the dash-form line with its period': (
+        _r2v_indication(R2V_IND_DASH + '.'),
+        [('45380', R8_TODAY_BX, 'done'), ('45385', R2V_IND_DASH + '.', 'not_done')]),
+    'R8 R2 V R05 control, a biopsy today under an unterminated indication': (
+        _r2v_indication('Indication: surveillance'), [('45380', R8_TODAY_BX, 'done')]),
+    'R8 R2 V R05 control, a snare today under the unterminated line': (
+        _r2v_indication(R2V_IND, R2V_TODAY_SNARE),
+        [('45380', R8_TODAY_BX, 'done'), ('45385', R2V_TODAY_SNARE, 'done')]),
+    'R8 R2 V R05 control, the unterminated line in an untitled note': (
+        _r8(B + 'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n' + R2V_IND
+            + '\nProcedure: Colonoscopy\n' + R8_CECUM + '\n' + R8_TODAY_BX),
+        [('45380', R8_TODAY_BX, 'done'), ('45385', (R2V_IND, R8_CECUM), 'not_done')]),
+    # R06 (P1 rule 2, the lead's L3): the compound's hyphen in a Unicode spelling, read where the ASCII hyphen is
+    'R8 R2 V R06a en dash compound, no act today': (
+        _r8(R8_EGD_DX, _r2v_barrett('–')), [('43239', _r2v_barrett('–'), 'not_done')]),
+    'R8 R2 V R06 non-breaking hyphen compound, no act today': (
+        _r8(R8_EGD_DX, _r2v_barrett('‑')), [('43239', _r2v_barrett('‑'), 'not_done')]),
+    'R8 R2 V R06 em dash compound, no act today': (
+        _r8(R8_EGD_DX, _r2v_barrett('—')), [('43239', _r2v_barrett('—'), 'not_done')]),
+    'R8 R2 V R06 en dash compound, biopsy-confirmed adenoma': (
+        _r8(R8_EGD_DX, 'Follow-up of a biopsy–confirmed gastric adenoma was performed.'),
+        [('43239', 'Follow-up of a biopsy–confirmed gastric adenoma was performed.', 'not_done')]),
+    'R8 R2 V R06 en dash field label answered No': (
+        R2_SNARED + 'Polyp 1 - sigmoid colon, 7 mm\nSnare–resected: No\nForceps–removed: Yes\n',
+        [('45385', R2_SNARED_Q, 'no_ready')]),
+    'R8 R2 V R06 control, an en dash attributive compound': (
+        R2_SNARED + 'The snare–resected sigmoid polyp was not retrieved.\n', [('45385', R2_SNARED_Q, 'done')]),
+    'R8 R2 V R06 control, an en dash compound and a biopsy today': (
+        _r8(R8_EGD_DX, _r2v_barrett('–'), R2V_BIOPSY_TODAY), [('43239', R2V_BIOPSY_TODAY, 'done')]),
+    'R8 R2 V R06 control, an en dash predicate compound': (
+        _r8(R8_COLON, R2V_PREDICATE), [('45378', R8_CECUM, 'done'), ('45385', R2V_PREDICATE, 'done')]),
+    # R12 (R8 D12, cues.NOT_IN_PERSON): the declared phrase hyphenated, contracted, or written with two spaces
+    'R8 R2 V R12a not seen in-person, exam': (
+        _r2v_exam('Patient not seen in-person today.'), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 R2 V R12a not seen in-person, history': (
+        _r8_edit(R8_EM, (R8_CC, R8_CC + ' Patient not seen in-person today.')), [('99204', R8_TWIN, 'no_ready')]),
+    "R8 R2 V R12b wasn't seen in person, exam": (
+        _r2v_exam("Patient wasn't seen in person today."), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 R2 V R12c the contraction with a curly apostrophe, exam': (
+        _r2v_exam('Patient wasn’t seen in person today.'), [('99204', R8_TWIN, 'no_ready')]),
+    "R8 R2 V R12d isn't seen in person, exam": (
+        _r2v_exam("Patient isn't seen in person today."), [('99204', R8_TWIN, 'no_ready')]),
+    "R8 R2 V R12e the patient wasn't seen, exam": (
+        _r2v_exam("The patient wasn't seen."), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 R2 V R12f two spaces in the phrase, exam': (
+        _r2v_exam('Patient not  seen in person today.'), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 R2 V R12g non-breaking hyphen in in-person, exam': (
+        _r2v_exam('Patient not seen in‑person today.'), [('99204', R8_TWIN, 'no_ready')]),
+    'R8 R2 V R12 control, seen in-person today': (
+        _r2v_exam('Patient seen in-person today.'), [('99204', R8_TWIN, 'done')]),
+})
+R8_USER.update({name: {'service_date': '2026-10-26'} for name in CASES if name.startswith('R8 R2 V R12')})
+# Measured and recorded, never repaired here (new wording: ACCURACY-RESIDUALS.md, "Core repair, refutation round 2"):
+# each reads READY on e25286af0 and on this package's head. Their truths are honest, so they stay out of CASES (a
+# register row carries no violation: tests/test_gi4_battery.AssessBatteryTests.test_no_new_violation);
+# tests/test_cux_r2_variants.py reads them with run_row, and the declaration records their readings.
+R2V_RESIDUALS = {
+    'R8 R2 V residual R06, the space form biopsy proven': (
+        _r8(R8_EGD_DX, _r2v_barrett(' ')), [('43239', _r2v_barrett(' '), 'not_done')]),
+    'R8 R2 V residual R06, the noun compound polypectomy scar': (
+        _r8(R8_COLON, 'The polypectomy scar in the sigmoid colon was healed.'),
+        [('45385', 'The polypectomy scar in the sigmoid colon was healed.', 'not_done')]),
+    'R8 R2 V residual R12, not evaluated in person': (
+        _r2v_exam('Patient not evaluated in person today.'), [('99204', R8_TWIN, 'no_ready')]),
+}
+R2V_RESIDUAL_USER = {'R8 R2 V residual R12, not evaluated in person': {'service_date': '2026-10-26'}}
 REVIEW_NOTE = ('Provisional author truths; no qualified GI coder has reviewed them. "X|MAY" marks a truth the second '
                'review disputes: J8 (its identity sentence reads like h4-06\'s own), E3 (the judge: arguable), and the '
                'anastomosis row (45378-53, 45330 or 45300: coders differ).')
