@@ -858,11 +858,23 @@ NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?s
 # installed.
 EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
                         r'consisting\s+of|which\s+(?:covered|included))\b')
+# Variant repair, round 2 (tests/fixtures/gi4/declarations/cux-r2-variants.json, V06 and V12): the hyphen of a declared
+# compound or phrase in its ASCII spelling and its Unicode ones - U+2010 hyphen, U+2011 non-breaking hyphen, U+2012
+# figure dash, U+2013 en dash, U+2014 em dash ("biopsy\u2013proven", "in\u2011person"). A character class; read by
+# services' attributive compounds (COMPOUND_PARTICIPLE_AFTER), NOT_IN_PERSON and detect._PV1_ATTENDANCE only.
+HYPHEN = r'[\-\u2010-\u2014]'
 # GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
 # contact, a telephone or phone contact, an audio-only one, a no-show, a patient who did not arrive. Read only to HOLD an
 # E/M reading (detect._not_in_person). Video, telehealth and virtual visits are not among them: installed reads those as
-# visits (EM_VISIT), and holding them is a policy this round does not make.
-NOT_IN_PERSON = rx(r'\bnot\s+seen\s+in\s+(?:the\s+)?(?:office|clinic|person)\b|\bno\s+in[- ]person\b'
+# visits (EM_VISIT), and holding them is a policy this round does not make. Variant repair, round 2 (refutation L1/R12;
+# cux-r2-variants.json V12): the declared phrase "not seen in person" (in the office, in clinic) is also read hyphenated
+# ("not seen in-person", the hyphen in HYPHEN's spellings) and with its negation contracted ("wasn't seen in person",
+# "isn't", an ASCII or a U+2019 apostrophe), "(patient|pt|she|he) (was|is) not seen" as "... wasn't seen", and "no
+# in-person" with HYPHEN's spellings; "not evaluated in person" is another verb and is not read.
+NOT_IN_PERSON = rx(r"(?:\bnot|(?<=[A-Za-z])n['\u2019]t)\s+seen\s+in(?:\s+(?:the\s+)?|" + HYPHEN
+                   + r')(?:office|clinic|person)\b|\bno\s+in(?: |' + HYPHEN + r')person\b'
+                   # (V12: session 2's "The patient was not seen." below, contracted; its own line is left as it was)
+                   r"|\b(?:patient|pt|she|he)\s+(?:was|is)n['\u2019]t\s+seen\b"
                    # repair cycle 1 (EMR-8): "on phone", "over phone" and a parenthesised "(telephone)" too
                    r'|\b(?:by|via|over(?:\s+the)?|on(?:\s+the)?)\s+(?:tele)?phone\b|\((?:by\s+|via\s+)?(?:tele)?phone\)'
                    r'|,[ \t]*(?:tele)?phone(?=[ \t]*(?:[.;]|$))'  # "Total time: 12 minutes, telephone."

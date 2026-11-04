@@ -1278,10 +1278,23 @@ def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...
     lay = _sections.layout(text) if lay is None else lay
     timed = [(s.start, _time_end(text, s), s.kind) for s in lay.sections if s.kind in ('history', 'plan')]
     # P2 READ-HOLD, R8 D8: an indication whose heading line carries its complete statement speaks for that line inside
-    # a titled report too ('indication_line', _time_kind); any other indication only outside one, as before
-    timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)),
-               'indication_line' if _statement_line_end(text, s) is not None else s.kind) for s in lay.sections
-              if s.kind == 'indication']
+    # a titled report too ('indication_line', _time_kind); any other indication only outside one, as before.
+    # Variant repair, round 2 (refutation L1/R05; cux-r2-variants.json V05): a heading line that carries any text after
+    # its heading is that indication's line whatever it ends with ("Indication: Surveillance after a sigmoid polyp was
+    # removed with a hot snare", no full stop; a semicolon; a dash form) - that line only. After it the section reads as
+    # before: today's report inside a titled report, the indication outside one (so a multi-line indication never gives
+    # its next line to today's report). _statement_line_end keeps its full-stop test for every other reader.
+    for s in lay.sections:
+        if s.kind != 'indication':
+            continue
+        end = min(_time_end(text, s), _paragraph_end(text, s))
+        line = _statement_line_end(text, s, complete=False)
+        if _statement_line_end(text, s) is not None or (line is not None and line >= end):
+            timed.append((s.start, end, 'indication_line'))
+        elif line is not None:
+            timed += [(s.start, line, 'indication_line'), (line, end, s.kind)]
+        else:
+            timed.append((s.start, end, s.kind))
     marks = {m for start, end, _ in timed for m in (start, end)}
     ends = {}
     # Every lookup below is a bisection over sorted starts (refutation r1, cost: scanning every section, mark and timed
@@ -1361,15 +1374,17 @@ def _time_end(text: str, section) -> int:
     return section.end if own is None else own
 
 
-def _statement_line_end(text: str, section) -> Optional[int]:
+def _statement_line_end(text: str, section, *, complete: bool = True) -> Optional[int]:
     """The end of a layout section's heading line (past its newline, within the section) when that line carries a
     complete statement after the heading ("Indication: Surveillance after a sigmoid polyp was removed with a hot
-    snare."); None otherwise ("Indication: surveillance", a heading alone on its line)."""
+    snare."); None otherwise ("Indication: surveillance", a heading alone on its line). With ``complete`` False (an
+    indication's heading line, V05), any text after the heading is the line's statement, whatever it ends with; a
+    heading alone on its line is still None."""
     line_end = text.find('\n', section.start, section.end)
     line_end = section.end if line_end < 0 else line_end
     if section.heading is not None and section.heading.end <= line_end:
         content = text[section.heading.end:line_end].strip()
-        if content and content[-1] in '.!?':
+        if content and (not complete or content[-1] in '.!?'):
             return min(section.end, line_end + 1)
     return None
 
@@ -2506,7 +2521,9 @@ def _own_question(text: str, start: int, end: int, denial: bool = False) -> bool
     doubtful: list = []
     names = [(a, b) for _, a, b in _acts_in(text, start, end, doubtful)]
     if denial:  # R2a (reader-bind round 2): a doubtful compound is the item a denying answer denies ("Snare-resected: No")
-        names += [(a, b) for _, a, b in doubtful]
+        # with its participle (variant repair, round 2, V06): routing's label words (detect._BOX_LABEL_WORD) join an ASCII
+        # compound into one word, and split one with a Unicode hyphen ("Snare\u2013resected") at the hyphen
+        names += [(a, _compound_end(text, b)) for _, a, b in doubtful]
     names += [(m.start(), m.end()) for _, _, pattern in SERVICES for m in pattern.finditer(text, start, end)]
     words = [(w.group(0).lower(), any(a <= w.start() < b for a, b in names))
              for w in detect._BOX_LABEL_WORD.finditer(text, start, end)]
@@ -3080,7 +3097,11 @@ def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -
 # it") states or denies the act and is read as before. ACTS and BARE_PARTICIPLE are unchanged (mention_count reads them).
 # a participle after the hyphen: two letters or more before its -ed / -en / -wn, and never a noun ending in -men
 # ("biopsy-specimen", "stent-lumen") or a short noun ("polypectomy-bed")
-COMPOUND_PARTICIPLE_AFTER = re.compile(r'-(?![A-Za-z]*men\b)[A-Za-z]{2,}(?:ed|en|wn)\b')
+# Variant repair, round 2 (refutation L1/R06; cux-r2-variants.json V06): the hyphen in its Unicode spellings too
+# (_cues.HYPHEN: "biopsy\u2013proven Barrett esophagus", a non-breaking hyphen, an em dash), read wherever the ASCII one
+# is - _attributive_compound, _attributive_position and _compound_participle; a space ("biopsy proven") never
+COMPOUND_PARTICIPLE_AFTER = re.compile(_cues.HYPHEN + r'(?![A-Za-z]*men\b)[A-Za-z]{2,}(?:ed|en|wn)\b')
+COMPOUND_HYPHENS = frozenset('-\u2010\u2011\u2012\u2013\u2014')  # _cues.HYPHEN's characters
 COMPOUND_PREDICATE_BEFORE = _rx(r"(?:\b(?:was|were|is|are|be|been|being|get|gets|got|gotten|getting)|n['’]t)"
                                 r"(?:\s+(?:not|never))?(?:\s+(?:then|also|subsequently|successfully|completely|each|"
                                 r"[\w-]+ly))?\s*$"
@@ -3108,6 +3129,13 @@ COMPOUND_NOUN_AFTER = re.compile(r'[ \t]+(?!(?:and|or|nor|but|then|also|it|its|t
                                  r'[A-Za-z][A-Za-z-]*(?<!ly)\b', re.A | re.I)
 
 
+def _compound_end(text: str, end: int) -> int:
+    """Where the act compound whose act word ends at ``end`` ends: past its participle (COMPOUND_PARTICIPLE_AFTER), or
+    ``end`` itself when no participle follows (V06)."""
+    participle = COMPOUND_PARTICIPLE_AFTER.match(text, end)
+    return end if participle is None else participle.end()
+
+
 def _attributive_position(text: str, end: int) -> bool:
     """Whether the compound whose act word ends at ``end`` is followed by a noun phrase it describes (R2a). Bounded: the
     participle and the word after it."""
@@ -3118,7 +3146,7 @@ def _attributive_position(text: str, end: int) -> bool:
 def _compound_participle(text: str, at: int) -> bool:
     """Whether a participle starting at ``at`` is the second element of an attributive act compound (rule 2): a hyphen
     right before it, after an act word that the compound does not make a predicate. Bounded: one act word before it."""
-    if at < 2 or text[at - 1] != '-':
+    if at < 2 or text[at - 1] not in COMPOUND_HYPHENS:
         return False
     for _kind, pattern in ACTS:
         for m in pattern.finditer(text, max(0, at - 1 - COMPOUND_REACH), at - 1):
