@@ -24,6 +24,7 @@ from studio.gi import context as gi_context
 from studio.types import ExtractionResult, PageSpan, sha256_json
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
+from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
 from tests.test_pipeline_api import FakeProvider, drain
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures'
@@ -794,3 +795,118 @@ class UploadKeyTests(TestCase):
         models.Encounter.objects.create(workspace=self.ws, title='c', created_by=self.other, client_key=key)
         for title in ('d', 'e'):  # every row an older release writes has no key: never refused
             models.Encounter.objects.create(workspace=self.ws, title=title, created_by=self.reviewer)
+
+
+# --- the re-assessment from retained answers (manage.py reassess_retained; jobs.reassess_retained) ---------------------
+
+class ReassessRetainedTests(ColonCase):
+    """R6 6.4: ONE assess in the re-assessment mode, which re-reads the final assessment's retained answers by id - the
+    Corti run, every phase-1 run and peer run its entries name - creates no ProviderRun and sends nothing. Corti is the
+    harness suite's in-process fake; Astra and Fable are the replay adapters on the real tool loop."""
+
+    def chain(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        drain()
+        return encounter_id
+
+    def sends(self):
+        return (models.ProviderRun.objects.count(), models.ProviderExchange.objects.count(),
+                models.ToolCall.objects.count(), [len(adapter.loops) for adapter in self.adapters.values()],
+                len(self.corti.requests))
+
+    def command(self, *args):
+        out = io.StringIO()
+        call_command('reassess_retained', *args, stdout=out)
+        return json.loads(out.getvalue())
+
+    def refused(self, encounter_id, message):
+        before = (models.Job.objects.count(), models.AuditEvent.objects.filter(event='assessment.refreshed').count())
+        with self.assertRaisesMessage(CommandError, message):
+            self.command('--encounter', str(encounter_id), '--tag', 'cux-flow-refused')
+        self.assertEqual((models.Job.objects.count(),
+                          models.AuditEvent.objects.filter(event='assessment.refreshed').count()), before)
+
+    def test_one_assess_re_reads_the_final_s_runs_by_id_and_sends_nothing(self):
+        encounter_id = self.chain()
+        final = self.encounter(encounter_id).current_assessment
+        self.assertEqual(jobs.assessment_phase(final), 2)
+        made = models.Job.objects.get(encounter_id=encounter_id, kind='assess', result__assessment=str(final.pk))
+        records, before = self.records(final), self.sends()
+        dry = self.command('--encounter', encounter_id, '--tag', 'cux-flow-r1', '--dry-run')
+        self.assertEqual((dry['action'], dry['job']), ('dry_run', None))
+        self.assertFalse(models.AuditEvent.objects.filter(event='assessment.refreshed').exists())
+        out = self.command('--encounter', encounter_id, '--tag', 'cux-flow-r1', '--username', self.reviewer.username)
+        key = f'{made.idempotency_key}:c:{hashlib.sha256(b"cux-flow-r1").hexdigest()[:12]}'
+        self.assertEqual((out['action'], out['key'], dry['key']), ('queued', key, key))
+        job = models.Job.objects.get(pk=out['job'])
+        self.assertEqual((job.kind, job.state, job.context_id, job.provider_run_id, job.requested_by),
+                         ('assess', 'queued', final.context_id, final.provider_run_id, self.reviewer))
+        self.assertEqual(jobs._assess_mode(job), jobs.AGAIN)
+        self.assertEqual(out['document_review_run'], str(final.provider_run_id))
+        self.assertEqual(out['participants'], [{'name': name, 'run': records[name]['run'],
+                                                'peer_run': records[name]['peer_run']} for name in ('astra', 'fable')])
+        # while it waits, the steps read and checked before stand and the results are being prepared again
+        waiting = progress.encounter_progress(self.encounter(encounter_id))
+        self.assertEqual((waiting['phase'], [step['state'] for step in waiting['steps']]),
+                         ('queued', ['done', 'done', 'done', 'waiting']))
+        real = jobs.run_assessment
+
+        def newer(*args, **kwargs):  # a newer reading, as the upgraded engine makes (an identical one keeps the final)
+            result = real(*args, **kwargs)
+            return dataclasses.replace(result, engine_version=result.engine_version + '+cux-flow')
+        with mock.patch('studio.jobs.run_assessment', side_effect=newer):
+            drain()
+        again = self.encounter(encounter_id).current_assessment
+        self.assertNotEqual(again, final)
+        self.assertEqual(self.sends(), before)  # no ProviderRun, exchange or tool call: nothing was sent to anyone
+        self.assertEqual(self.kinds(encounter_id)[-1], 'assess')  # and no peer stage was queued
+        after = self.records(again)
+        for name in ('astra', 'fable'):
+            for field in ('state', 'run', 'reading_sha256', 'peer_state', 'peer_run', 'peer_sha256'):
+                self.assertEqual(after[name][field], records[name][field], (name, field))
+            self.assertNotIn('frozen', after[name])
+        self.assertEqual((again.provider_run_id, again.context_id, jobs.assessment_phase(again), review.is_final(again)),
+                         (final.provider_run_id, final.context_id, 2, True))
+        (event,) = models.AuditEvent.objects.filter(event='assessment.refreshed')
+        self.assertEqual((event.actor, event.data['job'], event.data['tag'], event.data['assessment']),
+                         (self.reviewer, out['job'], 'cux-flow-r1', str(final.pk)))
+        # the same release again queues nothing
+        jobs_before = models.Job.objects.count()
+        repeat = self.command('--encounter', encounter_id, '--tag', 'cux-flow-r1')
+        self.assertEqual((repeat['action'], repeat['job'], repeat['key']), ('already_queued', out['job'], key))
+        self.assertEqual(models.Job.objects.count(), jobs_before)
+        self.assertEqual(models.AuditEvent.objects.filter(event='assessment.refreshed').count(), 1)
+
+    def test_refused_while_busy_or_stopped_and_when_the_final_assessment_is_not_current(self):
+        encounter_id = self.create(TWO_EXTENTS)
+        self.refused(encounter_id, jobs.REASSESS_BUSY)  # its pipeline is still queued
+        drain()
+        encounter = self.encounter(encounter_id)
+        final, first = encounter.current_assessment, self.assessments(encounter_id)[0]
+        models.Encounter.objects.filter(pk=encounter_id).update(current_assessment=first)  # assess #1: peers owed
+        self.refused(encounter_id, jobs.RETAINED_NOT_FINAL)
+        models.Encounter.objects.filter(pk=encounter_id).update(current_assessment=final)
+        stale = jobs.make_context(encounter, encounter.current_revision)  # the context changed since the final
+        models.Encounter.objects.filter(pk=encounter_id).update(current_context=stale)
+        self.refused(encounter_id, jobs.REASSESS_CONTEXT)
+        models.Encounter.objects.filter(pk=encounter_id).update(current_context=final.context)
+        jobs.stop_encounter(self.encounter(encounter_id), self.reviewer)
+        self.refused(encounter_id, jobs.RETAINED_STOPPED)
+        jobs.clear_stop(self.encounter(encounter_id))
+        with override_settings(FABLE_MODE='disabled'):  # the re-assessment would read other answers than the final
+            self.refused(encounter_id, 'The participants configured here are not the ones the final assessment read')
+        astra = models.ProviderRun.objects.get(pk=self.records(final)['astra']['run'])
+        kept = bytes(astra.response_bytes)
+        models.ProviderRun.objects.filter(pk=astra.pk).update(response_bytes=b'{}')
+        self.refused(encounter_id, jobs.RETAINED_BYTES.format(run=astra.pk))
+        models.ProviderRun.objects.filter(pk=astra.pk).update(response_bytes=kept)
+        # everything put back, the plan is accepted
+        self.assertEqual(self.command('--encounter', encounter_id, '--tag', 'cux-flow-r2', '--dry-run')['action'],
+                         'dry_run')
+        for args, message in ((['--encounter', str(uuid.uuid4()), '--tag', 'x'], 'No document has that id.'),
+                              (['--encounter', encounter_id, '--tag', 'two words'], jobs.RETAINED_TAG),
+                              (['--encounter', encounter_id, '--tag', 'ok', '--username', 'nobody'],
+                               'No active account has that username.')):
+            with self.subTest(args), self.assertRaisesMessage(CommandError, message):
+                self.command(*args)
+        self.assertFalse(models.Job.objects.filter(idempotency_key__contains=':c:').exists())
