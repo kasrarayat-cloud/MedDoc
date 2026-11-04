@@ -315,7 +315,12 @@ class DenialTiedToItsActTests(SimpleTestCase):
         item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45380', span(text, 'Biopsy of the sigmoid '
                                                                                              'colon.'))]), '45380')
         self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
-        # control: the same row with its "Yes" checked still reads as done
+        # controls: a box-first row checking "Completed" beside two unchecked denials (tests/test_repairs_r4d_boxes3's
+        # row), and the same row with its "Yes" checked, still read as done
+        text = colon('Cold snare polypectomy: ☐ Not done ☐ Not performed ☒ Completed')
+        item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, 'Cold snare polypectomy'))]),
+                        '45385')
+        self.assertEqual(item.status, 'ready')
         text = colon('Biopsy of the sigmoid colon. | Yes ☒ | No ☐')
         item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45380', span(text, 'Biopsy of the sigmoid '
                                                                                              'colon.'))]), '45380')

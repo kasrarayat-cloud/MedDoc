@@ -1058,7 +1058,11 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # the own-passage release, whose passage the inventory reads no act in by definition and which its own gates
             # already placed (_own_passage_may_stand: D1, D4, D5); never for an office visit, whose own plan and history
             # sentences are documentation of that visit ("Return in three months.": validation:6's pinned reading)
-            elsewhere = _passages_elsewhere(kept, another_time, found, inventory)
+            # a passage another time's or denied by a cue of its OWN: a time read only from the section it stands in is
+            # the layout's reading, not the passage's (round 4 PA's "one cause"; a numbered "3. Upcoming procedures"
+            # item makes today's "4. 6 mm sigmoid polyp removed with cold snare." planned: test_repairs_r4_sections)
+            own_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE and not _section_time(r)}
+            elsewhere = _passages_elsewhere(kept, own_time, found, inventory)
             if elsewhere:
                 found = replace(found, state='uncertain', reason='readings_disagree', question=(
                     f'Confirm whether {code} is supported: none of the passages it cites shows what was done on the date '
@@ -1084,10 +1088,11 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
     """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
     than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
     another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
-    historical, negated or cancelled (``another_time``) - or '' when one is not. Read only where the documented service
-    reads the code as performed and the passages' support is warn or fail; the code is then held, never excluded. A
-    passage of the matched service's own (its procedure-level statement) is never elsewhere: such a code stays as it is
-    (R3 open question 1, the narrow choice). Bounded: one pass over the inventory's services per passage."""
+    historical, negated or cancelled by a cue of its own (``another_time``: never by its section alone) - or '' when one
+    is not. Read only where the documented service reads the code as performed and the passages' support is warn or
+    fail; the code is then held, never excluded. A passage of the matched service's own (its procedure-level statement)
+    is never elsewhere: such a code stays as it is (R3 open question 1, the narrow choice). Bounded: one pass over the
+    inventory's services per passage."""
     if inventory is None or not kept:
         return ''
     own = found.service

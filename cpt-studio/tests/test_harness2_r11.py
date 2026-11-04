@@ -260,10 +260,13 @@ class PieceHoldsTests(r6m.MeaningCase):
     def test_page_1_a_documented_service_s_passage_in_one_piece_only(self):
         """page-1 (b): C6 with a blank line after its cecum line. 45380's documented-service source passage is that
         line; 43251's passage runs across the blank line. The biopsy piece holds no documented-service passage."""
-        text = r6m.C6.replace(f'{TAIL}\n', f'{TAIL}\n\n', 1)
-        self.assertNotEqual(text, r6m.C6)
-        titles = self.titles(self.corti_alone(text, [('45380', r6m.COL_BX), ('43251', f'{TAIL}\n\n{r6m.COL_BX}')]))
-        self.assertEqual(titles[r6m.COL_BX], 'Evidence for 43251, 45380')
+        # (P2 READ-HOLD, R8 D4: C6's unplaceable biopsy line is held now; its placed twin keeps the own-passage release
+        # this title reads - tests/test_harness2_r6_meaning.py C6_PLACED)
+        text = r6m.C6_PLACED.replace(f'{TAIL}\n', f'{TAIL}\n\n', 1)
+        self.assertNotEqual(text, r6m.C6_PLACED)
+        titles = self.titles(self.corti_alone(text, [('45380', r6m.PLACED_COL_BX),
+                                                     ('43251', f'{TAIL}\n\n{r6m.PLACED_COL_BX}')]))
+        self.assertEqual(titles[r6m.PLACED_COL_BX], 'Evidence for 43251, 45380')
         self.assertEqual(titles[TAIL], 'Evidence for 43251; Passage of the documented service for 45380')
 
     def test_page_1_an_unchecked_support_s_passage_in_one_piece_only(self):

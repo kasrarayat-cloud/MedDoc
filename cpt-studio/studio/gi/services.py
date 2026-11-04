@@ -1888,7 +1888,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             # \u2612 Biopsy"): strict boxes (2026-10-25) hold it, never read it as done
             return Reading('uncertain', (f'box: the row\u2019s label \u201c{label}\u201d does not list what was done',))
         if status in ('performed', 'incomplete') and box_cues and all(cue.startswith('section:') for cue in box_cues) \
-                and DENYING_OPTION_CHECKED.search(text, line_start, line_end):
+                and _row_marks_a_denial(text, line_start, line_end):
             # P2 READ-HOLD, R8 D3 (round 7 declared:1): done only by its section's default, on a row whose own line
             # marks a denying option ("Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612") that the box reader did
             # not tie to the item: held, never read as done
@@ -2048,11 +2048,34 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     return Reading('uncertain', ('uncertain: no performance statement',))
 
 
-# P2 READ-HOLD, R8 D3: the box row tie's denying option, checked ("No \u2612", "\u2612 Not performed"), and its cue.
+# P2 READ-HOLD, R8 D3: the box row tie. A row's options are written label-first ("| Yes \u2610 | No \u2612") or box-first
+# ("\u2610 Not done \u2610 Not performed \u2612 Completed"), read from its first box: an option word right before it makes
+# the row label-first. A checked box's option is then the word before it, or after it; the row is tied to a denial
+# when that option is one ("No", "None", "Not done", "Not performed", "Not taken", "Not obtained").
 _DENIAL_OPTION = r'(?:no|none|not[ \t]+(?:done|performed|taken|obtained))'
-DENYING_OPTION_CHECKED = re.compile(r'\b' + _DENIAL_OPTION + r'\b[ \t]*[:\-]?[ \t]*(?:' + _box_symbols.BOX_ON_PATTERN + r')'
-                                    r'|(?:' + _box_symbols.BOX_ON_PATTERN + r')[ \t]*' + _DENIAL_OPTION + r'\b', FLAGS)
+_ROW_OPTION_WORD = re.compile(r'(?:yes|no|none|n/?a|done|performed|completed?|taken|obtained)[ \t]*[:\-]?[ \t]*$', FLAGS)
+_ROW_BOX = re.compile('(?P<on>' + _box_symbols.BOX_ON_PATTERN + ')|(?:' + _box_symbols.BOX_OFF_PATTERN + ')')
+_DENIAL_BEFORE_BOX = re.compile(r'\b' + _DENIAL_OPTION + r'[ \t]*[:\-]?[ \t]*$', FLAGS)
+_DENIAL_AFTER_BOX = re.compile(r'[ \t]*' + _DENIAL_OPTION + r'\b', FLAGS)
 ROW_DENIAL_CUE = 'box: its row marks a denying option the box reader does not tie to it, so it is not read as done'
+
+
+def _row_marks_a_denial(text: str, ls: int, le: int) -> bool:
+    """Whether the row on [ls, le) checks a denying option, read by the row's own convention (label-first or
+    box-first, from its first box): "| Yes \u2610 | No \u2612" checks "No"; "\u2610 Not done \u2610 Not performed \u2612
+    Completed" checks "Completed", no denial (tests/test_repairs_r4d_boxes3). Bounded: the marks of one row."""
+    boxes = list(_ROW_BOX.finditer(text, ls, le))
+    if not boxes:
+        return False
+    label_first = _ROW_OPTION_WORD.search(text, ls, boxes[0].start()) is not None
+    for box in boxes:
+        if box.group('on') is None:
+            continue
+        if label_first and _DENIAL_BEFORE_BOX.search(text, ls, box.start()):
+            return True
+        if not label_first and _DENIAL_AFTER_BOX.match(text, box.end(), le):
+            return True
+    return False
 DENIAL_BEFORE_REACH = 160  # characters before a mention read for a negation that governs its noun phrase
 
 
