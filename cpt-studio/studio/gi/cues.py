@@ -751,14 +751,92 @@ _EM_ABSENT_NOUN = (r'(?:evaluation\s+and\s+management|E/M|(?:office|clinic|outpa
                    r'consultation|consult))(?:[- ](?:services?|encounters?|visits?|time))?')
 _EM_ABSENT_NP = r'(?:(?!\b(?:was|were|is|are|has|have|had|and|but|which|that)\b)[^.;:!?,\n])'
 _EM_ABSENT_QUALIFIED = r'(?:[\s,]{1,3}(?:' + _EM_ABSENT_QUALIFIER + r')){0,6}[\s,]{1,3}' + _EM_ABSENT_NOUN + r'\b'
-EM_ABSENCE = rx(r'(?<![\w/-])(?:no|without|neither)' + _EM_ABSENT_QUALIFIED
+# Round-2 repair 2026-11-04 (reader-em, R8b-1; refutation L2/F07; tests/fixtures/gi4/declarations/cux-r2-em.json): the
+# statement is the WHOLE of its sentence. P1's three forms read a part of a sentence, so a location hedge after the
+# denial ("The office visit is not documented here; it is documented in the clinic note of today.") and a negator
+# governing another noun ("No medication changes at today's office visit were documented.") both read as the denial,
+# and the visit's questions vanished. Each form now runs from the sentence's start - a line start, or a full stop,
+# question or exclamation mark and at most three spaces - to its end (a full stop or exclamation mark, a line end, or the
+# end of the text read), and holds nothing else but an optional "There is/was" opener, the form's own predicate and the
+# day adjuncts below; anything else in the sentence (a hedge, another clause, a condition, a question, a possessive, a
+# provider, another noun the negator governs) leaves it no absence statement, so the visit reads as installed (it asks).
+# Each form keeps P1's own reach, so it matches only where P1's pattern matched and covers no visit mention P1's did not:
+# (A) P1's first form ("No separate office visit or outpatient E/M service"), then optionally its predicate; (B) P1's
+# second form narrowed to a record noun governing the visit ("No record of a separate office visit is documented."),
+# P1's own 40-character reach to the noun asserted, its predicate right after the noun; (C) P1's third form ("Evaluation
+# and management was not provided.") after qualifiers that never begin a longer visit mention (EM_VISIT's "in-person" and
+# "outpatient" only where no "office" or "clinic" follows them), never after "the" or "this" (a definite visit is
+# presupposed, not denied). A day adjunct may also open the sentence ("Today, no separate office visit was provided.").
+_EM_ABSENT_START = r'(?:(?<![^\n])|(?<=[.!?\n][ \t])|(?<=[.!?\n][ \t]{2})|(?<=[.!?\n][ \t]{3})|(?<=[.!?]))[ \t]*'
+_EM_ABSENT_LEAD = (r'(?:(?:today|on\s+this\s+date|on\s+the\s+date\s+of\s+service|for\s+this\s+(?:date|encounter)),?'
+                   r'\s+)?')
+_EM_ABSENT_THERE = r'(?:there\s+(?:is|was|were|has\s+been|had\s+been)\s+)?'
+_EM_ABSENT_VERB = r'(?:documented|provided|performed|rendered|furnished|reported|billed)'  # P1's second form's verbs
+_EM_ABSENT_DONE = r'(?:documented|provided|performed|rendered|furnished|done)'  # P1's third form's verbs
+_EM_ABSENT_PREDICATE = (r'(?:\s+(?:is|was|were|are|has\s+been|have\s+been|had\s+been)\s+(?:separately\s+)?'
+                        r'(?:' + _EM_ABSENT_VERB + r'|done)(?:\s+(?:or|and|nor)\s+(?:' + _EM_ABSENT_VERB + r'|done)){0,2}'
+                        r'|\s+(?:occurred|took\s+place|happened))?\b')
+_EM_ABSENT_RECORD_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant',
+                                     'distinct', 'additional', 'face-to-face', 'in-person', 'office', 'clinic',
+                                     'outpatient', 'problem-oriented', 'E/M', 'same-day', 'or')  # no "and": P1's reach
+_EM_ABSENT_RECORD = (r'no(?=' + _EM_ABSENT_NP + r'{0,40}?\b' + _EM_ABSENT_NOUN + r'\b)'
+                     r'\s+(?:record|documentation|evidence|mention|note)s?\s+of(?:\s+(?:' + _EM_ABSENT_RECORD_QUALIFIER
+                     + r')){0,6}\s+' + _EM_ABSENT_NOUN + r'\b\s+(?:(?:is|was|were|are|has\s+been|have\s+been)\s+'
+                     r'(?:separately\s+)?' + _EM_ABSENT_VERB + r'|occurred|took\s+place)\b')
+_EM_ABSENT_DENIED_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant',
+                                     'distinct', 'additional', 'face-to-face', 'office', 'clinic', 'problem-oriented',
+                                     'E/M', 'same-day', 'and', 'or')
+_EM_ABSENT_DENIED = (r'(?:(?:' + _EM_ABSENT_DENIED_QUALIFIER + r'|(?:in-person|outpatient)(?![\s,]+(?:office|clinic)\b))'
+                     r'[\s,]{1,3}){0,6}' + _EM_ABSENT_NOUN
+                     + r"\s+(?:(?:was|is|has\s+been)\s+not|(?:was|is)n['’]t)\s+(?:separately\s+)?" + _EM_ABSENT_DONE
+                     + r'\b(?:\s+(?:or|and|nor)\s+' + _EM_ABSENT_DONE + r'\b){0,2}')
+_EM_ABSENT_DATE = r'(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4})'  # detect._em_absent checks it is the service date
+_EM_ABSENT_ON_DAY = (r'(?:today|this\s+date|separately|on\s+(?:this|the)\s+(?:date|day)(?:\s+of\s+(?:service|the\s+'
+                     r'procedure|the\s+encounter))?|for\s+(?:this|the)\s+(?:date|day|encounter)(?:\s+of\s+service)?|'
+                     r'for\s+today|(?:during|at)\s+(?:this|the)\s+encounter|(?:on|for|dated)\s+' + _EM_ABSENT_DATE + r')\b')
+_EM_ABSENT_DAY = r'(?:[\s,]+' + _EM_ABSENT_ON_DAY + r')*'
+EM_ABSENCE = rx(_EM_ABSENT_START + _EM_ABSENT_LEAD + r'(?:' + _EM_ABSENT_THERE + r'(?:no|without|neither)'
+                + _EM_ABSENT_QUALIFIED
                 # the visit nouns it coordinates ("no separate office visit or outpatient E/M service")
                 + r'(?:[\s,]{1,3}(?:or|and|nor)' + _EM_ABSENT_QUALIFIED + r'){0,3}'
-                r'|\bno\b' + _EM_ABSENT_NP + r'{0,40}?\b' + _EM_ABSENT_NOUN + r'\b' + _EM_ABSENT_NP + r'{0,40}?'
-                r'\b(?:(?:is|was|were|are|has\s+been|have\s+been)\s+(?:separately\s+)?(?:documented|provided|'
-                r'performed|rendered|furnished|reported|billed)|occurred|took\s+place)\b'
-                r'|\b' + _EM_ABSENT_NOUN + r"\s+(?:(?:was|is|has\s+been)\s+not|(?:was|is)n['’]t)\s+"
-                r'(?:separately\s+)?(?:documented|provided|performed|rendered|furnished|done)\b')
+                # one day adjunct may stand before the predicate ("No separate office visit on this date was provided.");
+                # one, never a run, so the two adjunct places cannot trade a run between them
+                + r'(?:[\s,]+' + _EM_ABSENT_ON_DAY + r')?' + _EM_ABSENT_PREDICATE
+                + r'|' + _EM_ABSENT_THERE + _EM_ABSENT_RECORD + r'|' + _EM_ABSENT_DENIED + r')'
+                + _EM_ABSENT_DAY + r'(?=[ \t]*(?:[.!]|\n|\Z))')
+# Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): words that state an evaluation of the patient, a
+# history, an examination or a visit in a wording routing reads as no E/M mention (EM_VISIT, an E/M heading, time and
+# decision making are routing's own): the patient as the one seen, evaluated, examined, assessed or interviewed ("She
+# was also evaluated today", "Separately, she was seen and examined today"); an evaluation stated today; the clinician
+# as the one evaluating ("I examined her"); an evaluation in a clinic or office, never a future one ("will be seen in
+# clinic" is none); a history, history and physical, H&P, evaluation, assessment or consultation done ("A separate
+# problem-focused history and examination was performed today"); a physical examination; the note elements of an
+# evaluation (HPI, history of present illness, review of systems, ROS); and a visit's own note ("documented in the
+# clinic note of today"). Read ONLY by detect._em_evaluation_stated, ONLY to hold an absence statement (EM_ABSENCE) as a
+# contradiction: never to read a visit performed. A closed list that only adds holds: a wording it misses reads as at
+# the core repair.
+_EM_EVAL_ADVERBS = (r'(?:(?:' + _words('also', 'separately', 'additionally', 'then', 'first', 'initially', 'subsequently',
+                                       'today', 'again', 'briefly', 'personally', 'independently', 'formally', 'fully',
+                                       'being', 'previously', 'recently', 'later', 'clinically', 'promptly', 'both')
+                    + r')[\s,]+){0,3}')
+_EM_EVAL_VERB = r'(?:seen|evaluated|re-?evaluated|examined|re-?examined|assessed|re-?assessed|interviewed)'
+_EM_EVAL_BE = r'(?:was|were|is|are|has\s+been|have\s+been|had\s+been)'
+EM_EVALUATION_STATED = rx(
+    r"\b(?:she|he|patient|pt|(?-i:(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][\w'-]*))\s+(?:" + _EM_EVAL_BE + r'|got)\s+'
+    + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'\b'
+    r'|(?-i:\b[A-Z][a-z]{1,20})\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS
+    + r'(?:evaluated|re-?evaluated|examined|re-?examined|interviewed)\b'
+    r'|\b' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'(?:\s+and\s+' + _EM_EVAL_VERB + r')?\s+today\b'
+    r'|\b(?:I|we)\s+' + _EM_EVAL_ADVERBS + r'(?:saw|evaluated|re-?evaluated|examined|re-?examined|assessed|'
+    r're-?assessed|interviewed|met\s+with)\b'
+    r'|\b(?:saw|evaluated|examined|assessed|interviewed)\s+(?:her|him|them|the\s+patient|this\s+patient)\b'
+    r'|(?<!\bbe\s)(?<!\bnot\s)\b' + _EM_EVAL_VERB + r'\s+(?:today\s+)?in\s+(?:the\s+)?(?:clinic|office)\b'
+    r'|\b(?:history(?:\s+and\s+(?:physical|exam(?:ination)?))?|H\s*&\s*P|evaluation|assessment|consultation|consult)\s+'
+    + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:performed|obtained|taken|done|completed|conducted|carried\s+out|'
+    r'elicited|held|provided|undertaken|documented)\b'
+    r'|\bphysical\s+exam(?:ination)?\b'
+    r'|\b(?:HPI|history\s+of\s+(?:the\s+)?present\s+illness|review\s+of\s+systems|(?-i:ROS))\b'
+    r'|\b(?:clinic|office|visit|consult(?:ation)?|E/M|H\s*&\s*P)\s+notes?\b')
 EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of)\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')

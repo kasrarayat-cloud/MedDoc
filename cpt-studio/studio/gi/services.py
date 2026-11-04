@@ -4479,7 +4479,19 @@ def _em_service(text: str, routing, context_facts, services, routine_em, sentenc
         setting=_fact_value(facts.get('setting')) or _setting(context_facts),
         service_date=_service_date_value(context_facts), separate_em='separate_em' in facts,
         uncertainty=tuple(name for name in ('setting', 'patient_status', 'em_basis')
-                          if not _fact_value(facts.get(name)) and not (name == 'setting' and _setting(context_facts))))
+                          if not _fact_value(facts.get(name)) and not _em_context_value(context_facts, name)))
+
+
+def _em_context_value(context_facts, name: str) -> str:
+    """The encounter context's value of a routine E/M fact: the setting, and (round-2 repair 2026-11-04, reader-em E7;
+    refutation L7/L7-06) new or established status - the document's value or a member's answer, never a conflict or a
+    missing fact (neither has one). Routing's facts hold only the document's; a member's saved status was ignored, so
+    its question came back after the one re-assessment. The basis (em_basis) is a clinical fact and never context."""
+    if name == 'setting':
+        return _setting(context_facts)
+    if name == 'patient_status':
+        return _fact_value((context_facts or {}).get('patient_status'))
+    return ''
 
 
 def _fact_value(fact) -> str:

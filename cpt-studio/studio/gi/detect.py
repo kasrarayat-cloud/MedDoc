@@ -6545,6 +6545,17 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
 EM_ABSENT_CUE = 'negated: an explicit statement that no separate office E/M service is documented'
 EM_ABSENT_CONTRADICTED = ('uncertain: the note states that no separate office E/M service is documented, and another '
                           'E/M statement of it reads as performed')
+# Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): the absence statement held beside an evaluation of the
+# patient, a history, an examination or a visit the note states in words routing reads as no E/M mention
+# (cues.EM_EVALUATION_STATED; _em_evaluation_stated). The words are quoted after it.
+EM_ABSENT_EVALUATION = ('uncertain: the note states that no separate office E/M service is documented, and it also '
+                        'states an evaluation, a history, an examination or a visit')
+# The opening of a sentence that denies what follows it ("No separate evaluation was performed today.", "No physical
+# examination was documented.", "There was no HPI."): a negator, then at most four words and no punctuation or
+# conjunction before the evaluation words, which it then governs. Such words state no evaluation (_em_evaluation_stated).
+_EM_DENYING_OPENER = re.compile(r'[ \t]*(?:there\s+(?:is|was|were|has\s+been|had\s+been)\s+)?(?:no|not|without|neither|'
+                                r'none\s+of)(?:\s+(?!(?:and|but|or|nor|then|while|so|yet|although|though|however)\b)'
+                                r"[\w/&'-]+){0,4}\s*", re.A | re.I)
 
 
 def _em_absent(an: Analysis, m: Mention) -> bool:
@@ -6563,6 +6574,33 @@ def _em_absent(an: Analysis, m: Mention) -> bool:
     starts, spans, dated = found
     at = bisect.bisect_right(starts, m.start) - 1  # the matches never overlap: only the last one starting at or before
     return dated and at >= 0 and m.end <= spans[at][1]
+
+
+def _em_evaluation_stated(an: Analysis) -> Optional[str]:
+    """Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): the words of the first statement of an
+    evaluation of the patient, a history, an examination or a visit (cues.EM_EVALUATION_STATED) that lies inside no
+    explicit E/M absence statement (cues.EM_ABSENCE) and that its own sentence does not open by denying
+    (_EM_DENYING_OPENER: "No separate evaluation was performed today."); None when the note states none. Read only where
+    an absence statement negates a visit mention (_route), and only to hold it. Bounded: each pattern once over the text
+    (an.memo), then one bisection and one sentence lookup per match."""
+    key = ('em_evaluation_stated',)
+    if key in an.memo:
+        return an.memo[key]
+    text = an.text
+    spans = [x.span() for x in cues.EM_ABSENCE.finditer(text)]
+    starts = [a for a, _ in spans]
+    found = None
+    for m in cues.EM_EVALUATION_STATED.finditer(text):
+        at = bisect.bisect_right(starts, m.start()) - 1
+        if (at >= 0 and spans[at][1] > m.start()) or (at + 1 < len(spans) and spans[at + 1][0] < m.end()):
+            continue  # words of (or reaching into) an absence statement are no other statement
+        ss, _ = an.lay.sentence_for(m.start(), m.end())
+        if ss <= m.start() and _EM_DENYING_OPENER.fullmatch(text, ss, m.start()):
+            continue
+        found = ' '.join(m.group(0).split())[:60]
+        break
+    an.memo[key] = found
+    return found
 
 
 # GI round 4 (C4): the cues of an E/M reading held because the note may document no in-person visit (the line that
@@ -8251,12 +8289,20 @@ def _route(an: Analysis) -> RoutingResult:
     readings.update(an.references)
     base = {m: _em_base_reading(an, m) for m in an.em}
     absent = {m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)}  # a set: one look per other reading
-    if absent and any(r.status in ('performed', 'incomplete', 'uncertain') for m, r in base.items() if m not in absent):
+    if absent:
         # rule 8 (core repair 2026-11-03): any other E/M statement that reads the visit as done or open (performed, or
         # held - a telephone visit, a hedged one) outranks the absence statement, which is then held: the note
-        # contradicts itself, so the family stays open and its questions are asked
-        base = {m: (Reading('uncertain', (EM_ABSENT_CONTRADICTED,) + r.cues, 'cue', doubt=True)
-                    if r.cues[:1] == (EM_ABSENT_CUE,) else r) for m, r in base.items()}
+        # contradicts itself, so the family stays open and its questions are asked. Round-2 repair (R8b-2): so does an
+        # evaluation of the patient, a history, an examination or a visit the note states in words routing reads as no
+        # E/M mention ("She was also evaluated today for new-onset jaundice, a separate problem.")
+        if any(r.status in ('performed', 'incomplete', 'uncertain') for m, r in base.items() if m not in absent):
+            held = EM_ABSENT_CONTRADICTED
+        else:
+            stated = _em_evaluation_stated(an)
+            held = None if stated is None else f"{EM_ABSENT_EVALUATION} ('{stated}')"
+        if held is not None:
+            base = {m: (Reading('uncertain', (held,) + r.cues, 'cue', doubt=True)
+                        if r.cues[:1] == (EM_ABSENT_CUE,) else r) for m, r in base.items()}
     em_facts = _em_facts(an, base)
     has_basis = any(f.name == 'em_basis' for f in em_facts)
     findings: dict[str, FamilyFinding] = {}
