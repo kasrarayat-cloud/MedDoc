@@ -47,9 +47,10 @@ UNMOVED = {tuple(key.split(' | ')): cell
            for key, cell in list(DECLARATION['unmoved'].items()) + list(AFTER_CODE.get('unmoved', {}).items())
            + list(COMBINED_HEAD.get('unmoved', {}).items())}
 # a later round's declared movement of a round-3 row is where that row now ends (this file's record stays as measured):
-# round 5's R1a-r5 (cux-r5-binding.json, declared before its code) holds the A3 control's labelled snare
+# round 5's R1a-r5 in its hold-only form (cux-r5-binding.json amendment_20261104_hold_only, declared before its code;
+# the unbinding form above it was refuted and reverted) holds the A3 control's labelled snare
 ROUND5 = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-r5-binding.json')
-                    .read_text(encoding='utf-8'))
+                    .read_text(encoding='utf-8'))['amendment_20261104_hold_only']
 LATER = {(name, code): after for name, code, before, after in ROUND5['battery'] if name.startswith('R8 R3 ')}
 HELD = 'selected/needs_clarification'
 EM = {'setting', 'patient_status', 'em_basis'}
@@ -274,8 +275,12 @@ class BindingAfterAnotherExaminationTests(SimpleTestCase):
         again = (HEAD + 'Colonoscopy and EGD report\nThe colonoscope was advanced to the cecum.\nCOL-1 - sigmoid colon: an '
                  '8 mm polyp was seen.\n' + GASTRO + ' The antrum was normal.\nThe colonoscope was then reinserted.\nCOL-1 '
                  'was removed with a cold snare.\n')
-        # round 5 (cux-r5-binding.json, declared_costs 'A3 control'): R1a-r5 reads no telling, so the colonoscope told
-        # again restores no binding; with two procedures read performed, the label-only snare is held (was READY here)
+        # round 5's hold-only form (cux-r5-binding.json amendment_20261104_hold_only, a declared cost): the snare stays
+        # bound to COL-1 as before, but with two procedures read performed only the label ties it to the colonoscopy, so
+        # it carries services.NAME_ONLY_CUE and 45385 is held (was READY here)
+        polyp = next(les for les in service(inventory(again), 'gi.colonoscopy').lesions if les.size == '8 mm')
+        self.assertEqual([(a.lesion, services.NAME_ONLY_CUE in a.cues)
+                          for a in acts(inventory(again), 'gi.colonoscopy', 'snare')], [(polyp.id, True)])
         self.assertEqual(outcomes(run(again, [('45385', 'COL-1 was removed with a cold snare.')]))['45385'],
                          held('performed_status'))
 
