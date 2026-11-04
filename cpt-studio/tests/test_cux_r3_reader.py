@@ -46,6 +46,11 @@ DECLARED = {(name, code): (before, after)
 UNMOVED = {tuple(key.split(' | ')): cell
            for key, cell in list(DECLARATION['unmoved'].items()) + list(AFTER_CODE.get('unmoved', {}).items())
            + list(COMBINED_HEAD.get('unmoved', {}).items())}
+# a later round's declared movement of a round-3 row is where that row now ends (this file's record stays as measured):
+# round 5's R1a-r5 (cux-r5-binding.json, declared before its code) holds the A3 control's labelled snare
+ROUND5 = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-r5-binding.json')
+                    .read_text(encoding='utf-8'))
+LATER = {(name, code): after for name, code, before, after in ROUND5['battery'] if name.startswith('R8 R3 ')}
 HELD = 'selected/needs_clarification'
 EM = {'setting', 'patient_status', 'em_basis'}
 
@@ -67,7 +72,8 @@ class R3RowsTests(SimpleTestCase):
             result = row(name)
             for code in result['proposals']:
                 with self.subTest(name, code=code):
-                    expected = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
+                    expected = LATER.get((name, code)) or (DECLARED[(name, code)][1] if (name, code) in DECLARED
+                                                           else UNMOVED[(name, code)])
                     self.assertEqual(state(result, code), expected)
                     self.assertEqual(result['proposals'][code]['violations'], [])
 
@@ -268,7 +274,10 @@ class BindingAfterAnotherExaminationTests(SimpleTestCase):
         again = (HEAD + 'Colonoscopy and EGD report\nThe colonoscope was advanced to the cecum.\nCOL-1 - sigmoid colon: an '
                  '8 mm polyp was seen.\n' + GASTRO + ' The antrum was normal.\nThe colonoscope was then reinserted.\nCOL-1 '
                  'was removed with a cold snare.\n')
-        self.assertEqual(outcomes(run(again, [('45385', 'COL-1 was removed with a cold snare.')]))['45385'], READY)
+        # round 5 (cux-r5-binding.json, declared_costs 'A3 control'): R1a-r5 reads no telling, so the colonoscope told
+        # again restores no binding; with two procedures read performed, the label-only snare is held (was READY here)
+        self.assertEqual(outcomes(run(again, [('45385', 'COL-1 was removed with a cold snare.')]))['45385'],
+                         held('performed_status'))
 
     def test_control_a_lesion_named_after_the_other_examination_keeps_its_label(self):
         # the gastroscope is told before the colon lesion's own passage: nothing stands between the lesion and its clip
