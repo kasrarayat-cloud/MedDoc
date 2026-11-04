@@ -42,6 +42,10 @@ R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPl
             'center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was '
             'completed.\n')
 R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+R8_CO_SNARE = 'A 7 mm polyp in the ascending colon was removed with a cold snare.'
+R8_FS_BIOPSY = 'Biopsies of the rectal mucosa were taken with cold forceps.'
+R8_EGD_DX = (B + 'Upper endoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory '
+             'surgery center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum.\n')
 R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
 R8_SNARE_HEAD = R8_COLON.replace('Procedure: Colonoscopy', 'Procedure: Colonoscopy with hot snare polypectomy')
 R8_TOP = B + 'Procedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
@@ -516,6 +520,25 @@ CASES = {
         R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
         'Procedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. The duodenum was normal.\n',
         [('45378', R8_CECUM, 'done'), ('43235', 'Upper endoscopy report (fictional)', 'not_done')]),
+    # D7 (lead integration, cux-lead.json L1): a separate same-day note under a 'Label: <service>' heading; its biopsy
+    # is the flexible sigmoidoscopy's, never the colonoscopy's (R8's H1, probes/R8-history-defects/r8_cases.py)
+    'R8 D7 H1 separate same-day note': (
+        _r8(R8_COLON.replace(R8_CECUM + '\n', ''), R8_CECUM, R8_CO_SNARE, '',
+            'Separate note: Flexible sigmoidoscopy (fictional), 2026-10-14',
+            'The flexible sigmoidoscope was advanced to 60 cm in the descending colon.', R8_FS_BIOPSY),
+        [('45385', R8_CO_SNARE, 'done'), ('45380', R8_FS_BIOPSY, 'not_done')]),
+    # L3 (lead integration, cux-lead.json L3; P1 rule 2): an attributive act compound presupposes an earlier act and
+    # states none today, so the own-passage release never stands on it; a biopsy stated today still does
+    'R8 L3 biopsy-proven Barrett, no act today': (
+        _r8(R8_EGD_DX, 'Surveillance of biopsy-proven Barrett esophagus was performed.'),
+        [('43239', 'Surveillance of biopsy-proven Barrett esophagus was performed.', 'not_done')]),
+    'R8 L3 biopsy-confirmed adenoma, no act today': (
+        _r8(R8_EGD_DX, 'Follow-up of a biopsy-confirmed gastric adenoma was performed.'),
+        [('43239', 'Follow-up of a biopsy-confirmed gastric adenoma was performed.', 'not_done')]),
+    'R8 L3 control, biopsy-proven Barrett and a biopsy today': (
+        _r8(R8_EGD_DX, 'Surveillance of biopsy-proven Barrett esophagus was performed.',
+            'Cold forceps biopsies were taken from the distal esophagus.'),
+        [('43239', 'Cold forceps biopsies were taken from the distal esophagus.', 'done')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {name: {'service_date': '2026-10-26'} for name in (

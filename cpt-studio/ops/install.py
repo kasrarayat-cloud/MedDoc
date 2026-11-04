@@ -1888,6 +1888,13 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              fable_peer (HARNESS.md 11.1) - are closed like a second review's whenever the next worker has no stage
 #              for them: no worker before the harness has any of the four, and none before harness@2 a peer review
 #              (CLOSE_STAGES, given the next worker's own kinds).
+#   member_answer - the current assessment has a member's answer that stands (MemberAnswer, not revoked: "Not
+#              documented" or "Cannot confirm", core repair 2026-11-03). No revision before it reads one: its page asks
+#              that question again and shows the code held, where this revision shows it Excluded with the answer and
+#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS).
+#   modifier - a current decision of the current assessment carries the reviewer's chosen modifier (Decision.modifiers,
+#              core repair 2026-11-03). No revision before it reads one: its page and both reports show that approval
+#              without the modifier. The decision row stays; no state can be put back for it (SHOWN_HAZARDS).
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1977,6 +1984,16 @@ def undo_hazards():
                 if not any(review._reviewable(proposal, decisions.get(proposal.pk))
                            for proposal in assessment.proposals.all()):
                     found.setdefault(str(encounter.pk), set()).add('second_review_unread')
+        # core repair 2026-11-03: a member's answer that stands, or a chosen modifier on a current decision - no older
+        # revision reads either, so its page asks the answered question again, or shows the approval without the
+        # modifier (read only where this image has them)
+        if (encounter.current_assessment_id is not None and hasattr(models, 'MemberAnswer')
+                and models.MemberAnswer.objects.filter(assessment_id=encounter.current_assessment_id,
+                                                       revocation__isnull=True).exists()):
+            found.setdefault(str(encounter.pk), set()).add('member_answer')
+        if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
+                decision.modifiers for decision in review.current_decisions(assessment).values()):
+            found.setdefault(str(encounter.pk), set()).add('modifier')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
@@ -2083,13 +2100,38 @@ print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 # (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
 # older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
 # handed. installed_state is 057a7d398's review._derive_state with its _failed_stage_state, as they are there; the helpers
-# it calls are this revision's and byte-identical to 057a7d39's (_active_jobs, live_assessment, _unreconciled_unknown,
-# _review_state - whose readiness differs from 057a7d39's in the wording of its blockers only, never in whether there is
-# one), so a change to any of them ports 057a7d39's here first. Run in this revision's image; nothing is sent.
+# it calls are this revision's and byte-identical to 057a7d39's (_active_jobs, live_assessment), so a change to any of
+# them ports 057a7d39's here first. Two did change in the core repair (2026-11-03) and are ported below as they are at
+# 057a7d39: _unreconciled_unknown (which now also reads a run left 'sending' by a stage that no longer runs, decision
+# (k)) and _review_state (which now reads the review overlay's statuses). _review_state's readiness is this revision's:
+# its _assessment_blockers already differed from 057a7d39's before the core repair (main c9f20a148 and the installed
+# 41e03656df61 carry the same one), and now also reads the overlay - so for an encounter with a reinstatement, a
+# member's answer or an approval the overlay no longer supports, whether it is 'reviewed' is this revision's reading.
+# Only an undo to 057a7d39 itself reads this script: a revision since then recomputes the states its own app phase
+# hands it (RECOMPUTE_STATES). Run in this revision's image; nothing is sent.
 INSTALLED_STATES = '''
 from django.db import transaction
 from django.utils import timezone
 from studio import models, review
+
+
+def unreconciled_unknown(encounter):  # 057a7d39's review._unreconciled_unknown, as it is there
+    return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+
+
+def review_state(encounter, assessment):  # 057a7d39's review._review_state, as it is there
+    if review.readiness(encounter)['reviewed']:
+        return 'reviewed'
+    current = review.current_decisions(assessment)
+    reviewable = [item for item in assessment.proposals.all() if review._reviewable(item, current.get(item.pk))]
+    encounter_question = assessment.clarifications.filter(
+        state=models.Clarification.OPEN, scope='encounter', proposal__isnull=True).exists()
+    if not reviewable:
+        return 'needs_clarification' if encounter_question else 'no_codes'
+    if encounter_question or any(item.status == models.Proposal.NEEDS_CLARIFICATION and item.pk not in current
+                                 for item in reviewable):
+        return 'needs_clarification'
+    return 'ready_for_review'
 
 
 def installed_state(encounter):
@@ -2120,7 +2162,7 @@ def installed_state(encounter):
         return 'processing_failed' if run.state == Run.SUCCEEDED else 'provider_failed'
     assessment = review.live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
-        return 'provider_unknown' if review._unreconciled_unknown(encounter) else 'processing'
+        return 'provider_unknown' if unreconciled_unknown(encounter) else 'processing'
     run = assessment.provider_run
     if run is None:
         return 'provider_not_run'
@@ -2128,7 +2170,7 @@ def installed_state(encounter):
         return 'provider_unknown'
     if run.state != Run.SUCCEEDED:
         return 'provider_failed'
-    return review._review_state(encounter, assessment)
+    return review_state(encounter, assessment)
 
 
 changed = {}
@@ -2396,7 +2438,9 @@ def hazard_summary(hazards) -> str:
 # handed - and a worker left stopped does not keep its web from saying it. Refutation P2RA, ROLLBACK lens 0: a second
 # review the shown assessment did not read is one too (it says that no code was proposed of a response nobody read).
 # The harness: a code only a participant proposed is one too (the older web shows it as the provider's proposal).
-SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant')
+# The core repair (2026-11-03): a member's answer that stands, and a chosen modifier, are two more (the older web reads
+# neither: it asks the answered question again, and shows the approval without its modifier).
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier')
 
 
 def hazards_by_kind(hazards):
@@ -4399,6 +4443,14 @@ def phase_reassess(ctx) -> dict:
     `--dry-run` is passed through. Each encounter's jobs are read before and after (REASSESS_JOBS), so the receipt
     names the jobs that appeared as measured, not as said; a dry run after which one appeared fails the phase."""
     encounters, dry = list(ctx.args.encounter), bool(ctx.args.dry_run)
+    # The worker makes the re-assessment, so the participants it must read are the worker's: this revision's app
+    # receipt names the modes its pair runs with. The one-shot below runs with every participant disabled, and the
+    # command would otherwise compare the final's participants with that (refusing every harness encounter).
+    app = require_receipt(ctx, 'app')
+    modes = (app.get('details') or {}).get('participants')
+    if not isinstance(modes, dict) or not all(isinstance(mode, str) for mode in modes.values()):
+        raise InstallError("This revision's app receipt names no participant modes; nothing was re-assessed.")
+    running = sorted(name for name, mode in modes.items() if mode != 'disabled')
     image_id = installed_image(ctx)
     require_db()
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
@@ -4414,8 +4466,8 @@ def phase_reassess(ctx) -> dict:
                            're-assessed.')
     results = {}
     for number, pk in enumerate(encounters, start=1):
-        command = ['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision] + (['--dry-run'] if dry
-                                                                                              else [])
+        command = (['manage', 'reassess_retained', '--encounter', pk, '--tag', ctx.revision,
+                    '--participants', ','.join(running) or 'none'] + (['--dry-run'] if dry else []))
         result = oneshot(image_id, command, env, timeout=REASSESS_SECONDS)
         log = ctx.log(f'reassess-{number:02d}', result.stdout + result.stderr)
         results[pk] = {'exit': result.returncode, 'log': log, 'receipt': access_receipt(result.stdout),
@@ -4435,7 +4487,7 @@ def phase_reassess(ctx) -> dict:
     if dry and appeared:
         raise InstallError(f'A dry run was followed by {appeared} new job(s) on the named encounters; read them in '
                            'this receipt.', details={'encounters': results})
-    return {'tag': ctx.revision, 'dry_run': dry, 'encounters': results,
+    return {'tag': ctx.revision, 'dry_run': dry, 'participants': running, 'encounters': results,
             'summary': f'reassess_retained {"(dry run) " if dry else ""}for {len(encounters)} encounter(s): '
                        f'{appeared} job(s) appeared'}
 

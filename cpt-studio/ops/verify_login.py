@@ -74,6 +74,10 @@ TIMEOUT_SECONDS = 30
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_CREDENTIALS_BYTES = 64 * 1024
 USER_AGENT = 'cpt-studio-verify-login/1 (login-only check of a synthetic demonstration account)'
+# Decision (l) (2026-11-03; studio/client_contract.py): the customer API answers 409 client_outdated to a call that does
+# not name the current customer page build, as a tab left open on the previous release would; this check calls it
+# as the current page does (tests/test_cux_client_contract.py pins this value to the server's).
+CLIENT_HEADER, CLIENT_VERSION = 'X-CPT-Studio-Client', 'customer-2026-11-03'
 WITHHELD = '[password withheld]'
 
 
@@ -247,7 +251,8 @@ class Transport:
         else:
             connection = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
         try:
-            connection.request(method, path, body=body, headers={'User-Agent': USER_AGENT, **headers})
+            connection.request(method, path, body=body,
+                               headers={'User-Agent': USER_AGENT, CLIENT_HEADER: CLIENT_VERSION, **headers})
             answer = connection.getresponse()
             data = answer.read(MAX_BODY_BYTES + 1) if read_body else b''
             entry['status'] = answer.status

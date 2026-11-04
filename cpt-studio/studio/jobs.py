@@ -575,7 +575,9 @@ def addendum_block(revision):
 
 
 def _unreconciled_unknown(encounter):
-    return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
+    # one rule with the derived state's: an unknown outcome not reconciled, or a run left 'sending' by a stage that no
+    # longer runs (decision (k), 2026-11-03: it blocks every send door like an unknown outcome)
+    return review._unreconciled_unknown(encounter)
 
 
 FAILED_BEFORE_MESSAGE = ('Nothing was sent: this request was sent before for this document and failed, and an '
@@ -950,7 +952,17 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter))
             _finish_loop(run, outcome)
         else:
-            _finish_run(run, provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30))
+            exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
+            try:
+                _finish_run(run, exchange)
+            except Exception:  # noqa: BLE001 - logged; the run records why, never the internals
+                # Decision (k) (2026-11-03; R6 4.6): the answer arrived and its outcome could not be recorded. The run
+                # is never left 'sending' - a failed job is not swept, so nothing would block an identical send - but
+                # recorded unknown, as _finish_loop records a participant's: it may have reached the vendor and been
+                # billed, so every send door waits on its reconciliation. The stage fails as before.
+                log.exception('the outcome of provider run %s could not be recorded', run.pk)
+                _settle_unrecorded(run, exchange)
+                raise
         # a participant's row names its provider, so the Activity tab words it ("Astra response recorded")
         audit.record(encounter.workspace, 'provider.finished', encounter=encounter, run=str(run.pk),
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
@@ -961,6 +973,29 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
     return run
+
+
+UNRECORDED_OUTCOME_MESSAGE = ('The answer arrived but its outcome could not be recorded (logged). The request may have '
+                              'reached the vendor and been billed: it is recorded with an unknown outcome, and nothing '
+                              'is sent again until it is reconciled.')
+ORPHANED_SENDING_MESSAGE = ('The stage that sent this request ended without recording its outcome. The request may have '
+                            'reached the vendor and been billed: it is recorded with an unknown outcome, and nothing is '
+                            'sent again until it is reconciled.')
+
+
+def _settle_unrecorded(run, exchange):
+    """Decision (k): ``run`` (still 'sending') recorded unknown - or not sent, where its exchange provably sent nothing -
+    with only small fields written, since writing the whole outcome just failed. A failure here is logged and leaves
+    the run 'sending', which every send door still reads as an unknown outcome (review._orphaned_sending) and the stale
+    sweep settles (mark_stale)."""
+    unsent = exchange.outcome == 'not_sent' and not exchange.sent
+    try:
+        models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
+            state=models.ProviderRun.NOT_SENT if unsent else models.ProviderRun.UNKNOWN, sent=bool(exchange.sent),
+            error='Nothing was sent; its record could not be written (logged).' if unsent else UNRECORDED_OUTCOME_MESSAGE,
+            finished_at=timezone.now())
+    except Exception:  # noqa: BLE001 - logged; the run stays 'sending', which blocks every send door
+        log.exception('provider run %s could not be settled after its outcome failed to record', run.pk)
 
 
 def _stop_requested(job, encounter):
@@ -2616,6 +2651,19 @@ def mark_stale():
             job.finished_at = timezone.now()
             job.save(update_fields=['state', 'error', 'result', 'finished_at'])
         review.refresh_state(job.encounter)
+    # Decision (k): a run left 'sending' by a stage that no longer runs - its outcome never recorded, the job failed or
+    # ended - is settled unknown like a dead worker's, so its reconciliation can release one new attempt. Until then
+    # every send door blocks on it (review._orphaned_sending). Its own stage, were it running, started before it.
+    for run in models.ProviderRun.objects.filter(state=models.ProviderRun.SENDING, created_at__lt=cutoff):
+        if Job.objects.filter(encounter_id=run.encounter_id, state=Job.RUNNING, started_at__lte=run.created_at).exists():
+            continue
+        with transaction.atomic():
+            reached = may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists()
+            settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
+                state=models.ProviderRun.UNKNOWN, error=ORPHANED_SENDING_MESSAGE, finished_at=timezone.now(),
+                sent=run.sent or reached)
+        if settled:
+            review.refresh_state(run.encounter)
 
 
 def remove_stale_ingest_dirs():
@@ -2627,6 +2675,57 @@ def remove_stale_ingest_dirs():
     for path in Path(tempfile.gettempdir()).glob('cpt-ingest-*'):
         if path.is_dir() and not path.is_symlink():
             shutil.rmtree(path, ignore_errors=True)
+
+
+# Decision (j) (2026-11-03): a dead worker never animates. The worker process beats every HEARTBEAT_SECONDS from a thread
+# of its own (so a long stage never reads as a dead worker); the progress panel reads a beat older than
+# WORKER_SILENT_SECONDS, while a document waits on processing, as processing paused.
+HEARTBEAT_SECONDS = 30
+WORKER_SILENT_SECONDS = 120
+WORKER_NAME = 'worker'
+
+
+def beat(*, name=WORKER_NAME, now=None):
+    """Record one heartbeat of this worker process (models.WorkerBeat). Never raises: a failed beat is logged, and a
+    worker whose beats keep failing reads as not responding, which is what it is to a member."""
+    import os
+
+    try:
+        models.WorkerBeat.objects.update_or_create(name=name, defaults={
+            'beat_at': now or timezone.now(), 'revision': str(settings.RELEASE_SHA)[:64], 'pid': os.getpid()})
+    except Exception:  # noqa: BLE001 - logged; the next beat tries again
+        log.exception('the worker heartbeat could not be recorded')
+
+
+def start_heartbeat(should_stop, *, interval=HEARTBEAT_SECONDS):
+    """A daemon thread that beats every ``interval`` seconds until ``should_stop()``; its database connection is
+    closed when it ends. Returns the thread."""
+    import threading
+
+    from django.db import connection as thread_connection
+
+    def loop():
+        try:
+            while not should_stop():
+                beat()
+                for _ in range(int(interval * 10)):
+                    if should_stop():
+                        break
+                    time.sleep(0.1)
+        finally:
+            thread_connection.close()
+    thread = threading.Thread(target=loop, name='cpt-studio-heartbeat', daemon=True)
+    thread.start()
+    return thread
+
+
+def worker_responding(*, now=None, name=WORKER_NAME):
+    """True when the worker beat within WORKER_SILENT_SECONDS, False when its newest beat is older, None when no beat
+    was ever recorded (nothing is known, and nothing is claimed)."""
+    row = models.WorkerBeat.objects.filter(name=name).first()
+    if row is None:
+        return None
+    return (now or timezone.now()) - row.beat_at <= timedelta(seconds=WORKER_SILENT_SECONDS)
 
 
 def work(should_stop, *, poll_seconds=1.0, clock=time.monotonic):
@@ -3030,7 +3129,7 @@ def _retained_runs(revision, final):
     return out
 
 
-def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
+def reassess_retained(encounter, tag, *, user=None, dry_run=False, expected_participants=None) -> dict:
     """Queue ONE re-assessment of the current revision that re-reads the final assessment's retained answers by id -
     Corti's run and every participant run and peer run its entries name - and sends nothing (R6 6.4): an assess keyed
     '<the final's key>:c:<12 hex of sha256(tag)>', read in AGAIN mode (_assess_mode), which queues no peer stage and
@@ -3044,7 +3143,11 @@ def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
     retained Corti answer was made for another date; when the participants configured here are not the ones the final
     read (the stage would read others); when a retained answer no longer matches its recorded sha256; and with no
     finished assess stage that made the final. Writes the 'assessment.refreshed' audit row; ``dry_run`` checks the same
-    and writes nothing. Returns what was (or would be) queued and what it re-reads."""
+    and writes nothing. Returns what was (or would be) queued and what it re-reads.
+
+    ``expected_participants``: the participants the WORKER that makes the re-assessment runs (the installer passes them
+    from its app receipt: its one-shot runs with every participant disabled, so this process's own configuration is not
+    the worker's); None reads this process's configuration, as a command run in the worker's environment does."""
     if not isinstance(tag, str) or not 0 < len(tag) <= 80 or not tag.isprintable() or any(c.isspace() for c in tag):
         raise Refused(RETAINED_TAG)
     with transaction.atomic():
@@ -3071,7 +3174,7 @@ def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
             raise Refused(RETAINED_DATE)
         retained = _retained_runs(revision, final)
         recorded = sorted(name for name, _, _ in retained)
-        configured = sorted(participants.configured())
+        configured = sorted(participants.configured() if expected_participants is None else expected_participants)
         if recorded != configured:
             raise Refused(RETAINED_PARTICIPANTS.format(recorded=', '.join(recorded) or 'none',
                                                        configured=', '.join(configured) or 'none'))

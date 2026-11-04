@@ -21,7 +21,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import answers, audit, customer_api, intake, jobs, models, reports, review
+from . import answers, audit, client_contract, customer_api, intake, jobs, models, reports, review
 from .access import active_membership, scoped_encounter
 from .ingest import canonicalize
 from .storage import read_original
@@ -74,11 +74,19 @@ class ApiError(Exception):
         self.status, self.message, self.details = status, message, details
 
 
-def api_view(view):
+def api_view(view=None, *, contract=True):
+    """A customer API view: JSON errors, sign-in required, and - unless ``contract`` is False (a download, which is a
+    browser navigation and sends no header of the page's) - the page build the client contract names
+    (studio.client_contract, decision (l)): any other answers 409 client_outdated before the view runs."""
+    if view is None:
+        return functools.partial(api_view, contract=contract)
+
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Sign in to continue.'}, status=401)
+        if contract and not client_contract.current(request):
+            return JsonResponse(client_contract.OUTDATED, status=409)
         try:
             return view(request, *args, **kwargs)
         except ApiError as exc:
@@ -468,7 +476,7 @@ def create_report(request, encounter_id):
 
 
 @require_GET
-@api_view
+@api_view(contract=False)
 def download_report(request, report_id):
     """A customer artifact of the caller's workspace, as stored (no sha256 header). Any other artifact - an operator's,
     or one recorded before the audience existed, which names the review participants - answers 404; an approved export
@@ -490,7 +498,7 @@ def download_report(request, report_id):
 
 
 @require_GET
-@api_view
+@api_view(contract=False)
 def original(request, encounter_id):
     encounter, _ = scoped_encounter(request.user, encounter_id)
     source = encounter.files.order_by('uploaded_at').first()

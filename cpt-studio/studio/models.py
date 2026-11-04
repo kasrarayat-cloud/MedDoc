@@ -686,3 +686,15 @@ class LoginAttempt(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at'])]
+
+
+class WorkerBeat(models.Model):
+    """Decision (j) of the core repair (2026-11-03): the worker process's heartbeat - one row per worker name, written
+    every jobs.HEARTBEAT_SECONDS by a thread of the worker process (jobs.start_heartbeat), so it says whether a worker
+    is alive, not whether its loop is between stages. The progress panel reads it (jobs.worker_responding): while a
+    document waits on processing and the newest beat is older than jobs.WORKER_SILENT_SECONDS, it says processing is
+    paused and does not animate. No row at all is never read as a dead worker (nothing is known)."""
+    name = models.CharField(primary_key=True, max_length=20)
+    beat_at = models.DateTimeField()
+    revision = models.CharField(max_length=64, blank=True)
+    pid = models.PositiveIntegerField(null=True, blank=True)

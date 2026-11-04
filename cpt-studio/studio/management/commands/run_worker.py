@@ -29,5 +29,9 @@ class Command(BaseCommand):
                 jobs.run_job(job)
             return
         self.stdout.write('CPT Studio worker started.')
+        # decision (j): the process beats at once and then every jobs.HEARTBEAT_SECONDS from a thread of its own, so the
+        # progress panel can tell a worker that is gone from one that is busy with a long stage
+        jobs.beat()
+        jobs.start_heartbeat(lambda: stopping['flag'])
         jobs.work(lambda: stopping['flag'], poll_seconds=options['poll_seconds'])
         self.stdout.write('CPT Studio worker stopped.')

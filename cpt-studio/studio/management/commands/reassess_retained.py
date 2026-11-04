@@ -27,6 +27,9 @@ class Command(BaseCommand):
         parser.add_argument('--tag', required=True, help='the release the re-assessment is made for')
         parser.add_argument('--username', default='', help='the account the request is recorded for (default: system)')
         parser.add_argument('--dry-run', action='store_true', help='check every guard and print the plan; queue nothing')
+        parser.add_argument('--participants', default=None,
+                            help='the participants the worker runs, comma-separated, or none (default: this '
+                                 "process's own configuration); the installer passes its app receipt's")
 
     def handle(self, *args, **options):
         try:
@@ -38,8 +41,17 @@ class Command(BaseCommand):
             user = models.User.objects.filter(username=options['username'], is_active=True).first()
             if user is None:
                 raise CommandError('No active account has that username.')
+        expected = None
+        if options['participants'] is not None:
+            from studio import participants
+            value = options['participants'].strip()
+            expected = [] if value == 'none' else [name.strip() for name in value.split(',')]
+            if not all(name in participants.PARTICIPANTS for name in expected) or len(set(expected)) != len(expected):
+                raise CommandError('--participants names each participant once (' + ', '.join(participants.PARTICIPANTS)
+                                   + '), or is none.')
         try:
-            out = jobs.reassess_retained(encounter, options['tag'], user=user, dry_run=options['dry_run'])
+            out = jobs.reassess_retained(encounter, options['tag'], user=user, dry_run=options['dry_run'],
+                                         expected_participants=expected)
         except jobs.Refused as exc:
             raise CommandError(str(exc))
         self.stdout.write(json.dumps(out, sort_keys=True))
