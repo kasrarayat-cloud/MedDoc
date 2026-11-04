@@ -145,6 +145,7 @@ UNMOVED = {
     ('R8 D12 E/M control, h4-01 time-only twin', '99204'): READY,
     ('R8 D13 named EGD control, h4-03 as written', '43244'): READY,
     ('R8 D13 named EGD control, two passages', '43244'): READY,
+    ('R8 D15 EGD with EUS, base EGD coded', '43242'): READY,
 }
 
 
@@ -547,3 +548,39 @@ class StoppedShortOfTheExtentTests(SimpleTestCase):
             with self.subTest(other):
                 text = NAMED_EGD.replace(RETROFLEXION, RETROFLEXION + ' ' + other, 1)
                 self.assertEqual(self.extent_status(text, BANDS_PASSED), ('ready', []))
+
+
+EUS = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure note (fictional)\n'
+       'Date of service: 2026-10-14\nPlace of service: Hospital outpatient\nProcedure: EGD with EUS\n'
+       'The echoendoscope was advanced to the second part of the duodenum.\n'
+       'Endosonographic examination of the pancreas showed a 2 cm hypoechoic mass in the pancreatic head.\n'
+       'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.\n')
+EUS_REACH = 'The echoendoscope was advanced to the second part of the duodenum.'
+EUS_FNA = 'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.'
+
+
+class BaseInsideAnIncludingServiceTests(SimpleTestCase):
+    """D15 (R8 1.2, r1 missed-14): a base code whose documented service is the endoscopic portion of another documented
+    service (DocumentedService.included_in: an EGD inside an upper EUS) is held [base_included] beside a selected code
+    of that service that includes the examination (reconcile's own inclusion test, catalogue.includes_examination), or
+    when that service has no selected code at all (it is the one asked for) - engine._base_within, beside the base rule
+    that counted only same-family codes. Held, never excluded."""
+
+    def test_d15_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D15 ')
+
+    def test_the_egd_base_beside_its_eus_is_held(self):
+        result = run(EUS, [sel('43242', span(EUS, EUS_FNA)), sel('43235', span(EUS, EUS_REACH))])
+        base = proposal(result, '43235')
+        self.assertEqual((base.bucket, base.status), ('selected', 'needs_clarification'))
+        (asked,) = [c for c in base.clarifications if c.fact == 'base_included']  # (its extent is asked here too)
+        self.assertIn('43242', asked.question)
+        self.assertEqual(proposal(result, '43242').status, 'ready')
+        # the EGD base alone, its EUS coded by nobody: held too (the EUS code includes the examination)
+        alone = proposal(run(EUS, [sel('43235', span(EUS, EUS_REACH))]), '43235')
+        self.assertIn('base_included', [c.fact for c in alone.clarifications])
+
+    def test_control_an_egd_of_its_own_stays_ready(self):
+        text = EGD_HEAD + 'The stomach and duodenum were normal.\n'
+        item = proposal(run(text, [sel('43235', span(text, EGD_BASE))]), '43235')
+        self.assertEqual(item.status, 'ready')

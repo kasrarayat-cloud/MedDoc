@@ -136,6 +136,10 @@ class _Encounter:
     # Engine @4: a family's base (diagnostic) code selected beside a code of the same documented service that accounts
     # for one of its interventions: (base code, the other codes). The base is held, never excluded.
     bases_included: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # P2 READ-HOLD, R8 D15: a base code whose documented service is the endoscopic portion of another (an EGD inside an
+    # EUS): (base code, the selected codes of that service that include the examination - none when it has no selected
+    # code). Held, never excluded; empty when no base is so read (I1).
+    bases_within: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -2214,7 +2218,9 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
                       and entry is not None and a.kind in entry.acts and not reconcile._bundled(match.service, a)]
         if others or reportable:
             bases.append((s.code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
-    return _Encounter(bases_included=tuple(bases), provider=provider, context=context, sources=sources,
+    within = tuple((s.code, codes) for s in active for codes in (_base_within(s, active),) if codes is not None)
+    return _Encounter(bases_included=tuple(bases), bases_within=within, provider=provider, context=context,
+                      sources=sources,
                       date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       possible_labels=tuple(possible_labels),
@@ -2222,6 +2228,28 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
                       if_reinstated=tuple((s.code, s.profile.label if s.profile.supported else '')
                                           for s in reinstatable) if gate else (),
                       gated_visits=tuple(s.code for s in visits) if gate else ())
+
+
+def _base_within(s: _Selection, active: Sequence[_Selection]) -> Optional[tuple[str, ...]]:
+    """P2 READ-HOLD, R8 D15 (r1 missed-14): whether the base code ``s`` is held because its matched documented service
+    is the endoscopic portion of another (DocumentedService.included_in: an EGD inside an upper EUS), as the base rule
+    above holds a base beside a same-family intervention: the codes of the active selections matched to that service
+    that include the examination (reconcile's own inclusion test, catalogue.includes_examination: an EGD-with-EUS
+    code), or () when that service has no active selected code at all (the code it asks for includes the examination,
+    reconcile.inclusion_asks_no_code). None - no hold - when the code is no base, its service is part of no other, or
+    that service's selected codes include no such examination (a sigmoidoscopy EUS code: the EGD is a service of its
+    own). Bounded: one pass over the active selections."""
+    profile = reconcile.catalogue.code_profile(s.code)
+    match = s.evaluation.match if s.evaluation is not None else None
+    if profile is None or not profile.base or match is None or not match.service.included_in:
+        return None
+    service = match.service
+    including = [t for t in active if t is not s and t.evaluation is not None and t.evaluation.match is not None
+                 and t.evaluation.match.service.id == service.included_in]
+    if not including:
+        return ()
+    codes = tuple(t.code for t in including if reconcile.catalogue.includes_examination(t.code, service.kind))
+    return codes or None
 
 
 def _procedural(s: _Selection) -> bool:
@@ -2363,6 +2391,20 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
                                                 proposal_key=key, reason=reason,
                                                 question=f'Is {s.code} reported separately from {", ".join(included)} '
                                                          'for this examination?'))
+    within = dict(enc.bases_within).get(s.code)
+    if within is not None and not included and not s.excluded:
+        # P2 READ-HOLD, R8 D15: the base code of a service read as the endoscopic portion of another (_base_within)
+        service_name = reconcile.service_label(m.service) if m else 'service'
+        coded = f', which {", ".join(within)} {"accounts" if len(within) == 1 else "account"} for' if within else ''
+        reason = (f'The documented {service_name} is the endoscopic portion of the endoscopic ultrasound documented with '
+                  f'it{coded}; that examination is normally included in it, not reported separately (internal profile '
+                  'rule; NCCI procedure-to-procedure edits are not connected). Held for the reviewer, not excluded.')
+        found.append(Check('services.base_included', 'Diagnostic examination beside its interventions', 'warn', reason,
+                           reconcile.SOURCE))
+        clarifications.append(ClarificationSpec(
+            scope='proposal', fact='base_included', family=s.family, proposal_key=key, reason=reason,
+            question=f'Is {s.code} reported separately from {", ".join(within) or "the endoscopic ultrasound"} for this '
+                     'examination?'))
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)

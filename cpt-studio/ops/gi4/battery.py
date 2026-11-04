@@ -486,6 +486,14 @@ CASES = {
     'R8 D13 named EGD, stopped in the stomach, two passages': (
         R8_STOPPED, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'no_ready')]),
     'R8 D13 named EGD control, two passages': (R8_NAMED_EGD, [('43244', (R8_BANDS_PASSED, R8_BANDS), 'done')]),
+    # D15: a base code beside the service that includes it (an EGD inside an EUS)
+    'R8 D15 EGD with EUS, base EGD coded': (
+        _r8(B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
+                'Procedure: EGD with EUS', 'The echoendoscope was advanced to the second part of the duodenum.',
+            'Endosonographic examination of the pancreas showed a 2 cm hypoechoic mass in the pancreatic head.',
+            'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.'),
+        [('43242', 'EUS-guided fine-needle aspiration of the pancreatic head mass was performed.', 'done'),
+         ('43235', 'The echoendoscope was advanced to the second part of the duodenum.', 'no_ready')]),
     # D10: an attached prior report's title
     'R8 D10 attached prior EGD report title': (
         R8_COLON + '\nAttached prior report:\nUpper endoscopy report (fictional)\nDate of service: 2025-03-01\n'
