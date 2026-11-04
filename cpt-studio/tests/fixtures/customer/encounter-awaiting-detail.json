@@ -1,0 +1,332 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000003",
+ "title": "Office visit with upper endoscopy and colonoscopy",
+ "created_at": "2026-10-30T15:02:00Z",
+ "updated_at": "2026-10-30T15:12:04Z",
+ "state": "awaiting_detail",
+ "state_label": "A few details needed",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "Pasted clinical text",
+  "media_type": "text/plain",
+  "size": 698,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nHarbor Point GI - Visit and procedure note\nPatient: Theo Marsh (fictional) | Date of service: 2026-10-30\n\nOffice visit, separate from the procedures: evaluation of new iron-deficiency anemia. Total time on the date of the visit: 32 minutes. The decision was made to proceed with endoscopy today.\n\nUpper endoscopy: The endoscope was passed to the second part of the duodenum. Biopsies were taken from the gastric antrum with cold forceps.\n\nColonoscopy: The colonoscope was advanced through the colon. A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare and retrieved.\n\nImpression: Gastric biopsies taken; one sigmoid polyp removed.",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 698
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Pasted text",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": "2026-10-30",
+  "source": "document",
+  "document_value": "2026-10-30",
+  "document_quote": {
+   "text": "Date of service: 2026-10-30",
+   "start": 121,
+   "end": 148
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "awaiting_detail",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-10-30T15:02:04Z",
+    "finished_at": "2026-10-30T15:02:09Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-10-30T15:02:09Z",
+    "finished_at": "2026-10-30T15:02:11Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "done",
+    "started_at": "2026-10-30T15:02:11Z",
+    "finished_at": "2026-10-30T15:04:40Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "done",
+    "started_at": "2026-10-30T15:04:40Z",
+    "finished_at": "2026-10-30T15:04:52Z"
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-10-30T15:02:04Z",
+  "finished_at": "2026-10-30T15:04:52Z",
+  "server_time": "2026-10-30T15:12:10Z",
+  "slow": false,
+  "message": "Results are ready. A few details are needed before every code can be reviewed.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "done"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "done"
+  }
+ ],
+ "codes": [
+  {
+   "id": "c1a00000-0000-4000-8000-000000000001",
+   "number": 1,
+   "code": "43239",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "ready",
+   "status_label": "Ready for review",
+   "sub_label": "",
+   "summary": "The upper endoscopy is documented with cold-forceps biopsies of the gastric antrum.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Biopsies were taken from the gastric antrum with cold forceps.",
+      "start": 419,
+      "end": 481,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": []
+   },
+   "detail_ids": [],
+   "allowed_actions": [
+    "approve",
+    "reject"
+   ],
+   "decision": null
+  },
+  {
+   "id": "c1a00000-0000-4000-8000-000000000002",
+   "number": 2,
+   "code": "45385",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "needs_detail",
+   "status_label": "Needs a detail",
+   "sub_label": "Waiting for a detail: how far the colonoscope was advanced.",
+   "summary": "The colonoscopy is documented with hot-snare removal of a 9 mm polyp in the sigmoid colon.",
+   "why": {
+    "quotes": [
+     {
+      "text": "A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare and retrieved.",
+      "start": 544,
+      "end": 634,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": [
+     "A colonoscopy code needs the furthest extent reached, and this note does not state it."
+    ]
+   },
+   "detail_ids": [
+    "c1d00000-0000-4000-8000-000000000002"
+   ],
+   "allowed_actions": [
+    "reject"
+   ],
+   "decision": null
+  },
+  {
+   "id": "c1a00000-0000-4000-8000-000000000003",
+   "number": 3,
+   "code": "99214",
+   "units": 1,
+   "modifiers": [],
+   "modifier_review": null,
+   "status": "needs_detail",
+   "status_label": "Needs a detail",
+   "sub_label": "Waiting for a detail: new or established patient.",
+   "summary": "A separate office visit with 32 minutes of total time on the date of the visit is documented.",
+   "why": {
+    "quotes": [
+     {
+      "text": "Total time on the date of the visit: 32 minutes.",
+      "start": 236,
+      "end": 284,
+      "page": 1,
+      "exact": true
+     }
+    ],
+    "qualifications": [
+     "The office visit code depends on whether the patient is new or established, which the note does not state."
+    ]
+   },
+   "detail_ids": [
+    "c1d00000-0000-4000-8000-000000000001",
+    "c1d00000-0000-4000-8000-000000000003"
+   ],
+   "allowed_actions": [
+    "reject"
+   ],
+   "decision": null
+  }
+ ],
+ "other_codes": [
+  {
+   "code": "99204",
+   "reason": "Whether the patient is new is not documented."
+  }
+ ],
+ "not_separately_coded": [],
+ "details_needed": [
+  {
+   "id": "c1d00000-0000-4000-8000-000000000001",
+   "fact": "patient_status",
+   "family_label": "Office visit",
+   "prompt": "Is the patient new or established for this office visit?",
+   "control": "choice",
+   "choices": [
+    {
+     "value": "new",
+     "label": "New patient"
+    },
+    {
+     "value": "established",
+     "label": "Established patient"
+    }
+   ],
+   "allow": [
+    "not_documented"
+   ],
+   "document_value": null,
+   "entered_value": null,
+   "quote": null,
+   "affects": [
+    "99214"
+   ],
+   "saved": null,
+   "addendum_allowed": false
+  },
+  {
+   "id": "c1d00000-0000-4000-8000-000000000002",
+   "fact": "extent",
+   "family_label": "Colonoscopy",
+   "prompt": "The note does not say how far the colonoscope was advanced. Is the furthest extent documented?",
+   "control": "confirm",
+   "choices": [],
+   "allow": [
+    "not_documented",
+    "cannot_confirm"
+   ],
+   "document_value": null,
+   "entered_value": null,
+   "quote": null,
+   "affects": [
+    "45385"
+   ],
+   "saved": null,
+   "addendum_allowed": true
+  },
+  {
+   "id": "c1d00000-0000-4000-8000-000000000003",
+   "fact": "setting",
+   "family_label": "Office visit",
+   "prompt": "Where did the office visit take place?",
+   "control": "choice",
+   "choices": [
+    {
+     "value": "office",
+     "label": "Office"
+    },
+    {
+     "value": "hospital_outpatient",
+     "label": "Hospital outpatient department"
+    },
+    {
+     "value": "telehealth",
+     "label": "Telehealth"
+    }
+   ],
+   "allow": [
+    "not_documented"
+   ],
+   "document_value": null,
+   "entered_value": null,
+   "quote": null,
+   "affects": [
+    "99214"
+   ],
+   "saved": {
+    "value": "office",
+    "label": "Office",
+    "by": "Synthetic Reviewer",
+    "at": "2026-10-30T15:12:04Z",
+    "answer_id": "c1f00000-0000-4000-8000-000000000001"
+   },
+   "addendum_allowed": false
+  }
+ ],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "2 details are still needed.",
+   "43239 is waiting for a review decision."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-30T15:02:00Z"
+  },
+  {
+   "event": "detail.answered",
+   "summary": "A detail was answered",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-30T15:12:04Z"
+  }
+ ]
+}

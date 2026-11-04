@@ -1,0 +1,124 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000011",
+ "title": "Colonoscopy report, just uploaded",
+ "created_at": "2026-11-02T14:20:00Z",
+ "updated_at": "2026-11-02T14:20:00Z",
+ "state": "processing",
+ "state_label": "Processing",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "upload",
+  "name": "synthetic-colonoscopy-upload.pdf",
+  "media_type": "application/pdf",
+  "size": 41200,
+  "page_count": 1,
+  "revision": 1,
+  "text": "",
+  "pages": [],
+  "reading": {
+   "status": "pending",
+   "label": "Not read yet",
+   "messages": []
+  },
+  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000011/original"
+ },
+ "service_date": {
+  "value": null,
+  "source": "missing",
+  "document_value": null,
+  "document_quote": null,
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "queued",
+  "busy": true,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "waiting",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-11-02T14:20:00Z",
+  "finished_at": null,
+  "server_time": "2026-11-02T14:20:03Z",
+  "slow": false,
+  "message": "Your document is in line to be read. It usually starts within a minute.",
+  "can_stop": true,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "waiting"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "waiting"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "waiting"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "Processing has not finished."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-02T14:20:00Z"
+  }
+ ]
+}

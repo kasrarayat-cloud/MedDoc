@@ -1,0 +1,141 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000008",
+ "title": "Flexible sigmoidoscopy, stopped",
+ "created_at": "2026-10-25T16:00:00Z",
+ "updated_at": "2026-10-25T16:01:30Z",
+ "state": "stopped",
+ "state_label": "Stopped",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "Pasted clinical text",
+  "media_type": "text/plain",
+  "size": 303,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nHarbor Point GI - Flexible sigmoidoscopy report\nPatient: Max Dorsey (fictional) | Date of service: 2026-10-25\n\nProcedure: The sigmoidoscope was advanced to 45 cm. A 4 mm polyp at 20 cm was removed with cold biopsy forceps.\nImpression: One small polyp removed.",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 303
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Pasted text",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": "2026-10-25",
+  "source": "document",
+  "document_value": "2026-10-25",
+  "document_quote": {
+   "text": "Date of service: 2026-10-25",
+   "start": 126,
+   "end": 153
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "stopped",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-10-25T16:00:02Z",
+    "finished_at": "2026-10-25T16:00:05Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-10-25T16:00:05Z",
+    "finished_at": "2026-10-25T16:00:07Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "stopped",
+    "started_at": "2026-10-25T16:00:07Z",
+    "finished_at": "2026-10-25T16:01:30Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-10-25T16:00:02Z",
+  "finished_at": "2026-10-25T16:01:30Z",
+  "server_time": "2026-10-25T16:05:00Z",
+  "slow": false,
+  "message": "Processing was stopped. Nothing else runs until you resume.",
+  "can_stop": false,
+  "can_resume": true,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "done"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "not_run"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "Processing was stopped before results were ready."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-25T16:00:00Z"
+  },
+  {
+   "event": "processing.stopped",
+   "summary": "Processing stopped",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-25T16:01:30Z"
+  }
+ ]
+}

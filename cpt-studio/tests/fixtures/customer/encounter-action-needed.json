@@ -1,0 +1,154 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000002",
+ "title": "Upper endoscopy, date to choose",
+ "created_at": "2026-11-01T10:15:00Z",
+ "updated_at": "2026-11-01T10:15:12Z",
+ "state": "action_needed",
+ "state_label": "Action needed",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "upload",
+  "name": "synthetic-upper-endoscopy.pdf",
+  "media_type": "application/pdf",
+  "size": 30551,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nWillow Creek Endoscopy - Upper endoscopy report\nPatient: Owen Pike (fictional) | Date of service: 2026-10-28\nIndication: Dyspepsia.\n\nProcedure: The endoscope was passed to the second part of the duodenum. Cold-forceps biopsies were taken from the gastric antrum.\nImpression: Mild antral erythema. Biopsies taken.",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 356
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "PDF text layer",
+   "messages": []
+  },
+  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000002/original"
+ },
+ "service_date": {
+  "value": null,
+  "source": "conflict",
+  "document_value": "2026-10-28",
+  "document_quote": {
+   "text": "Date of service: 2026-10-28",
+   "start": 125,
+   "end": 152
+  },
+  "entered_value": "2026-10-21",
+  "conflict": true,
+  "can_use_document_date": true
+ },
+ "progress": {
+  "phase": "action_needed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-11-01T10:15:02Z",
+    "finished_at": "2026-11-01T10:15:07Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-11-01T10:15:07Z",
+    "finished_at": "2026-11-01T10:15:09Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-11-01T10:15:02Z",
+  "finished_at": null,
+  "server_time": "2026-11-01T10:15:12Z",
+  "slow": false,
+  "message": "The date of service you entered differs from the date in the document. Choose one below; nothing is checked until then.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": null
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "not_run"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "not_run"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [
+  {
+   "id": "c1d00000-0000-4000-8000-000000000001",
+   "fact": "service_date",
+   "family_label": "Encounter",
+   "prompt": "Which date of service is right for this document?",
+   "control": "date",
+   "choices": [],
+   "allow": [],
+   "document_value": "2026-10-28",
+   "entered_value": "2026-10-21",
+   "quote": {
+    "text": "Date of service: 2026-10-28",
+    "start": 125,
+    "end": 152
+   },
+   "affects": [],
+   "saved": null,
+   "addendum_allowed": false
+  }
+ ],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "Choose the date of service."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T10:15:00Z"
+  }
+ ]
+}

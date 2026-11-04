@@ -1,0 +1,129 @@
+{
+ "id": "c1000000-0000-4000-8000-000000000007",
+ "title": "Scanned colonoscopy report",
+ "created_at": "2026-10-26T12:00:00Z",
+ "updated_at": "2026-10-26T12:00:40Z",
+ "state": "failed",
+ "state_label": "Could not finish",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "upload",
+  "name": "synthetic-scan-without-text.pdf",
+  "media_type": "application/pdf",
+  "size": 182044,
+  "page_count": 2,
+  "revision": 1,
+  "text": "",
+  "pages": [],
+  "reading": {
+   "status": "failed",
+   "label": "Could not be read",
+   "messages": [
+    "No text could be read from this file. If it is a scan, upload a copy with a text layer or paste the text."
+   ]
+  },
+  "original_url": "/api/encounters/c1000000-0000-4000-8000-000000000007/original"
+ },
+ "service_date": {
+  "value": null,
+  "source": "missing",
+  "document_value": null,
+  "document_quote": null,
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "failed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "failed",
+    "started_at": "2026-10-26T12:00:04Z",
+    "finished_at": "2026-10-26T12:00:40Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "not_started",
+    "started_at": null,
+    "finished_at": null
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-10-26T12:00:04Z",
+  "finished_at": "2026-10-26T12:00:40Z",
+  "server_time": "2026-10-26T12:05:00Z",
+  "slow": false,
+  "message": "The document could not be read, so no codes were suggested.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": {
+   "text": "No text could be read from this file. Upload a copy with a text layer, or paste the text.",
+   "action": "new_document"
+  }
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "not_run"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "not_run"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "unresolved": [],
+ "limitations": [
+  "CPT descriptors are not shown: no licensed CPT content is connected.",
+  "NCCI procedure-to-procedure edits and payer modifier policy are not checked.",
+  "Suggestions are not billing advice; every code needs a reviewer who reads the whole document."
+ ],
+ "readiness": {
+  "draft": false,
+  "approved": false,
+  "blockers": [
+   "The document could not be read."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document.added",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "at": "2026-10-26T12:00:00Z"
+  }
+ ]
+}
