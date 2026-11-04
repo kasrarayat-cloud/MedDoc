@@ -873,6 +873,8 @@ HYPHEN = r'[\-\u2010-\u2014]'
 # in-person" with HYPHEN's spellings; "not evaluated in person" is another verb and is not read.
 NOT_IN_PERSON = rx(r"(?:\bnot|(?<=[A-Za-z])n['\u2019]t)\s+seen\s+in(?:\s+(?:the\s+)?|" + HYPHEN
                    + r')(?:office|clinic|person)\b|\bno\s+in(?: |' + HYPHEN + r')person\b'
+                   # (V12: session 2's "The patient was not seen." below, contracted; its own line is left as it was)
+                   r"|\b(?:patient|pt|she|he)\s+(?:was|is)n['\u2019]t\s+seen\b"
                    # repair cycle 1 (EMR-8): "on phone", "over phone" and a parenthesised "(telephone)" too
                    r'|\b(?:by|via|over(?:\s+the)?|on(?:\s+the)?)\s+(?:tele)?phone\b|\((?:by\s+|via\s+)?(?:tele)?phone\)'
                    r'|,[ \t]*(?:tele)?phone(?=[ \t]*(?:[.;]|$))'  # "Total time: 12 minutes, telephone."
@@ -883,8 +885,7 @@ NOT_IN_PERSON = rx(r"(?:\bnot|(?<=[A-Za-z])n['\u2019]t)\s+seen\s+in(?:\s+(?:the\
                    r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b"
                    # session 2: "The patient was not seen.", a visit-type field naming the telephone ("Visit type:
                    # Telephone", "Type of encounter: phone"), "missed her appointment", "left without being seen"
-                   r"|\b(?:patient|pt|she|he)\s+(?:(?:was|is)\s+not|(?:was|is)n['\u2019]t)\s+seen\b"
-                   r'|\b(?:(?:visit|encounter|appointment|contact|'
+                   r'|\b(?:patient|pt|she|he)\s+(?:was|is)\s+not\s+seen\b|\b(?:(?:visit|encounter|appointment|contact|'
                    r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
                    r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
                    r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
