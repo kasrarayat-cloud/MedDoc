@@ -6163,5 +6163,4700 @@
    "ops.gi4.battery --declare reads only a declaration's top-level 'battery', so a superseding amendment is checked with a scratch file that copies its 'battery' verbatim (H4_battery).",
    "A customer sees no quote for a named_only hold (the match names no act, so review.evidence_spans returns none). Its one detail row is a confirm control that accepts 'not documented' or 'cannot confirm', or an addendum; the code allows reject only."
   ]
+ },
+ "amendment_20261104_hold_only_r5b": {
+  "declared_before_code": true,
+  "declared_at": "2026-11-04, on fix/cpt-studio-label-binding-20261104 at bbe4266da6f4a9355f0321aa3887c805eb6a6c52 (main 20a64b8601380f716fb47dd68ada4f7c83de5ffc with the hold-only form of R1a-r5: amendment_20261104_hold_only, its code a6dee085, its tests ebf858fc and its after-code record bbe4266d), before any code of the three fixes, and committed alone, before the code commit. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "provenance": "HONEST ORDER OF WORK. The three fixes, their patch script (/home/claude/cpt-studio-ux-20261103/verify-r4/apply_z21.py, run WITHOUT --d: it asserts each of its three anchors once and prints each file's sha256 before and after) and their measurements were designed, prototyped and measured by the lead BEFORE this amendment, on the lead's prototype tree verify-r4/proto-Z21a (bbe4266d with that script applied); the lead also measured a variant (--d, verify-r4/proto-Z21d) and did not take it. Those measurements are the lead's and are recorded in lead_measurements as the lead's. This amendment is written by the implementing session before this branch changes any code. Before writing it, this session made its own sealed git-archive exports from this worktree (scratch-r5c/exports, chmod a-w: main 20a64b860, installed 41e03656d, the hold-only head bbe4266d, and bbe4266d with the lead's script applied) and reproduced: the patched export is byte-identical, every file, to verify-r4/proto-Z21a (engine.py 90ba74e8f50aac4b..., services.py d0ed5996c0481554..., reconcile.py b2aa6e5ef1743694...); the lead's driver verify-r4/drive2.py over verify-r4/refuter-cases4.json, base-probes2.json and cases.json on the sealed main, installed, hold-only and patched exports gives outputs byte-identical to the lead's rc4-*, bp2-* and c18b-* files (12 of 12); the lead's corpus dumps (verify-r4/invdump_main.py with its fixture root moved to the sealed main export) of main and of the hold-only head are byte-identical to the lead's inv-x-20a64b860138.json and inv-x-bbe4266da6f4.json; and the lead's figures, recomputed from those outputs (scratch-r5c/tools/rcstats2.py), equal the lead's statement but for one wording about installed (lead_measurements.variant_d). Every cell, inventory act, offer, second-review merge, modifier review and customer flow below was measured by this session before code with a scratch harness - the hold-only head's cpt-studio exported, with this amendment's battery edit applied (ops/gi4/battery.py sha256 4e49f0f6cb86779b3e43e8c4e3407c2d69e82ba5faf99ac511286d7991188e95) - reading the sealed exports one tree per process, offline, and (the customer flows) through the real endpoints and pipeline on the throwaway test server 127.0.0.1:55461 (suffixes r5c11 to r5c13) with scratch probe modules on PYTHONPATH, never in a tree: they are the prototype's readings, declared before this branch's code exists. The battery edit (the three 'R8 R5 Z' rows and R5_Z_SOURCES) lands with the tests, after the code, byte-identical to that harness's battery.py; this amendment pins each new text by its sha256. The committed code must reproduce every reading below and every lead measurement; each is re-measured after code on sealed exports and recorded in a dated after-code record that changes no key above it.",
+  "governs": "This amendment governs wherever amendment_20261104_hold_only (and after_code_20261104_hold_only) disagrees: the hold-only rule gains the three fixes, and the battery, readings, named_only_cells, inventory_acts, offer_battery and declared_costs below replace that amendment's as the head's expectation (its keys stay as the dated record of the hold-only form as committed in a6dee085 and measured in bbe4266d). The tests read this amendment: tests/test_cux_r5_binding.py (the hold-only rule's latest record) and tests/test_cux_hold.RegisterOfferTests (the latest offer_battery of this file). tests/test_cux_r3_reader.py reads amendment_20261104_hold_only's 'battery' for its one 'R8 R3 ' movement (the A3 control, held), which this amendment does not move. ops.gi4.battery --declare reads a file's top-level 'battery' only, so it is run with a scratch file whose top-level 'battery' is this amendment's 'battery', copied verbatim (the precedent: after_code_20261104_hold_only H4_battery).",
+  "refute_round_5b": {
+   "source": "/home/claude/cpt-studio-ux-20261103/refute-r5b-results.json: r5brefute:X and r5brefute:Y, each finding reproduced independently in r5bverify:<lens>:<id>. How this form reads each was measured by this session before code on the sealed patched export, with the hold-only head and main beside it (scratch-r5c/out); the rows named are added below ('R8 R5 Z').",
+   "X-R5B-1": "blocking in its verifier's grading (the finder graded it major), REPRODUCED, new in the hold-only form, worse than main and installed. engine._second_review counted a code as accounting for a whole service left without a proposal only when its match was performed or incomplete; a named_only match is 'uncertain', so a 45385 the bounded re-check selected for the unproposed colonoscopy of a hold-class document was dropped to an informational alternative with a false reason ('the act it accounts for is not documented as done in the service left unresolved'), the colonoscopy stayed unresolved, the one second review was used up, and once the primary's 43239 was approved the approved export (201) listed 43239 alone: the documented snare polypectomy left the claim with no warning. Reproduced before code on the hold-only head, offline (engine.assess with a second-review response over the X-R5B-1 verifier's 38 cases: scratch-r5c/out/srx-off-hold.json) and through the customer API (scratch-r5c/out/api-hold.json). Fix (a): a named_only match counts as supported (its act is documented as done; only its tie to the service is in question), so the code is added as a second-review proposal and held [performed_status] (named_only). Patched export, before code: in every case where the hold-only head drops 45385 to an alternative (the Y1 rows x3, the Y3 rows x4, Y5, the 1146, 1277 and 1406 rows, SR3 on Y1 and on Y3, and the nothing-primary SR0 on X3 FD4b, the two Y4 rows, the denied-title row and the A3 control) it is added, held, origin second_review, reason named_only; the colonoscopy is accounted for wherever main reads it accounted for, and the check reads as main's ('selected 45385, added as a proposal for review'). Through the API (the Y3 and 1146 rows): 45385 is a code 'Needs a detail' (reject its only action), nothing is listed as an alternative, and after 43239 is approved the approved export is refused (409, blockers ['45385 needs a detail.']) until 45385 is decided, as main refuses it until 45385 has a decision; after 45385 is rejected the export (201) lists 43239. SR4 (the act-item path) was already held and is unchanged.",
+   "X-R5B-2": "minor, REPRODUCED, new in the hold-only form, worse than main (installed has no modifier review). The named_only Match carried no acts, so the stored support recorded acts [] and every rule reading a code's acts lost the held code: the separate-lesion modifier review of the ready partner code (45380 on Polyp B) and of 45385 disappeared, an approval of 45380 with XS or 59 was refused (409), and 45385's own separate-lesion and screening-became-therapeutic considerations were dropped. Fix (c): the named_only hold carries its acts; the code stays held [performed_status] (named_only) - an uncertain match is never performed, so the support check stays not_applicable and no quote is added - and every rule reading the acts reads them as main does. Patched export, before code: over the X-R5B-2 verifier's seven cases (scratch-r5c/out/mrx-off-proto.json) 45385 records support acts [S2-A1], its considerations return (with a screening indication, both), the overlay's modifier review [59, XS] returns on 45385 and 45380 exactly as on main, and an approval of 45380 with XS has no blocker; through the API (the Z3 row's text) both codes offer the review and approving 45380 with XS (201, modifiers ['XS']) or with 59 (201, ['59']) succeeds, as on main. Row 'R8 R5 Z3 ...'.",
+   "Y-F1": "major, REPRODUCED, new in the hold-only form, worse than main and installed. services._merge_acts merges every statement of one act (kind, status, lesion, role) into the FIRST statement and kept that statement's cues, so a label-only statement told first kept NAME_ONLY_CUE through the merge with a restatement naming its site, size or service (an impression line, a 'COLONOSCOPY IMPRESSION' line, '... during the colonoscopy'), and the code was held with a false question; the hold depended on order. Fix (b): a merged act keeps NAME_ONLY_CUE only when every statement of it carries it. Patched export, before code (the Y lens's cases, scratch-r5c/out/y-c7-*, y-c3-*): R1 realistic and M1 to M5 read 45385 READY [service] (main and installed READY); R1r and M1r READY as before; the texts with no restatement (R1c, EM1, S6) stay held, as the class declares. Row 'R8 R5 Z1 ...' (the R1 realistic text).",
+   "Y-F2": "major, REPRODUCED, new in the hold-only form, worse than main and installed. The same merge folded the physician's addendum restating the act at its site into the cued act, so no addendum could lift the hold, and the detail row's two answers (not documented, cannot confirm) both excluded a done code. Fix (b), as in Y-F1. Patched export, before code: offline (y-c2-*, y-c4-*) the addendum wordings that restate the act - E1, E4, E5, E6, A1, A2, A3, A5, A6 and the finding's own wording - read 45385 READY [service]; those in which the inventory reads no statement of the act (E2 'The cold snare polypectomy was performed on the date of service, as documented.', E3 'Polyp A was located in the sigmoid colon.', A7 'Correction: the snare removal of Polyp A took place in the colonoscopy.': the snare keeps its one label-only statement and its cue) stay held, and E7 is held [service_uncertain] on every tree. Through the customer API (the Y1 row; the finding's addendum posted from the detail row; Corti and both participants citing the original line, the addendum line, or both): revision 2 reads 45385 'Ready for review' with approve and reject, no detail row, and an approval returns 201; with no addendum the hold and its exits are the hold-only form's (the declared class). Row 'R8 R5 Z2 ...' (the finding's addendum wording in the block the pipeline writes for revision 2).",
+   "Y-F3": "major, REPRODUCED, new in the hold-only form, NOT FIXED here: the lead's three fixes do not touch it, and it is recorded as a residual of the class (declared_costs.hold_class.as_implemented; ACCURACY-RESIDUALS.md, round 5b). The class's condition 'its clause names no site of its own' is read as 'the ANATOMY reader reads no site in the clause' (services.py own_anat), so a site the reader does not know - 'just above the dentate line', 'at the anastomosis', 'at 30 cm', 'at 25 cm', 'at 38 cm from the incisors', 'at the incisura' - puts the act in the class and holds its code [performed_status] (named_only) where main and installed read READY. Patched export, before code: unchanged, held (y-c8-*, y-c9-*, y-c1-*); the controls the reader knows (the splenic and hepatic flexures, 30 cm from the anal verge, the cardia, the pylorus, the duodenal bulb, the antrum) read READY."
+  },
+  "rule": {
+   "R1a-r5 (hold-only), round 5b": "The rule of amendment_20261104_hold_only with three changes, the lead's patch verbatim. (a) studio/validation/engine.py _second_review: a whole service left without a proposal is accounted for by a code whose match is performed, incomplete, or held named_only (match.reason == 'named_only': its act is documented as done; only its tie to the service is in question), so that code is added as a second-review proposal and held [performed_status] - never dropped to an informational alternative that leaves the service silently uncoded. (b) studio/gi/services.py _merge_acts: when statements of one act merge (kind, status, lesion, role), the merged act keeps services.NAME_ONLY_CUE only when every merged statement carries it - a restatement naming its site, an addendum among them, lifts the mark; every other cue, the evidence, the technique and the detail merge as before. (c) studio/validation/reconcile.py match: the named_only hold carries the performed acts it rests on (Match('uncertain', service, done, 'named_only', ...)), so every rule reading a code's acts - the separate-lesion and screening considerations, the overlay's modifier review, the support record - reads them as main does; an uncertain match is never performed, so the support check stays not_applicable and no quote is added. The cue's condition, the conflict-first order, the reason named_only and its performed_status question are the hold-only form's, unchanged."
+  },
+  "patch": {
+   "script": "/home/claude/cpt-studio-ux-20261103/verify-r4/apply_z21.py (the lead's; run verbatim, WITHOUT --d: python3 apply_z21.py <worktree>/cpt-studio, on bbe4266d)",
+   "files": {
+    "studio/validation/engine.py": {
+     "sha256_before": "8a5f1a1670f0f7b0dac65c4e25abebc2cf414bb2a598e08ca06b320ac4efaa32 (bbe4266d)",
+     "sha256_after": "90ba74e8f50aac4b3118fdf9365d93bfab33433954b316baa15fe13c2b8303d8 (required)",
+     "anchors": "one, asserted to occur once: _second_review's 'supported' assignment"
+    },
+    "studio/gi/services.py": {
+     "sha256_before": "6525b08a7b38349a988745ee3a3c4ddc4ba45a820a43dce8cdd2af2f9edd6f71 (bbe4266d)",
+     "sha256_after": "d0ed5996c0481554e40e621e0afe6fdb38569e32c7a6d6049990f357bf001242 (required)",
+     "anchors": "one, asserted to occur once: _merge_acts's replace of a merged act (the cues computed before it); the --d anchor is not applied"
+    },
+    "studio/validation/reconcile.py": {
+     "sha256_before": "a01fdc18e1b915c0ee126e3b6f1bc3c80a0563eff981f0ed8eea043941b8e45f (bbe4266d)",
+     "sha256_after": "b2aa6e5ef17436946c2c609a368690ab38720a89738bf2ab75adf5c19bdd6941 (required)",
+     "anchors": "one, asserted to occur once: match's named_only Match"
+    }
+   },
+   "equals": "each file byte-identical to /home/claude/cpt-studio-ux-20261103/verify-r4/proto-Z21a/cpt-studio's (sha256 compared)",
+   "committed": "the three files alone, in the code commit after this amendment"
+  },
+  "engine_changed": [
+   "engine._second_review: 'supported' also counts a named_only match"
+  ],
+  "services_changed": [
+   "services._merge_acts: a merged act keeps NAME_ONLY_CUE only when every merged statement carries it"
+  ],
+  "reconcile_changed": [
+   "reconcile.match: the named_only hold carries its supporting performed acts"
+  ],
+  "cues_added": "none",
+  "detect_changed": "none",
+  "battery_rows_added": [
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site",
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service",
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line"
+  ],
+  "battery_rows_sources": {
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site": "refute-r5b/Y/cases/c7.json 'R1 realistic: findings by label, impression restates with size and site'",
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service": "refute-r5b/verify-Y/Y-F2/out/off/cases.json 'battery | W0 the finding | 2026-11-04 | cite orig'",
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line": "refute-r5b/X/work/cases2.json 'MR2 Y3 with a second polyp on its own line'"
+  },
+  "battery_rows_sources_note": "Each text is verbatim from refute-r5b, with its codes and truths: Z1 from the Y lens's own case file (refute-r5b/Y/cases/c7.json, the case Y-F1 names); Z2 from the Y-F2 verifier's offline case file (refute-r5b/verify-Y/Y-F2/out/off/cases.json: the Y1 row with the finding's addendum wording in the block studio.jobs.addendum_block_text writes for revision 2, the provider citing the original line); Z3 from the X lens's case file (refute-r5b/X/work/cases2.json, the case X-R5B-2 names). The same three are keys 2730, 2776 and 2660 of the lead's verify-r4/refuter-cases4.json. Each text's sha256 equals its source's (scratch-r5c/tools/edit_battery.py checks it).",
+  "battery_rows": [
+   "R8 R5 R1 dash",
+   "R8 R5 R1b dash upper endoscopy named",
+   "R8 R5 R3 dash",
+   "R8 R5 R1 paren",
+   "R8 R5 R1b paren upper endoscopy named",
+   "R8 R5 R3 paren",
+   "R8 R5 R1 control unlabelled",
+   "R8 R5 R2 dash combined",
+   "R8 R5 R2 paren combined",
+   "R8 R5 R4 dash",
+   "R8 R5 R4 paren",
+   "R8 R5 H1 dash first snare attempt",
+   "R8 R5 H3 dash one bite",
+   "R8 R5 H1 paren first snare attempt",
+   "R8 R5 H3 paren one bite",
+   "R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD",
+   "R8 R5 B2 dash base code: label-only line before the EGD",
+   "R8 R5 B3 dash EGD base code: label-only biopsy after the colon",
+   "R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD",
+   "R8 R5 B2 paren base code: label-only line before the EGD",
+   "R8 R5 B3 paren EGD base code: label-only biopsy after the colon",
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope",
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name",
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp",
+   "R8 R5 hold 1383 an upper lesion acted on by its label",
+   "R8 R5 hold, a combined title whose second service the note denies",
+   "R8 R5 G1 impression act by label, a bare endoscope",
+   "R8 R5 G1 impression act by label, the upper endoscopy named",
+   "R8 R5 control, the gastroscope named (R1a-r3 path)",
+   "R8 R5 control, a colonoscopy-only note with a label-only act",
+   "R8 R5 control, a labelled clip after the upper endoscopy",
+   "R8 R5 control, a labelled denial after the upper endoscopy",
+   "R8 R5 control, one procedure performed and one planned, acts by label",
+   "R8 R5 gap a, numbered procedure headings under an indication line",
+   "R8 R5 gap a control, the numbered headings without the indication line",
+   "R8 R5 gap b, the Label (site) form with a denial naming each label",
+   "R8 R5 gap b control, the 'Label - site:' form",
+   "R8 R5 X1 snare by label, the EGD titled first",
+   "R8 R5 X1 biopsy by label, the EGD titled first",
+   "R8 R5 X2 colon base code beside a label-only snare",
+   "R8 R5 X2 upper base code beside a label-only snare",
+   "R8 R5 X2 colon base code, the R1a-r3 path",
+   "R8 R5 X3 the 1146 row text, its base code beside 43239",
+   "R8 R5 X3 the denied-title row text, its base code alone",
+   "R8 R5 X3 the A3 control text, its base code alone",
+   "R8 R5 X3 an EGD by another provider, the base code alone",
+   "R8 R5 X3 an EGD by another provider, the snare code",
+   "R8 R5 X4 a performed snare and a sited denial at one polyp",
+   "R8 R5 X4 a performed snare and a labelled denial at one polyp",
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading",
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading",
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS",
+   "R8 R5 Y1 control, no sub-heading",
+   "R8 R5 Y2 EGD with a Bravo pH capsule",
+   "R8 R5 Y2 EGD with a PillCam placement",
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange",
+   "R8 R5 Y2 control, EGD alone",
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading",
+   "R8 R5 Y3 Part 2: Colonoscopy heading",
+   "R8 R5 Y3 2. Colonoscopy heading",
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings",
+   "R8 R5 Y4 a separately reported same-day EGD",
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument",
+   "R8 R5 Y4 control, no second family",
+   "R8 R5 Y5 a specimen-numbered act",
+   "R8 R5 Y5 control, no specimen number",
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site",
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service",
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line"
+  ],
+  "texts_sha256": {
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site": "7c35c70830d5a68a7aa8438bc10205a39786f16dbc64260532edd5bf8385acaa",
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service": "1e2e33b930924587f33d70d7bea85b5861838d5a8ddc04ffe0012961085b9279",
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line": "3b531e1de366a88a86c1399126d68127f0ebe60ff066d375e497b7948c3c3076"
+  },
+  "battery": [
+   [
+    "R8 R3 A3 control, the colonoscope told again before the labelled act",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 B2 dash base code: label-only line before the EGD",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R1 dash",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R1b dash upper endoscopy named",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R2 dash combined",
+    "45382",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R3 dash",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 X3 an EGD by another provider, the snare code",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y2 EGD with a Bravo pH capsule",
+    "43239",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y2 EGD with a PillCam placement",
+    "43239",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y2 EGD with a gastrostomy tube exchange",
+    "43239",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y3 2. Colonoscopy heading",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y3 Part 2: Colonoscopy heading",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y4 a separately reported same-day EGD",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Y5 a specimen-numbered act",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 Z3 a label-only snare beside a forceps removal on its own line",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 hold 1146 a procedures-performed line, the label acted on by name",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 hold 1277 findings first, the label acted on after the colonoscope",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 hold 1383 an upper lesion acted on by its label",
+    "43251",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 hold, a combined title whose second service the note denies",
+    "45385",
+    "selected/ready",
+    "selected/needs_clarification"
+   ]
+  ],
+  "battery_note": "Measured before code with the scratch harness (278 rows, 454 codes): python -m ops.gi4.battery --base <sealed main> --head <sealed patched export>: base 6 violations, head 2 (the known S2/S3); 26 movements, every one READY to held - the hold-only amendment's 25 and the Z3 row's 45385 - 0 new violations (scratch-r5c/out/bat-main-vs-proto.log). Against installed (--base <sealed installed>): installed 80 violations, head 2; 145 movements, none declared against installed, 0 new violations (bat-inst-vs-proto.log). Against the hold-only head (--base <sealed bbe4266d>): 2 movements, the Z1 and Z2 rows' 45385 held to READY (fix b; main reads both READY), 0 new violations (bat-hold-vs-proto.log). Every other cell: unmoved.",
+  "fixes_against_base": [
+   [
+    "R8 R5 R1 dash",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R1b dash upper endoscopy named",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R3 dash",
+    "45380",
+    "selected/ready",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R5 R2 dash combined",
+    "45382",
+    "selected/ready",
+    "selected/needs_clarification"
+   ]
+  ],
+  "releases_against_base": "none: no cell moves toward READY or toward an exclusion against main",
+  "moves_against_hold_only_head": {
+   "battery": [
+    [
+     "R8 R5 Z1 an impression restating the label-only snare with its size and site",
+     "45385",
+     "selected/needs_clarification",
+     "selected/ready"
+    ],
+    [
+     "R8 R5 Z2 an addendum restating the label-only snare with its site and service",
+     "45385",
+     "selected/needs_clarification",
+     "selected/ready"
+    ]
+   ],
+   "note": "Not movements against main (main and installed read both READY): fix (b) lifts the hold where a restatement (Z1, an impression line) or an addendum (Z2) names the act's site or service. On the lead's 2,924 cases the patched form moves 124 cells from held to READY against the hold-only head, every one truth done and READY on main, all from round 5b's Y lens and its verifiers; it adds a held second-review proposal wherever the hold-only head dropped one (fix a), and restores the acts and modifier reviews of every named_only cell (fix c)."
+  },
+  "readings": {
+   "R8 R5 R1 dash | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1 dash | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 R1b dash upper endoscopy named | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1b dash upper endoscopy named | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 R3 dash | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R3 dash | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 R1 paren | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1 paren | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1b paren upper endoscopy named | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1b paren upper endoscopy named | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R3 paren | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R3 paren | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1 control unlabelled | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R1 control unlabelled | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R2 dash combined | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R2 dash combined | 45382": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 R2 dash combined | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R2 paren combined | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R2 paren combined | 45382": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 R2 paren combined | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R4 dash | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R4 dash | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R4 paren | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 R4 paren | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:snare"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 H1 dash first snare attempt | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 H1 dash first snare attempt | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:snare"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 H3 dash one bite | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:biopsy"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 H3 dash one bite | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 H1 paren first snare attempt | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 H1 paren first snare attempt | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 H3 paren one bite | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 H3 paren one bite | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 B2 dash base code: label-only line before the EGD | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B2 dash base code: label-only line before the EGD | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 B3 dash EGD base code: label-only biopsy after the colon | 43235": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B3 dash EGD base code: label-only biopsy after the colon | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 B2 paren base code: label-only line before the EGD | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B2 paren base code: label-only line before the EGD | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 B3 paren EGD base code: label-only biopsy after the colon | 43235": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 B3 paren EGD base code: label-only biopsy after the colon | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 hold 1383 an upper lesion acted on by its label | 43251": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 hold, a combined title whose second service the note denies | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 G1 impression act by label, a bare endoscope | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 G1 impression act by label, a bare endoscope | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 G1 impression act by label, the upper endoscopy named | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 G1 impression act by label, the upper endoscopy named | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, the gastroscope named (R1a-r3 path) | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 control, the gastroscope named (R1a-r3 path) | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 control, a colonoscopy-only note with a label-only act | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, a labelled clip after the upper endoscopy | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, a labelled clip after the upper endoscopy | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, a labelled denial after the upper endoscopy | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, a labelled denial after the upper endoscopy | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, one procedure performed and one planned, acts by label | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 control, one procedure performed and one planned, acts by label | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 gap a, numbered procedure headings under an indication line | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "readings_disagree"
+   },
+   "R8 R5 gap a, numbered procedure headings under an indication line | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "readings_disagree"
+   },
+   "R8 R5 gap a control, the numbered headings without the indication line | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 gap a control, the numbered headings without the indication line | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 gap b, the Label (site) form with a denial naming each label | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 gap b, the Label (site) form with a denial naming each label | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:snare"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 gap b control, the 'Label - site:' form | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 gap b control, the 'Label - site:' form | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X1 snare by label, the EGD titled first | 43251": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 X1 snare by label, the EGD titled first | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 X1 biopsy by label, the EGD titled first | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 X1 biopsy by label, the EGD titled first | 45380": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "extent",
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 X2 colon base code beside a label-only snare | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X2 colon base code beside a label-only snare | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X2 upper base code beside a label-only snare | 43235": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X2 upper base code beside a label-only snare | 45378": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X2 colon base code, the R1a-r3 path | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X3 the 1146 row text, its base code beside 43239 | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X3 the 1146 row text, its base code beside 43239 | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X3 the denied-title row text, its base code alone | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X3 the A3 control text, its base code alone | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X3 an EGD by another provider, the base code alone | 45378": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "base_included"
+    ],
+    "reason": "service"
+   },
+   "R8 R5 X3 an EGD by another provider, the snare code | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 X4 a performed snare and a sited denial at one polyp | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X4 a performed snare and a sited denial at one polyp | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:snare"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 X4 a performed snare and a labelled denial at one polyp | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 X4 a performed snare and a labelled denial at one polyp | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "conflict:snare"
+    ],
+    "reason": "conflict"
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y1 control, no sub-heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y1 control, no sub-heading | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y2 EGD with a Bravo pH capsule | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y2 EGD with a PillCam placement | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange | 43239": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y2 control, EGD alone | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y3 Part 2: Colonoscopy heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y3 Part 2: Colonoscopy heading | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y3 2. Colonoscopy heading | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y3 2. Colonoscopy heading | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y4 a separately reported same-day EGD | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y4 control, no second family | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y5 a specimen-numbered act | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y5 a specimen-numbered act | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   },
+   "R8 R5 Y5 control, no specimen number | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Y5 control, no specimen number | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   },
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service | 45385": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 43239": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 45380": {
+    "cell": "selected/ready",
+    "clarifications": [],
+    "reason": "service"
+   },
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 45385": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "named_only"
+   }
+  },
+  "readings_note": "Every cell of the 69 'R8 R5 ' rows of CASES on the patched export: bucket/status, clarification facts and the support record's reason. The 66 earlier rows read exactly as amendment_20261104_hold_only's readings record them (asserted); the Z rows are new: Z1 and Z2 READY [service], Z3's 45385 held [performed_status] named_only beside 43239 and 45380 READY. No cell reads a violation.",
+  "named_only_cells": [
+   "R8 R5 B2 dash base code: label-only line before the EGD | 45385",
+   "R8 R5 R1 dash | 45380",
+   "R8 R5 R1b dash upper endoscopy named | 45380",
+   "R8 R5 R2 dash combined | 45382",
+   "R8 R5 R3 dash | 45380",
+   "R8 R5 X1 biopsy by label, the EGD titled first | 45380",
+   "R8 R5 X1 snare by label, the EGD titled first | 45385",
+   "R8 R5 X3 an EGD by another provider, the snare code | 45385",
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading | 45385",
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading | 45385",
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS | 45385",
+   "R8 R5 Y2 EGD with a Bravo pH capsule | 43239",
+   "R8 R5 Y2 EGD with a PillCam placement | 43239",
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange | 43239",
+   "R8 R5 Y3 2. Colonoscopy heading | 45385",
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading | 45385",
+   "R8 R5 Y3 Part 2: Colonoscopy heading | 45385",
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings | 45385",
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument | 45385",
+   "R8 R5 Y4 a separately reported same-day EGD | 45385",
+   "R8 R5 Y5 a specimen-numbered act | 45385",
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 45385",
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name | 45385",
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope | 45385",
+   "R8 R5 hold 1383 an upper lesion acted on by its label | 43251",
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp | 45385",
+   "R8 R5 hold, a combined title whose second service the note denies | 45385"
+  ],
+  "named_only_support_acts": {
+   "R8 R5 R1 dash | 45380": [
+    "S1-A2"
+   ],
+   "R8 R5 R1b dash upper endoscopy named | 45380": [
+    "S1-A2"
+   ],
+   "R8 R5 R3 dash | 45380": [
+    "S1-A2"
+   ],
+   "R8 R5 R2 dash combined | 45382": [
+    "S2-A2"
+   ],
+   "R8 R5 B2 dash base code: label-only line before the EGD | 45385": [
+    "S1-A1"
+   ],
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 hold 1383 an upper lesion acted on by its label | 43251": [
+    "S1-A1"
+   ],
+   "R8 R5 hold, a combined title whose second service the note denies | 45385": [
+    "S1-A1"
+   ],
+   "R8 R5 X1 snare by label, the EGD titled first | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 X1 biopsy by label, the EGD titled first | 45380": [
+    "S2-A1"
+   ],
+   "R8 R5 X3 an EGD by another provider, the snare code | 45385": [
+    "S1-A1"
+   ],
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y2 EGD with a Bravo pH capsule | 43239": [
+    "S1-A1"
+   ],
+   "R8 R5 Y2 EGD with a PillCam placement | 43239": [
+    "S1-A1"
+   ],
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange | 43239": [
+    "S1-A1"
+   ],
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y3 Part 2: Colonoscopy heading | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y3 2. Colonoscopy heading | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Y4 a separately reported same-day EGD | 45385": [
+    "S1-A1"
+   ],
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument | 45385": [
+    "S1-A1"
+   ],
+   "R8 R5 Y5 a specimen-numbered act | 45385": [
+    "S2-A1"
+   ],
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 45385": [
+    "S2-A1"
+   ]
+  },
+  "named_only_support_acts_note": "Fix (c): the support record of every named_only cell names the acts it rests on (on the hold-only head each recorded acts []); bucket, status, clarification and reason are unchanged.",
+  "inventory_acts": {
+   "R8 R3 A3 control, a labelled clip and denial in a combined narrative": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R3 A3 control, the colonoscope told again before the labelled act": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD": [],
+   "R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD": [],
+   "R8 R5 B2 dash base code: label-only line before the EGD": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 B2 paren base code: label-only line before the EGD": [],
+   "R8 R5 B3 dash EGD base code: label-only biopsy after the colon": [],
+   "R8 R5 B3 paren EGD base code: label-only biopsy after the colon": [],
+   "R8 R5 G1 impression act by label, a bare endoscope": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 G1 impression act by label, the upper endoscopy named": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 H1 dash first snare attempt": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 H1 paren first snare attempt": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L2",
+     false
+    ]
+   ],
+   "R8 R5 H3 dash one bite": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 H3 paren one bite": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "S1-L2",
+     false
+    ]
+   ],
+   "R8 R5 R1 control unlabelled": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 R1 dash": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 R1 paren": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 R1b dash upper endoscopy named": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 R1b paren upper endoscopy named": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 R2 dash combined": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "performed",
+     "S2-L1",
+     true
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 R2 paren combined": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 R3 dash": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 R3 paren": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 R4 dash": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L3",
+     false
+    ]
+   ],
+   "R8 R5 R4 paren": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L3",
+     false
+    ]
+   ],
+   "R8 R5 X1 biopsy by label, the EGD titled first": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 X1 snare by label, the EGD titled first": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 X2 colon base code beside a label-only snare": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 X2 colon base code, the R1a-r3 path": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 X2 upper base code beside a label-only snare": [
+    [
+     "gi.egd",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 X3 an EGD by another provider, the base code alone": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 X3 an EGD by another provider, the snare code": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 X3 the 1146 row text, its base code beside 43239": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 X3 the A3 control text, its base code alone": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 X3 the denied-title row text, its base code alone": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 X4 a performed snare and a labelled denial at one polyp": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 X4 a performed snare and a sited denial at one polyp": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y1 control, no sub-heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 Y2 EGD with a Bravo pH capsule": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ],
+    [
+     "gi.reflux",
+     "ph_monitoring",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.reflux",
+     "capsule_study",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 Y2 EGD with a PillCam placement": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ],
+    [
+     "gi.capsule",
+     "capsule_study",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     true
+    ],
+    [
+     "gi.feeding_tube",
+     "tube_replacement",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 Y2 control, EGD alone": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 Y3 2. Colonoscopy heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y3 Part 2: Colonoscopy heading": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y4 a separately reported same-day EGD": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y4 control, no second family": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 Y5 a specimen-numbered act": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 Y5 control, no specimen number": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S2-L2",
+     false
+    ]
+   ],
+   "R8 R5 control, a colonoscopy-only note with a label-only act": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 control, a labelled clip after the upper endoscopy": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 control, a labelled denial after the upper endoscopy": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 control, one procedure performed and one planned, acts by label": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ]
+   ],
+   "R8 R5 control, the gastroscope named (R1a-r3 path)": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 gap a control, the numbered headings without the indication line": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 gap a, numbered procedure headings under an indication line": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 gap b control, the 'Label - site:' form": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 gap b, the Label (site) form with a denial naming each label": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S1-L2",
+     false
+    ]
+   ],
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 hold 1383 an upper lesion acted on by its label": [
+    [
+     "gi.egd",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     true
+    ]
+   ],
+   "R8 R5 hold, a combined title whose second service the note denies": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     true
+    ]
+   ],
+   "R8 R5 residual G1 impression act by label, the gastroscope named (R1a-r3 path)": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 dash colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 paren colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 unlabelled colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "R8 R5 residual gap b, the G1 impression act by a Label (site) label": [
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ]
+   ],
+   "mara rev1": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.egd",
+     "biopsy",
+     "negated",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "performed",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "negated",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "biopsy",
+     "negated",
+     "S2-L2",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S2-L2",
+     false
+    ]
+   ]
+  },
+  "inventory_acts_note": "services.build (as tests/test_cux_bind.inventory builds it) on the patched export, per row: [family, kind, status, lesion, carries the cue] for every act. On every row, the A3 rows, the residuals and Mara's retained revision the families, kinds, statuses, lesions, services and conflicts equal main's (no act placement changes); the cue equals amendment_20261104_hold_only's inventory_acts on every earlier text (asserted), and on Z1 and Z2 the merged snare - the label-only statement and its sited restatement - carries no cue (fix b). Mara's acts carry no cue.",
+  "second_review": {
+   "method": "engine.assess as tests.test_services_reconcile.run calls it, with the bounded second review's response and the scope items the primary-only assessment flags (the X-R5B-1 verifier's own driver and its 38 cases, copied to scratch-r5c/tools/srx), on the sealed patched export: each case with a second review, its cells, its unresolved items and the provider.second_review check's status.",
+   "cases": {
+    "SR | R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y3 2. Colonoscopy heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y3 Part 2: Colonoscopy heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y3 Upper endoscopy and Lower endoscopy headings": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 Y5 a specimen-numbered act": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 hold 1146 a procedures-performed line, the label acted on by name": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 hold 1277 findings first, the label acted on after the colonoscope": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR | R8 R5 hold 1406 the colonoscope reinserted to the identified polyp": {
+     "cells": [
+      "43235 selected/ready [] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR0 nothing primary | R8 R3 A3 control, the colonoscope told again before the labelled act": {
+     "cells": [
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [
+      "gi.egd (service) no_proposal"
+     ],
+     "check": "warn"
+    },
+    "SR0 nothing primary | R8 R5 X3 an EGD by another provider, the snare code": {
+     "cells": [
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [
+      "gi.egd (service) no_proposal"
+     ],
+     "check": "warn"
+    },
+    "SR0 nothing primary | R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument": {
+     "cells": [
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [
+      "gi.egd (service) no_proposal"
+     ],
+     "check": "warn"
+    },
+    "SR0 nothing primary | R8 R5 Y4 a separately reported same-day EGD": {
+     "cells": [
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [
+      "gi.egd (service) no_proposal"
+     ],
+     "check": "warn"
+    },
+    "SR0 nothing primary | R8 R5 control, a colonoscopy-only note with a label-only act": {
+     "cells": [
+      "45385 selected/ready [] service (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR0 nothing primary | R8 R5 hold, a combined title whose second service the note denies": {
+     "cells": [
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR3 base+snare | R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45378 selected/needs_clarification [base_included] service (second review)",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR3 base+snare | R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45378 selected/needs_clarification [base_included] service (second review)",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR4 act item | R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45378 selected/needs_clarification [base_included] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    },
+    "SR4 act item | R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading": {
+     "cells": [
+      "43239 selected/ready [] service",
+      "45378 selected/needs_clarification [base_included] service",
+      "45385 selected/needs_clarification [performed_status] named_only (second review)"
+     ],
+     "unresolved": [],
+     "check": "info"
+    }
+   }
+  },
+  "modifier_review": {
+   "method": "the X-R5B-2 verifier's offline driver and its seven cases (copied to scratch-r5c/tools/mrx): jobs._assess_child, then the review overlay (review_view.review_view) with each case's decisions, on the sealed patched export: per code its status, support reason and acts, its count of modifier considerations, and the overlay's separate-lesion modifier review, blocker and chosen modifiers.",
+   "cases": {
+    "V-MR2 Y3 + Polyp B, three codes": {
+     "43239": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 0,
+      "modifier_review": null,
+      "blocker": "",
+      "modifiers": []
+     },
+     "45385": {
+      "status": "needs_clarification",
+      "reason": "named_only",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    },
+    "V-MR2d Y3 + Polyp B, approve 45380 with XS": {
+     "43239": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 0,
+      "modifier_review": null,
+      "blocker": "",
+      "modifiers": []
+     },
+     "45385": {
+      "status": "needs_clarification",
+      "reason": "named_only",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": [
+       "XS"
+      ]
+     }
+    },
+    "V-MR3 Y3 + Polyp B, screening indication": {
+     "43239": {
+      "status": "needs_clarification",
+      "reason": "readings_disagree",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 0,
+      "modifier_review": null,
+      "blocker": "",
+      "modifiers": []
+     },
+     "45385": {
+      "status": "needs_clarification",
+      "reason": "named_only",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 2,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "needs_clarification",
+      "reason": "readings_disagree",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 2,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    },
+    "V-MR1 gastroscope-first form + Polyp B": {
+     "43239": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 0,
+      "modifier_review": null,
+      "blocker": "",
+      "modifiers": []
+     },
+     "45385": {
+      "status": "needs_clarification",
+      "reason": "named_only",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    },
+    "V-C1 control colonoscopy only + Polyp B": {
+     "45385": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    },
+    "V-C2 control Y3 + Polyp B, snare clause names its site": {
+     "43239": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S1-A1"
+      ],
+      "considerations": 0,
+      "modifier_review": null,
+      "blocker": "",
+      "modifiers": []
+     },
+     "45385": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    },
+    "V-C3 Y3 + Polyp B, 45385 and 45380 only (no 43239)": {
+     "45385": {
+      "status": "needs_clarification",
+      "reason": "named_only",
+      "support_acts": [
+       "S2-A1"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45385",
+       "45380"
+      ],
+      "blocker": "",
+      "modifiers": []
+     },
+     "45380": {
+      "status": "ready",
+      "reason": "service",
+      "support_acts": [
+       "S2-A2"
+      ],
+      "considerations": 1,
+      "modifier_review": [
+       "45380",
+       "45385"
+      ],
+      "blocker": "",
+      "modifiers": []
+     }
+    }
+   }
+  },
+  "customer_flows": {
+   "method": "Scratch probe modules on PYTHONPATH (scratch-r5c/tools/apiprobe; never in a tree), run with manage.py test from the sealed patched export on the throwaway test server 127.0.0.1:55461 (suffix r5c11; a socket guard refuses every other address): the real endpoints and pipeline, every provider and participant an in-process fake. SR: tests.test_services_second_review.TwoPassProvider (the primary's 43239, the re-check's 45385), then the approval of 43239, the approved export, 45385 rejected and the export again. MR: the Z3 text, approve 45380 with XS, 59, or none. ADD: the Y1 row with tests.test_customer_fixtures.CitingCorti and both participants agreeing, the finding's addendum posted from the detail row (the provider citing the original line, the addendum line, or both), then an approval of 45385, or the detail answered. SURFACE: the 1146 row and the Z3 shape, every customer surface of every role (30 each) read, held to the contract, the denylist, the regex net and the rule's own words.",
+   "outcomes": {
+    "ADD both": {
+     "before": [
+      "45385 needs_detail reject",
+      "43239 ready approve/reject"
+     ],
+     "after_addendum": [
+      "45385 ready approve/reject",
+      "43239 ready approve/reject"
+     ],
+     "details_after": [],
+     "approve_45385": 201,
+     "answer": null,
+     "after_answer": null
+    },
+    "ADD cited": {
+     "before": [
+      "45385 needs_detail reject",
+      "43239 ready approve/reject"
+     ],
+     "after_addendum": [
+      "45385 ready approve/reject",
+      "43239 ready approve/reject"
+     ],
+     "details_after": [],
+     "approve_45385": 201,
+     "answer": null,
+     "after_answer": null
+    },
+    "ADD control": {
+     "before": [
+      "45385 ready approve/reject",
+      "43239 ready approve/reject"
+     ],
+     "after_addendum": null,
+     "details_after": [],
+     "approve_45385": 201,
+     "answer": null,
+     "after_answer": null
+    },
+    "ADD none": {
+     "before": [
+      "45385 needs_detail reject",
+      "43239 ready approve/reject"
+     ],
+     "after_addendum": null,
+     "details_after": [
+      "performed_status"
+     ],
+     "approve_45385": 409,
+     "answer": [
+      "cannot_confirm",
+      201
+     ],
+     "after_answer": [
+      "45385 excluded ",
+      "43239 ready approve/reject"
+     ]
+    },
+    "ADD orig": {
+     "before": [
+      "45385 needs_detail reject",
+      "43239 ready approve/reject"
+     ],
+     "after_addendum": [
+      "45385 ready approve/reject",
+      "43239 ready approve/reject"
+     ],
+     "details_after": [],
+     "approve_45385": 201,
+     "answer": null,
+     "after_answer": null
+    },
+    "MR 59": {
+     "codes": [
+      "43239 ready approve/reject",
+      "45385 needs_detail reject modifier review 59/XS",
+      "45380 ready approve/reject modifier review 59/XS"
+     ],
+     "approve_45380": 201,
+     "modifiers_recorded": [
+      "59"
+     ]
+    },
+    "MR XS": {
+     "codes": [
+      "43239 ready approve/reject",
+      "45385 needs_detail reject modifier review 59/XS",
+      "45380 ready approve/reject modifier review 59/XS"
+     ],
+     "approve_45380": 201,
+     "modifiers_recorded": [
+      "XS"
+     ]
+    },
+    "MR none": {
+     "codes": [
+      "43239 ready approve/reject",
+      "45385 needs_detail reject modifier review 59/XS",
+      "45380 ready approve/reject modifier review 59/XS"
+     ],
+     "approve_45380": 201,
+     "modifiers_recorded": []
+    },
+    "SR 1146": {
+     "after_second_review": [
+      "43239 ready approve/reject",
+      "45385 needs_detail reject"
+     ],
+     "listed_as_alternative": [],
+     "unresolved": [],
+     "readiness_after_approving_the_primary": {
+      "approved": false,
+      "blockers": [
+       "45385 needs a detail."
+      ],
+      "draft": true
+     },
+     "approved_export": [
+      409,
+      "{\"error\": \"The approved export is not available yet.\", \"details\": {\"blockers\": [\"45385 needs a detail.\"]}}"
+     ],
+     "after_rejecting_45385": 201
+    },
+    "SR X3": {
+     "after_second_review": [
+      "45385 needs_detail reject"
+     ],
+     "listed_as_alternative": [],
+     "unresolved": [
+      "Upper GI endoscopy (EGD, esophagoscopy, POEM): no supported code was found for it."
+     ],
+     "readiness_after_approving_the_primary": {
+      "approved": false,
+      "blockers": [
+       "45385 needs a detail."
+      ],
+      "draft": true
+     },
+     "approved_export": [
+      409,
+      "{\"error\": \"The approved export is not available yet.\", \"details\": {\"blockers\": [\"45385 needs a detail.\"]}}"
+     ],
+     "after_rejecting_45385": [
+      409,
+      "{\"error\": \"The approved export is not available yet.\", \"details\": {\"blockers\": [\"No code has been approved.\"]}}"
+     ]
+    },
+    "SR Y3": {
+     "after_second_review": [
+      "43239 ready approve/reject",
+      "45385 needs_detail reject"
+     ],
+     "listed_as_alternative": [],
+     "unresolved": [],
+     "readiness_after_approving_the_primary": {
+      "approved": false,
+      "blockers": [
+       "45385 needs a detail."
+      ],
+      "draft": true
+     },
+     "approved_export": [
+      409,
+      "{\"error\": \"The approved export is not available yet.\", \"details\": {\"blockers\": [\"45385 needs a detail.\"]}}"
+     ],
+     "after_rejecting_45385": 201
+    },
+    "SURFACE": {
+     "1146": {
+      "customer_codes": [
+       "45385 needs_detail reject",
+       "43239 ready approve/reject"
+      ],
+      "quotes_45385": [
+       []
+      ],
+      "operator": {
+       "acts": [
+        "S2-A1"
+       ],
+       "reason": "named_only",
+       "status": "needs_clarification"
+      },
+      "surfaces_read": 30,
+      "assertClean": "pass",
+      "contract": "pass",
+      "denylist_hard_hits": 0,
+      "rule_wording_leaks": 0
+     },
+     "Z3 shape": {
+      "customer_codes": [
+       "43239 ready approve/reject",
+       "45385 needs_detail reject modifier review 59/XS",
+       "45380 ready approve/reject modifier review 59/XS"
+      ],
+      "quotes_45385": [
+       []
+      ],
+      "operator": {
+       "acts": [
+        "S2-A1"
+       ],
+       "reason": "named_only",
+       "status": "needs_clarification"
+      },
+      "surfaces_read": 30,
+      "assertClean": "pass",
+      "contract": "pass",
+      "denylist_hard_hits": 0,
+      "rule_wording_leaks": 0
+     }
+    }
+   }
+  },
+  "declared_costs": {
+   "hold_class": {
+    "name": "A document of more than one procedure read performed (pass 1's performed_families, the office visit not counted), where a code's every supporting performed act is tied to its service only by a lesion's name - in every statement of it: a label or a specimen number in the act's clause binds it, the clause names no site of its own, the act's part names no service, and the act is not a clip or a cannulation; a restatement or addendum of the same act that names its site or service takes it out of the class (fix b). The code is held [performed_status] (reason named_only) with its acts (fix c); the act stays where main puts it and every other rule reads it as main does (a base code beside it, a conflict, an unresolved item, an offer, a second review's added code - added and held, fix a - and the modifier reviews).",
+    "realistic_shapes": {
+     "Y1": "a 'Findings:' or 'Interventions:' sub-heading under a COLONOSCOPY heading, and Mara's layout with its polyp's definition and act on two lines ('COLONOSCOPY - PERFORMED TODAY', 'LESIONS AND INTERVENTIONS'): the sub-heading's part names no service",
+     "Y3": "numbered or plain headings the reader does not take as naming a service: 'PROCEDURE 2: COLONOSCOPY' (the first fresh walk document's form), 'Part 2: Colonoscopy', '2. Colonoscopy', 'Lower endoscopy'",
+     "Y4": "a colonoscopy note that names a separately reported same-day EGD, or uses a pediatric gastroscope as its instrument: a second family read performed (also X3's FD4b, another provider's EGD line)",
+     "Y5": "a specimen-numbered act referring back to the polyp just described ('It was removed with a cold snare and sent as specimen 2.')"
+    },
+    "in_the_class_by_definition": "Y2 (an EGD beside a pH capsule, a PillCam placement or a tube exchange: a second family read performed; its verifier's verdict BY_DESIGN), the R8 R3 A3 control, the B2 dash probe's 45385 and the 'R8 R5 hold ...' rows",
+    "measured": {
+     "adversarial_lead": "the lead's, on 2,924 cases of refutation rounds 4, 4b, 5 and 5b (verify-r4/refuter-cases4.json from verify-r4/collect4.py, 5,018 cells; rc4-x-20a64b860138.json main, rc4-x-41e03656df61.json installed, rc4-x-bbe4266da6f4.json the hold-only head, rc4-proto-Z21a.json this form): 383 cells held where main reads READY with truth done, 270 of them READY on installed too (the hold-only head: 507, 366); reproduced byte for byte and recomputed by this session: equal",
+     "battery": "the 22 cost cells below: the hold-only amendment's 21 and the Z3 row's 45385 (a Y3 shape beside a second polyp's forceps removal)",
+     "corpus": "none claimed. 0 of the 5,723 corpus texts define a lesion label. Over the lead's 5,980 corpus, battery and fixture texts and the hold-only head's 66 'R8 R5 ' rows (scratch-r5c/tools/cue_census.py, the tree's own battery): 35 texts carry the cue on the hold-only head and on the patched export alike, every one a battery row; 0 corpus texts, 0 of the 48 fixtures (Mara among them)."
+    },
+    "cost_cells": [
+     [
+      "R8 R3 A3 control, the colonoscope told again before the labelled act",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 B2 dash base code: label-only line before the EGD",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 X3 an EGD by another provider, the snare code",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y2 EGD with a Bravo pH capsule",
+      "43239",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y2 EGD with a PillCam placement",
+      "43239",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y2 EGD with a gastrostomy tube exchange",
+      "43239",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y3 2. Colonoscopy heading",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y3 Part 2: Colonoscopy heading",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y4 a separately reported same-day EGD",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Y5 a specimen-numbered act",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 Z3 a label-only snare beside a forceps removal on its own line",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 hold 1146 a procedures-performed line, the label acted on by name",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 hold 1277 findings first, the label acted on after the colonoscope",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 hold 1383 an upper lesion acted on by its label",
+      "43251",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ],
+     [
+      "R8 R5 hold, a combined title whose second service the note denies",
+      "45385",
+      "selected/ready",
+      "selected/needs_clarification"
+     ]
+    ],
+    "installed": "installed reads 19 of the 22 cost cells READY and holds 3: R8 R3 A3 control, the colonoscope told again before the labelled act | 45385; R8 R5 B2 dash base code: label-only line before the EGD | 45385; R8 R5 hold, a combined title whose second service the note denies | 45385",
+    "as_implemented": {
+     "Y-F3": "Recorded, not fixed (refute_round_5b Y-F3): 'names no site of its own' is read by the ANATOMY reader (services.py own_anat), so a site it does not read - the dentate line, an anastomosis, a distance in cm ('at 30 cm', 'at 25 cm', 'at 38 cm from the incisors'), the incisura, the angularis, the lesser curvature, an ileocolic anastomosis - counts as no site and its act is in the class: the code is held [performed_status] where main and installed read READY. Its cells are among the lead's 383 below; no battery row carries it."
+    }
+   }
+  },
+  "installed_comparison": {
+   "note": "Every 'R8 R5 ' cell on the patched export against installed 41e03656d (both measured before code): no cell reads a violation installed lacks. Each cell where the two differ is listed.",
+   "head_held_installed_ready": [
+    "R8 R5 R1 dash | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 R3 dash | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 R1 paren | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 R3 paren | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 R1 control unlabelled | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 H1 dash first snare attempt | 45385: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 H3 dash one bite | 45380: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 B3 dash EGD base code: label-only biopsy after the colon | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 B3 paren EGD base code: label-only biopsy after the colon | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 hold 1277 findings first, the label acted on after the colonoscope | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 hold 1146 a procedures-performed line, the label acted on by name | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 hold 1383 an upper lesion acted on by its label | 43251: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 G1 impression act by label, a bare endoscope | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 G1 impression act by label, the upper endoscopy named | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 control, the gastroscope named (R1a-r3 path) | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 X1 snare by label, the EGD titled first | 43251: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X1 biopsy by label, the EGD titled first | 43239: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X3 the 1146 row text, its base code beside 43239 | 45378: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X3 the denied-title row text, its base code alone | 45378: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X3 the A3 control text, its base code alone | 45378: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X3 an EGD by another provider, the base code alone | 45378: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth not_done",
+    "R8 R5 X3 an EGD by another provider, the snare code | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 X4 a performed snare and a labelled denial at one polyp | 45385: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y2 EGD with a Bravo pH capsule | 43239: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y2 EGD with a PillCam placement | 43239: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y2 EGD with a gastrostomy tube exchange | 43239: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y3 Part 2: Colonoscopy heading | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y3 2. Colonoscopy heading | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y4 a separately reported same-day EGD | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y5 a specimen-numbered act | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done",
+    "R8 R5 Y5 control, no specimen number | 45385: head selected/needs_clarification, installed selected/ready, main selected/needs_clarification; truth done",
+    "R8 R5 Z3 a label-only snare beside a forceps removal on its own line | 45385: head selected/needs_clarification, installed selected/ready, main selected/ready; truth done"
+   ],
+   "head_ready_installed_held": [
+    "R8 R5 R4 dash | 45385: head selected/ready, installed selected/needs_clarification, main selected/ready; truth done",
+    "R8 R5 control, a labelled denial after the upper endoscopy | 43239: head selected/ready, installed selected/needs_clarification, main selected/ready; truth done",
+    "R8 R5 gap b control, the 'Label - site:' form | 45385: head selected/ready, installed selected/needs_clarification, main selected/ready; truth done"
+   ]
+  },
+  "residuals_measured": {
+   "note": "ops.gi4.battery.R5_RESIDUALS, unchanged: each of its five rows reads, on main, installed, the hold-only head and the patched export alike, exactly as amendment_20261104_hold_only's residuals_measured records (asserted by scratch-r5c's comparison); its honest truth makes each a violation, so none is a register row.",
+   "rows": {
+    "R8 R5 residual R2 dash colonoscopy only": {
+     "45382": "selected/ready",
+     "45385": "selected/ready"
+    },
+    "R8 R5 residual R2 paren colonoscopy only": {
+     "45382": "selected/ready",
+     "45385": "selected/ready"
+    },
+    "R8 R5 residual R2 unlabelled colonoscopy only": {
+     "45382": "selected/ready",
+     "45385": "selected/ready"
+    },
+    "R8 R5 residual gap b, the G1 impression act by a Label (site) label": {
+     "43239": "selected/ready",
+     "45380": "selected/ready"
+    },
+    "R8 R5 residual G1 impression act by label, the gastroscope named (R1a-r3 path)": {
+     "43239": "selected/ready",
+     "45380": "selected/ready"
+    }
+   }
+  },
+  "offer_battery": {
+   "R8 R5 R1 dash": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R1b dash upper endoscopy named": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R3 dash": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R1 paren": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R1b paren upper endoscopy named": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R3 paren": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R1 control unlabelled": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 R2 dash combined": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 R2 paren combined": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 R4 dash": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 R4 paren": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 H1 dash first snare attempt": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 H3 dash one bite": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 H1 paren first snare attempt": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 H3 paren one bite": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 B1 dash base code: only therapeutic statement is a label-only line after the EGD": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 B2 dash base code: label-only line before the EGD": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 B3 dash EGD base code: label-only biopsy after the colon": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 B1 paren base code: only therapeutic statement is a label-only line after the EGD": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 B2 paren base code: label-only line before the EGD": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 B3 paren EGD base code: label-only biopsy after the colon": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 hold 1277 findings first, the label acted on after the colonoscope": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 hold 1146 a procedures-performed line, the label acted on by name": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 hold 1383 an upper lesion acted on by its label": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 hold, a combined title whose second service the note denies": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 G1 impression act by label, a bare endoscope": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 G1 impression act by label, the upper endoscopy named": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 control, the gastroscope named (R1a-r3 path)": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 control, a colonoscopy-only note with a label-only act": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 control, a labelled clip after the upper endoscopy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 control, a labelled denial after the upper endoscopy": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 control, one procedure performed and one planned, acts by label": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 gap a, numbered procedure headings under an indication line": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 gap a control, the numbered headings without the indication line": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 gap b, the Label (site) form with a denial naming each label": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 gap b control, the 'Label - site:' form": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 X1 snare by label, the EGD titled first": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 X1 biopsy by label, the EGD titled first": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 X2 colon base code beside a label-only snare": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X2 upper base code beside a label-only snare": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X2 colon base code, the R1a-r3 path": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X3 the 1146 row text, its base code beside 43239": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X3 the denied-title row text, its base code alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X3 the A3 control text, its base code alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X3 an EGD by another provider, the base code alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "snare",
+      "not_covered",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X3 an EGD by another provider, the snare code": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 X4 a performed snare and a sited denial at one polyp": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 X4 a performed snare and a labelled denial at one polyp": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y1 control, no sub-heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y2 EGD with a Bravo pH capsule": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.reflux",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.reflux",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 Y2 EGD with a PillCam placement": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.capsule",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.capsule",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 Y2 EGD with a gastrostomy tube exchange": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.feeding_tube",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.feeding_tube",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 Y2 control, EGD alone": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y3 Part 2: Colonoscopy heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y3 2. Colonoscopy heading": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y4 a separately reported same-day EGD": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R5 Y4 control, no second family": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y5 a specimen-numbered act": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Y5 control, no specimen number": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Z1 an impression restating the label-only snare with its size and site": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Z2 an addendum restating the label-only snare with its site and service": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R5 Z3 a label-only snare beside a forceps removal on its own line": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ],
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   }
+  },
+  "offers": {
+   "note": "Second-review offers (tests/test_gi4_po.offers_of: each row's own answer and an empty one) of all 228 'R8 ' rows of the scratch harness, measured before code on sealed main, the hold-only head and the patched export: identical on every row (scratch-r5c/out/offers-*.json). The 66 earlier 'R8 R5 ' rows' offers equal amendment_20261104_hold_only's offer_battery. offer_battery here is the full record of the 69 'R8 R5 ' rows; tests/test_cux_hold.RegisterOfferTests reads it as this file's latest.",
+   "moved_against_base": {}
+  },
+  "lead_measurements": {
+   "refuter_cases": "2,924 cases from refutation rounds 4, 4b, 5 and 5b (verify-r4/refuter-cases4.json; collect4.py over refute-r4, refute-r4b, refute-r5 and refute-r5b, out/ directories included), read with verify-r4/drive2.py, one sealed tree per process (rc4-*.json): against main 0 cells toward READY, 0 violations main lacks, 0 new exclusions, 113 of main's 262 violations fixed; held where main reads READY with truth done 383 cells, 270 of them READY on installed too (the hold-only head: 507, 366); against installed 2 violations it lacks, both main's too and both pre-existing: the B3 probe's EGD base code cited alone (verify-X/X3 'R8 R5 B3 dash|paren ... | base alone', 43235 READY where installed holds it, through R1a-r3's drop of the act; a residual, recorded). Against the hold-only head: 124 cells held to READY, every one truth done and READY on main. Reproduced by this session before code: every output byte-identical to the lead's; figures equal.",
+   "base_probes": "verify-r4/base-probes2.json (12 probes, 18 cells; bp2-*.json): 0 cells toward READY against main, 0 violations main lacks; the B3 dash and paren probes' EGD base code alone read 43235 READY (truth not done) on main, the hold-only head and this form, held on installed - the residual above; the patched output equals the hold-only head's. Reproduced byte for byte.",
+   "cases": "verify-r4/cases.json (18 cases; c18b-*.json): the four false READYs main reads stay held; the patched output equals the hold-only head's. Reproduced byte for byte.",
+   "variant_d": "NOT TAKEN. The lead's --d variant (verify-r4/proto-Z21d: R1a-r3 no longer unbinds - drops or moves - an act in a document of several performed procedures, and the hold-only mark holds its codes instead), measured by the lead on the same 2,924 cases (rc4-proto-Z21d.json, read by this session from the lead's output): it fixes 122 of main's violations, but it moves one cell toward READY against main - refutation round 4's 'E3-1g control: the same, gastroscope named (dash)', 45380 READY where its truth says not done and where main and this form hold it [performed_status] - a violation main lacks, which the standard forbids (installed reads that cell READY too, a violation of its own: the lead's wording 'where main and installed hold it' is right of main and not of installed). It would also hold the B3 dash probe's EGD base code cited alone [base_included], as installed does (the paren form stays READY); that residual is recorded instead (ACCURACY-RESIDUALS.md, round 5b)."
+  },
+  "standard": "The head never moves a cell toward READY or toward an exclusion against main, never adds a violation main lacks, and every movement against main is declared above (READY to held: 4 fixes, 22 costs of the hold class). Against installed: no violation installed lacks on the battery; on the lead's 2,924 cases the only two are main's (the B3 probe's EGD base code cited alone, a residual of R1a-r3's path). Against the hold-only head the fixes move cells toward READY only where a restatement or addendum of the act names its site or service (fix b), add a held proposal where it dropped one to an alternative (fix a), and give back a named_only code's acts to the rules that read them (fix c). Round-4 (ruling 2026-11-03 (g)): when the document does not settle a reading, hold or ask - never release, never exclude a supported code. Any movement not declared here is a finding, measured and recorded (dated, after code) before it is accepted.",
+  "must_hold": [
+   "every must_hold item of amendment_20261104_hold_only, but where this amendment's battery, readings, inventory_acts and named_only_cells replace that amendment's",
+   "every act where main puts it: on every 'R8 R5 ' row, the A3 rows, the residuals and Mara, the inventory's families, kinds, statuses, lesions, services and conflicts equal main's (inventory_acts)",
+   "fix (a): a code the bounded second review selects for a whole service left without a proposal, whose match is named_only, is added as a second-review proposal and held [performed_status], never an informational alternative; the approved export waits for its decision",
+   "fix (b): a merged act carries the cue only when every merged statement does; Z1 and Z2 read 45385 READY [service], and an addendum restating the act at its site or service (the Y-F2 flow) lifts the hold; a document with no such restatement stays held (the declared class, its 22 cost cells)",
+   "fix (c): every named_only cell records its acts (named_only_support_acts); the Z3 row's 45385 and 45380 carry the separate-lesion modifier review [59, XS], and an approval of 45380 with XS succeeds",
+   "every code this form holds for the class is held with reason 'named_only' and clarification performed_status (named_only_cells), and no other code changes its reason",
+   "the diagnostic base codes held [base_included] (the six B probes, X2 and X3), X1's 43251 and 43239 held, X4's conflict kept, R1a-r3's path unchanged, the controls carrying no cue, Mara unchanged",
+   "the offers of every 'R8 ' row unchanged against main",
+   "no customer surface carries the reason 'named_only', the cue or the rule's wording; a named_only hold still shows no quote (its support check is not_applicable)"
+  ],
+  "unit_pins": "Expected to change: tests/test_cux_r5_binding.py - its row tests read this amendment (the 69 rows, their readings and declared movements, the hold class's 22 cost cells, inventory_acts with the Z rows), and it gains the three fixes' tests through the paths their findings used: the bounded second review through engine.assess and through the customer API to the approved export (a), the merged cue and an addendum posted from the detail row (b), the modifier review and an approval with XS (c). No other existing test or pin is expected to move: the 'R8 R3 ' A3 control still reads held (tests/test_cux_r3_reader.py reads amendment_20261104_hold_only's battery for it); tests/test_cux_hold.RegisterOfferTests reads this amendment's offer_battery (the latest in this file) and the offers are unchanged; no fixture text carries the cue, so the parity digests, tests/test_harness_pipeline and tests/test_customer_fixtures read no changed inventory, and no named_only cell is in a pinned fixture. Between the commits: on the amendment commit and on the code commit tests/test_cux_hold.RegisterOfferTests fails - this amendment's offer_battery names the three Z rows, which the battery does not have until the battery edit lands with the tests - and tests/test_cux_r5_binding.py (still the hold-only form's) passes on both: the fixes move none of its 66 rows' cells, cues or offers.",
+  "mutation_plan": "Each fix mutation-proved after code in this worktree (apply, assert the anchor occurs once and the mutant is read back, run the named tests on the throwaway server - they must have run and must fail - restore, sha256 equal to the committed file, printed): M1 fix (a) reverted (engine.py: 'supported' reads match.state only) - the second-review tests must fail; M2 fix (b) reverted (services.py: the merged act keeps the first statement's cues) - the Z1, Z2 and addendum tests must fail; M3 fix (c) reverted (reconcile.py: the named_only Match carries no acts) - the modifier-review and support-acts tests must fail.",
+  "replay": "EQUAL predicted for the 8 regression documents in every member state (python -m ops.gi4.replay --fixtures --base 20a64b860): no fixture text carries the cue, and the second review merge and a match's acts change nothing a regression document reads.",
+  "h2": "No movement of any class predicted (GATE HOLDS): the patch changes engine._second_review's coverage test, services._merge_acts's cues and reconcile.match's named_only acts only; context.py, sections.py, cues.py, detect.py and the request side are untouched, so cue patterns, layouts, the date channel, requests and mention counts cannot move.",
+  "customer_surface": "Measured before code on the patched export through the real endpoints (customer_flows.outcomes.SURFACE): a named_only hold reaches a customer as before - status needs_detail, the overlay's summary for an uncertain match, the fixed performed_status qualification and detail row, reject the only action, no quote - now with the separate-lesion modifier review where a partner code accounts for an act on another lesion (the Z3 shape, its text and sources as on main). The reason id, the cue and the engine's stored question and detail reach none of the 30 surfaces read for each of the two texts; contract pass, denylist hard hits 0, assertClean pass.",
+  "not_changed": [
+   "the cue condition (services._build pass 3: several_performed, name_only, the NOT_REPORTED exemption)",
+   "services.NAME_ONLY_CUE",
+   "services.ACTS",
+   "services.BARE_PARTICIPLE",
+   "services.SERVICES",
+   "services.INSTRUMENTS",
+   "services._told_after",
+   "services._bound_lesion",
+   "services._family_for_act",
+   "services.parts()",
+   "R1a-r3's unbinding and site reading",
+   "the conflict check before the named_only hold",
+   "reconcile.gi_services_name_only",
+   "engine._second_opinion",
+   "studio/validation/review_view.py",
+   "studio/customer_api.py",
+   "studio/review.py",
+   "studio/gi/catalogue.py",
+   "studio/gi/cues.py",
+   "studio/gi/sections.py",
+   "studio/gi/context.py",
+   "studio/gi/detect.py",
+   "the request side"
+  ],
+  "cost": "Per second-review candidate, one more comparison; per merged act, one tuple membership and at most one tuple filter; per named_only match, the tuple of acts it already computed. No new pass, no pattern, no new read of the text."
  }
 }
