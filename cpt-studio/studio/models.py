@@ -38,6 +38,19 @@ class ImmutableModel(models.Model):
         raise ValidationError(f'{type(self).__name__} rows are immutable and cannot be deleted.')
 
 
+class UniqueIndex(models.Index):
+    """A UNIQUE index, added by AddIndex (P5 FLOW, 2026-11-03). Django's Index has no unique form and a UniqueConstraint
+    is an AddConstraint, which the installer's migration gate refuses on an existing table (ops/install.py
+    migration_verdict: it can refuse an older revision's rows). Used only as a partial index over a column no older
+    revision writes (its rows hold NULL there, and NULL is outside the index), so no older revision's insert or update is
+    ever refused by it."""
+    UNIQUE_SQL = 'CREATE UNIQUE INDEX %(name)s ON %(table)s (%(columns)s)%(include)s%(condition)s'
+
+    def create_sql(self, model, schema_editor, using='', **kwargs):
+        kwargs['sql'] = self.UNIQUE_SQL
+        return super().create_sql(model, schema_editor, using=using, **kwargs)
+
+
 class User(AbstractUser):
     HUMAN, AGENT = 'human', 'agent'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -108,9 +121,15 @@ class Encounter(models.Model):
     # Derived list state, recomputed by review.refresh_state(); never authoritative.
     state = models.CharField(max_length=32, default='processing')
     updated_at = models.DateTimeField(auto_now=True)
+    # The upload attempt's key the page generated (P5 FLOW, 2026-11-03): a repeated POST of the same attempt by the same
+    # member answers with this encounter instead of making a second one (intake.find_upload). Null for rows made before
+    # it existed and for uploads that sent none; unique per member where set.
+    client_key = models.UUIDField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [UniqueIndex(fields=['created_by', 'client_key'], condition=Q(client_key__isnull=False),
+                               name='studio_enc_upload_key_uniq')]
 
 
 class SourceFile(ImmutableModel):
@@ -189,6 +208,10 @@ class EncounterContext(ImmutableModel):
     sha256 = models.CharField(max_length=64)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
+    # The document's own service date fact BEFORE a member's value is merged in (gi.context.document_service_date_fact,
+    # P5 FLOW), recorded when the context is made, so a screen can show the document's date beside the one a member
+    # entered without reading the note's prose. Outside ``sha256``. Null for contexts made before it existed.
+    document_date = models.JSONField(null=True, blank=True)
 
 
 class RoutingRun(ImmutableModel):
@@ -402,6 +425,41 @@ class DecisionInvalidation(ImmutableModel):
     by_revision = models.ForeignKey(SourceRevision, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     by_context = models.ForeignKey(EncounterContext, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class MemberAnswer(ImmutableModel):
+    """A member's answer to a detail CPT Studio asked (directive section 4; P5 FLOW, 2026-11-03): that it is not
+    documented, or that the member cannot confirm it. Bound to its revision and to the code, family and fact it answers -
+    never to a clarification row or a proposal key, which every re-assessment makes anew. It is what a member said, never
+    clinical documentation: it never enters the document text, a provider request or an addendum, and it approves
+    nothing. Append-only; a MemberAnswerRevocation withdraws it."""
+    NOT_DOCUMENTED, CANNOT_CONFIRM = 'not_documented', 'cannot_confirm'
+    VALUES = [(NOT_DOCUMENTED, 'Not documented'), (CANNOT_CONFIRM, 'Cannot confirm')]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='member_answers')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='member_answers')
+    # the assessment whose question the member answered (provenance only: the answer binds to code, family and fact)
+    assessment = models.ForeignKey('Assessment', on_delete=models.PROTECT, related_name='+')
+    fact = models.CharField(max_length=40)
+    family = models.CharField(max_length=40, blank=True)
+    code = models.CharField(max_length=10, blank=True)
+    value = models.CharField(max_length=20, choices=VALUES)
+    answered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['answered_at']
+
+
+class MemberAnswerRevocation(ImmutableModel):
+    """A member's answer withdrawn: by the member ('withdrawn'), or by a later answer to the same detail
+    ('superseded'), so at most one answer to a detail ever stands and a withdrawn one is never resurrected."""
+    WITHDRAWN, SUPERSEDED = 'withdrawn', 'superseded'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    answer = models.OneToOneField(MemberAnswer, on_delete=models.PROTECT, related_name='revocation')
+    reason = models.CharField(max_length=12, choices=[(WITHDRAWN, 'Withdrawn'), (SUPERSEDED, 'Superseded')])
+    revoked_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    revoked_at = models.DateTimeField(auto_now_add=True)
 
 
 class Job(models.Model):

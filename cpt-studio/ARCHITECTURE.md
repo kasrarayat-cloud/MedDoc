@@ -3249,3 +3249,35 @@ The truth rules of section 2 stand on both surfaces: a customer code shows CPT S
 the provider's exact passages only where the support record says they show the act, never a passage that does not
 support; agent approvals are labelled "Agent-executed synthetic review — not clinical approval"; a recorded test
 response is said to be one ("These results come from a recorded test response, not a live check.").
+
+## Core repair and customer interface (2026-11-03): P5 FLOW
+
+**Member answers are context, never documentation.** `MemberAnswer` (append-only) records that a member says a
+detail is not documented or cannot be confirmed, bound to its revision and to (code, family, fact) - never to a
+clarification row or a proposal key, which every re-assessment makes anew, so an answer stands through a re-assessment
+of the same revision and never reaches a new one. A later answer to the same detail, or the member's withdrawal, adds
+a `MemberAnswerRevocation`; at most one answer per detail stands and a withdrawn one is never resurrected. An answer
+never enters the document text, a provider request or an addendum, and approves nothing: the review overlay reads the
+standing answers (`answers.saved_answers`) and a proposal-scoped "not documented" leaves its proposal excluded, never
+approvable, until withdrawn. A member never supplies a clinical fact: a `confirm` row takes only "Not documented" or
+"Cannot confirm", or the physician's addendum. Context values (date, place of service, new or established, claim
+type) keep the existing path: one `jobs.change_context` per save.
+
+**The document's own date is recorded beside each context.** `EncounterContext.document_date` holds the pre-merge
+service date fact (`context.document_service_date_fact`), computed from the Fact the reader made - the bounded child's
+facts, so the text is never read again in the worker or a web request - and outside the context's sha256. "Use
+document date" is offered only where the document gives one date of its own; a date the reader types as another
+occurrence's or document's, a date of birth or a doubt's other side is never offered.
+
+**Progress is a fold over the rows** (`studio/progress.py`): the current revision's jobs cut into runs (a job queued
+while every earlier one had finished starts a run), four plain steps, one phase, the member date hold read from the
+current context as soon as analyze records it. It is read-only: polling, reloading or opening results can create
+nothing, and no customer sentence comes from a job's or a run's error text.
+
+**Uploads are idempotent per attempt** (`Encounter.client_key`, a unique partial index on (created_by, client_key);
+`intake.find_upload`). **Re-assessment from retained answers** (`jobs.reassess_retained`, `manage.py reassess_retained`)
+queues the assess stage's AGAIN mode, which re-reads the final assessment's runs by id and sends nothing.
+
+Migration `0009_cux_flow` is additive under the installer's gate (two new tables, two nullable columns, one index). An
+older release reading the new schema never reads the answer tables (it asks those questions again) and only ever writes
+NULL in the new columns, which the partial unique index excludes.

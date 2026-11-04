@@ -939,3 +939,49 @@ membership signs in on the same login page and lands on `/ops/`.
 
 An operator's reads of an encounter are audited as `operator.viewed` (once per operator, encounter and view in ten
 minutes); they are never part of an encounter's activity, the customer's or the operator's.
+
+## Core repair and customer interface (2026-11-03): P5 FLOW
+
+Endpoints and blocks the customer interface reads for directive sections 4 and 5. Every sentence below is from fixed
+tables in `studio/answers.py` and `studio/progress.py`: no stored question, reason, note, job error or run error text
+is passed through.
+
+**`POST /api/encounters` - `client_key`** (optional multipart field): a UUID the page generates per upload attempt. A
+repeated POST of the same attempt - the same member, within 24 hours, the same file (sha256) or pasted text - answers
+201 with the first encounter's `id` and creates nothing. Another member's same key is their own new encounter. 409 for a
+key used for another document, in another workspace or more than 24 hours ago ("This upload was already received. Open
+it from your documents." / "This upload key was already used for a different document. Reload the page and upload
+again."); 400 for a key that is not a UUID. Two concurrent POSTs of one attempt are settled by the database's unique
+index on (member, key): the second answers with the first's id.
+
+**`POST /api/encounters/{id}/details`** `{"answers": [{"id": "<detail id>", "fact": "<fact>", "value": "<value>"}]}` -
+one save for every row of "A few details needed" (owner or reviewer; 403 otherwise; 404 outside the workspace):
+- a `date` row takes `YYYY-MM-DD`, or `use_document` where offered (clears the member's date: the document's own date
+  then stands); a `choice` row takes one of its listed values, `use_document` where offered, or `not_documented` where
+  `allow` lists it; a `confirm` row (a clinical fact) takes only `not_documented` or `cannot_confirm`;
+- context values go through ONE context change and its re-assessment (as `POST .../context` makes it); the other two
+  values are stored as the member's answers (append-only, attributed, audited `detail.answered`), read by the review
+  overlay with no re-assessment and nothing sent;
+- 201 `{"saved": n, "unchanged": m, "answer_ids": [...], "reassessing": bool}` when something was saved; 200 with
+  `saved` 0 when the save changed nothing (a repeated identical save makes nothing); 400 `{"error"}` for an answer the
+  row does not allow ("Only "Not documented" or "Cannot confirm" can be recorded for this detail. A clinical detail is
+  added to the documentation by the physician.", "Choose one of the answers offered for this detail.", ...); 409 while
+  processing runs or for a detail no longer asked.
+
+**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer (the detail is asked again);
+201 `{"revoked": "<answer id>"}`; 404 for another document's answer; 409 while processing runs or when already
+withdrawn. A later answer to the same detail withdraws the earlier one itself.
+
+**Blocks** (built by `answers.details_needed(encounter, assessment, view)`, `answers.service_date_block(encounter)`,
+`progress.encounter_progress(encounter, now)` and `progress.checks_summary(encounter)` with DESIGN section 7's keys):
+`details_needed` rows are one per open question, de-duplicated by (fact, family, code), with a stable `id` across
+re-assessments; `service_date` shows the document's own date and quote only where the document gives one date of its
+own, beside the member's entered date; `progress` folds the jobs into four plain steps and one phase (`queued`,
+`processing`, `action_needed`, `awaiting_detail`, `completed`, `partial`, `failed`, `stopped`, `being_confirmed`), never
+a percentage or an estimate, "taking longer than usual" only from the stage's own deadline; `checks` states Document
+review, Independent checks and Coding validation. None of them writes anything.
+
+**Operator command `manage.py reassess_retained --encounter <uuid> --tag <release> [--username U] [--dry-run]`**:
+one re-assessment from the retained answers (the final assessment's runs re-read by id), nothing sent, one job per tag;
+refused, with the reason, while busy or stopped or when the final assessment is not current. Audit
+`assessment.refreshed` ("Results were refreshed with updated software").

@@ -11,6 +11,7 @@ stored artifact - is a platform operator's, served under /ops/ by studio.operato
 import functools
 import json
 import re
+import uuid
 from datetime import date
 
 from django.conf import settings
@@ -20,7 +21,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, customer_api, intake, jobs, models, reports, review
+from . import answers, audit, customer_api, intake, jobs, models, reports, review
 from .access import active_membership, scoped_encounter
 from .ingest import canonicalize
 from .storage import read_original
@@ -145,6 +146,18 @@ def _PIPE_choice(data, name, choices, message):
     return value
 
 
+# P5 FLOW: the upload attempt's key, a UUID the page generates per attempt (8-4-4-4-12 hex digits).
+_CLIENT_KEY = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+
+def _client_key(value):
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str) or not _CLIENT_KEY.fullmatch(value):
+        raise ApiError(400, 'The upload key must be a UUID.')
+    return uuid.UUID(value)
+
+
 def _clean_title(raw, fallback):
     title = re.sub(r'\s+', ' ', UNSTORABLE.sub(' ', str(raw or ''))).strip()[:160]
     return title or fallback
@@ -183,10 +196,21 @@ def encounters(request):
         data, filename = None, ''
         fallback_title = f'Pasted note {timezone.now():%Y-%m-%d %H:%M}'
     title = _clean_title(request.POST.get('title'), fallback_title)
+    # P5 FLOW: a repeated POST of the same upload attempt (its client_key, by the same member, within 24 h, of the same
+    # document) answers with the encounter the first made - 201 with the same id - and creates nothing
+    client_key = _client_key(request.POST.get('client_key'))
+    pasted = '' if upload is not None else text
     try:
-        encounter = intake.create_encounter(
-            membership=membership, user=request.user, title=title, service_date=service_date, data=data,
-            filename=filename, text='' if upload is not None else text)
+        encounter = intake.find_upload(user=request.user, workspace=membership.workspace, client_key=client_key,
+                                       data=data, text=pasted)
+        if encounter is None:
+            encounter = intake.create_encounter(
+                membership=membership, user=request.user, title=title, service_date=service_date, data=data,
+                filename=filename, text=pasted, client_key=client_key)
+    except intake.DuplicateUpload as exc:
+        encounter = exc.encounter
+    except intake.UploadKeyRefused as exc:
+        raise ApiError(409, str(exc))
     except ValidationError as exc:
         raise ApiError(400, customer_api.customer_error(' '.join(exc.messages)))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
@@ -342,6 +366,42 @@ def context(request, encounter_id):
     except jobs.Refused as exc:
         raise ApiError(409, customer_api.customer_error(str(exc)))
     return JsonResponse({'context_id': str(ctx.pk)}, status=201)
+
+
+@require_POST
+@api_view
+def details(request, encounter_id):
+    """P5 FLOW: one save for the "A few details needed" rows, ``{"answers": [{"id", "fact", "value"}]}``
+    (answers.save_details): context values through one context change and its re-assessment, "not documented" or
+    "cannot confirm" stored as the member's answers. An owner or reviewer only; 400 for an answer a detail does not
+    allow, 409 while processing runs or for a detail no longer asked. 201 when something was saved, 200 when the save
+    changed nothing."""
+    data = _payload(request)
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        saved = answers.save_details(encounter, request.user, data.get('answers'))
+    except answers.InvalidAnswer as exc:  # answers.py's own fixed customer sentences
+        raise ApiError(400, str(exc))
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse(saved, status=201 if saved['saved'] else 200)
+
+
+@require_POST
+@api_view
+def revoke_detail(request, encounter_id, answer_id):
+    """P5 FLOW: withdraw one saved answer (answers.revoke_answer); the detail is asked again. 404 for an answer that is
+    not this document's, 409 while processing runs or for an answer already withdrawn."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        revocation = answers.revoke_answer(encounter, request.user, answer_id)
+    except models.MemberAnswer.DoesNotExist:
+        raise Http404()
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse({'revoked': str(revocation.answer_id)}, status=201)
 
 
 @require_POST

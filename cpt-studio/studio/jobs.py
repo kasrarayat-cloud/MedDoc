@@ -468,7 +468,10 @@ def _record_context(encounter, revision, document_facts, *, created_by=None):
     return models.EncounterContext.objects.create(
         encounter=encounter, revision=revision, facts=facts, user_values=user_values, version=CONTEXT_VERSION,
         sha256=sha256_json({'facts': facts, 'user_values': user_values, 'revision': str(revision.pk)}),
-        created_by=created_by)
+        created_by=created_by,
+        # P5 FLOW: the document's own date before the member's value is merged, read from the facts the bounded child
+        # returned (never the text again here), recorded beside the context and outside its sha256
+        document_date=gi_context.document_service_date_fact(revision.text, facts=document_facts))
 
 
 def _record_routing(revision, data, service_date):
@@ -2993,3 +2996,109 @@ def reassess_after_confirmation(encounter, user):
                       provider_run=final.provider_run, key=key, requested_by=user)
         review.refresh_state(encounter)
     return job
+
+
+# --- P5 FLOW: re-assessment from retained answers, nothing sent (owner directive 2026-11-03, section 6; R6 6.4) ----------
+
+RETAINED_STOPPED = 'A member stopped processing of this document; nothing is queued while the Stop stands.'
+RETAINED_NOT_FINAL = ('The current assessment is not its chain\'s final assessment (its peer stages have not finished), '
+                      'so there is no final reading to re-read.')
+RETAINED_NOT_NEWEST = 'A newer assessment of the current revision exists, so the stage would assess nothing.'
+RETAINED_EARLIER = ('The current context was recorded under earlier context rules; re-assessing it would remake the '
+                    'context first and could send. Nothing was queued.')
+RETAINED_HELD = 'A member date conflict holds this document: there is no retained answer to re-read until it is settled.'
+RETAINED_DATE = ('The retained answer was requested for another service date than the current context; it cannot be '
+                 're-read for this one.')
+RETAINED_PARTICIPANTS = ('The participants configured here are not the ones the final assessment read ({recorded} read, '
+                         '{configured} configured): the re-assessment would read other answers than the retained ones.')
+RETAINED_BYTES = 'A retained answer no longer matches its recorded sha256 (run {run}); it would not be read.'
+RETAINED_KEY = 'The re-assessment key would be longer than the job key column holds.'
+RETAINED_TAG = 'Give the release tag as 1 to 80 printable characters with no spaces.'
+
+
+def _retained_runs(revision, final):
+    """(name, phase-1 run, peer run) of each model participant ``final`` read, by the ids its entries name - exactly what
+    an AGAIN-mode assess re-reads (_reread)."""
+    out = []
+    for name, record in sorted(review.model_records(final).items()):
+        if record.get('state') in (None, 'not_configured'):
+            continue
+        run = _own_run(revision, name, record.get('run'), models.ProviderRun.INDEPENDENT)
+        peer = (_own_run(revision, name, record.get('peer_run'), models.ProviderRun.PEER_REVIEW)
+                if 'peer_state' in record else None)
+        out.append((name, run, peer))
+    return out
+
+
+def reassess_retained(encounter, tag, *, user=None, dry_run=False) -> dict:
+    """Queue ONE re-assessment of the current revision that re-reads the final assessment's retained answers by id -
+    Corti's run and every participant run and peer run its entries name - and sends nothing (R6 6.4): an assess keyed
+    '<the final's key>:c:<12 hex of sha256(tag)>', read in AGAIN mode (_assess_mode), which queues no peer stage and
+    builds no request. ``tag`` names the release it is made for: one job per tag, so running it again for the same
+    release queues nothing (``action`` 'already_queued').
+
+    Refused (Refused, with why) under the row lock, before anything is written: while busy; while a member's Stop
+    stands (claim_next would cancel it); with no final assessment of the current revision, one made on another context,
+    one that is not its chain's final, or a newer assessment of the revision (the stage would skip); on a context of an
+    earlier version (the stage would remake it and could send); while a member date conflict holds it; when the
+    retained Corti answer was made for another date; when the participants configured here are not the ones the final
+    read (the stage would read others); when a retained answer no longer matches its recorded sha256; and with no
+    finished assess stage that made the final. Writes the 'assessment.refreshed' audit row; ``dry_run`` checks the same
+    and writes nothing. Returns what was (or would be) queued and what it re-reads."""
+    if not isinstance(tag, str) or not 0 < len(tag) <= 80 or not tag.isprintable() or any(c.isspace() for c in tag):
+        raise Refused(RETAINED_TAG)
+    with transaction.atomic():
+        encounter = _locked(encounter)
+        if busy(encounter):
+            raise Refused(REASSESS_BUSY)
+        if encounter.stopped_at is not None:
+            raise Refused(RETAINED_STOPPED)
+        revision, context, final = encounter.current_revision, encounter.current_context, encounter.current_assessment
+        if revision is None or context is None or final is None or final.revision_id != revision.pk:
+            raise Refused(REASSESS_NONE)
+        if final.context_id != context.pk:
+            raise Refused(REASSESS_CONTEXT)
+        if not review.is_final(final):
+            raise Refused(RETAINED_NOT_FINAL)
+        if _newest_assessment(revision).pk != final.pk:
+            raise Refused(RETAINED_NOT_NEWEST)
+        if context.version in EARLIER_CONTEXT_VERSIONS:
+            raise Refused(RETAINED_EARLIER)
+        corti = final.provider_run
+        if peer_review_held(final):
+            raise Refused(RETAINED_HELD)
+        if corti is not None and run_service_date(corti) != context_service_date(context):
+            raise Refused(RETAINED_DATE)
+        retained = _retained_runs(revision, final)
+        recorded = sorted(name for name, _, _ in retained)
+        configured = sorted(participants.configured())
+        if recorded != configured:
+            raise Refused(RETAINED_PARTICIPANTS.format(recorded=', '.join(recorded) or 'none',
+                                                       configured=', '.join(configured) or 'none'))
+        for run in [corti] + [item for _, run, peer in retained for item in (run, peer)]:
+            if (run is not None and run.state == models.ProviderRun.SUCCEEDED
+                    and hashlib.sha256(bytes(run.response_bytes)).hexdigest() != run.response_sha256):
+                raise Refused(RETAINED_BYTES.format(run=run.pk))
+        made = (Job.objects.filter(encounter=encounter, revision=revision, kind=Job.ASSESS, state=Job.SUCCEEDED,
+                                   result__assessment=str(final.pk)).order_by('-created_at', '-pk').first())
+        if made is None:
+            raise Refused(REASSESS_UNFINISHED)
+        key = f'{made.idempotency_key.split(AGAIN_MARK, 1)[0]}{AGAIN_MARK}{_digest(tag)}'
+        if len(key) > Job._meta.get_field('idempotency_key').max_length:
+            raise Refused(RETAINED_KEY)
+        existing = Job.objects.filter(idempotency_key=key).first()
+        out = {'encounter': str(encounter.pk), 'tag': tag, 'key': key, 'final_assessment': str(final.pk),
+               'context': str(context.pk), 'document_review_run': str(corti.pk) if corti is not None else None,
+               'participants': [{'name': name, 'run': str(run.pk) if run is not None else None,
+                                 'peer_run': str(peer.pk) if peer is not None else None}
+                                for name, run, peer in retained]}
+        if existing is not None:
+            return {**out, 'action': 'already_queued', 'job': str(existing.pk), 'job_state': existing.state}
+        if dry_run:
+            return {**out, 'action': 'dry_run', 'job': None, 'job_state': None}
+        job = enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=corti, key=key,
+                      requested_by=user)
+        audit.record(encounter.workspace, 'assessment.refreshed', encounter=encounter, actor=user, job=str(job.pk),
+                     tag=tag, assessment=str(final.pk))
+        review.refresh_state(encounter)
+    return {**out, 'action': 'queued', 'job': str(job.pk), 'job_state': job.state}
