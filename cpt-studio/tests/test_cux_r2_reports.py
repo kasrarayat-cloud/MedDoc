@@ -19,7 +19,8 @@ acceptance evidence (L3-1, L3-3, L3-6; the walk's half of L3-3, L3-5, L3-7, L3-9
   have the shape customer_snapshot builds from a real encounter (SampleReportTests; SnapshotShapeTests); the tools'
   copies of the server's words and check ids are the server's (ConstantsTests).
 
-DB-backed (CPT_STUDIO_TEST_DB_SUFFIX) except SampleReportTests; synthetic data only; nothing is sent.
+DB-backed (CPT_STUDIO_TEST_DB_SUFFIX) except SampleReportTests and ConstantsTests; synthetic data only; nothing is sent.
+The walk tests need node (as the CI job has).
 """
 import copy
 import hashlib
@@ -186,12 +187,14 @@ class ExportCase(TestCase):
         view, trace = self.operator_view(s)
         persisted = self.persisted_modifiers(s)
         decisions = [p['decision'] for p in view['assessment']['proposals'] if p.get('decision')]
-        if all('modifiers' in decision for decision in decisions):
-            self.assertEqual({d['proposal_id']: d['modifiers'] for d in decisions}, persisted)
+        served = {d['proposal_id']: d['modifiers'] for d in decisions if 'modifiers' in d}
+        self.assertEqual(served, {key: persisted[key] for key in served})  # what the view says is what the rows hold
+        if len(served) == len(decisions):
             return view, trace
         for (kind, fmt), bad in self.judged(files, view, trace, by).items():
-            self.assertEqual([(check, status) for check, status, _ in bad], [(MODIFIERS_CHECK[fmt], 'incomplete')],
-                             (kind, fmt, bad))
+            unknown = any(item['modifiers'] is vd.UNKNOWN for item in vd.customer_truth(view, kind))
+            self.assertEqual([(check, status) for check, status, _ in bad],
+                             [(MODIFIERS_CHECK[fmt], 'incomplete')] if unknown else [], (kind, fmt, bad))
         return with_modifiers(view, persisted), trace
 
     def assert_all_pass(self, files, view, trace, by):
