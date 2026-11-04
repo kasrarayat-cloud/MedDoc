@@ -5875,5 +5875,293 @@
    "the request side"
   ],
   "cost": "Per inventory, one length test of performed_families and one local import; per placed act, one boolean and one frozenset membership and at most one tuple concatenation; per matched code, one all() over its supporting acts' cues. No new pass, no pattern, no new read of the text."
+ },
+ "after_code_20261104_hold_only": {
+  "provenance": "Written 2026-11-04 AFTER the code and its measurement, as a record: it changes no key above it (each value is identical; the only byte added before this key is the separating comma, checked when it was appended). amendment_20261104_hold_only was committed alone in d89708a883835801b6284a2738dee9343a27958d 2026-11-04T19:14:06+00:00 (declared_before_code). The code, alone, is in a6dee085575c04aee4072f52f55f93047255d34c 2026-11-04T19:14:29+00:00. main's services.py was checked out again (sha256 ced33ed0...), and the lead's script then printed: services.py before ced33ed03afcfb41, after 6525b08a7b38349a; reconcile.py before bbe755eab7b613b2, after a01fdc18e1b915c0; applied: True. The full sha256 of each file equals the required value. The battery edit and the tests are in ebf858fca47c55f35a8eb47526350c2709ad61e3 2026-11-04T19:19:19+00:00; ops/gi4/battery.py is byte-identical to the scratch harness the amendment's cells were measured with (4a5242be...). The harness tools ran from this worktree's cpt-studio (PYTHONDONTWRITEBYTECODE=1, venv-cpt-6212 python -B; --base exported and sealed by ops.gi4.boot into scratch-r5b/gi4-*). The lead's tools (verify-r4/drive2.py, verify-r4/invdump_main.py with its fixture root moved to the sealed main export, scratch-r4b/diffinv.py) ran on this session's own sealed git-archive exports of main, installed and ebf858fca47c (scratch-r5b/exports/head, chmod a-w, byte-identical to the worktree). The exports' tree digests were unchanged after every run, and no bytecode was written.",
+  "governs": "This record measures amendment_20261104_hold_only, which governs. Its declared class, its 21 cost cells (declared_costs.hold_class.cost_cells) and its 4 fixes are reproduced below. A movement named there is a declared cost or fix; any other is a finding.",
+  "H4_battery": [
+   "python -m ops.gi4.battery --base 20a64b860 --head <this worktree> --declare tests/fixtures/gi4/declarations/cux-r5-binding.json: == base {'rows': 275, 'codes': 447, 'violations': 6, 'judged': 430, 'ready': 172, 'excluded': 14, 'held': 261} == head {'rows': 275, 'codes': 447, 'violations': 2, 'judged': 430, 'ready': 147, 'excluded': 14, 'held': 286} == 25 movements, 14 undeclared; 0 new violations (exit 1). The tool reads the file's top-level 'battery' only, which is the refuted form's 12. The 14 movements it calls undeclared are X3 FD4b and the Y1 to Y5 rows' declared costs; this amendment declares them in its own 'battery'",
+   "the same with --declare scratch-r5b/declare-hold-only.json (top-level 'battery' = this amendment's 'battery', verbatim): == base {'rows': 275, 'codes': 447, 'violations': 6, 'judged': 430, 'ready': 172, 'excluded': 14, 'held': 261} == head {'rows': 275, 'codes': 447, 'violations': 2, 'judged': 430, 'ready': 147, 'excluded': 14, 'held': 286} == 25 movements, 0 undeclared; 0 new violations (exit 0). Exactly the 25 declared: 4 fixes and 21 costs, every one READY to held. The 2 violations left are the known S2/S3 exclusions (scratch-r5b/out/battery-vs-main.log)",
+   "python -m ops.gi4.battery --base 41e03656d --head <this worktree>: == base {'rows': 275, 'codes': 447, 'violations': 80, 'judged': 430, 'ready': 247, 'excluded': 8, 'held': 192} == head {'rows': 275, 'codes': 447, 'violations': 2, 'judged': 430, 'ready': 147, 'excluded': 14, 'held': 286} == 144 movements, 144 undeclared; 0 new violations (none declared against installed, so exit 1 by design; 0 new violations; scratch-r5b/out/battery-vs-inst.log)"
+  ],
+  "H1_replay": "python -m ops.gi4.replay --fixtures --base 20a64b860 --head <this worktree>: EQUAL. The four date.sends-only-the-truth HARD failures of h4-03 are on base and head alike, as recorded before (scratch-r5b/out/replay.log)",
+  "H2_freeze": [
+   "python -m ops.gi4.freeze --base 20a64b860 --head <this worktree> --workers 6:",
+   "== H2 freeze: base /home/claude/cpt-studio-ux-20261103/scratch-r5b/gi4-freeze/tree-20a64b860138/cpt-studio",
+   "               head /opt/meddoc-pro/.worktrees/cux-r5/cpt-studio",
+   "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+   "    sections.layout over 5723 texts: identical",
+   "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+   "(c) requests over 19780 primary and dated requests: changed 0",
+   "(d) mention counts over 5723 texts: changed 0",
+   "== GATE HOLDS",
+   "(scratch-r5b/out/freeze.log)"
+  ],
+  "corpus_inventory": "The lead's invdump_main.py (its fixture root moved to the sealed main export) on the sealed head, compared with scratch-r4b/diffinv.py against this session's main dump (byte-identical to the lead's inv-x-20a64b860138.json): texts 5980, differ 0, so no act placement changes. The head's dump equals the lead's inv-proto-Z2b.json on all 5,980 common texts. The head adds 66 texts, its 'R8 R5 ' rows, which the base does not have. The lead's number, equal",
+  "refuter_cases": "verify-r4/drive2.py over verify-r4/refuter-cases3.json (2,396 cases) on the sealed main, installed and head exports, one tree per process. Each output is byte-identical to the lead's rc3-x-20a64b860138.json, rc3-x-41e03656df61.json and rc3-proto-Z2b.json (scratch-r5b/tools/rcstats2.py). 0 cells toward READY against main, 0 violations main lacks, 0 violations installed lacks, 0 new exclusions, and 100 of main's violations fixed. Held where main reads READY with truth done: 308 cells, 208 of them READY on installed too. The lead's numbers, equal",
+  "x_lens_cases": "verify-r4/drive2.py over the X lens's and its verifiers' 228 cases (scratch-r5b/x-cases-all.json) on the sealed head: identical to the before-code reading of the patched export (x_lens_cases above)",
+  "cases_and_base_probes": "verify-r4/drive2.py over verify-r4/cases.json and base-probes.json on the sealed head: byte-identical to the lead's c18-Z2b.json and bp-Z2b.json. The four false READYs are held, and every base code is held [base_included]",
+  "rows": "Every 'R8 R5 ' cell (bucket/status, clarifications, support reason), every inventory act and cue of the rows, the A3 rows, the residuals and Mara, and the offers of all 225 'R8 ' rows, read on the sealed head: identical to the declared before-code readings, inventory_acts and offer_battery",
+  "declared_costs_measured_after_code": {
+   "cost_cells": [
+    [
+     "R8 R5 B2 dash base code: label-only line before the EGD",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1277 findings first, the label acted on after the colonoscope",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1146 a procedures-performed line, the label acted on by name",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1406 the colonoscope reinserted to the identified polyp",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold 1383 an upper lesion acted on by its label",
+     "43251",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 hold, a combined title whose second service the note denies",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 X3 an EGD by another provider, the snare code",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 COLONOSCOPY heading, Findings: sub-heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 COLONOSCOPY heading, Interventions: sub-heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y1 Mara-style headings, LESIONS AND INTERVENTIONS",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a Bravo pH capsule",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a PillCam placement",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y2 EGD with a gastrostomy tube exchange",
+     "43239",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 PROCEDURE 2: COLONOSCOPY heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 Part 2: Colonoscopy heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 2. Colonoscopy heading",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y3 Upper endoscopy and Lower endoscopy headings",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y4 a separately reported same-day EGD",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y4 a pediatric gastroscope as the colonoscopy instrument",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 Y5 a specimen-numbered act",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R3 A3 control, the colonoscope told again before the labelled act",
+     "45385",
+     "selected/ready",
+     "selected/needs_clarification"
+    ]
+   ],
+   "fixes": [
+    [
+     "R8 R5 R1 dash",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R1b dash upper endoscopy named",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R3 dash",
+     "45380",
+     "selected/ready",
+     "selected/needs_clarification"
+    ],
+    [
+     "R8 R5 R2 dash combined",
+     "45382",
+     "selected/ready",
+     "selected/needs_clarification"
+    ]
+   ],
+   "note": "each reads after code exactly as declared: every cost a done code held [performed_status], reason named_only, no violation; every fix a not-done code held"
+  },
+  "mutation_proofs": {
+   "method": "scratch-r5b/tools/mutate_inplace.py, in place in this worktree (only this session edits these files). A baseline run on the unmutated files comes first. For each mutant: the committed file's sha256 is taken, its anchor is asserted to occur once, and the mutant is written and read back ('mutation applied: True') and compiled. tests.test_cux_r5_binding, tests.test_cux_r3_reader and tests.test_cux_bind.MaraEndToEndTests then run on the throwaway server 127.0.0.1:55461 (they must have run and must fail). The file is restored byte for byte, and its sha256 is compared with the one taken before.",
+   "results": [
+    "cpt-studio/studio/gi/services.py committed sha256 6525b08a7b38349a988745ee3a3c4ddc4ba45a820a43dce8cdd2af2f9edd6f71",
+    "cpt-studio/studio/validation/reconcile.py committed sha256 a01fdc18e1b915c0ee126e3b6f1bc3c80a0563eff981f0ed8eea043941b8e45f",
+    "baseline (unmutated): Ran 53; OK",
+    "M1 the cue never added: anchor occurs 1 time(s) in services.py",
+    "   mutation applied: True",
+    "   Ran 53 tests; FAILED (failures=96) -> KILLED",
+    "     failing: DeclaredCostTests.test_a_combined_title_counts_a_service_the_note_denies",
+    "     failing: BindingAfterAnotherExaminationTests.test_controls_a_labelled_clip_and_denial_and_the_colonoscope_told_again",
+    "     failing: PlacementTests.test_every_act_is_where_main_puts_it_with_its_declared_cue",
+    "     failing: DeclaredCostTests.test_the_a3_control_s_snare_stays_bound_and_carries_the_cue",
+    "     failing: FourShapesTests.test_the_biopsy_by_label_stays_the_colon_polyp_s_and_45380_is_held",
+    "     failing: DeclaredCostTests.test_the_costs_and_fixes_are_exactly_the_declared_movements",
+    "     failing: BaseCodeTests.test_the_label_only_snare_stays_documented_beside_the_base_code",
+    "     failing: FourShapesTests.test_the_prophylactic_clip_s_bleeding_control_is_held_and_the_clip_keeps_no_cue",
+    "     failing: R3RowsTests.test_the_rows",
+    "     failing: HoldOnlyRowsTests.test_the_rows",
+    "     failing: RefutedShapesTests.test_x1_43251_is_held_and_the_snare_stays_at_the_colon_lesion",
+    "     failing: RefutedShapesTests.test_x4_the_genuine_conflict_is_kept",
+    "   failing tests: 12",
+    "   restore sha256 6525b08a7b38349a==6525b08a7b38349a: True",
+    "M2 reconcile ignoring the cue: anchor occurs 1 time(s) in reconcile.py",
+    "   mutation applied: True",
+    "   Ran 53 tests; FAILED (failures=56) -> KILLED",
+    "     failing: DeclaredCostTests.test_a_combined_title_counts_a_service_the_note_denies",
+    "     failing: BindingAfterAnotherExaminationTests.test_controls_a_labelled_clip_and_denial_and_the_colonoscope_told_again",
+    "     failing: DeclaredCostTests.test_the_a3_control_s_snare_stays_bound_and_carries_the_cue",
+    "     failing: FourShapesTests.test_the_biopsy_by_label_stays_the_colon_polyp_s_and_45380_is_held",
+    "     failing: DeclaredCostTests.test_the_costs_and_fixes_are_exactly_the_declared_movements",
+    "     failing: FourShapesTests.test_the_prophylactic_clip_s_bleeding_control_is_held_and_the_clip_keeps_no_cue",
+    "     failing: R3RowsTests.test_the_rows",
+    "     failing: HoldOnlyRowsTests.test_the_rows",
+    "     failing: RefutedShapesTests.test_x1_43251_is_held_and_the_snare_stays_at_the_colon_lesion",
+    "   failing tests: 9",
+    "   restore sha256 a01fdc18e1b915c0==a01fdc18e1b915c0: True",
+    "M3 the NOT_REPORTED exemption removed: anchor occurs 1 time(s) in services.py",
+    "   mutation applied: True",
+    "   Ran 53 tests; FAILED (failures=8) -> KILLED",
+    "     failing: ControlTests.test_a_labelled_clip_and_a_labelled_denial_keep_their_lesions",
+    "     failing: PlacementTests.test_every_act_is_where_main_puts_it_with_its_declared_cue",
+    "     failing: MaraUnchangedTests.test_no_act_carries_the_cue_and_the_clip_keeps_its_lesion",
+    "     failing: ControlTests.test_the_controls_carry_no_cue_and_read_ready",
+    "     failing: FourShapesTests.test_the_prophylactic_clip_s_bleeding_control_is_held_and_the_clip_keeps_no_cue",
+    "   failing tests: 5",
+    "   restore sha256 6525b08a7b38349a==6525b08a7b38349a: True",
+    "M4 several_performed forced true: anchor occurs 1 time(s) in services.py",
+    "   mutation applied: True",
+    "   Ran 53 tests; FAILED (failures=4) -> KILLED",
+    "     failing: PlacementTests.test_every_act_is_where_main_puts_it_with_its_declared_cue",
+    "     failing: ControlTests.test_one_procedure_performed_beside_one_planned_carries_no_cue",
+    "     failing: HoldOnlyRowsTests.test_the_rows",
+    "   failing tests: 3",
+    "   restore sha256 6525b08a7b38349a==6525b08a7b38349a: True",
+    "final cpt-studio/studio/gi/services.py 6525b08a7b38349a988745ee3a3c4ddc4ba45a820a43dce8cdd2af2f9edd6f71 True",
+    "final cpt-studio/studio/validation/reconcile.py a01fdc18e1b915c0ee126e3b6f1bc3c80a0563eff981f0ed8eea043941b8e45f True",
+    "all killed: True"
+   ]
+  },
+  "tests": {
+   "named_set": "WT=<this worktree> tools/t.sh r5b4 tests.test_cux_r5_binding tests.test_cux_r3_reader tests.test_cux_r2_bind tests.test_cux_r2_em tests.test_cux_r2_variants tests.test_cux_bind tests.test_cux_hold tests.test_cux_lead tests.test_gi4_battery tests.test_gi4_state tests.test_harness_engine_parity tests.test_harness2_r2_parity tests.test_harness_pipeline tests.test_cux_review tests.test_customer_fixtures tests.test_cux_wire: 346 tests in 163.3 s, OK (scratch-r5b/out/tests-r5b4.log)",
+   "unit_pins": "Moved, as declared: tests/test_cux_r5_binding.py, rewritten (20 tests); the two pins of the A3 control in tests/test_cux_r3_reader.py. R3RowsTests reads this file's hold-only amendment, and the 'again' document pins the snare at COL-1 with the cue, held [performed_status]. tests/test_cux_hold.py is unchanged: RegisterOfferTests reads the amendment's offer_battery as this file's latest. No other pin moved: the parity digests, tests/test_harness_pipeline, tests/test_gi4_battery's pins and tests/test_customer_fixtures pass on their committed fixtures."
+  },
+  "customer_surface": {
+   "method": "A scratch test, never committed (scratch-r5b/surface: a writable export of this head with one probe module), on the throwaway server: the 'R8 R5 hold 1146' text through the real endpoints and pipeline (tests.test_harness_pipeline's fakes, Corti tests.test_customer_fixtures.CitingCorti, both participants agreeing) with 45385 citing 'Polyp A was removed with a cold snare.' and 43239 the antral biopsies; draft TXT and CSV exports. Every customer surface (session, list and encounter for the owner, reviewer and viewer, their headers, both downloads: 30) was then read and checked four ways: held to tests.test_customer_surface.assert_contract and ops/scan_customer.py's contract check; scanned with ops/verification/customer-denylist.json (ops/scan_customer.py); checked by SurfaceCase.assertClean; and searched for 'named_only', the cue text and the engine's stored detail, question and reason.",
+   "operator_side": "45385 needs_clarification, support reason 'named_only', one clarification performed_status (its stored question and reason carry the rule's wording); the snare stays at the sigmoid polyp with the cue; 43239 ready",
+   "customer_sees": {
+    "status": "needs_detail",
+    "status_label": "Needs a detail",
+    "summary": "The document does not establish the snare removal as done on the date of service.",
+    "why": {
+     "quotes": [],
+     "qualifications": [
+      "The document does not establish that this was done on the date of service."
+     ]
+    },
+    "allowed_actions": [
+     "reject"
+    ]
+   },
+   "customer_detail": [
+    {
+     "fact": "performed_status",
+     "family_label": "Colonoscopy",
+     "prompt": "Was this procedure performed on the date of service, as documented?",
+     "control": "confirm",
+     "allow": [
+      "not_documented",
+      "cannot_confirm"
+     ],
+     "addendum_allowed": true
+    }
+   ],
+   "checks": "contract: pass; denylist hard hits: 0; assertClean: pass; the reason id, the cue and the stored question and detail on a customer surface: 0 of 30 surfaces"
+  },
+  "mara": "tests/test_cux_bind.MaraEndToEndTests passes unchanged: 43239, 45380 and 45385 READY, 0 conflicts, the clip bundled at COL-2. No act of Mara's inventory carries the cue (tests/test_cux_r5_binding.MaraUnchangedTests); M3 (the NOT_REPORTED exemption removed) puts the cue on Mara's clip and fails that test, while the acceptance stands (a clip supports no code).",
+  "findings_recorded_not_fixed": [
+   "verify-r4/refuter-cases3.json does not hold round 5's X lens cases: verify-r4/collect.py skips every directory whose name starts with 'out', and the X lens and its verifiers kept their cases under out/. The lead's 2,396-case figures therefore exclude X1 to X4's inputs; this session measured them separately (x_lens_cases).",
+   "The B3 probe with its EGD base code cited alone reads 43235 READY where its truth says not done, on main, the unbinding head and this head; installed holds it. It comes from R1a-r3's path (round 3): the label-only biopsy told after the colonoscope is unbound and no service's, so base_included finds no reportable act. It is main's reading, worse than installed. It is not this form's and is not changed (ACCURACY-RESIDUALS.md, round 5, the hold-only form).",
+   "The G1 shape told by the gastroscope reads 43239 READY where its truth says not done, on main, installed and this head. It was moved out of the register to R5_RESIDUALS; the unbinding form's fix of it is not taken.",
+   "ops.gi4.battery --declare reads only a declaration's top-level 'battery', so a superseding amendment is checked with a scratch file that copies its 'battery' verbatim (H4_battery).",
+   "A customer sees no quote for a named_only hold (the match names no act, so review.evidence_spans returns none). Its one detail row is a confirm control that accepts 'not documented' or 'cannot confirm', or an addendum; the code allows reject only."
+  ]
  }
 }
