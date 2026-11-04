@@ -43,6 +43,7 @@ R8_COLON = (B + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\nPl
             'completed.\n')
 R8_CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
 R8_SEEN = 'A 9 mm pedunculated polyp in the sigmoid colon was seen.'
+R8_SNARE_HEAD = R8_COLON.replace('Procedure: Colonoscopy', 'Procedure: Colonoscopy with hot snare polypectomy')
 R8_EGD = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
           'Procedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\n')
 R8_ERCP = (B + 'Procedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\n'
@@ -342,6 +343,36 @@ CASES = {
         _r8(R8_EGD, 'A small nodule was seen in the gastric antrum.', 'Cold forceps biopsy of the antrum failed.'),
         [('43235', 'The endoscope was advanced to the second part of the duodenum.', 'done'),
          ('43239', 'Cold forceps biopsy of the antrum failed.', 'not_done')]),
+    # D3: a denial read as done, or not tied to its act
+    'R8 D3 N15 no polyps removed, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'No polyps were removed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'No polyps were removed.', 'no_ready')]),
+    'R8 D3 N17 polyp was not removed, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'The polyp was not removed.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'The polyp was not removed.', 'no_ready')]),
+    'R8 D3 N16 we did not remove it, snare header': (
+        _r8(R8_SNARE_HEAD, R8_SEEN, 'We did not remove the polyp.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'We did not remove the polyp.', 'no_ready')]),
+    'R8 D3 release-0 none was snared': (
+        _r8(R8_COLON, 'Three polyps were seen in the sigmoid colon.', 'Of the three polyps, none was snared.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'Of the three polyps, none was snared.', 'not_done')]),
+    'R8 D3 release-0 at no point': (
+        _r8(R8_COLON, R8_SEEN, 'At no point was the polyp snared.'),
+        [('45378', R8_CECUM, 'done'), ('45385', 'At no point was the polyp snared.', 'not_done')]),
+    'R8 D3 release-0 without resection': (
+        _r8(R8_COLON, 'The examination was completed without endoscopic resection of the 25 mm sigmoid polyp by hot '
+                      'snare.'),
+        [('45378', R8_CECUM, 'done'),
+         ('45385', 'The examination was completed without endoscopic resection of the 25 mm sigmoid polyp by hot snare.',
+          'not_done')]),
+    'R8 D3 negtime-0 biopsies not obtained (whether)': (
+        _r8(R8_EGD, 'A 1 cm ulcer was seen in the gastric antrum.', 'Biopsies to determine whether this represents '
+            'malignancy were not obtained because of anticoagulation.'),
+        [('43235', 'The endoscope was advanced to the second part of the duodenum.', 'done'),
+         ('43239', 'A 1 cm ulcer was seen in the gastric antrum.', 'not_done')]),
+    'R8 D3 declared:1 period-ended row, No checked': (
+        _r8(R8_COLON, 'Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612'),
+        [('45378', R8_CECUM, 'done'), ('45380', 'Biopsy of the sigmoid colon.', 'no_ready')]),
 }
 # The member's answer a row is read with (jobs._merged_facts), by row name; a row not named here is read with none.
 R8_USER: dict = {}

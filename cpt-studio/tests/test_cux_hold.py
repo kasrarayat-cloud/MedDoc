@@ -121,6 +121,14 @@ UNMOVED = {
     ('R8 D1 N3 biopsy attempted, no tissue', '45378'): HELD,
     ('R8 D1 N4 ERCP stent placement failed', '43260'): HELD,
     ('R8 D2 N10 antral biopsy failed', '43235'): HELD,
+    ('R8 D3 N15 no polyps removed, snare header', '45378'): HELD,
+    ('R8 D3 N17 polyp was not removed, snare header', '45378'): HELD,
+    ('R8 D3 N16 we did not remove it, snare header', '45378'): HELD,
+    ('R8 D3 release-0 none was snared', '45378'): HELD,
+    ('R8 D3 release-0 at no point', '45378'): HELD,
+    ('R8 D3 release-0 without resection', '45378'): HELD,
+    ('R8 D3 negtime-0 biopsies not obtained (whether)', '43235'): HELD,
+    ('R8 D3 declared:1 period-ended row, No checked', '45378'): HELD,
 }
 
 
@@ -218,3 +226,77 @@ class FailedActClauseTests(SimpleTestCase):
             with self.subTest(line):
                 read = [status for _, k, status in acts(head + line + '\n') if k == kind]
                 self.assertIn('performed', read, acts(head + line + '\n'))
+
+
+SNARE_HEAD = HEAD.replace('Procedure: Colonoscopy', 'Procedure: Colonoscopy with hot snare polypectomy')
+
+
+class DenialTiedToItsActTests(SimpleTestCase):
+    """D3 (R8 1.3): a denial is read as a denial and tied to its act. (a) The routing-era reader's own negated or
+    cancelled reading, or its unresolved-negation doubt, is a status signal (engine._status_signal), so a denial in the
+    matched service's own report holds the code with both readings - never "not about the documented colonoscopy, so it
+    does not decide". (b) The clause reader's negation forms "none (of ...) was", "at no point was" and "without" over
+    the act's noun phrase, and "<act> to determine whether ... were not obtained". (c) A boxed row read as performed only
+    by its section, whose own line marks a denying option, is held (the box row tie), never read as done."""
+
+    def test_d3_rows(self):
+        RegisterRowsTests.assert_rows(self, 'R8 D3 ')
+
+    def test_the_negation_forms_are_read_as_denials(self):
+        for head, kind, line in (
+                (HEAD + CECUM + '\n', 'snare', 'Three polyps were seen. Of the three polyps, none was snared.'),
+                (HEAD + CECUM + '\n', 'snare', 'At no point was the polyp snared.'),
+                (HEAD, 'snare', 'The examination was completed without endoscopic resection of the 25 mm sigmoid polyp by '
+                                'hot snare.'),
+                (EGD_HEAD, 'biopsy', 'Biopsies to determine whether this represents malignancy were not obtained because '
+                                     'of anticoagulation.')):
+            with self.subTest(line):
+                read = [status for _, k, status in acts(head + line + '\n') if k == kind]
+                self.assertNotIn('performed', read, acts(head + line + '\n'))
+
+    def test_controls_an_act_outside_the_negation_stays_done(self):
+        for head, kind, line in (
+                (HEAD + CECUM + '\n', 'snare', 'The 9 mm polyp was removed with a hot snare; none of the other polyps was '
+                                               'larger than 3 mm.'),
+                (HEAD + CECUM + '\n', 'snare', 'At no point was there bleeding after the polyp was snared.'),
+                (HEAD + CECUM + '\n', 'snare', 'The examination was completed without difficulty. The 9 mm polyp was '
+                                               'removed with a hot snare.'),
+                (EGD_HEAD, 'biopsy', 'Biopsies were taken to determine whether this represents malignancy.'),
+                (EGD_HEAD, 'biopsy', 'Biopsies to determine whether H. pylori is present were obtained from the antrum.')):
+            with self.subTest(line):
+                read = [status for _, k, status in acts(head + line + '\n') if k == kind]
+                self.assertIn('performed', read, acts(head + line + '\n'))
+
+    def test_controls_a_denial_of_a_finding_or_of_another_act_decides_nothing(self):
+        # tests/test_services_reconcile.py's fragments control and h4-04's 43251 ("so no clip was needed" cited for a
+        # snare code), read through the status signal: neither denies an act the code accounts for
+        done = 'A 6 mm polyp in the sigmoid colon was removed with a hot snare.'
+        for denial in ('No gastric ulcer or mass was identified.', 'The stalk base was clean and dry, so no clip was '
+                                                                   'needed.'):
+            with self.subTest(denial):
+                text = colon(done, denial)
+                item = proposal(run(text, [sel('45385', span(text, done), span(text, denial))]), '45385')
+                self.assertEqual(item.status, 'ready')
+
+    def test_controls_the_procedure_line_alone_and_a_stated_snare_stay(self):
+        stated = 'The polyp was removed with a hot snare.'
+        text = SNARE_HEAD + CECUM + '\n' + SEEN + '\n' + stated + '\n'
+        result = run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, stated))])
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        # the plain procedure line cited alone, under no denial: ready as on the base
+        text = SNARE_HEAD + CECUM + '\n' + SEEN + '\n'
+        line = 'Procedure: Colonoscopy with hot snare polypectomy'
+        result = run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, line))])
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+
+    def test_the_box_row_tie(self):
+        text = colon('Biopsy of the sigmoid colon. | Yes ☐ | No ☒')
+        item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45380', span(text, 'Biopsy of the sigmoid '
+                                                                                             'colon.'))]), '45380')
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+        # control: the same row with its "Yes" checked still reads as done
+        text = colon('Biopsy of the sigmoid colon. | Yes ☒ | No ☐')
+        item = proposal(run(text, [sel('45378', span(text, CECUM)), sel('45380', span(text, 'Biopsy of the sigmoid '
+                                                                                             'colon.'))]), '45380')
+        self.assertEqual(item.status, 'ready')
+

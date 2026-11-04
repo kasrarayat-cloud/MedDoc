@@ -1821,6 +1821,12 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             # done only by its section's default, on a row whose own label lists something else ("Risks discussed -
             # \u2612 Biopsy"): strict boxes (2026-10-25) hold it, never read it as done
             return Reading('uncertain', (f'box: the row\u2019s label \u201c{label}\u201d does not list what was done',))
+        if status in ('performed', 'incomplete') and box_cues and all(cue.startswith('section:') for cue in box_cues) \
+                and DENYING_OPTION_CHECKED.search(text, line_start, line_end):
+            # P2 READ-HOLD, R8 D3 (round 7 declared:1): done only by its section's default, on a row whose own line
+            # marks a denying option ("Biopsy of the sigmoid colon. | Yes \u2610 | No \u2612") that the box reader did
+            # not tie to the item: held, never read as done
+            return Reading('uncertain', (ROW_DENIAL_CUE,))
         return Reading(BOX_STATUS.get(status, 'uncertain'), ('box: ' + (box_cues[0] if box_cues else status),)
                        + tuple(box_cues[1:3]))
     # Check boxes on the row, never another line's: "[X] Performed [ ] Not performed".
@@ -1863,8 +1869,14 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                 and not _outside_negation(tail, after):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
+    denied = _denied_before(text, cs, pos, before, after)
+    if denied:
+        return Reading('negated', (denied,))
     for not_verb in NOT_VERB.finditer(whole):
-        if _not_on_another_predicate(text, cs + not_verb.start(), end):
+        if _not_on_another_predicate(text, cs + not_verb.start(), end) \
+                and not _cues.PURPOSE_WHETHER.match(text, end, cs + not_verb.start()):
+            # (P2 READ-HOLD, R8 D3: a purpose phrase between the act and its own negated predicate - "Biopsies to
+            # determine whether this represents malignancy were not obtained" - leaves the negation the act's)
             continue
         # "was complete and was not discontinued": the negated word is the completion word, not this act.
         neg_target = text[cs + not_verb.end(): min(ce, cs + not_verb.end() + 40)]
@@ -1968,6 +1980,45 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if in_today_report:
         return Reading('uncertain', ('uncertain: named without an act predicate',))
     return Reading('uncertain', ('uncertain: no performance statement',))
+
+
+# P2 READ-HOLD, R8 D3: the box row tie's denying option, checked ("No \u2612", "\u2612 Not performed"), and its cue.
+_DENIAL_OPTION = r'(?:no|none|not[ \t]+(?:done|performed|taken|obtained))'
+DENYING_OPTION_CHECKED = re.compile(r'\b' + _DENIAL_OPTION + r'\b[ \t]*[:\-]?[ \t]*(?:' + _box_symbols.BOX_ON_PATTERN + r')'
+                                    r'|(?:' + _box_symbols.BOX_ON_PATTERN + r')[ \t]*' + _DENIAL_OPTION + r'\b', FLAGS)
+ROW_DENIAL_CUE = 'box: its row marks a denying option the box reader does not tie to it, so it is not read as done'
+DENIAL_BEFORE_REACH = 160  # characters before a mention read for a negation that governs its noun phrase
+
+
+def _denied_before(text: str, cs: int, pos: int, before: str, after: str) -> str:
+    """The cue of a denial right before the mention at ``pos`` in its clause starting at ``cs``, or '' (package P2
+    READ-HOLD, R8 D3, ACCURACY-RESIDUALS r1 release-0): "none (of ...) was/were" (cues.NONE_WAS_BEFORE: "Of the three
+    polyps, none was snared."); "at no point was/were" over the act's noun phrase (cues.AT_NO_POINT: "At no point was
+    the polyp snared.") with no other predicate or clause opener between; and "without" over the act's own noun phrase
+    beyond the 40 characters read before ("completed without endoscopic resection of the 25 mm sigmoid polyp by hot
+    snare"), with no predicate, mark or clause opener between and never a complication ("without complication"). A
+    negation of another clause (_outside_negation) leaves the act to its own predicate. Bounded: DENIAL_BEFORE_REACH
+    characters."""
+    lo = max(cs, pos - DENIAL_BEFORE_REACH)
+    if _cues.NONE_WAS_BEFORE.search(text, lo, pos):
+        return 'negated: "none" on its predicate'
+    point = None
+    for point in _cues.AT_NO_POINT.finditer(text, lo, pos):
+        pass
+    if point is not None:
+        between = text[point.end():pos]
+        if not re.search(r'\b(?:was|were|is|are|been|has|have|had)\b|[,;:]', between, FLAGS) \
+                and not NEGATION_SCOPE_END.search(between) and not _outside_negation(between, after):
+            return 'negated: "at no point" before it'
+    last = None
+    for last in WITHOUT.finditer(text, lo, pos):
+        pass
+    if last is not None and not WITHOUT_COMPLICATION.match(text, last.start()):
+        between = text[last.end():pos]
+        if not re.search(r'\b(?:was|were|is|are|been|has|have|had|and|or|but)\b|[,;:()]', between, FLAGS) \
+                and not NEGATION_SCOPE_END.search(between) and not ACT_VERB.search(between):
+            return 'negated: "without" over its noun phrase'
+    return ''
 
 
 def _failed_act(text: str, cs: int, ce: int, pos: int, end: int) -> str:

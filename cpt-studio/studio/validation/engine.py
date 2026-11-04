@@ -1724,7 +1724,7 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
         return True  # the visit's own E/M documentation, whatever routing read it as (validation:4, engine._other_service)
     # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ..."), or, for a procedure,
     # about no other service at all
-    if _status_signal(reading, passage) and (
+    if _status_signal(reading, passage, code) and (
             (service.scope_start <= reading.start and reading.end <= service.scope_end)
             or (service.family not in checks.EM_FAMILIES and inventory is not None
                 and not _other_named(reading, found, passage, inventory, routing))):
@@ -1734,7 +1734,7 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
 
 
-def _status_signal(reading: checks.Reading, passage: str) -> bool:
+def _status_signal(reading: checks.Reading, passage: str, code: str = '') -> bool:
     """Whether a passage states a status of its own: a status word ("completed", "not performed", "aborted"), a hedge
     ("?", "unclear", "possible"), or a routing-era reading from a check-box or status-option row ("Yes \u2610 No
     \u2612", "\u2612 No", "Carried out \u2610 Not carried out \u2612") - structural signals, so the hold no longer depends on
@@ -1745,7 +1745,30 @@ def _status_signal(reading: checks.Reading, passage: str) -> bool:
         return True
     if gi_services.HEDGE_WORDS.search(passage) and not gi_services.OBSERVED.search(passage):
         return True
+    if (reading.status in ('negated', 'cancelled') or any(cue.startswith(DOUBT_PREFIX) for cue in reading.cues)) \
+            and _denies_an_act_of(code, passage):
+        # P2 READ-HOLD, R8 D3: the routing-era reader's own denial, cancellation or unresolved negation of a passage that
+        # states an act the code accounts for, or an act of no named kind ("No polyps were removed.", "The polyp was
+        # not removed.", "We did not remove the polyp."): a status of its own, so a denial in the matched service's own
+        # report holds with both readings instead of "not about the documented colonoscopy, so it does not decide".
+        # Never a denial of a finding ("No gastric ulcer or mass was identified.") or of another act ("so no clip was
+        # needed" cited for a snare code: h4-04's 43251 stays READY)
+        return True
     return any('box' in cue.lower() for cue in reading.cues)
+
+
+def _denies_an_act_of(code: str, passage: str) -> bool:
+    """Whether a passage read as denied states an act ``code`` accounts for (an act kind of its profile's covers,
+    services.ACTS), or an act of no named kind by its predicate (a participle, services.ACT_VERB / BARE_PARTICIPLE, or a
+    denied act verb, cues.DENIED_ACT_VERB). A passage naming only another act kind, or no act at all, is no status of
+    this code's act (P2 READ-HOLD, R8 D3)."""
+    profile = reconcile.catalogue.code_profile(code)
+    covers = set(profile.covers) if profile is not None else set()
+    named = {kind for kind, pattern in gi_services.ACTS if pattern.search(passage)}
+    if named:
+        return bool(named & covers)
+    return bool(gi_services.ACT_VERB.search(passage) or gi_services.BARE_PARTICIPLE.search(passage)
+                or gi_cues.DENIED_ACT_VERB.search(passage))
 
 
 def _other_named(reading: checks.Reading, found: reconcile.Match, passage: str, inventory,
