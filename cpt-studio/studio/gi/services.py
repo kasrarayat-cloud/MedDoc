@@ -326,6 +326,10 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                + r")\b(?:\s+be)?"
                r"|\bnot\s+(?:performed|done|obtained|taken|removed|resected|treated|sampled|biopsied|placed|injected|"
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
+               # refutation round 4 (L4B-2): the repair package's patch made "excised" a bare act participle
+               # (BARE_PARTICIPLE); its bare denials are read with it ("Sigmoid polyp not excised with hot snare.",
+               # "never excised"), and no other participle's reading moves
+               r"|\b(?:not|never)\s+excised\b"
                r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
 # A negation's list ends where another clause opens after it - a subordinator or a temporal preposition ("No bleeding
@@ -439,6 +443,8 @@ def _not_on_another_predicate(text: str, neg: int, end: int, *, start: Optional[
         # marking's own purpose ("for future localization"): never a predicate of its own ("ink that was unavailable"),
         # a place or provider ("at the referring facility"), or another clause ("since the tattoo ink ran out")
         return False
+    if not _package_sentence(text, start, PACKAGE_MARKED_SENTENCE):
+        return False  # round 4 (L4A-1): only inside the package's own whole sentence
     return _marking_link(text, clause_start, neg, start, end, allow_marked=True)
 
 
@@ -468,6 +474,69 @@ MARKED_TO_DENIAL = _rx(r'\s*(?:ink\s+)?(?:for\s+(?:the\s+)?(?:(?:future|next|lat
 # today's, and one of manner ("carefully") is held on the safe side. With "was" or "were", MARKING_PREDICATE already
 # admits only then, also and successfully between.
 MARKED_BARE_AFTER = _rx(r'\b(?:lesion|polyp|mass|tumou?r|nodule)\s+\Z')
+# Refutation round 4 (lens A, L4A-1 and L4A-2): both of the repair package's releasing rules had been checked on a span
+# (from "marked" to "not resected", from the predicate to the purpose), and four rounds found the sentence around the span
+# saying another time, place, provider, condition or doubt ("Prior to this procedure, ...", "At the referring facility,
+# ...", "If ...", "It is unknown whether ...", "... at the referring facility.", "Ink not yet injected ...", "Tattoo ink
+# needs to get injected ..."). Each rule now releases only inside one of the package's own WHOLE sentences, fail-closed:
+# every word of the sentence is a slot of the template below, so any other word - whatever it says - leaves the sentence
+# as main reads it, held. A sentence runs from the last stop before it ([.!?] then a space, or a blank line) to the next;
+# a single line break is no stop, so a heading without a stop above it is part of the sentence (only the four headings
+# below are slots), and a line wrapped inside the sentence (88d9db32's "... and\nnot resected today.") is read whole.
+_PKG_SITE = (r'(?:cecum|cecal|caecum|caecal|ascending|transverse|descending|sigmoid|rectosigmoid|rectum|rectal|colon|'
+             r'colonic|hepatic|splenic|flexure|ileocecal|valve|appendiceal|orifice|terminal|ileum|ileal|proximal|distal|'
+             r'mid|right|left)')
+_PKG_SITE_WORD = rf'{_PKG_SITE}(?:-{_PKG_SITE})?'
+_PKG_ADJECTIVE = (r'(?:separate|second|third|additional|flat|subtle|sessile|pedunculated|large|small|nonlifting|'
+                  r'non-lifting|laterally|spreading|depressed|granular|nongranular|non-granular|ulcerated|polypoid|mucosal)')
+_PKG_SIZE = r'\d+(?:\.\d+)?\s*(?:mm|cm)'
+_PKG_NOUN = r'(?:lesion|polyp|mass|tumou?r|nodule)'
+_PKG_HEADING = r'(?:(?:impression|findings|summary|assessment)\s*:?\s*\n\s*)?'
+_PKG_SUBJECT = (rf'(?:(?:the|a|an)\s+)?(?:(?:{_PKG_ADJECTIVE}|{_PKG_SITE_WORD}|{_PKG_SIZE})\s+){{0,6}}{_PKG_NOUN}'
+                rf'(?:\s+(?:in|at|of)\s+the\s+(?:{_PKG_SITE_WORD}\s+){{0,3}}{_PKG_SITE_WORD})?')
+_PKG_PURPOSE = r'for\s+(?:the\s+)?(?:(?:future|next|later)\s+)?(?:locali[sz]ation|identification|recognition)'
+_PKG_PLACE = (rf'(?:into|in|at|adjacent\s+to|distal\s+to|proximal\s+to|next\s+to|near|beside|around)\s+'
+              rf'(?:(?:the|this|a|an|of|in|at|to|submucosa|submucosal|wall|opposite|site|polypectomy|{_PKG_SITE_WORD}|'
+              rf'{_PKG_NOUN}|{_PKG_ADJECTIVE}|{_PKG_SIZE})\s+){{0,10}}(?:{_PKG_SITE_WORD}|{_PKG_NOUN}|submucosa|wall|site)')
+_PKG_END = r'\s*\.?\s*'
+# the coordinated form: "<lesion> was marked with [submucosal] tattoo [for future localization] and not resected [today]."
+PACKAGE_MARKED_SENTENCE = _rx(
+    rf'\s*{_PKG_HEADING}{_PKG_SUBJECT}\s+(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked\s+(?:with|using)\s+'
+    rf'(?:(?:an?|the)\s+)?(?:(?:submucosal|carbon|spot|sterile|permanent|black|endoscopic)\s+)?'
+    rf'(?:tattoo|india\s+ink|carbon\s+ink)(?:\s+ink)?(?:\s+{_PKG_PURPOSE})?\s+and\s+not\s+resected(?:\s+today)?{_PKG_END}')
+# the purpose: "<ink> was injected <place> for future localization." or "<lesion> was tattooed [<place>] for future
+# localization." - a completed marking stated as such, and nothing else in its sentence
+_PKG_INK = (r'(?:(?:the|a|an)\s+)?(?:(?:sterile|carbon|carbon-based|submucosal|spot|black|permanent)\s+){0,2}'
+            r'(?:tattoo\s+ink|tattoo|india\s+ink|ink)')
+_PKG_FUTURE = r'for\s+(?:the\s+)?(?:future|next)\s+(?:locali[sz]ation|identification|recognition)'
+PACKAGE_PURPOSE_SENTENCE = _rx(
+    rf'\s*{_PKG_HEADING}{_PKG_INK}\s+(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?injected\s+{_PKG_PLACE}\s+'
+    rf'{_PKG_FUTURE}(?:\s+of\s+(?:the\s+)?(?:{_PKG_SITE_WORD}\s+){{0,3}}{_PKG_NOUN})?{_PKG_END}'
+    rf'|\s*{_PKG_HEADING}{_PKG_SUBJECT}\s+(?:was|were)\s+(?:(?:then|also|successfully)\s+)?tattooed(?:\s+{_PKG_PLACE})?\s+'
+    rf'{_PKG_FUTURE}{_PKG_END}')
+PACKAGE_SENTENCE_STOP = re.compile(r'[.!?](?=\s|\Z)|\n[ \t]*\n')
+PACKAGE_SENTENCE_REACH = 400  # characters either side read for the sentence's stops; a longer sentence is no package one
+
+
+def _package_sentence(text: str, pos: int, template: re.Pattern) -> bool:
+    """Whether the sentence holding ``pos`` is, whole, one of the package's own sentences (``template``)."""
+    lo = max(0, pos - PACKAGE_SENTENCE_REACH)
+    start = None
+    for stop in PACKAGE_SENTENCE_STOP.finditer(text, lo, pos):
+        start = stop.end()
+    if start is None:
+        if lo:
+            return False
+        start = 0
+    hi = min(len(text), pos + PACKAGE_SENTENCE_REACH)
+    stop = PACKAGE_SENTENCE_STOP.search(text, pos, hi)
+    if stop is None:
+        if hi < len(text):
+            return False
+        end = len(text)
+    else:
+        end = stop.end()
+    return bool(template.fullmatch(text, start, end))
 
 
 def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_marked: bool = False) -> bool:
@@ -546,8 +615,10 @@ ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain
 FAILURE_FRAME = _rx(r"\b(?:(?:unable|not\s+able|failed|fails|failing)\s+to|could\s+not|couldn['\u2019]t|cannot|can\s+not)"
                     r"\s+$")
 DECOMPRESS_VERB = _rx(r'\bdecompress\b')
-ATTEMPT_FRAME = _rx(r"\b(?:(?:unable|not\s+able|failed|fails|failing)\s+to|could\s+not|couldn['\u2019]t|cannot|can\s+not"
-                    r"|attempts?\s+to|attempted\s+to)\s+$")
+# Refutation round 4 (L4B-1): a failure frame only. "Attempts to decompress the colon were made but failed." had read as
+# a decompression done (the attempt is no doubt the readers keep), so an attempt's bare verb is not read, as at main.
+ATTEMPT_FRAME = _rx(r"\b(?:(?:unable|not\s+able|failed|fails|failing)\s+to|could\s+not|couldn['\u2019]t|cannot|can\s+not)"
+                    r"\s+$")
 
 
 def _attempt_or_failure(cues) -> bool:
@@ -606,7 +677,8 @@ def _marking_purpose_words(text: str, cs: int, ce: int, pos: int, end: int) -> f
     for purpose in MARKING_PURPOSE.finditer(text, cs, ce):
         if pos >= purpose.start():
             continue
-        if _marking_link(text, cs, purpose.start(), pos, end):
+        if _marking_link(text, cs, purpose.start(), pos, end) \
+                and _package_sentence(text, purpose.start(), PACKAGE_PURPOSE_SENTENCE):  # round 4 (L4A-2)
             out.add(purpose.start('time'))
     return frozenset(out)
 # "without (any) complication(s) (at all)" ending its clause at a stop, a semicolon, a colon or the line's end ("The

@@ -2545,3 +2545,42 @@ form ("was marked with ...") is unaffected.
 injected adjacent to the lesion" and "Tattoo ink had already been injected ..." read 45381 READY on Corti's path at main
 and at the live revision, as here. They are pinned under the equivalent standard in `RecordedResidualTests`, and listed
 in ACCURACY-RESIDUALS.md "Harness repair, refutation round 4".
+
+**Round 4's independent lenses (2026-11-05), over the fix above at `99a10671`.** Two read-only lenses attacked the
+finished diff against main `8645fd54`, with the same two claims as round 3 (D1, D2), each in a sealed sandbox:
+- **Lens A:** the coordinated marking forms.
+- **Lens B:** decompression, the negation release and P-ADMIT.
+
+D2 held in every input either tried (lens A 355, lens B 24 multi-participant shapes). D1 broke in four families, all
+blocking. Each was reproduced by the author on the committed code before repair:
+
+| id | input (one line after the colonoscopy header) | HEAD | main | cause |
+|---|---|---|---|---|
+| L4A-1 | "Prior to this procedure, the lesion in the ascending colon was marked with tattoo and not resected." Also "Previously, ...", "At the referring facility, ...", "If ..., surgery would follow.", "It is unknown whether ...", "... at the referring facility.", "..., but the tattoo was unsuccessful.", "... before referral." | 45381 READY, both paths | held | the coordinated rule checked only the span from "marked" to "not resected"; the readers after it miss these frames at main too, where the "not" had answered first |
+| L4A-2 | "Ink not yet injected into the ascending colon for future localization." Also "never injected", "needs to get injected", "to get injected", "could get injected", "At the referring facility, India ink was injected ...", "If India ink was injected ..., surgery is easier." | READY | excluded | the purpose rule hid "future" for any predicate `_unstated_marking` let through: one word before a bare participle, from be/is/are/am/to/being only |
+| L4B-1 | "Attempts to decompress the colon were made but failed." Also "... made.", "A second attempt ...", "... by the nurse with a rectal tube." | 45393 (and 45337) READY | held | round 3's ATTEMPT_FRAME admitted "attempts to"; no reader keeps an attempt in doubt |
+| L4B-2 | "Sigmoid polyp not excised with hot snare." Also "never excised", and 45380 and 45390 forms | READY | held | the package's patch made "excised" a bare act participle that no bare negation reads |
+
+**Repaired (round 4b):**
+- **The package's two releasing rules** now release only inside one of the package's own WHOLE sentences
+  (`PACKAGE_MARKED_SENTENCE`, `PACKAGE_PURPOSE_SENTENCE`, read by `_package_sentence`).
+  - It is fail-closed: every word of the sentence is a slot of the template (a lesion subject, the marker, a purpose,
+    a place in anatomy words, a heading of impression, findings, summary or assessment). Any other word, whatever it
+    says, leaves the sentence as main reads it: held.
+  - A sentence runs between stops ([.!?] then a space, or a blank line). A single line break is no stop, so
+    88d9db32's wrapped impression ("... and\nnot resected today.") is read whole, and a heading without a stop above
+    the sentence is part of it.
+- **ATTEMPT_FRAME is failure frames only.** An attempt's bare verb is no act, as at main. "An attempt to decompress the
+  stomach was unsuccessful." is no longer listed, and is recorded.
+- **"excised":** the package's bare participle is kept, because its lesion ownership of "it was not excised by snare"
+  reads it. Its bare denials ("not excised", "never excised") are read as negations; no other participle moves.
+
+**Pins:** `PackageSentenceTests` (27 forms, both paths, with and without a primary code, and the package's own
+sentences READY, with 88d9db32's own shapes), `ExcisedTests`, and `DecompressionTests` for the attempt forms.
+`RecordedResidualTests` gains the attempt and failure wordings the readers do not read (L4B-3, main-equal).
+
+**Recorded, not made by this change (main-equal):**
+- L4B-3: a failed decompression worded outside the readers' failure phrases ("We tried to decompress the stomach but
+  could not.", "... attempted and did not work.", "Decompression of the colon failed.") is no act, or no listed one,
+  so completeness does not show it. This is at main too.
+- "never removed", "never biopsied" and "not snared" (bare) read as done at main and here.

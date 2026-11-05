@@ -1256,3 +1256,11 @@ HARNESS.md, "Refutation round 4 (2026-11-05)". Round 4 repaired the regression i
 | residual | example | reads | why left |
 |---|---|---|---|
 | an injection or tattoo predicate after an adverb of another time the readers do not list ("already", "originally") reads as done today | "The lesion in the ascending colon was already tattooed and not resected."; "India ink was already injected adjacent to the lesion in the ascending colon."; "Tattoo ink had already been injected into the ascending colon." | 45381 READY on Corti's path, at main, at the live revision and here; a participant's reading is READY exactly there (the equivalent standard, pinned) | not made by this change; a time-adverb rule in the shared act reader reaches every family and was not measured in this round. "Previously", "earlier", "formerly", a year and "at the prior colonoscopy" are held |
+
+### Round 4's lenses (2026-11-05): what the round-4b repairs leave
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the package's coordinated marking or purpose form in any sentence that is not, whole, the package's own | "Impression and plan: the lesion in the ascending colon was marked with tattoo and not resected."; "The 25 mm lesion in the ascending colon, which was flat, was marked with tattoo and not resected." | as main reads them: held or excluded | fail-closed by design (round 4b); a hold is the safe side |
+| a failed decompression worded outside the readers' failure phrases (L4B-3) | "We tried to decompress the stomach but could not."; "Gastric decompression was attempted and did not work."; "Decompression of the colon failed."; "An attempt to decompress the stomach was unsuccessful." | no decompression act, or none listed, so completeness does not show it; never READY | at main too; a failure-phrase list does not converge, and round 3's attempt frame released a READY (L4B-1) |
+| a bare participle denied by "never", or a bare "not snared" | "Sigmoid polyp never removed with hot snare."; "Sigmoid polyp never biopsied with cold forceps."; "Sigmoid polyp not snared." | READY on Corti's path at main and here; a participant's reading READY exactly there | not made by this change; "not excised" and "never excised" are read (round 4b) because this change made "excised" a bare act participle |
