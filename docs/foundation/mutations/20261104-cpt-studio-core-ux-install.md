@@ -396,3 +396,33 @@ Stop and diagnose on any of these; do not rerun a phase and do not upload the wa
   exiting non-zero; jobs_active not returning to 0 within the stage deadlines; a downloaded report that misstates the
   persisted decisions; any customer-visible provider identity or diagnostic; any action on an encounter the walk did
   not create (Mara is read only).
+
+## Decision after the app phase (2026-11-05, appended before the next phase)
+
+**What the record showed.** The app phase receipt (app-20261105T003351011802Z.json, ok) matches every declared row:
+- migrate applied exactly 0009 to 0012;
+- the switch went 9150 to 9151, the vhost 259b895d... to f816a27d..., https 200;
+- availability: 301 samples, 0 not 200, releases 41e03656df61 then 24c49a50;
+- drain 130.6 s;
+- states_recomputed {"encounters": 49, "changed": {}};
+- no unrunnable stage, no leftover container.
+
+The read-only counts after app (live_baseline.sh) equal the pre-app reading in every count, with migrations at 12, the
+four new columns present and four of the five new tables empty. **One count differs from this declaration:**
+`studio_workerbeat` holds 1 row, where the declaration says the five new tables are empty. That is a count the phase
+did not declare, so the phase was stopped and diagnosed before anything else ran.
+
+**Diagnosis (read-only).**
+- The row: name 'worker', revision 24c49a5032d5bb0185e5efda08ebe71f54a2845f, pid 1, beat_at 2026-11-05T00:34:26Z.
+- It is the new worker's own heartbeat (decision (j), studio/models.py WorkerBeat). A thread of the worker process
+  writes one row per worker name (jobs.start_heartbeat, update_or_create) every jobs.HEARTBEAT_SECONDS, from the moment
+  S4 starts the worker. The progress panel reads it to say "paused" when no worker beats.
+- It carries no document, answer, decision or usage. No provider run was created; provider runs, exchanges, tool calls,
+  assessments, decisions and audit events are unchanged.
+
+**Decision.** The declaration's "the five new tables exist and are empty" was wrong for `studio_workerbeat`. It is
+corrected here: four new tables are empty, and `studio_workerbeat` holds exactly the running worker's one heartbeat row.
+The row's count stays 1 and its beat_at advances on its own. No undeclared row of any other kind exists. Every later
+phase's count check reads `studio_workerbeat` as 1 row, name 'worker', revision 24c49a50. The remaining phases run, in
+the declared order, from a clean detached checkout of the commit that lands this decision: passages, license-note,
+operators, verify, then reassess (dry run, then real). Nothing else in this declaration changes.
