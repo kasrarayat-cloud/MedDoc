@@ -2712,3 +2712,28 @@ author before repair:
     at main, and completeness lists it.
 - What is measured instead: the differential re-runs every input every lens generated in seven rounds, on both paths,
   against main.
+
+### Installed (2026-11-05): e6d451f03d86 at cpt.quillmd.com, 88d9db32 re-assessed, and the fresh walk
+
+The install ran blue/green under docs/foundation/mutations/20261105-cpt-studio-harness-repair-install.md. The record is
+docs/deploy-reports/20261105-cpt-studio-e6d451f0-install-and-walk3.md. Every receipt matched the declaration:
+- 305 availability samples, all 200;
+- no migration, and no state recomputed;
+- nothing sent.
+
+88d9db32 was re-assessed from its retained responses, with only the six declared table movements:
+- ready: 45380 and 43239 (Corti), and 43249, 45390 and 45385 (Astra and Fable, admitted);
+- held: 45381, by the tattoo conflict;
+- listed: the decompression.
+
+**The fresh walk found three things the offline suites could not, and each is recorded, not repaired here:**
+1. **Fable's readings were refused by the reading schema** on all three documents: "not_coded[0] has a field the schema
+   does not allow". The model answered, and the harness reported the refusal as partial participation, substituting
+   nothing, as specified. Accepting or dropping an unknown field in not_coded is a parser change on the clinical path,
+   for its own refutation round.
+2. **A Stop that cuts a participant's run short loses that participant for the revision.** Duplicate prevention refuses
+   to send the identical request again after Resume, so h2b ran no peer reviews. Nothing was sent twice, which is the
+   rule's purpose; the cost is a participant missing, reported as not sent.
+3. **The routing-era reader's family label** read h2b's colonoscopy as historical ("an outside colonoscopy" in the
+   Indication) and h2c's upper endoscopy as uncertain (the report's title alone). Both are identical at main. The
+   documented-service reader still made h2b's codes READY. h2c's 43248 is held by that doubt.
