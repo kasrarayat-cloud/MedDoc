@@ -1867,7 +1867,6 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     # the service names and interventions of the target's group: a cited passage is no name of its own
     names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end) for iv in an.interventions_in(cs, ce)}
     named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
-    marking_goals = None
     for cue in clause_cues:
         status, doubt = cue.status, False
         if cue.name == 'aborted':
@@ -1881,21 +1880,6 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
         if cue.name in ('scheduled', 'plan', 'booked', 'ordered', 'recommend') \
                 and cues.AS_BOOKED_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
             continue  # "was performed today as scheduled": the booking it kept, not a future
-        if status == 'planned' and cue.text.lower() in ('future', 'next'):
-            # The inventory and this earlier reader must give the same time to a completed marking's purpose.
-            # Read the shared, bounded rule only for a marker/injection actually inside the target passage; it never
-            # erases another act's plan, an own future predicate, a history, a denial, or the plan section's default.
-            if marking_goals is None:
-                from studio.gi import services
-                marking_goals = set()
-                for kind, pattern in services.ACTS:
-                    if kind not in ('tattoo', 'injection'):
-                        continue
-                    for marker in pattern.finditer(text, max(cs, ts), min(ce, te)):
-                        marking_goals.update(services._marking_purpose_words(text, cs, ce,
-                                                                           marker.start(), marker.end()))
-            if cue.start in marking_goals:
-                continue
         if _attached(spans, index, cue.start, cue.end):
             if status in _B2_DENYING_STATUSES:  # round 4c-2 box2:I: an option's own words, read by its own box
                 read = _B2_option_words(an, cue.start, cue.end, ts, te, cue.text, status)

@@ -92,6 +92,34 @@ class EmrComponentsTests(SimpleTestCase):
                 self.assertEqual(by_astra, [READY])
 
 
+class SecondLesionInOneSentenceTests(SimpleTestCase):
+    """Refutation round 7 (L7-2): the reader binds two acts to one lesion whenever one sentence names two lesions at one
+    site, so a second lesion's snare removal (or biopsy) had been bundled into the first lesion's EMR (or removal) and
+    hidden from completeness. Acts read in separate clauses are one lesion's only at a lesion recorded alone and
+    singular (reconcile._one_lesion); in doubt the act is its own, as at main."""
+    LINES = ('A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare.',
+             'Two polyps were found in the ascending colon; one was removed by EMR, and the second was removed with a '
+             'cold snare.',
+             'Two sessile polyps in the transverse colon: the first was resected by EMR; the second was removed with a '
+             'hot snare.')
+
+    def test_a_second_lesions_snare_is_never_bundled_into_the_emr(self):
+        for line in self.LINES:
+            with self.subTest(line):
+                text = COLON + line + '\n'
+                result = run(text, corti(('45390', span(text, line))))
+                self.assertNotEqual(result.completeness['state'], 'complete_pending_review')
+                self.assertNotIn('snare', [b['act'] for b in result.completeness['bundled']])
+                self.assertTrue(any('snare' in u['label'] for u in result.completeness['unresolved_items']))
+
+    def test_a_second_lesions_biopsy_is_never_bundled_into_the_removal(self):
+        line = 'A 25 mm lesion in the cecum was biopsied, and a 4 mm polyp in the cecum was removed with a cold snare.'
+        text = COLON + line + '\n'
+        result = run(text, corti(('45385', span(text, line))))
+        self.assertNotIn('biopsy', [b['act'] for b in result.completeness['bundled']])
+        self.assertTrue(any('biops' in u['label'] for u in result.completeness['unresolved_items']))
+
+
 class BiopsyOfRemovedLesionTests(SimpleTestCase):
     """The biopsy of a recorded lesion then removed is part of the removal (round 1's multi-2 rule, LESION_SITED, was
     dropped in round 2: its unrecorded forms are RecordedResidualTests)."""
@@ -274,10 +302,9 @@ class TattooPlaceTests(SimpleTestCase):
                 self.assertNotIn(READY, by_astra)
 
     def test_a_tattoo_placed_stays_ready(self):
-        for line in ('The lesion in the ascending colon was marked with tattoo for localization and not resected.',
-                     'The lesion in the ascending colon was marked with tattoo ink and not resected.',
-                     'The lesion in the ascending colon was marked with India ink and not resected.',
-                     'The lesion in the ascending colon was tattooed and not resected.',
+        # round 6: the package's coordinated "marked with tattoo ... and not resected" is dropped and reads as main
+        # reads it, held (PackageSentenceTests); the participle forms below are main's own reading
+        for line in ('The lesion in the ascending colon was tattooed and not resected.',
                      'A tattoo was placed distal to the lesion in the ascending colon.',
                      'India ink was injected adjacent to the polyp in the ascending colon.'):
             with self.subTest(line):
@@ -303,6 +330,188 @@ class MarkedShapeTests(SimpleTestCase):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
                 self.assertNotIn(READY, by_corti)
                 self.assertNotIn(READY, by_astra)
+
+
+class MarkedAdverbTests(SimpleTestCase):
+    """Round 4: round 3's restored "marked" took any word before a bare "marked", so a tattoo placed at another time
+    read as today's 45381, READY on both paths where main holds it. Reproduced on the merge commit 92b24d3b9f5b."""
+
+    def test_a_marking_dated_to_another_time_is_never_ready(self):
+        for line in ('The lesion in the ascending colon was already marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was originally marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was initially marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was once marked with tattoo and not resected.',
+                     'Ascending colon lesion already marked with tattoo and not resected.',
+                     'Ascending colon lesion originally marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was earlier marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was formerly marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was previously marked with tattoo and not resected.',
+                     # an adverb of manner: held on the safe side
+                     'The lesion in the ascending colon was carefully marked with tattoo and not resected.'):
+            for primary in ((), (('45378', CECUM),)):
+                with self.subTest(line, primary=bool(primary)):
+                    by_corti, by_astra = both(COLON + line + '\n', '45381', line, primary)
+                    self.assertNotIn(READY, by_corti)
+                    self.assertNotIn(READY, by_astra)
+
+    def test_the_packages_own_forms_read_as_main_reads_them(self):
+        # round 6: the package's coordinated rule is dropped; its own forms are held, as at main
+        for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was also marked with tattoo and not resected.',
+                     'Ascending colon lesion marked with tattoo and not resected.',
+                     'Ascending colon polyp marked with India ink and not resected.'):
+            with self.subTest(line):
+                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
+
+
+class PackageSentenceTests(SimpleTestCase):
+    """Round 4, lens A: the repair package's two releasing rules had been checked on a span, and the sentence around it
+    said another time, place, provider, condition or doubt. Each now releases only inside one of the package's own
+    whole sentences (PACKAGE_MARKED_SENTENCE, PACKAGE_PURPOSE_SENTENCE): never READY on the forms below, where main holds
+    or excludes them, and READY on the package's own."""
+
+    COORDINATED = (  # L4A-1
+        'Prior to this procedure, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Previously, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the referring facility, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected at the referring facility.',
+        'If the lesion in the ascending colon was marked with tattoo and not resected, surgery would follow.',
+        'It is unknown whether the lesion in the ascending colon was marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected, but the tattoo was unsuccessful.',
+        'Ascending colon lesion marked with tattoo and not resected before referral.',
+        'Before referral, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Elsewhere, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Per outside report, the lesion in the ascending colon was marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected by Dr. Synthetic Surgeon.',
+        'The lesion in the ascending colon was marked with tattoo and not resected (outside report).',
+        'Referring endoscopist: ascending colon lesion marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected; the tattoo did not take.',
+        'The lesion in the ascending colon was injected with India ink and not resected at the referring facility.',
+        # round 5 (L5-1): a frame inside the engine's own sentence, past a stop the engine does not cut at
+        'At the outside hosp. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'On the day before at 3 p.m. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Last wk. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected today. -- by the referring endoscopist.',
+        'At the referring facility... the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Per Dr. Smith the lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the outside ctr. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the referring facility.\x0bthe lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the referring facility.\x0cthe lesion in the ascending colon was marked with tattoo and not resected.',
+    )
+    PURPOSE = (  # L4A-2
+        'Ink not yet injected into the ascending colon for future localization.',
+        'Ink never injected into the ascending colon for future localization.',
+        'Tattoo ink needs to get injected into the ascending colon for future localization.',
+        'India ink to get injected into the ascending colon for future localization at surgery.',
+        'Tattoo ink could get injected into the ascending colon for future localization.',
+        'At the referring facility, India ink was injected adjacent to the lesion in the ascending colon for future '
+        'localization.',
+        'If India ink was injected adjacent to the lesion in the ascending colon for future localization, surgery is '
+        'easier.',
+        'Saline not yet injected into the ascending colon for future localization.',
+        'Ink has to get injected into the ascending colon for future localization.',
+        'India ink got injected into the ascending colon for future localization at the referring hospital.',
+        'Before this procedure, the lesion in the ascending colon was tattooed for future localization and not resected.',
+        # round 5 (L5-1)
+        'At the outside hosp. tattoo ink was injected into the transverse colon submucosa for future localization.',
+        'Per Dr. Smith tattoo ink was injected into the transverse colon submucosa for future localization.',
+    )
+
+    def test_a_form_outside_the_packages_whole_sentence_is_never_ready(self):
+        for line in self.COORDINATED + self.PURPOSE:
+            for primary in ((), (('45378', CECUM),)):
+                with self.subTest(line, primary=bool(primary)):
+                    by_corti, by_astra = both(COLON + line + '\n', '45381', line, primary)
+                    self.assertNotIn(READY, by_corti)
+                    self.assertNotIn(READY, by_astra)
+
+    def test_under_a_heading_the_package_sentence_reads_as_a_plain_act_sentence(self):
+        # round 5: the sentence is the engine's own (_sentences), which ends a heading line that ends in a colon. What a
+        # heading says is then another sentence's context, which no reader reads for a plain act sentence either: under
+        # every heading the package's sentence reads exactly as the plain "India ink was injected ..." does, never
+        # better (D1), and under the section headings the readers know it is held or excluded with it
+        line = 'The lesion in the ascending colon was marked with tattoo and not resected.'
+        plain = 'India ink was injected adjacent to the lesion in the ascending colon.'
+        for heading in ('Outside report:', 'Referral letter:', 'Per outside endoscopist:', 'Prior to this procedure:',
+                        'History:', 'Prior procedures:', 'Plan:', 'Impression:', 'Findings:'):
+            with self.subTest(heading):
+                package = both(COLON + heading + '\n' + line + '\n', '45381', line)
+                as_plain = both(COLON + heading + '\n' + plain + '\n', '45381', plain)
+                for got, base in zip(package, as_plain):
+                    if READY in got:
+                        self.assertIn(READY, base)
+        for heading in ('History:', 'Prior procedures:'):
+            with self.subTest(heading):
+                for got in both(COLON + heading + '\n' + line + '\n', '45381', line):
+                    self.assertNotIn(READY, got)
+
+    def test_the_packages_own_sentences_read_as_main_reads_them(self):
+        # round 6: both package rules are dropped (the whole-sentence form failed its second cycle, L6-1: a package
+        # sentence after "Indication: Referred after an outside colonoscopy ..." read READY where main holds it)
+        for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
+                     'The transverse colon lesion was marked with tattoo and not resected today.',
+                     'India ink was injected adjacent to the lesion in the ascending colon for future localization.',
+                     'Tattoo ink was injected into the transverse colon submucosa for future localization.',
+                     'Tattoo ink injected into the transverse colon submucosa for future localization.',
+                     # L6-1 and L6-2
+                     'The transverse colon lesion was tattooed for future localization.'):
+            with self.subTest(line):
+                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
+        for body in ('Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
+                     'The transverse colon lesion was marked with tattoo and not resected.',
+                     'Indication:\nThe transverse colon lesion was marked with tattoo and not resected today.'):
+            with self.subTest(body):
+                line = body.split('\n')[-1]
+                for got in both(COLON + body + '\n', '45381', line):
+                    self.assertNotIn(READY, got)
+
+    def test_88d9db32s_shapes_read_as_main_reads_them(self):
+        # the encounter's own shapes: the injection stated in the findings, and the impression's coordinated form
+        # wrapped across a line ("... and\nnot resected today."). With the package's coordinated rule dropped (round
+        # 6) the impression's denial reaches its tattoo, which conflicts with the injection: 45381 is held, as at main
+        # and the live revision
+        body = ('To facilitate subsequent\nlocalization, sterile carbon-based tattoo ink was injected into the submucosa '
+                'approximately 3 cm distal to this\ntransverse-colon abnormality, on the opposite wall.\nImpression\n'
+                'Distal rectal mucosal\nabnormality biopsied. Separate transverse-colon lesion marked with submucosal '
+                'tattoo for future localization and\nnot resected today.')
+        quote = 'sterile carbon-based tattoo ink was injected into the submucosa'
+        by_corti, by_astra = both(COLON + body + '\n', '45381', quote)
+        self.assertEqual(by_corti, [('selected', 'needs_clarification')])
+        self.assertNotIn(READY, by_astra)
+        from tests.test_advanced_gi_binding import colon, inventory
+        inv = inventory(body)
+        self.assertEqual(len(inv.conflicts), 1, inv.conflicts)
+        self.assertTrue([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
+
+
+class ExcisedTests(SimpleTestCase):
+    """Rounds 4 and 5 (L4B-2, L5-2): the package's patch had made "excised" a bare act participle that no not-done list
+    of the readers or of routing reads, so its denials and failures read as a removal done. It failed two cycles and is
+    dropped: the bare list is main's again, and these read as main reads them."""
+
+    def test_a_bare_denied_excision_is_never_ready(self):
+        # round 5 (L5-2): and the not-done frames of "excised", now that the package's bare participle is dropped
+        for head, which, line, primary in (
+                (COLON, '45385', 'Sigmoid polyp not excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45385', 'Sigmoid polyp never excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45380', 'Sigmoid polyp not excised with cold biopsy forceps.', (('45378', CECUM),)),
+                (COLON, '45390', 'Transverse colon lesion not excised by EMR.', (('45378', CECUM),)),
+                (COLON, '45385', 'Sigmoid polyp was unable to be excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45380', 'Sigmoid polyp not able to be excised with cold biopsy forceps.', (('45378', CECUM),)),
+                (COLON, '45390', 'Transverse colon lesion failed to be excised with endoscopic mucosal resection.',
+                 (('45378', CECUM),)),
+                (EGD, '43251', 'Gastric polyp not to be excised with hot snare.', ()),
+                (COLON, '45385', 'Attempts were made, but the sigmoid polyp was unable to be excised with hot snare.',
+                 (('45378', CECUM),))):
+            for prim in ((), primary):
+                with self.subTest(line, primary=bool(prim)):
+                    by_corti, by_astra = both(head + line + '\n', which, line, prim)
+                    self.assertNotIn(READY, by_corti)
+                    self.assertNotIn(READY, by_astra)
 
 
 class LesionOwnershipTests(SimpleTestCase):
@@ -422,8 +631,8 @@ class DecompressionTests(SimpleTestCase):
         for line in ('Decompression of the stomach was attempted but failed.',
                      'Gastric decompression was attempted but failed.',
                      'Decompression of the gastric volvulus was attempted, without success.',
-                     # round 3: the verb's bare form only in a failure or attempt frame
-                     'We were unable to decompress the stomach.', 'An attempt to decompress the stomach was unsuccessful.',
+                     # round 3, as round 4 (L4B-1) left it: the verb's bare form only in a failure frame
+                     'We were unable to decompress the stomach.',
                      'Gastric decompression could not be achieved.', 'The stomach could not be decompressed.',
                      'Decompression of the stomach was not successful.', 'The stomach was decompressed.'):
             with self.subTest(line):
@@ -437,6 +646,27 @@ class DecompressionTests(SimpleTestCase):
                      'If the stomach becomes distended, decompression will be performed.'):
             with self.subTest(line):
                 self.assertNotIn(('decompression', 'unsupported'), self.unresolved(line)[1])
+
+    def test_an_attempt_to_decompress_never_makes_a_decompression_code_ready(self):
+        # round 4 (L4B-1): "Attempts to decompress the colon were made but failed." had read as a decompression done,
+        # READY on both paths where main holds it; an attempt's bare verb is no act (as at main)
+        sig = COLON.replace('Colonoscopy report', 'Flexible sigmoidoscopy report').replace(
+            'Procedure: Colonoscopy', 'Procedure: Flexible sigmoidoscopy').replace(
+            'The colonoscope was advanced to the cecum and the examination was completed.',
+            'The sigmoidoscope was advanced to the descending colon.')
+        for head, which, line in ((COLON, '45393', 'Attempts to decompress the colon were made but failed.'),
+                                  (COLON, '45393', 'Attempts to decompress the colon were made, without success.'),
+                                  (COLON, '45393', 'Attempts to decompress the colon were made.'),
+                                  (COLON, '45393', 'A second attempt to decompress the colon was made.'),
+                                  (COLON, '45393', 'Attempts to decompress the colon were performed by the nurse with a '
+                                                   'rectal tube.'),
+                                  (sig, '45337', 'Attempts to decompress the colon were made but failed.'),
+                                  (sig, '45337', 'Multiple attempts to decompress the colon were performed.')):
+            for primary in ((), (('45378', CECUM),) if head is COLON else ()):
+                with self.subTest(line, code=which, primary=bool(primary)):
+                    by_corti, by_astra = both(head + line + '\n', which, line, primary)
+                    self.assertNotIn(READY, by_corti)
+                    self.assertNotIn(READY, by_astra)
 
     def test_the_verbs_bare_forms_never_make_a_decompression_code_ready(self):
         # round 3, LENS-1: reading "to decompress" made 45393 and 45337 READY where main held them (a plan, a drug, a
@@ -478,18 +708,46 @@ class ProcedureLineTests(SimpleTestCase):
     def test_a_listed_removal_the_report_denies_defers_doubts_or_fails_is_never_ready(self):
         untitled = self.HEAD.replace('Colonoscopy report (fictional)\n', '')
         for head in (self.HEAD, untitled):
-            for last in ('No polyps were removed.', 'Hot snare polypectomy failed.',
+            for last in ('Hot snare polypectomy failed.',
                          'The polyp will be removed by hot snare at a later date.',
                          'Plan: the polyp will be removed by hot snare at a later date.',
                          'Polypectomy will be performed at a later date.',
                          'It is unclear whether hot snare polypectomy was performed.',
-                         'Hot snare polypectomy may have been performed.',
-                         'The polyp was not removed.', 'The polyp will be removed at a later date.'):
+                         'Hot snare polypectomy may have been performed.'):
                 with self.subTest(last, titled=head == self.HEAD):
                     text = head + last + '\n'
                     by_corti, by_astra = both(text, '45385', self.LINE, primary=[('45378', CECUM)])
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
+
+    def test_a_removal_with_no_technique_reads_as_main_reads_it(self):
+        # refutation round 7 (L7-1): the withheld listing's kindless branch read another lesion's or another date's
+        # "not removed" as today's listed removal and made 45378 READY; it failed two cycles and is dropped. A removal
+        # stated not done with no technique named now leaves the listing as main reads it (ACCURACY-RESIDUALS.md,
+        # round 7): pinned under the equivalent standard
+        untitled = self.HEAD.replace('Colonoscopy report (fictional)\n', '')
+        for head in (self.HEAD, untitled):
+            for last in ('No polyps were removed.', 'The polyp was not removed.',
+                         'The polyp will be removed at a later date.'):
+                with self.subTest(last, titled=head == self.HEAD):
+                    by_corti, by_astra = both(head + last + '\n', '45385', self.LINE, primary=[('45378', CECUM)])
+                    if READY in by_astra:
+                        self.assertIn(READY, by_corti)
+
+    def test_another_lesions_or_dates_removal_never_withholds_todays_listing(self):
+        # L7-1 itself: the listed polypectomy stays listed and the diagnostic code stays held, as at main
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+                'Date of service: 2026-10-14\nProcedure: Colonoscopy with hot snare polypectomy\n'
+                'The colonoscope was advanced to the cecum and the examination was completed.\n')
+        for body in ('Indication: Prior colonoscopy in 2021; no polyps were removed.\n'
+                     'Findings: A 9 mm polyp in the sigmoid colon.\n',
+                     'Findings: A 9 mm polyp in the sigmoid colon.\nTwo diminutive rectal polyps were not removed.\n',
+                     'Findings: A 9 mm polyp in the sigmoid colon.\nA 30 mm rectal lesion was not resected; it was '
+                     'referred for surgery.\n'):
+            with self.subTest(body):
+                result = run(text + body, corti(('45378', span(text + body, CECUM))))
+                self.assertNotIn(READY, outcome(result, '45378'))
+                self.assertIn('snare', ' '.join(u['label'] for u in result.completeness['unresolved_items']))
 
     def test_a_listed_stent_the_report_says_failed_is_never_ready(self):
         text = ERCP.replace('Procedure: ERCP', 'Procedure: ERCP with biliary stent placement') \
@@ -523,7 +781,7 @@ class ProcedureLineTests(SimpleTestCase):
 
 class RecordedResidualTests(SimpleTestCase):
     """The readers' recorded residuals the refutation lenses reached (ACCURACY-RESIDUALS.md, "Harness repair,
-    refutation rounds 1 and 2"): not repaired here - each was a phrase-level rule that did not converge in two cycles,
+    refutation rounds 1 to 4"): not repaired here - each was a phrase-level rule that did not converge in two cycles,
     or the same at main on Corti's path. What is pinned is the directive's equivalent standard: a participant's code is
     READY only where Corti's selection of the same passages is READY, so admission adds no false READY of its own."""
     EMR = 'A 25 mm flat lesion in the ascending colon was removed by endoscopic mucosal resection.'
@@ -566,6 +824,22 @@ class RecordedResidualTests(SimpleTestCase):
         # compl-2: a decompression in a family whose act list has none (reverted in round 2, over-11)
         (ERCP + 'A biliary sphincterotomy was performed.\nThe distended stomach was decompressed for a gastric volvulus '
                 'before withdrawal.\n', '43262', 'A biliary sphincterotomy was performed.', []),
+        # round 4 (L4B-1, L4B-3): an attempt to decompress, or a failure worded outside the readers' failure
+        # phrases, is no decompression act; the upper endoscopy's completeness does not list it (as at main)
+        (EGD + 'An attempt to decompress the stomach was unsuccessful.\n', '43249',
+         'An attempt to decompress the stomach was unsuccessful.', []),
+        (EGD + 'We tried to decompress the stomach but could not.\n', '43249',
+         'We tried to decompress the stomach but could not.', []),
+        (COLON + 'Decompression of the colon failed.\n', '45393', 'Decompression of the colon failed.', []),
+        # round 4: an injection or tattoo predicate after an adverb of another time reads as done today, READY on
+        # Corti's path at main and at the live revision as here (a reader residual this change neither made nor
+        # repairs; ACCURACY-RESIDUALS.md "Harness repair, refutation round 4")
+        (COLON + 'The lesion in the ascending colon was already tattooed and not resected.\n', '45381',
+         'The lesion in the ascending colon was already tattooed and not resected.', []),
+        (COLON + 'India ink was already injected adjacent to the lesion in the ascending colon.\n', '45381',
+         'India ink was already injected adjacent to the lesion in the ascending colon.', []),
+        (COLON + 'Tattoo ink had already been injected into the ascending colon.\n', '45381',
+         'Tattoo ink had already been injected into the ascending colon.', []),
     )
 
     def test_a_participants_code_is_ready_only_where_cortis_is(self):

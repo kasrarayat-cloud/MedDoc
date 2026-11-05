@@ -580,14 +580,16 @@ def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
     if act.kind == 'cannulation':
         return dict(catalogue.COMMON_BUNDLED)['cannulation']
     if act.kind == 'biopsy' and act.lesion and any(
-            a.lesion == act.lesion and a.kind in REMOVAL_KINDS and a.status == 'performed' for a in service.acts):
+            a.lesion == act.lesion and a.kind in REMOVAL_KINDS and a.status == 'performed'
+            and _one_lesion(act, a, service.lesions) for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['biopsy_of_removed_lesion']
     if act.kind == 'injection' and any(a.kind in ('emr', 'esd') and a.status == 'performed'
                                        and (not act.lesion or a.lesion == act.lesion) and _sites_agree(act, a)
                                        for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['lift_injection']
     if act.kind in ('snare', 'hot_biopsy') and any(
-            a.kind in ('emr', 'esd') and a.status == 'performed' and _one_resection(act, a) for a in service.acts):
+            a.kind in ('emr', 'esd') and a.status == 'performed' and _one_resection(act, a, service.lesions)
+            for a in service.acts):
         # Harness repair 2026-11-05, refutation multi-1: "resected by EMR with a hot snare" reads an EMR and a snare at
         # one lesion; the snare is the resection's own technique, never a second removal charged beside it. A snare at
         # another lesion keeps its own code (and its distinct-lesion consideration).
@@ -605,14 +607,33 @@ def _sites_agree(one: Act, other: Act) -> bool:
     return not one.anatomy or not other.anatomy or bool(set(one.anatomy) & set(other.anatomy))
 
 
-def _one_resection(removal: Act, resection: Act) -> bool:
+def _one_lesion(one: Act, other: Act, lesions: Sequence) -> bool:
+    """Whether two acts the reader binds to one lesion are that one lesion's: read in one clause (their evidence
+    overlaps), or else at a lesion recorded alone - singular, and no other lesion record of the service reaching either
+    act's evidence. Refutation round 7 (L7-2): the reader binds both acts to one lesion whenever one sentence names two
+    lesions at one site ("A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with
+    a cold snare.", "Two polyps were found ...; one was removed by EMR, and the second ... with a cold snare."), so a
+    second lesion's act had been bundled into the first's and hidden from completeness. In doubt the act is its own, as
+    at main: listed, and its code read on its own."""
+    if any(_overlaps(e.start, e.end, f.start, f.end) for e in one.evidence for f in other.evidence):
+        return True
+    lesion = next((l for l in lesions if l.id == one.lesion), None)
+    if lesion is None or re.search(r'(?<!s)s\Z', lesion.noun or '', re.I):
+        return False  # unrecorded, or plural ("polyps"): the acts may be different members'
+    spans = [*one.evidence, *other.evidence]
+    return not any(l.id != lesion.id and any(_overlaps(e.start, e.end, x.start, x.end) for e in l.evidence for x in spans)
+                   for l in lesions)
+
+
+def _one_resection(removal: Act, resection: Act, lesions: Sequence = ()) -> bool:
     """Whether ``removal`` (a snare or hot-forceps act) is the technique of ``resection`` (an EMR or ESD act): both at
-    one recorded lesion, the removal's own sites agreeing with the resection's; or, neither at a lesion, both read in
-    one clause naming one site at most. Refutation round 2, over-4: a snare of another lesion is never the EMR's - "The
-    sigmoid polyp was removed with a cold snare." after a lesion's EMR, "EMR ... in the ascending colon, and cold snare
-    polypectomy ... in the sigmoid colon"."""
+    one recorded lesion, the removal's own sites agreeing with the resection's, and that lesion's (_one_lesion); or,
+    neither at a lesion, both read in one clause naming one site at most. Refutation round 2, over-4: a snare of another
+    lesion is never the EMR's - "The sigmoid polyp was removed with a cold snare." after a lesion's EMR, "EMR ... in the
+    ascending colon, and cold snare polypectomy ... in the sigmoid colon"."""
     if removal.lesion or resection.lesion:
-        return removal.lesion == resection.lesion and _sites_agree(removal, resection)
+        return (removal.lesion == resection.lesion and _sites_agree(removal, resection)
+                and _one_lesion(removal, resection, lesions))
     shared = any(_overlaps(e.start, e.end, f.start, f.end) for e in removal.evidence for f in resection.evidence)
     return shared and len(set(removal.anatomy) | set(resection.anatomy)) <= 1
 

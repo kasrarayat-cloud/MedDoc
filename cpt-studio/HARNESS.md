@@ -2509,3 +2509,206 @@ without a primary code, against main `8645fd54`:
   - provider runs 107 → 107 and sends 97 → 97;
   - the tables move by studio_assessment +1, studio_proposal +26, studio_clarification +1, studio_job +1,
     studio_routingrun +1 and studio_auditevent +2, and by nothing else.
+
+### Refutation round 4 (2026-11-05): round 3's restored "marked", attacked before install
+
+PR #1472 merged as `92b24d3b9f5b`. Before writing its install declaration, the author probed round 3's one new releasing
+rule: the package's coordinated "marked with <tattoo> ... and not resected" (`MARKED_WITH`, `MARKED_TO_DENIAL`). The
+probe used 22 lines, then a 36-case differential against main on both paths. The directive keeps historical, planned
+and other-provider services protected, so the probe aimed there.
+
+**Reproduced on `92b24d3b9f5b`, both paths:**
+- "The lesion in the ascending colon was already marked with tattoo and not resected." reads 45381 READY, where main
+  holds it.
+- So do "originally", "initially" and "once" marked, the bare "Ascending colon lesion already marked ...", and the
+  manner adverb "carefully".
+
+The cause is in `MARKING_PREDICATE`'s second alternative: it matches a bare "marked" after any word. With
+"was/were", only then, also and successfully are admitted, and `_unstated_marking` reads only be, is, are, am, to and
+being as unstated. "Previously", "earlier", "formerly", a year, "at the prior colonoscopy", "by <another provider>",
+plans, modals and denials were all held already.
+
+**Repaired:** a bare "marked" sets the coordinated denial apart only right after the lesion it marks (`MARKED_BARE_AFTER`:
+lesion, polyp, mass, tumour, nodule). That is the package's own telegraphic form, "Transverse colon lesion marked with
+submucosal tattoo ... and not resected today". After any other word the form reads as main reads it: held. 88d9db32's
+form ("was marked with ...") is unaffected.
+
+**Measured:**
+- Pins in `MarkedAdverbTests`: the time forms never READY with or without a primary code, and the package's forms
+  READY.
+- Three mutants killed, restores verified by sha256.
+- The 36-case differential: READY beyond main only on the package's own forms ("was marked with tattoo and not
+  resected", "was also marked ...").
+- The lens corpus (651 rows): 0 D1 and 0 D2 flags.
+
+**Not introduced by this change, and recorded:** "was already tattooed and not resected", "India ink was already
+injected adjacent to the lesion" and "Tattoo ink had already been injected ..." read 45381 READY on Corti's path at main
+and at the live revision, as here. They are pinned under the equivalent standard in `RecordedResidualTests`, and listed
+in ACCURACY-RESIDUALS.md "Harness repair, refutation round 4".
+
+**Round 4's independent lenses (2026-11-05), over the fix above at `99a10671`.** Two read-only lenses attacked the
+finished diff against main `8645fd54`, with the same two claims as round 3 (D1, D2), each in a sealed sandbox:
+- **Lens A:** the coordinated marking forms.
+- **Lens B:** decompression, the negation release and P-ADMIT.
+
+D2 held in every input either tried (lens A 355, lens B 24 multi-participant shapes). D1 broke in four families, all
+blocking. Each was reproduced by the author on the committed code before repair:
+
+| id | input (one line after the colonoscopy header) | HEAD | main | cause |
+|---|---|---|---|---|
+| L4A-1 | "Prior to this procedure, the lesion in the ascending colon was marked with tattoo and not resected." Also "Previously, ...", "At the referring facility, ...", "If ..., surgery would follow.", "It is unknown whether ...", "... at the referring facility.", "..., but the tattoo was unsuccessful.", "... before referral." | 45381 READY, both paths | held | the coordinated rule checked only the span from "marked" to "not resected"; the readers after it miss these frames at main too, where the "not" had answered first |
+| L4A-2 | "Ink not yet injected into the ascending colon for future localization." Also "never injected", "needs to get injected", "to get injected", "could get injected", "At the referring facility, India ink was injected ...", "If India ink was injected ..., surgery is easier." | READY | excluded | the purpose rule hid "future" for any predicate `_unstated_marking` let through: one word before a bare participle, from be/is/are/am/to/being only |
+| L4B-1 | "Attempts to decompress the colon were made but failed." Also "... made.", "A second attempt ...", "... by the nurse with a rectal tube." | 45393 (and 45337) READY | held | round 3's ATTEMPT_FRAME admitted "attempts to"; no reader keeps an attempt in doubt |
+| L4B-2 | "Sigmoid polyp not excised with hot snare." Also "never excised", and 45380 and 45390 forms | READY | held | the package's patch made "excised" a bare act participle that no bare negation reads |
+
+**Repaired (round 4b):**
+- **The package's two releasing rules** now release only inside one of the package's own WHOLE sentences
+  (`PACKAGE_MARKED_SENTENCE`, `PACKAGE_PURPOSE_SENTENCE`, read by `_package_sentence`).
+  - It is fail-closed: every word of the sentence is a slot of the template (a lesion subject, the marker, a purpose,
+    a place in anatomy words, a heading of impression, findings, summary or assessment). Any other word, whatever it
+    says, leaves the sentence as main reads it: held.
+  - A sentence runs between stops ([.!?] then a space, or a blank line). A single line break is no stop, so
+    88d9db32's wrapped impression ("... and\nnot resected today.") is read whole, and a heading without a stop above
+    the sentence is part of it.
+- **ATTEMPT_FRAME is failure frames only.** An attempt's bare verb is no act, as at main. "An attempt to decompress the
+  stomach was unsuccessful." is no longer listed, and is recorded.
+- **"excised":** the package's bare participle is kept, because its lesion ownership of "it was not excised by snare"
+  reads it. Its bare denials ("not excised", "never excised") are read as negations; no other participle moves.
+
+**Pins:** `PackageSentenceTests` (27 forms, both paths, with and without a primary code, and the package's own
+sentences READY, with 88d9db32's own shapes), `ExcisedTests`, and `DecompressionTests` for the attempt forms.
+`RecordedResidualTests` gains the attempt and failure wordings the readers do not read (L4B-3, main-equal).
+
+**Recorded, not made by this change (main-equal):**
+- L4B-3: a failed decompression worded outside the readers' failure phrases ("We tried to decompress the stomach but
+  could not.", "... attempted and did not work.", "Decompression of the colon failed.") is no act, or no listed one,
+  so completeness does not show it. This is at main too.
+- "never removed", "never biopsied" and "not snared" (bare) read as done at main and here.
+
+### Refutation round 5 (2026-11-05): one lens over round 4b, and the two-cycle rule applied to "excised"
+
+One read-only lens attacked round 4b's head `995cdcfd` against main, with D1 and D2. Two declared limits were not
+findings: context in another sentence, and false holds. D2 held in all 828 cases. D1 broke in two blocking families,
+both reproduced by the author before repair:
+
+| id | input | HEAD | main | cause |
+|---|---|---|---|---|
+| L5-1 | "At the outside hosp. the lesion in the ascending colon was marked with tattoo and not resected." Also "... 3 p.m. ...", "Last wk. ...", "... today. -- by the referring endoscopist.", "At the referring facility... ...", and the purpose form "At the outside hosp. tattoo ink was injected ... for future localization." | 45381 READY, both paths | held or excluded | round 4b's own stop ([.!?] then a space) cut a sentence the engine keeps whole (after an abbreviation, before a lowercase word or a dash, at a form feed), so the template matched only the tail |
+| L5-2 | "Sigmoid polyp was unable to be excised with hot snare." Also "not able to be excised", "failed to be excised", "Gastric polyp not to be excised with hot snare." (43251), "Attempts were made, but ... unable to be excised ..." | READY | held | the package's bare "excised" is read by no not-done list of the readers or of routing (`cues._NOT_DONE`, `NOT_DONE_CLAUSE`); the "removed" control is held at both |
+
+**Repaired:**
+- **The package sentence is the engine's own** (`_sentences`, read once per text by `_sentence_spans`, found by
+  bisection). It does not cut after an abbreviation, before a lowercase word or a dash, or at a line wrap or a form
+  feed.
+  - A heading line ending in a colon is a sentence of its own in that model. What a heading says is then another
+    sentence's context, which no reader reads for a plain act sentence either.
+  - The heading pin now holds the package sentence to that: under every heading it reads as the plain "India ink was
+    injected ..." does, never better, and under "History:" and "Prior procedures:" it is held.
+  - A sentence longer than `PACKAGE_SENTENCE_REACH` (600 characters) is no package sentence.
+- **The package's bare "excised" is dropped under the two-cycle rule** (L4B-2 in round 4, L5-2 in round 5). The bare
+  participle list is main's exactly, and round 4b's "not/never excised" negation goes with it.
+  - The patch's reading of "it was not excised by snare" as the patch's own denied snare goes too.
+  - So 88d9db32's 45380 reads READY, as at main and at the live revision. The biopsy was done, so round 3's recorded
+    cost no longer arises.
+  - Stage 3's two pins that held a 45380 citing only another act's denial read READY, as at main (recorded as weak
+    support).
+  - The package's ownership test keeps its clinical assertions: no conflict, and 45385 and 45380 READY.
+
+**Proof:** three mutants killed, restores verified (a naive splitter in place of the engine's, "excised" put back, the
+reach shrunk). The pins hold all of round 5's forms and all of round 4's.
+
+### Refutation round 6 (2026-11-05): the templates' second cycle, and the two-cycle rule applied
+
+One read-only lens attacked round 5's head `9f1dddcd` against main. D2 held in all 658 cases, and no input came near a
+cost of 10 s (growth linear, 4.5 s at 84 KB). D1 broke again on the whole-sentence templates:
+- **L6-1, blocking.** "Indication: Referred after an outside colonoscopy on 2026-09-01." then "The transverse colon
+  lesion was marked with tattoo and not resected." reads 45381 READY on both paths, where main holds it.
+  - The declared comparator, the plain "India ink was injected adjacent to the lesion in the ascending colon.", is held
+    in the same position, by the routing-era indication reading.
+  - The tattoo most likely came from the outside colonoscopy. The purpose template, "The transverse colon lesion was
+    tattooed for future localization.", leaks the same way.
+- **L6-2, minor.** The coordinated template's own "today" slot sets the clause's "today", which skips the indication
+  hold for "Indication:" then "... and not resected today.".
+
+**Decision: both of the repair package's releasing rules are dropped, under the two-cycle rule.** The rules are the
+coordinated denial set apart from a marking, and the purpose rule ("for future localization" never dates a completed
+marking).
+- Their span form had failed rounds 1 to 4, and their whole-sentence form (round 4b) failed rounds 5 and 6.
+- Every release of either reading found a false READY on plausible wording: another time, another provider, a plan,
+  a doubt, a sentence boundary, and now an indication.
+- The decision was stated before round 6 ran.
+
+**What is removed, restoring main's code:**
+- In `services.py`, every definition only those two rules used is removed: `MARKING_PREDICATE`,
+  `PLACED_MARKER_PREDICATE`, `MARKING_PURPOSE`, the `MARKED_*` rules, the `PACKAGE_*` templates and their slots,
+  `_sentence_spans`, `_package_sentence`, `_marking_link`, `_unstated_marking` and `_marking_purpose_words`.
+  `_not_on_another_predicate` is main's function exactly, its call site is main's, and the clause reader's plan
+  detection is main's.
+- In `detect.py`, routing's consumer of the purpose rule is removed, so `detect.py` differs from main by its version
+  label alone.
+
+**What of the package's patch stays:** its holds, and the readers round 1 repaired. These are the comparison aside
+(`COMPARISON_OBJECT`, `_comparison_objects`), lesion ownership of patches and comparison anatomy, and a tattoo named as a place
+(`TATTOO_AS_PLACE`).
+
+**What the drop changes, and what it means for the directive:**
+- "<lesion> was marked with tattoo ... and not resected" reads as main reads it. The denial reaches the tattoo, so with
+  an injection stated elsewhere a tattoo conflict holds 45381.
+- "for future localization" after an injection dates it as planned, so 45381 is excluded.
+- **88d9db32's 45381 is held by the tattoo conflict, as at main and the live revision.** This is the conflict the
+  package was written to remove.
+- Directive item 3's "tattoo versus resection negation" and "future localization versus future performance" are
+  therefore NOT delivered. The conservative reading is kept, because every release tried read a tattoo not placed today
+  as placed. "Comparison anatomy" and "lesion ownership" are delivered.
+- **A candidate for a later round, not built here:** a restatement-only release. It would set the coordinated denial
+  apart only where the same lesion's tattoo is separately stated performed today in a plain sentence, so the READY
+  rests on that sentence and never on the coordinated one.
+
+**Proof:**
+- The package tests and the pins are re-pinned to main's reading (eight edits, each a reading of main's).
+- Run on round 5's code, the round-6 pins fail 19 times, so they detect both releases.
+
+### Refutation round 7 (2026-11-05): the whole remaining diff
+
+After round 6, one read-only lens attacked everything still different from main at `23b9a394`, with three claims:
+- **D1:** nothing READY beyond main, with no exemption left;
+- **D2:** equivalent standards;
+- **D3:** no documented act hidden from completeness that main shows.
+
+D2 held in every participant run. The slowest engine run took 0.02 s. Two blocking findings, both reproduced by the
+author before repair:
+
+| id | input | HEAD | main | cause |
+|---|---|---|---|---|
+| L7-1 | under "Procedure: Colonoscopy with hot snare polypectomy": "Indication: Prior colonoscopy in 2021; no polyps were removed." (also "Two diminutive rectal polyps were not removed.", "A 30 mm rectal lesion was not resected; ...") beside a 9 mm sigmoid polyp | 45378 READY on both paths; completeness complete, the listed polypectomy hidden | 45378 held (base included); the snare listed as not covered | fa-1's kindless branch withheld the listed removal on any removal statement with no technique in a one-procedure report, whatever lesion or date it named |
+| L7-2 | "A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare." (also "Two polyps ...; one was removed by EMR, and the second ... cold snare.", "Two sessile polyps ...: the first ... EMR; the second ... hot snare.") | completeness complete, the second lesion's snare bundled as the EMR's technique | the snare listed as not covered | the reader binds both acts to one lesion when one sentence names two lesions at one site, and `_one_resection` trusted that binding |
+
+**Repaired:**
+- **L7-1: the kindless branch is dropped under the two-cycle rule** (round 2's narrowing, then round 7). A removal
+  stated with no technique leaves the listing as main reads it. The `stated` branch stays: a body act of the listed
+  kind stated against the listing. Probed with another lesion's and another date's same-kind statements, it reads as
+  main does.
+  - **Recorded cost:** round 1's fa-1 forms with no technique return to main's reading. "No polyps were removed." under
+    a listed "hot snare polypectomy" reads the listed code as main does. Four of the six declared battery movements
+    (R8 D3 N15 and N17, 45378 and 45385 each) were that branch's and are gone; N9's two ("considered but not
+    performed") are the stated branch's and stay.
+  - **Recorded candidate for a later round, not built:** a hold-only listing. A listed removal in doubt would hold both
+    its own code and the diagnostic base, and stay listed in completeness.
+- **L7-2: acts read in separate clauses are one lesion's only at a lesion recorded alone and singular**
+  (`reconcile._one_lesion`). This applies to both bundling rules that trust a shared lesion: the resection's technique
+  and a biopsy of a removed lesion. In doubt the act is its own, as at main: listed, and its code read on its own.
+  - An EMR's own snare in one clause, or in the next sentence about the same single lesion, stays bundled, as directive
+    item 6 asks. Every EmrComponentsTests form still holds.
+
+**Proof:**
+- three mutants killed, restores verified;
+- run on round 6's code, round 7's pins fail seven times.
+
+**The pass ends here, and what that does and does not cover:**
+- Round 7 attacked the whole remaining diff.
+- Its two repairs were not themselves attacked by an independent lens. Both can only move a reading toward main's:
+  - a removed branch is main's reading;
+  - an act no longer bundled is read as main reads every act, which never bundles one. Its code may be READY only as
+    at main, and completeness lists it.
+- What is measured instead: the differential re-runs every input every lens generated in seven rounds, on both paths,
+  against main.

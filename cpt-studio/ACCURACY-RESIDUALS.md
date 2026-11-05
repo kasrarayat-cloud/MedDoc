@@ -1247,3 +1247,41 @@ main's own reading, plus one cost on the motivating encounter:
 | a code's own act beside another act's denial in one passage is held, as main holds it | 88d9db32: "... was sampled with cold biopsy forceps for histology; it was not excised by snare." | Corti's 45380 held (a performed-status question); the member's path is an addendum or a rejection, since this release offers no reviewer confirmation | setting the other act's denial apart believed acts done "at the referring facility", "elsewhere", "historically" or "unsuccessfully" through three rounds |
 | the package's coordinated marking outside its own shape | "marked with 3 mL of India ink and not resected"; "marked distally with tattoo ink and not resected"; "marked with submucosal tattoo for future localization and not resected" alone | 45381 held or excluded, as main reads it | the shape's widenings released forms where no tattoo was placed; a hold is the safe side |
 | a decompression's bare verb outside a failure or attempt frame | "The sigmoid volvulus was detorsed, decompressing the colon." | not read as an act, as at main | reading the bare verb made 45393 and 45337 READY on plans, drugs and tubes |
+
+## Harness repair, refutation round 4 (2026-11-05): a marking dated by an adverb the readers do not know
+
+HARNESS.md, "Refutation round 4 (2026-11-05)". Round 4 repaired the regression its probe found: round 3's restored
+"marked" had released earlier-time forms. What it leaves is main's own reading:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| an injection or tattoo predicate after an adverb of another time the readers do not list ("already", "originally") reads as done today | "The lesion in the ascending colon was already tattooed and not resected."; "India ink was already injected adjacent to the lesion in the ascending colon."; "Tattoo ink had already been injected into the ascending colon." | 45381 READY on Corti's path, at main, at the live revision and here; a participant's reading is READY exactly there (the equivalent standard, pinned) | not made by this change; a time-adverb rule in the shared act reader reaches every family and was not measured in this round. "Previously", "earlier", "formerly", a year and "at the prior colonoscopy" are held |
+
+### Round 4's lenses (2026-11-05): what the round-4b repairs leave
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the package's coordinated marking or purpose form in any sentence that is not, whole, the package's own | "Impression and plan: the lesion in the ascending colon was marked with tattoo and not resected."; "The 25 mm lesion in the ascending colon, which was flat, was marked with tattoo and not resected." | as main reads them: held or excluded | fail-closed by design (round 4b); a hold is the safe side |
+| a failed decompression worded outside the readers' failure phrases (L4B-3) | "We tried to decompress the stomach but could not."; "Gastric decompression was attempted and did not work."; "Decompression of the colon failed."; "An attempt to decompress the stomach was unsuccessful." | no decompression act, or none listed, so completeness does not show it; never READY | at main too; a failure-phrase list does not converge, and round 3's attempt frame released a READY (L4B-1) |
+| a bare participle denied by "never", or a bare "not snared" | "Sigmoid polyp never removed with hot snare."; "Sigmoid polyp never biopsied with cold forceps."; "Sigmoid polyp not snared." | READY on Corti's path at main and here; a participant's reading READY exactly there | not made by this change; "not excised" and "never excised" are read (round 4b) because this change made "excised" a bare act participle |
+
+### Round 5 (2026-11-05): what dropping the package's bare "excised" leaves
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a code cited on a passage that states only another act's denial, where the code's own act is documented elsewhere | "Biopsies were taken from the cecum with cold forceps. The examination was completed; the rectal patch was not excised by snare.", 45380 citing the second sentence | READY, as at main and at the live revision (a biopsy is documented in the report; the citation is weak support) | the package's bare "excised" that held it failed two refutation cycles (L4B-2, L5-2) and is dropped |
+| a heading's context, when the engine ends the heading as a sentence of its own | "Outside report:" on its own line, then the package's own coordinated sentence | as the plain "India ink was injected ..." reads in that position (READY under an unknown heading; held under History and Prior procedures) | cross-sentence context is read by no reader for any plain act sentence; the package sentence is never read better than one |
+
+### Round 6 (2026-11-05): the repair package's two releasing readings, dropped
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a coordinated "marked with tattoo ... and not resected" | 88d9db32's impression: "Separate transverse-colon lesion marked with submucosal tattoo for future localization and not resected today." | the denial reaches the tattoo; beside an injection stated elsewhere, a tattoo conflict holds 45381 (needs_clarification), as at main and the live revision | the package's release failed six refutation rounds (span form rounds 1 to 4, whole-sentence form rounds 5 and 6): it read tattoos placed at another time or by another provider as today's |
+| "for future localization" after a completed injection | "Tattoo ink was injected into the transverse colon submucosa for future localization." | planned: 45381 excluded, as at main | the purpose rule failed the same rounds ("Ink not yet injected ... for future localization", an indication naming an outside colonoscopy) |
+
+### Round 7 (2026-11-05): the withheld listing's kindless branch, dropped
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a removal stated not done, failed or planned with no technique named, under a procedure line listing that removal | "Procedure: Colonoscopy with hot snare polypectomy" ... "No polyps were removed." | the listed removal reads as main and the live revision read it: listed on the line; a participant's reading READY exactly where Corti's is | round 1's withheld listing (fa-1) read another lesion's or another date's removal as today's ("Indication: Prior colonoscopy in 2021; no polyps were removed." made 45378 READY and hid the listed polypectomy); it failed two cycles. A same-kind statement ("Hot snare polypectomy failed.", "... will be removed by hot snare at a later date.") still withholds the listing |
+| two lesions named in one sentence at one site, the reader binding both acts to one of them | "A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare." | the second lesion's snare is its own act (listed, its 45385 read on its own), as at main; an EMR's own snare in its own clause stays part of the EMR | the reader's lesion binding is main's; the bundling now trusts it only at a lesion recorded alone and singular |
