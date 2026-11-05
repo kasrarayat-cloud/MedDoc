@@ -150,6 +150,35 @@ requested in chat.
 - The exact remaining licensing requirements are prepared for the owner's review in
   `docs/cpt-harness/licensing-requirements-20261101.md`.
 
+## Harness repair, 2026-11-05 (owner directive of 2026-11-05)
+
+The owner's directive of 2026-11-05 ("Complete the CPT Studio GI core and multi-agent harness repair, install it on
+https://cpt.quillmd.com, and verify the actual customer workflow"), verbatim with the session's interpretation (a)-(k)
+in `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. Integration and deployment owner: session a12d8fb3. The
+sections above are kept as the history of the 2026-11-01 directive; this section is the acceptance contract of the
+repair.
+
+**Marks (owner, 2026-11-05).** `[ ]` not completed; `[x]` completed and verified, with evidence; BLOCKED names the exact
+dependency and the work that can continue independently. Every tick names its revision, its test or live observation,
+and its evidence path. Earlier tests, replays and access checks never stand in for fresh installed acceptance.
+
+| | Item | Status | Revision | Evidence | Remaining action |
+|---|---|---|---|---|---|
+| [x] | 1. Baseline: project instructions read, preflight run, isolated worktree, no concurrent deployment writer; served revision, configuration and preservation baseline recorded | DONE (live read 2026-11-05 09:03-09:16Z) | served `b0dc3446c64c`; `main` `8645fd54` (no runtime file differs) | `docs/cpt-harness/repair-20261105/stage1-baseline.md`; preflight GO `docs/preflight-reports/preflight-20261105T090526Z.md` (shared tree, untracked by convention) | the preserved counts are compared again at stage 9 |
+| [x] | 2. The harness traced for 88d9db32: Corti, Astra and Fable first assessments, peer reviews, references and the final reconciliation; where each missing code was lost, held or made informational | DONE (live records read-only 09:07Z; reproduced offline on `main`) | live records of `b0dc3446c64c`; offline `main` `8645fd54` | `docs/cpt-harness/repair-20261105/stage2-trace-88d9db32.md`: Corti omitted 43249, 45390, 45385 in both answers; Astra and Fable each proposed all six; D14 made the three alternatives; 45381's hold and 45380's anatomy are reader defects; the decompression item is a catalogue gap | — |
+| [ ] | 3. Shared interpretation repaired: tattoo versus resection negation, future localization versus future performance, comparison anatomy, lesion ownership; genuine contradictions, failed, historical, planned and other-provider services stay protected; nothing hardcoded | IN PROGRESS | — | the package's `repair.patch` verified (stage 2 doc; rulings interpretation (f)); a new false hold it exposes on 45380 found offline | the negation-scope repair of `_negation_resolved`; tests and controls |
+| [ ] | 4. D14's blanket prohibition replaced: an explicit Astra or Fable proposal enters human review only after the full source-validation path passes, with equivalent standards whatever its origin; no promotion by quotes, confidence or agreement; raw lists never promoted; no model approves; true origin kept in protected diagnostics; recorded in the contract | IN PROGRESS | — | contract: `cpt-studio/HARNESS.md`, "GI core and harness repair (2026-11-05)" | build; tests; refutation |
+| [ ] | 5. The complete harness kept: Corti, Astra and Fable participate; first assessments frozen and hashed before peer conclusions are shared; peer reviews stored separately; tool traces and dated provenance kept; a skipped, refused, malformed or failed participant reported as partial completion, never silently substituted | NOT RUN | — | — | verify on the installed release and in fresh acceptance |
+| [ ] | 6. The complete service set reconciled: distinct procedures and lesions, included components, units, potential modifiers; no separate charge for EMR components or prophylactic clipping; decompression investigated without the rejected shortcut; relationships recomputed after clarification and review decisions, on reload and before export | NOT RUN | — | — | — |
+| [ ] | 7. The doctor-facing page kept simple: CPT numbers, units and modifiers where supported, short source-based reasons, review status, only necessary questions; no provider or model identity, prompt or trace in customer APIs, HTML, accessibility text, browser logs or downloads; truthful stages, elapsed time and failure states | NOT RUN | — | — | — |
+| [ ] | 8. The finished implementation verified: Linux tests and required CI; an independent refutation of the finished diff with concrete counterexamples (false approvals, negation, time, procedure ownership, multiple lesions, misleading completeness); findings reproduced before repair; failures kept | NOT RUN | — | — | — |
+| [ ] | 9. Installed through the project gates with a declared, reversible, available deployment; 88d9db32 re-assessed from retained responses with sends disabled; the prior assessment and decisions kept; served behaviour verified and remaining omissions explained | NOT RUN | — | — | — |
+| [ ] | 10. Fresh live acceptance: a small new synthetic set (Word and PDF), expected services and provisional coding fixed before outputs are read; actual Corti, Astra and Fable participation; review decisions, reload persistence and an actual downloaded report matching them; agent-executed approvals labelled | NOT RUN | — | — | — |
+
+**Verdicts (three, kept separate).** Functional completion, clinical accuracy and content-use permissions are reported
+apart. A passing synthetic case is never reported as guaranteed accuracy, and missing reference coverage is never
+invented.
+
 ## Progress log (append only)
 
 - **2026-11-01T21:10Z** Checklist created before any harness change. Carried in from round 4, as context and not as
@@ -404,3 +433,15 @@ requested in chat.
     12.20) and the base not held again (12.18), all unchanged (I1); pypdf 6.21.2's advisories (interpretation 68, not
     waived). 4.6, D3 to D5, D14's question and the release-standard question are open, none approved. Report:
     `docs/foundation/reports/2026-11-03-cpt-studio-harness-install.md`.
+
+- **2026-11-05T09:20Z (session a12d8fb3): the harness repair begins (owner directive of 2026-11-05).** Stage 1 recorded
+  (served `b0dc3446c64c`, configuration, the preservation counts, no concurrent writer) and stage 2 traced from the
+  protected records of 88d9db32: Corti selected 43239, 45380 and 45381 in its first answer and again in the owner's
+  second review of 07:43Z, which named the dilation, the decompression, the EMR and the snare; Astra and Fable each
+  proposed all six documented services independently; D14 listed 43249, 45390 and 45385 as alternatives. The repair
+  package's `repair.patch` applies cleanly to `main`; its focused modules pass on Linux (125 tests) and fail on unpatched
+  `main` as reported (8 failures, 1 error). Re-assessed offline from the retained responses, with nothing sent, it
+  clears 45381's false tattoo conflict and corrects 45380's anatomy, and it also holds 45380 on Corti's actual passage
+  "...; it was not excised by snare." (a release that refuses on any overlapping not-done act): repaired in stage 3.
+  D14's owner question is answered by the directive; 4.6, the release-standard question, D3-D5, interpretation 68 and
+  decision (m) stay open.

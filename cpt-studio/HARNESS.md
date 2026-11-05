@@ -4,6 +4,10 @@ This file is the contract for the owner's directive of 2026-11-01 (recorded verb
 `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; acceptance checklist `CPT-HARNESS-CHECKLIST.md`). Code, tests and the
 adversarial pass are held to the INVARIANTS below; a change to one is a change to this file in the same commit.
 
+**Amended 2026-11-05 (owner directive of 2026-11-05).** D14 is replaced by the owner's controlled participant admission,
+section "GI core and harness repair (2026-11-05)" at the end of this file. Every earlier statement here that a
+participant's code is never a proposal describes the releases up to `b0dc3446c64c` and is kept as their record.
+
 ## 1. What the harness is
 
 **Three production participants examine every uploaded document.** None of them is an engineering agent.
@@ -155,7 +159,9 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   found such codes READY and approvable on their quotes alone where the quote states a failed, denied, earlier or
   another procedure's act (negation-1..3, ownership-1, -4, time-1), and recasting Corti's base code as included in them
   and clearing CPT Studio's own unresolved-act warning (time-2). Whether a participant's own code may again be a
-  proposal, and on what reader guarantee, is an owner question.
+  proposal, and on what reader guarantee, is an owner question. (Answered 2026-11-05 by the owner: an explicit first-reading proposal may
+  enter human review after the full source-validation path passes; the rule is section "GI core and harness repair
+  (2026-11-05)", P-ADMIT, which supersedes this bullet from that release on.)
 - **I3: agreement never promotes** (worded, after refutation round 1's EV-5, as the engine guarantees it). A second or
   third participant proposing a code with the same located quotes changes nothing but the record of who proposed it.
   ~~Its own other located quotes join the code's evidence and are read with it by the same local readers, exactly as
@@ -414,7 +420,8 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
   (`ImportedReferenceParityTests`); the superscript pin of `RetrievalFailureTests` likewise (`fd0b37c42efd` at the head's
   labels, `b8bdc979057d` at the installed ones).
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
-  Corti's, with located exact evidence.
+  Corti's, with located exact evidence. (2026-11-05, P-ADMIT: true again as worded - a first-reading proposal is read
+  by that path, from its proposers' exact spans only, and admitted only as the second review's selections are.)
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
   the same located quotes changes nothing but the record of who proposed it; ~~another proposer's other located quotes
   join the code's evidence and are read with it by the same local readers, exactly as Corti's passages would be (I2),
@@ -1601,7 +1608,7 @@ removed with hot snare."). There are two paths, and the distinction decides the 
 
 | decision | findings | the rule | recorded in |
 |---|---|---|---|
-| D14 | negation-1, -2, -3, ownership-1, -4, time-1, time-2 (their harness path) | **in this release a participant's code is never a proposal.** A code no decidable proposal carries (neither Corti's nor the bounded second review's) is listed as an alternative, informational, with CPT Studio's own reason (`engine.PARTICIPANT_NOT_ADDED`: "a quote found verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a participant's code is never added as a proposal of its own"), after the scope, UNLOCATED and NO_EVIDENCE reasons, which still come first. So participants never make a code ready, never count as covering a documented act, never make another code included and never clear an unresolved item. They still read, reconcile and review each other; their positions and peer reviews are shown; and a service only a participant reads as performed still makes coding completeness incomplete. Corti's proposals are assessed exactly as with no participant configured. This is the D7 pattern ("keep ... disabled until verified"). **Owner question (class a):** should a participant's own code ever become a selectable proposal again, and on what reader guarantee? The recommendation is only after the shared-reader repair passes its own refutation, and re-enabled by the owner | section 5 and I2, I3 (amended in place, superseded wording kept), 11.4, 12.6, API.md |
+| D14 | negation-1, -2, -3, ownership-1, -4, time-1, time-2 (their harness path) | **in this release a participant's code is never a proposal.** A code no decidable proposal carries (neither Corti's nor the bounded second review's) is listed as an alternative, informational, with CPT Studio's own reason (`engine.PARTICIPANT_NOT_ADDED`: "a quote found verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a participant's code is never added as a proposal of its own"), after the scope, UNLOCATED and NO_EVIDENCE reasons, which still come first. So participants never make a code ready, never count as covering a documented act, never make another code included and never clear an unresolved item. They still read, reconcile and review each other; their positions and peer reviews are shown; and a service only a participant reads as performed still makes coding completeness incomplete. Corti's proposals are assessed exactly as with no participant configured. This is the D7 pattern ("keep ... disabled until verified"). **Owner question (class a):** should a participant's own code ever become a selectable proposal again, and on what reader guarantee? The recommendation is only after the shared-reader repair passes its own refutation, and re-enabled by the owner | section 5 and I2, I3 (amended in place, superseded wording kept), 11.4, 12.6, API.md; **replaced 2026-11-05 by the owner's P-ADMIT** (section "GI core and harness repair (2026-11-05)") |
 
 **Round 6's repairs** (four agents, disjoint functions, each from `de6418fc6` in its own worktree):
 - **R6-TRACE** (account-1..5, falsegreen-1, -3): the owner's trace headings are neutral ("Additional codes", "Codes it
@@ -2060,3 +2067,60 @@ participant's name, position, phase, model or reading (`studio/customer_api.py`)
 `/ops/api/`; its node tests are `tests/operator/ops.test.cjs`. The verification tooling that reads provider runs,
 request hashes or report sha256s (ops/verify_browser.cjs, ops/verify_downloads.py) reads them from `/ops/api/` with an
 operator session.
+
+## GI core and harness repair (2026-11-05): participant admission replaces D14
+
+The owner's directive of 2026-11-05 (verbatim, with the session's interpretation (a)-(k), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; checklist `CPT-HARNESS-CHECKLIST.md`, "Harness repair,
+2026-11-05"). Its changed requirement, in the owner's words: "I authorize implementing a controlled replacement for
+D14's blanket prohibition: an explicit proposal from Astra or Fable may enter the human-review workflow after the full
+source-validation path passes. Apply equivalent eligibility standards regardless of originating provider [...] A
+quotation existing, model confidence, or agreement between models is insufficient. Raw alternative lists must not be
+automatically promoted. No model may approve a code." This section is the contract, written before the code; what was
+built, measured and refuted is appended below it as it happens.
+
+### P-ADMIT: which participant code becomes a proposal
+
+- **Only an explicit, independent proposal.** An entry of the `codes` list of a participant's frozen first reading
+  (11.1), with at least one quote found verbatim and an exact span (I7). A code a participant only adds in peer review
+  (`additional_codes`) stays an alternative: it was proposed after the participant had seen its peers' conclusions.
+  Nothing in a raw list is ever read as a proposal: a first reading's `not_coded`, Corti's candidates and alternatives,
+  the bounded second review's listed codes, any alternative row.
+- **The same path as the proposal provider's.** The code is read by `_select` exactly as a Corti selection, from the
+  exact spans of its first-reading proposers only (each span once, in document order, whoever gave it: I3): scope,
+  exact evidence, the routed family, the documented service and act (`reconcile.match`), the P2 READ-HOLD holds
+  (`_second_opinion`, `_own_passage_may_stand`, `_passages_elsewhere`), the passages' support, the required facts, the
+  E/M rules, PFS, MUE and the endoscopic base. Its status, checks and questions are what that path gives any selection.
+- **The second review's admission rule.** It becomes a proposal only where that reading exists and does not exclude it,
+  the matched documented service or act is documented as done (performed or incomplete, or named only and held), and it
+  accounts for a documented service or act that the decidable proposals - Corti's selections and the second review's
+  additions - left unresolved (`reconcile.reconcile`'s `no_proposal` and `not_covered` items, read through the coverage
+  catalogue exactly as `_second_review` reads them). Otherwise it stays an alternative saying why, in the second review's
+  own words where they apply.
+- **CPT Studio never chooses between participants.** Where two different codes that would each be admitted account for
+  one same unresolved item, neither is added for it: both stay alternatives saying that independent participants
+  propose different codes for that act, and the item stays open. Agreement on the same code adds its proposers and their
+  passages, and nothing else.
+- **No model approves.** An admitted code is a selected proposal, `ready` or held by the readers; only a workspace
+  member's decision approves or rejects it, as for any proposal. The reconciliation counts it as covering the act it
+  accounts for, as it counts every selection, and the shared base rule reads it as any therapeutic code.
+- **Origin is kept, and protected.** The proposal records `support.origin = 'participant'`, its proposers and their
+  phases. The operator API and console show who proposed it and Corti's relation to the code (`_lead`); customer
+  surfaces (API, page, accessibility text, downloads) word it without any participant's or model's name.
+- **Unchanged.** I1: with no participant configured nothing here runs. I5 and I6: requests and responses as before.
+  I8: no new request is sent by admission; it reads what is retained. A participant's stated units, modifiers and
+  confidence are recorded in its position and never used.
+
+### The shared-reader repair (stage 3)
+
+- The repair package's accepted `repair.patch` (base `b0dc3446c64c`; `studio/gi/services.py`, `studio/gi/detect.py`,
+  `tests/test_advanced_gi_binding.py`): a denial of tissue removal coordinated after a marking ("marked with tattoo ...
+  and not resected") is a second predicate, never the marking's denial; the future purpose of a completed marking
+  ("for future localization") is its purpose, never its time, in both readers; an explicitly closed comparison aside
+  ("..., separate from the sigmoid polyp, ...") names another lesion, never a second site of the act; a mucosal patch or
+  abnormality is a lesion of its own, so a denied snare of it never inherits the preceding polyp. Its rejected
+  decompression experiment is not applied.
+- `engine._negation_resolved`: the routing-era reader's unresolved negation is released only where the passage is the
+  service's positive reading and overlaps no not-done act **of a kind the code accounts for**; before, any not-done act
+  it overlapped refused the release, so "... was sampled with cold biopsy forceps for histology; it was not excised by
+  snare." held 45380 once the patch read the denied snare. A not-done act of the code's own kind still refuses it.
