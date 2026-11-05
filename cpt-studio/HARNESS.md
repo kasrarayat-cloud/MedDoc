@@ -2689,8 +2689,9 @@ author before repair:
   kind stated against the listing. Probed with another lesion's and another date's same-kind statements, it reads as
   main does.
   - **Recorded cost:** round 1's fa-1 forms with no technique return to main's reading. "No polyps were removed." under
-    a listed "hot snare polypectomy" reads the listed code as main does, and the six declared battery movements that
-    branch made are gone.
+    a listed "hot snare polypectomy" reads the listed code as main does. Four of the six declared battery movements
+    (R8 D3 N15 and N17, 45378 and 45385 each) were that branch's and are gone; N9's two ("considered but not
+    performed") are the stated branch's and stay.
   - **Recorded candidate for a later round, not built:** a hold-only listing. A listed removal in doubt would hold both
     its own code and the diagnostic base, and stay listed in completeness.
 - **L7-2: acts read in separate clauses are one lesion's only at a lesion recorded alone and singular**
