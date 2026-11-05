@@ -885,6 +885,30 @@ test('no step or icon is animated when processing failed, stopped or waits on th
   assert.doesNotMatch(app.progressPanel(idle, ui(idle)), /is-animated|progress-card/);
 });
 
+test('every full progress panel says whether the member can leave the page, a stopped and a failed one included', () => {
+  // the 2026-11-05 acceptance walk on cpt.quillmd.com: the stopped panel told nobody they could leave (directive 5:
+  // "Make it clear when the user can leave the page and return"); a failed one did not either
+  const notes = {
+    // never "nothing runs until it is resumed": a detail saved on a stopped document restarts it (jobs.change_context)
+    'encounter-stopped.json': 'You can leave this page — the document stays in Documents.',
+    'encounter-failed.json': 'You can leave this page — the document stays in Documents.',
+  };
+  const drawn = [];
+  for (const name of ENCOUNTERS) {
+    const doc = fixture(name);
+    const html = app.progressPanel(doc, ui(doc));
+    if (html.includes('progress-done')) continue;  // results are ready: one compact line, nothing left to wait for
+    drawn.push(doc.progress.phase);
+    assert.equal(doc.progress.can_leave, true, `${name}: the scenario`);
+    assert.equal(count(html, '<p class="leave-note">'), 1, `${name}: one leave note`);
+    if (notes[name]) assert.ok(html.includes(`<p class="leave-note">${notes[name]}</p>`), name);
+    const kept = clone(doc);
+    kept.progress.can_leave = false;
+    assert.doesNotMatch(app.progressPanel(kept, ui(kept)), /leave-note/, `${name}: no note where the server says the member cannot leave`);
+  }
+  for (const phase of ['processing', 'queued', 'action_needed', 'being_confirmed', 'failed', 'stopped']) assert.ok(drawn.includes(phase), phase);
+});
+
 test('failed: the plain error and its action; stopped: Resume; being confirmed: no Stop and the settling message', () => {
   const failedDoc = fixture('encounter-failed.json');
   const failed = app.progressPanel(failedDoc, ui(failedDoc));

@@ -74,6 +74,12 @@ const LEAVE_NOTES = {
   action_needed: 'You can leave this page — the document waits in the Review queue until you choose.',
   being_confirmed: 'You can leave this page — the document stays in Documents while this is settled.',
   paused: 'You can leave this page — your document is saved.',
+  // the server serves can_leave for every state (progress.encounter_progress); a stopped or failed document is kept
+  // too, so its panel says so (the 2026-11-05 acceptance walk: the stopped panel told nobody they could leave). Nothing
+  // more is promised: saving a detail on a stopped document restarts its processing without Resume
+  // (jobs.change_context clears the stop), so "nothing runs until it is resumed" would not be true.
+  stopped: 'You can leave this page — the document stays in Documents.',
+  failed: 'You can leave this page — the document stays in Documents.',
 };
 const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
 const USE_DOCUMENT = 'use_document';

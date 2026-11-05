@@ -8,6 +8,11 @@ const path = require('node:path');
 const test = require('node:test');
 
 const vb = require('../verify_browser.cjs');
+// the customer page itself: the walk's progress checks are held to the panel it really draws (the 2026-11-05 acceptance
+// walk failed six checks written against hand-drawn panels no page draws)
+const app = require('../../studio/static/studio/app.js');
+const pageUi = enc => ({ open: new Set(), answers: new Map(), ack: null, reconnecting: false, clock: 0,
+  nowMs: Date.parse(enc?.progress?.server_time || '2026-11-03T22:10:00+00:00') });
 
 const ROOT = path.join(__dirname, '..', '..');
 const TEXT = fs.readFileSync(path.join(__dirname, 'documents', 'gi-08-flexible-sigmoidoscopy-biopsy.txt'), 'utf8');
@@ -3034,8 +3039,7 @@ function fakeSite({ leak = {} } = {}) {
     const code = dialog ? c.codes.find(item => item.id === dialog.proposal) : null;
     const select = code && code.modifier_review ? `<select id="reviewModifier"><option value=""${dialog.modifier ? '' : ' selected'}></option>${['59', 'XS'].map(v => `<option value="${v}"${dialog.modifier === v ? ' selected' : ''}>${v}</option>`).join('')}</select>` : '';
     return `<html><head><title>CPT Studio</title></head><body><main><h1>${c.title}</h1>${leak.toast ? `<div id="toast" role="status">${leak.toast}</div>` : ''}`
-      + `<section class="progress-panel" data-phase="${c.progress.phase}" role="status"><ol>${c.progress.steps.map(s => `<li class="progress-step" data-step="${s.key}" data-state="${s.state}">${s.label}</li>`).join('')}</ol>`
-      + `<p class="progress-message">${c.progress.message}</p><p class="leave-note">You can leave this page.</p></section>`
+      + app.progressPanel(c, pageUi(c))
       + `<ul class="checks-panel">${c.checks.map(k => `<li class="check-step" data-check="${k.key}" data-state="${k.state}">${k.label}</li>`).join('')}</ul>`
       + `<ol class="result-list">${rows}</ol><button type="button" data-action="export"${leak.exportAria ? ` aria-label="${leak.exportAria}"` : ''}>Download</button></main>`
       + `${dialog ? `<dialog id="reviewDialog" open><input type="checkbox" id="reviewAcknowledgement">${select}<textarea id="reviewNote"></textarea><button id="saveReview">Save</button></dialog>` : ''}`
@@ -3341,4 +3345,215 @@ test('the walk without a modifier plan chooses none, and the acceptance reviewer
   const accepted = await walkSite(fakeSite(), { notes: ACC_NOTES, plan: { approve_codes: ['45380'] }, opts: { acceptanceReviewer: true, noAutoApprove: true, account: human } });
   const got = accepted.record.assertions.filter(a => a.status === 'fail').map(a => a.id);
   for (const id of ['persist.decision.45380', 'dom.decision.45380', 'customer.decision.45380', 'decisions.labelled']) assert.ok(got.includes(id), `${id}: ${got.join(', ')}`);
+});
+
+// --- the 2026-11-05 acceptance walk's corrections ------------------------------------------------------------------------
+// The live walk of 24c49a50 failed six checks that were wrong about the page (the compact line held to the whole panel's
+// contract, a message read from the head that the page says in its notice, a model asked of Corti, whose API names
+// none) and missed the upload's client key; and the stopped panel told nobody they could leave, which was the page's.
+// Each check is held here to what the real page draws and the real operator view serves, and to the shape it must fail.
+
+const CUSTOMER_FIXTURES_DIR = path.join(ROOT, 'tests', 'fixtures', 'customer');
+const customerFixture = name => JSON.parse(fs.readFileSync(path.join(CUSTOMER_FIXTURES_DIR, name), 'utf8'));
+const CUSTOMER_FIXTURES = fs.readdirSync(CUSTOMER_FIXTURES_DIR).filter(name => /^encounter-.+\.json$/.test(name)).sort();
+const pageHtml = enc => app.progressPanel(enc, pageUi(enc));
+const pageDom = (enc, edit = html => html) => domOf(`<html><body>${edit(pageHtml(enc))}</body></html>`);
+
+test('checkProgressDom passes on the panel the real page draws for every served state, the compact line included', () => {
+  const kinds = new Set();
+  for (const name of CUSTOMER_FIXTURES) {
+    const enc = customerFixture(name);
+    assert.deepEqual(failed(vb.checkProgressDom(enc, pageDom(enc), [])), [], name);
+    kinds.add(vb.PANEL_PHASES.has(enc.progress.phase) ? 'panel' : 'compact');
+  }
+  assert.deepEqual([...kinds].sort(), ['compact', 'panel']);
+  // what the walk failed on, each read where the page draws it
+  const stopped = customerFixture('encounter-stopped.json');
+  const stoppedIds = ids(vb.checkProgressDom(stopped, pageDom(stopped), []));
+  for (const id of ['progress.dom.whole_panel:pass', 'progress.dom.message:pass', 'progress.dom.error:pass', 'progress.dom.leave_note:pass', 'progress.dom.resume:pass']) {
+    assert.ok(stoppedIds.includes(id), id);
+  }
+  const ready = customerFixture('encounter-ready.json');
+  const readyIds = ids(vb.checkProgressDom(ready, pageDom(ready), []));
+  for (const id of ['progress.dom.compact:pass', 'progress.dom.took:pass', 'progress.dom.still:pass']) assert.ok(readyIds.includes(id), id);
+  assert.ok(!readyIds.some(id => /^progress\.dom\.(steps|leave_note):/.test(id)), 'a finished line has no steps or leave note to hold it to');
+});
+
+test('checkProgressDom fails a waiting, stopped or failed panel folded into the compact line, a finished one drawn whole, and each missing part', () => {
+  const stopped = customerFixture('encounter-stopped.json');
+  const ready = customerFixture('encounter-ready.json');
+  // the stopped document drawn as if finished: one compact line
+  const folded = domOf(`<html><body>${pageHtml(ready).replace('data-phase="completed"', 'data-phase="stopped"')}</body></html>`);
+  assert.ok(failed(vb.checkProgressDom(stopped, folded, [])).includes('progress.dom.whole_panel'));
+  // a finished document drawn as the whole panel
+  const whole = domOf(`<html><body>${pageHtml(stopped).replace('data-phase="stopped"', 'data-phase="completed"')}</body></html>`);
+  assert.ok(failed(vb.checkProgressDom(ready, whole, [])).includes('progress.dom.compact'));
+  // the compact line without the time it took, or still animating
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready, html => html.replace(/ · finished in <span[^>]*>[^<]*<\/span>/, '')), [])), ['progress.dom.took']);
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready), ['svg.icon (spin)'])), ['progress.dom.still']);
+  // the stopped notice gone: its sentence is said nowhere
+  const noNotice = pageDom(stopped, html => html.replace(/<div class="progress-error"[\s\S]*?<\/div><\/div>/, ''));
+  assert.deepEqual(failed(vb.checkProgressDom(stopped, noNotice, [])).sort(), ['progress.dom.error', 'progress.dom.message']);
+  // the stopped panel the 2026-11-05 walk met: no leave note
+  assert.deepEqual(failed(vb.checkProgressDom(stopped, pageDom(stopped, html => html.replace(/<p class="leave-note">[^<]*<\/p>/, '')), [])), ['progress.dom.leave_note']);
+});
+
+test('the sample pages draw the progress panel as the page does for their encounters', () => {
+  const fields = p => p && { phase: p.phase, compact: p.compact, summary: p.summary.replace(/finished in .*$/, 'finished in'), steps: p.steps.length,
+    message: p.message, leave: p.leave, stop: p.stop, resume: p.resume, notice: p.notice, elapsed_present: p.elapsed_present };
+  for (const [page, enc] of [['customer-page.html', CUST()], ['customer-page-details.html', DETAILS()]]) {
+    assert.deepEqual(fields(domOf(sample(page)).progress), fields(pageDom(enc).progress), page);
+  }
+});
+
+test('checkProvenance: Corti names no model - its runs stand on endpoint, adapter version and identity - and every other participant still names its models', () => {
+  const op = OP();
+  assert.equal(op.harness.participants[0].model, '', 'the sample serves Corti as the live operator view does');
+  assert.deepEqual(failed(vb.checkProvenance(op, TRACE(), { expectHarness: true })), []);
+  assert.equal(vb.checkProvenance(op, TRACE()).find(r => r.id === 'provenance.returned_models').status, 'pass');
+  for (const [label, mutate] of [['Astra without its model', o => { o.harness.participants[1].model = ''; }],
+    ['Corti without its vendor', o => { o.harness.participants[0].vendor = ''; }]]) {
+    const o = OP();
+    mutate(o);
+    assert.deepEqual(failed(vb.checkProvenance(o, TRACE())), ['provenance.models'], label);
+  }
+  const unanswered = OP();
+  unanswered.harness.participants[2].returned_model = '';
+  assert.equal(vb.checkProvenance(unanswered, TRACE()).find(r => r.id === 'provenance.returned_models').status, 'warn');
+  const corti = TRACE().participants[0].runs;
+  assert.ok(corti.length === 1 && corti[0].requested_model === '' && corti[0].adapter_version, 'the sample traces Corti\'s run as the live trace does');
+  for (const [label, mutate] of [['Corti without its adapter version', t => { t.participants[0].runs[0].adapter_version = ''; }],
+    ['Corti without its endpoint', t => { t.participants[0].runs[0].endpoint = ''; }],
+    ['Corti without its identity', t => { t.participants[0].runs[0].run_identity = ''; }],
+    ['Astra without its model', t => { t.participants[1].runs[0].requested_model = ''; }]]) {
+    const t = TRACE();
+    mutate(t);
+    assert.deepEqual(failed(vb.checkProvenance(OP(), t)), ['provenance.trace'], label);
+  }
+});
+
+test('uploadCarriedClientKey reads the form the page sent, since Playwright serves no body that holds a file', () => {
+  const watch = (keys, uuid = true) => ({ requests: [{ method: 'GET', path: '/api/encounters' },
+    { method: 'POST', path: '/api/encounters', ...(keys ? { form_keys: keys, client_key_uuid: uuid } : {}) }] });
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'service_date', 'synthetic_attestation', 'client_key'])), true);
+  // an empty or malformed key is no key to the server (api._client_key), so it is not carried (refutation, 2026-11-05)
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'synthetic_attestation', 'client_key'], false)), false);
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'synthetic_attestation'])), false);
+  assert.equal(vb.uploadCarriedClientKey(watch(null), ''), false, 'no form seen and no body: not carried');
+  assert.equal(vb.uploadCarriedClientKey(watch(null), 'Content-Disposition: form-data; name="client_key"'), true, 'a text body Playwright did serve');
+  assert.equal(vb.uploadCarriedClientKey(null, ''), false);
+});
+
+test('planProblems: a document expected to fail names a failed state, carries no plan and is walked in agent mode', () => {
+  const notes = { approve: 'Approved in an agent-executed synthetic review.' };
+  const base = { id: 'x-fail', expected_failure: 'extraction_failed' };
+  assert.deepEqual(vb.planProblems(base, notes), []);
+  for (const [label, doc] of [['not a failed state', { ...base, expected_failure: 'failed' }], ['with a plan', { ...base, review_plan: { stop_and_resume: true } }],
+    ['with questions expected', { ...base, expected_no_em_questions: true }],
+    ['with an extraction its walk never checks', { ...base, expected_extraction: { status_in: ['ok'] } }],
+    ['with codes its walk never checks', { ...base, author_expected_cpt: ['45378'], must_not_code: [] }]]) {
+    assert.equal(vb.planProblems(doc, notes).length, 1, label);
+  }
+  assert.ok(vb.planProblems(base, { approve: vb.ACCEPTANCE_LABEL }, { acceptanceReviewer: true }).some(p => /agent mode only/.test(p)));
+});
+
+test('checkFailure: the failed panel the page draws, the named state, nothing sent and no code; each broken promise fails', () => {
+  const enc = customerFixture('encounter-failed.json');
+  const op = { state: 'extraction_failed', provider_runs: [] };
+  assert.equal(enc.progress.error.action, 'new_document', 'the scenario: the page offers "Upload a new document"');
+  assert.deepEqual(failed(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])), []);
+  assert.ok(ids(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])).includes('failure.action:pass'));
+  const sent = { id: 'r1', provider: 'corti', purpose: 'primary', state: 'succeeded', sent: true };
+  // the operator view's own run shape (serializers._provider_run_json): no `sent` key at all (refutation, 2026-11-05)
+  const live = OP().provider_runs[0];
+  assert.ok(!('sent' in live), 'the sample serves runs as the operator view does');
+  const cases = [
+    ['failure.state', [enc, { ...op, state: 'provider_failed' }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [sent] }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [live] }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [{ ...live, state: 'not_sent' }] }, pageDom(enc)]],
+    ['progress.dom.panel', [enc, op, domOf('<html><body></body></html>')]],
+    ['failure.no_codes', [{ ...clone(enc), codes: [{ code: '45378' }] }, op, pageDom(enc)]],
+    ['failure.customer', [{ ...clone(enc), state: 'ready' }, op, pageDom(enc)]],
+    ['failure.action', [enc, op, pageDom(enc, html => html.replace(/<button type="button" class="button secondary" data-action="upload">[^<]*<\/button>/, ''))]],
+    ['progress.dom.leave_note', [enc, op, pageDom(enc, html => html.replace(/<p class="leave-note">[^<]*<\/p>/, ''))]],
+  ];
+  for (const [id, [c, o, d]] of cases) assert.ok(failed(vb.checkFailure(c, o, d, 'extraction_failed', [])).includes(id), id);
+});
+
+test('checkProgressDom: a waiting, stopped or failed document with no panel fails, busy or not; a finished one may have none', () => {
+  // the review page always draws its panel (app.js reviewView); refutation 2026-11-05: none passed whenever nothing was busy
+  for (const name of ['encounter-stopped.json', 'encounter-failed.json', 'encounter-action-needed.json', 'encounter-being-confirmed.json']) {
+    const enc = customerFixture(name);
+    assert.equal(enc.progress.busy, false, `${name}: the scenario`);
+    assert.deepEqual(failed(vb.checkProgressDom(enc, domOf('<html><body></body></html>'), [])), ['progress.dom.panel'], name);
+  }
+  assert.deepEqual(failed(vb.checkProgressDom(customerFixture('encounter-ready.json'), domOf('<html><body></body></html>'), [])), []);
+});
+
+test('checkProgressDom asks the time elapsed only of a busy queued or processing panel, as the page shows it', () => {
+  // refutation 2026-11-05: a paused document (decision (j)) and a date hold being re-checked are busy and show no time
+  const paused = customerFixture('encounter-processing.json');
+  paused.progress.phase = 'paused';
+  const held = customerFixture('encounter-action-needed.json');
+  held.progress.busy = true;
+  for (const enc of [paused, held]) {
+    const results = vb.checkProgressDom(enc, pageDom(enc), []);
+    assert.deepEqual(failed(results), [], enc.progress.phase);
+    assert.ok(!ids(results).some(id => id.startsWith('progress.dom.elapsed')), enc.progress.phase);
+  }
+  const processing = customerFixture('encounter-processing.json');
+  assert.deepEqual(failed(vb.checkProgressDom(processing, pageDom(processing, html => html.replace(/<p class="progress-time">[\s\S]*?<\/p>/, '')), [])), ['progress.dom.elapsed']);
+});
+
+test('checkCompactProgress holds the compact line to its own phase\'s title', () => {
+  // refutation 2026-11-05: any non-empty line passed
+  const ready = customerFixture('encounter-ready.json');
+  const partial = customerFixture('encounter-partial.json');
+  assert.deepEqual(failed(vb.checkProgressDom(partial, pageDom(partial), [])), []);
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready, html => html.replace('<strong>Results ready</strong>', '<strong>Processing could not finish</strong>')), [])), ['progress.dom.compact']);
+  assert.deepEqual(failed(vb.checkProgressDom(partial, pageDom(partial, html => html.replace('<strong>Results ready, with a limitation</strong>', '<strong>Results ready</strong>')), [])), ['progress.dom.compact']);
+  const unknown = { ...clone(ready), progress: { ...clone(ready).progress, phase: 'archived' } };
+  assert.ok(failed(vb.checkProgressDom(unknown, pageDom(ready, html => html.replace('data-phase="completed"', 'data-phase="archived"')), [])).includes('progress.dom.compact'));
+});
+
+// The walk of a document that must fail, end to end on the fake site (the refutation's harness, 2026-11-05): a failed
+// encounter served as the operator and customer views serve one.
+function failedSite({ runs = 'none' } = {}) {
+  const site = fakeSite();
+  const f = customerFixture('encounter-failed.json');
+  f.id = site.id;
+  f.state = 'failed'; f.state_label = 'Could not finish'; f.codes = []; f.other_codes = []; f.details_needed = [];
+  f.progress.error = { text: 'We could not read the text of this document. Upload a clearer copy, or paste the text instead.', action: 'new_document' };
+  f.progress.message = f.progress.error.text;
+  f.reports = []; f.readiness = { draft: false, approved: false, blockers: [] };
+  site.state.customer = f;
+  site.state.operator.state = 'extraction_failed';
+  if (runs === 'none') site.state.operator.provider_runs = [];
+  return site;
+}
+
+test('the walk of a document that must fail passes a failed encounter that sent nothing, list contract and probes included', async () => {
+  const { record } = await walkSite(failedSite(), { plan: {}, doc: { expected_failure: 'extraction_failed' } });
+  assert.equal(record.error, null);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => `${a.id}: ${a.reason}`), []);
+  assert.equal(record.result, 'pass');
+  assert.equal(record.failure.provider_runs, 0);
+  for (const id of ['failure.state', 'failure.nothing_sent', 'failure.action', 'progress.dom.leave_note', 'customer.list_contract', 'scan.json']) {
+    assert.ok(record.assertions.some(a => a.id === id && a.status === 'pass'), id);
+  }
+});
+
+test('the walk of a document that must fail fails one that sent requests, one that did not fail, and refuses a foreign attached paste', async () => {
+  const sent = (await walkSite(failedSite({ runs: 'sample' }), { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.equal(sent.result, 'fail');
+  assert.ok(sent.assertions.some(a => a.id === 'failure.nothing_sent' && a.status === 'fail'));
+  const succeeded = (await walkSite(fakeSite(), { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.equal(succeeded.result, 'fail');
+  for (const id of ['failure.state', 'failure.customer']) assert.ok(succeeded.assertions.some(a => a.id === id && a.status === 'fail'), id);
+  const foreign = failedSite();
+  foreign.state.operator.revision.text = 'SYNTHETIC TEST DOCUMENT - a different document altogether\n';
+  const refused = (await walkSite(foreign, { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.match(String(refused.error), /^refusing to act on encounter /);
+  assert.notEqual(refused.result, 'pass');
 });

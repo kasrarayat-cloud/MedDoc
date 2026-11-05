@@ -13,8 +13,43 @@
       "name": "corti",
       "label": "Corti",
       "vendor": "Corti",
-      "model": "corti-coding-v2",
-      "runs": []
+      "model": "",
+      "runs": [
+        {
+          "id": "c0ffee00-0001-4a5b-8c6d-7e8f9a0b1c2d",
+          "state": "succeeded",
+          "sent": true,
+          "mode": "live",
+          "purpose": "primary",
+          "run_identity": "9f8e7d6c-0000-4b3a-8c7d-6e5f4a3b2c1d",
+          "authorization_ref": "owner-ruling-2026-10-23",
+          "requested_by": "CPT Studio review agent (automated agent)",
+          "adapter_version": "corti-coding-v2@cptstudio-1",
+          "endpoint": "https://api.example.invalid/corti/v2/tools/coding/",
+          "requested_model": "",
+          "returned_model": "",
+          "request_id": "req_corti0123456789",
+          "response_id": "",
+          "http_status": 200,
+          "latency_ms": 1201,
+          "usage": {
+            "creditsConsumed": 3
+          },
+          "usage_basis": "provider_reported_credits_not_usd",
+          "estimated_cost_usd": null,
+          "request_sha256": "49bfaf4d68764a867518edb6fc5d5d7999e2d6fa0956f76742c1af516eef5222",
+          "response_sha256": "a33bf3ca8fa85942228cf3638cfd80d2f3e1cecba73c3372a6d38b1470b6335d",
+          "response_bytes": 2048,
+          "created_at": "2026-11-03T22:00:00+00:00",
+          "finished_at": "2026-11-03T22:00:00+00:00",
+          "error": "",
+          "reused_from": null,
+          "reconciled": false,
+          "reading": null,
+          "review": null,
+          "exchanges": []
+        }
+      ]
     },
     {
       "name": "astra",
