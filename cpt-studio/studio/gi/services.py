@@ -270,11 +270,6 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
 ACT_KINDS = tuple(kind for kind, _ in ACTS)
 # Kinds whose mere naming in a sentence is not an act (they name a thing): they are acts only with an act predicate.
 BLEEDING_CONTROL = dict(ACTS)['bleeding_control']
-# Refutation fa-1: a removal stated with no technique named ("No polyps were removed.", "The polyp will be removed at a
-# later date."), read for the procedure line's listed removals only (build: LISTED_WITHHELD_CUE)
-REMOVAL_WORD = _rx(r'\b(?:removed|resected|excised|removal|resection)\b')
-REMOVAL_ACT_KINDS = ('snare', 'hot_biopsy', 'emr', 'esd')
-REMOVAL_READ_CAP = 200  # removal clauses read per document; beyond it the rule decides nothing (the listing stands)
 LISTED_CUE = 'performed: listed on the procedure line'
 LISTED_WITHHELD_CUE = ('uncertain: the report states the act its procedure line lists as not done, failed, planned or '
                        'in doubt')
@@ -4435,9 +4430,6 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # R1c-r3 (round 3, A2): a denial's second reading at the labelled lesion R1c unbinds it from (service draft,
         # act), added once every act is read so no other act's id moves
         second_readings: list = []
-        removal_otherwise: list[int] = []  # refutation fa-1: removals stated not done, failed or planned, no technique
-        removal_done: list[int] = []  # round 2, over-7: and stated done, no technique ("... was removed and retrieved.")
-        removal_reads = [0]  # round 2, cost-1: how many removal clauses were read (REMOVAL_READ_CAP)
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -4456,24 +4448,6 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 continue
             described: Optional[list[int]] = None  # rule 1: _described_starts of this sentence, read when first needed
             cls = clauses_of(ss, read_end)
-            read_clauses: set = set()
-            for rm in REMOVAL_WORD.finditer(text, ss, read_end):
-                rc = _clause_for(cls, rm.start())
-                if rc in read_clauses or removal_reads[0] >= REMOVAL_READ_CAP:
-                    continue  # one reading per clause, at most REMOVAL_READ_CAP (refutation round 2, cost-1)
-                read_clauses.add(rc)
-                if not LESION_NOUN_RX.search(text, rc[0], rc[1]) \
-                        or any(k in REMOVAL_ACT_KINDS and rc[0] <= m0 < rc[1] for k, m0, _ in mentions):
-                    continue  # no lesion removed is named, or its technique is (read as that act below)
-                removal_reads[0] += 1
-                said = read_clause(text, rc, rm.start(), rm.end(), service_date=service_date, dates=dates, part=part,
-                                   in_today_report=part.kind == 'report')
-                if said.status == 'planned' and any(p.search(text, rc[0], rc[1]) for _, _, p in SERVICES):
-                    continue  # planned for another occurrence of a service: no statement about today's (cost-3)
-                if said.status in ('negated', 'cancelled', 'planned') or _attempt_or_failure(said.cues):
-                    removal_otherwise.append(rm.start())
-                elif said.status == 'performed':
-                    removal_done.append(rm.start())
             anatomy_all = [a for a in _anatomy_in(text, ss, read_end)
                            if not any(lo <= a[2] < hi for lo, hi in comparisons)]
             regions = {region for _, region, _, _ in anatomy_all}
@@ -4872,21 +4846,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):
                 d.acts = [a for a in d.acts if a.id != act_id]
         # Harness repair 2026-11-05, refutation fa-1: a procedure line lists what its report documents. Where the report
-        # itself states an act the line lists as planned, attempted, failed or in doubt - or, for a removal, states a
-        # removal of a lesion not done, failed or planned with no technique named ("No polyps were removed.") - and
-        # documents no such act done, the listing establishes nothing: the act stays in doubt (held with a question,
-        # never ready on the line alone). Rule 4 reads a report title the same way. A denial that names the act is the
-        # conflict _conflicts keeps, as before.
-        one_procedure = len([f for f in drafts if f != 'gi.office_em']) == 1
-        capped = removal_reads[0] >= REMOVAL_READ_CAP
+        # itself states an act of the kind the line lists as planned, attempted, failed or in doubt, and documents no
+        # such act done, the listing establishes nothing: the act stays in doubt (held with a question, never ready on
+        # the line alone). Rule 4 reads a report title the same way. A denial that names the act is the conflict
+        # _conflicts keeps, as before. Refutation round 7 (L7-1): the kindless branch - a removal stated with no
+        # technique ("No polyps were removed.") withholding a listed removal - read another lesion's or another date's
+        # removal as today's listed one ("Indication: Prior colonoscopy in 2021; no polyps were removed." made 45378
+        # READY and hid the listed polypectomy). It failed two refutation cycles (round 2's narrowing, round 7) and is
+        # dropped: such a sentence leaves the listing as main reads it.
         for d in drafts.values():
-            # a report of one procedure has no other service its sentences could be about, titled or not (round 2,
-            # cost-2: "No polyps were removed." under an untitled report was outside every scope); the scope test is
-            # read once per draft (cost-1: once per listed act had made an adversarial document time out)
-            def in_scope(positions, d=d):
-                return bool(positions) and (one_procedure or any(lo <= pos < hi for pos in positions
-                                                                 for lo, hi in d.scopes))
-            kindless_otherwise = not capped and in_scope(removal_otherwise) and not in_scope(removal_done)
             body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}
             for i, a in enumerate(d.acts):
                 if a.status != 'performed' or LISTED_CUE not in a.cues or a.kind in body_done:
@@ -4897,8 +4865,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # service ("repeat colonoscopy with snare polypectomy in 3 years")
                 stated = any(b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)
                              for b in d.acts)
-                kindless = a.kind in REMOVAL_ACT_KINDS and not body_done & set(REMOVAL_ACT_KINDS) and kindless_otherwise
-                if stated or kindless:
+                if stated:
                     d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,))
     except _Capped as exc:
         problems.append(str(exc))

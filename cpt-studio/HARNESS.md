@@ -2667,3 +2667,47 @@ marking).
 **Proof:**
 - The package tests and the pins are re-pinned to main's reading (eight edits, each a reading of main's).
 - Run on round 5's code, the round-6 pins fail 19 times, so they detect both releases.
+
+### Refutation round 7 (2026-11-05): the whole remaining diff
+
+After round 6, one read-only lens attacked everything still different from main at `23b9a394`, with three claims:
+- **D1:** nothing READY beyond main, with no exemption left;
+- **D2:** equivalent standards;
+- **D3:** no documented act hidden from completeness that main shows.
+
+D2 held in every participant run. The slowest engine run took 0.02 s. Two blocking findings, both reproduced by the
+author before repair:
+
+| id | input | HEAD | main | cause |
+|---|---|---|---|---|
+| L7-1 | under "Procedure: Colonoscopy with hot snare polypectomy": "Indication: Prior colonoscopy in 2021; no polyps were removed." (also "Two diminutive rectal polyps were not removed.", "A 30 mm rectal lesion was not resected; ...") beside a 9 mm sigmoid polyp | 45378 READY on both paths; completeness complete, the listed polypectomy hidden | 45378 held (base included); the snare listed as not covered | fa-1's kindless branch withheld the listed removal on any removal statement with no technique in a one-procedure report, whatever lesion or date it named |
+| L7-2 | "A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare." (also "Two polyps ...; one was removed by EMR, and the second ... cold snare.", "Two sessile polyps ...: the first ... EMR; the second ... hot snare.") | completeness complete, the second lesion's snare bundled as the EMR's technique | the snare listed as not covered | the reader binds both acts to one lesion when one sentence names two lesions at one site, and `_one_resection` trusted that binding |
+
+**Repaired:**
+- **L7-1: the kindless branch is dropped under the two-cycle rule** (round 2's narrowing, then round 7). A removal
+  stated with no technique leaves the listing as main reads it. The `stated` branch stays: a body act of the listed
+  kind stated against the listing. Probed with another lesion's and another date's same-kind statements, it reads as
+  main does.
+  - **Recorded cost:** round 1's fa-1 forms with no technique return to main's reading. "No polyps were removed." under
+    a listed "hot snare polypectomy" reads the listed code as main does, and the six declared battery movements that
+    branch made are gone.
+  - **Recorded candidate for a later round, not built:** a hold-only listing. A listed removal in doubt would hold both
+    its own code and the diagnostic base, and stay listed in completeness.
+- **L7-2: acts read in separate clauses are one lesion's only at a lesion recorded alone and singular**
+  (`reconcile._one_lesion`). This applies to both bundling rules that trust a shared lesion: the resection's technique
+  and a biopsy of a removed lesion. In doubt the act is its own, as at main: listed, and its code read on its own.
+  - An EMR's own snare in one clause, or in the next sentence about the same single lesion, stays bundled, as directive
+    item 6 asks. Every EmrComponentsTests form still holds.
+
+**Proof:**
+- three mutants killed, restores verified;
+- run on round 6's code, round 7's pins fail seven times.
+
+**The pass ends here, and what that does and does not cover:**
+- Round 7 attacked the whole remaining diff.
+- Its two repairs were not themselves attacked by an independent lens. Both can only move a reading toward main's:
+  - a removed branch is main's reading;
+  - an act no longer bundled is read as main reads every act, which never bundles one. Its code may be READY only as
+    at main, and completeness lists it.
+- What is measured instead: the differential re-runs every input every lens generated in seven rounds, on both paths,
+  against main.

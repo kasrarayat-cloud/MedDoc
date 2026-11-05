@@ -92,6 +92,34 @@ class EmrComponentsTests(SimpleTestCase):
                 self.assertEqual(by_astra, [READY])
 
 
+class SecondLesionInOneSentenceTests(SimpleTestCase):
+    """Refutation round 7 (L7-2): the reader binds two acts to one lesion whenever one sentence names two lesions at one
+    site, so a second lesion's snare removal (or biopsy) had been bundled into the first lesion's EMR (or removal) and
+    hidden from completeness. Acts read in separate clauses are one lesion's only at a lesion recorded alone and
+    singular (reconcile._one_lesion); in doubt the act is its own, as at main."""
+    LINES = ('A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare.',
+             'Two polyps were found in the ascending colon; one was removed by EMR, and the second was removed with a '
+             'cold snare.',
+             'Two sessile polyps in the transverse colon: the first was resected by EMR; the second was removed with a '
+             'hot snare.')
+
+    def test_a_second_lesions_snare_is_never_bundled_into_the_emr(self):
+        for line in self.LINES:
+            with self.subTest(line):
+                text = COLON + line + '\n'
+                result = run(text, corti(('45390', span(text, line))))
+                self.assertNotEqual(result.completeness['state'], 'complete_pending_review')
+                self.assertNotIn('snare', [b['act'] for b in result.completeness['bundled']])
+                self.assertTrue(any('snare' in u['label'] for u in result.completeness['unresolved_items']))
+
+    def test_a_second_lesions_biopsy_is_never_bundled_into_the_removal(self):
+        line = 'A 25 mm lesion in the cecum was biopsied, and a 4 mm polyp in the cecum was removed with a cold snare.'
+        text = COLON + line + '\n'
+        result = run(text, corti(('45385', span(text, line))))
+        self.assertNotIn('biopsy', [b['act'] for b in result.completeness['bundled']])
+        self.assertTrue(any('biops' in u['label'] for u in result.completeness['unresolved_items']))
+
+
 class BiopsyOfRemovedLesionTests(SimpleTestCase):
     """The biopsy of a recorded lesion then removed is part of the removal (round 1's multi-2 rule, LESION_SITED, was
     dropped in round 2: its unrecorded forms are RecordedResidualTests)."""
@@ -680,18 +708,46 @@ class ProcedureLineTests(SimpleTestCase):
     def test_a_listed_removal_the_report_denies_defers_doubts_or_fails_is_never_ready(self):
         untitled = self.HEAD.replace('Colonoscopy report (fictional)\n', '')
         for head in (self.HEAD, untitled):
-            for last in ('No polyps were removed.', 'Hot snare polypectomy failed.',
+            for last in ('Hot snare polypectomy failed.',
                          'The polyp will be removed by hot snare at a later date.',
                          'Plan: the polyp will be removed by hot snare at a later date.',
                          'Polypectomy will be performed at a later date.',
                          'It is unclear whether hot snare polypectomy was performed.',
-                         'Hot snare polypectomy may have been performed.',
-                         'The polyp was not removed.', 'The polyp will be removed at a later date.'):
+                         'Hot snare polypectomy may have been performed.'):
                 with self.subTest(last, titled=head == self.HEAD):
                     text = head + last + '\n'
                     by_corti, by_astra = both(text, '45385', self.LINE, primary=[('45378', CECUM)])
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
+
+    def test_a_removal_with_no_technique_reads_as_main_reads_it(self):
+        # refutation round 7 (L7-1): the withheld listing's kindless branch read another lesion's or another date's
+        # "not removed" as today's listed removal and made 45378 READY; it failed two cycles and is dropped. A removal
+        # stated not done with no technique named now leaves the listing as main reads it (ACCURACY-RESIDUALS.md,
+        # round 7): pinned under the equivalent standard
+        untitled = self.HEAD.replace('Colonoscopy report (fictional)\n', '')
+        for head in (self.HEAD, untitled):
+            for last in ('No polyps were removed.', 'The polyp was not removed.',
+                         'The polyp will be removed at a later date.'):
+                with self.subTest(last, titled=head == self.HEAD):
+                    by_corti, by_astra = both(head + last + '\n', '45385', self.LINE, primary=[('45378', CECUM)])
+                    if READY in by_astra:
+                        self.assertIn(READY, by_corti)
+
+    def test_another_lesions_or_dates_removal_never_withholds_todays_listing(self):
+        # L7-1 itself: the listed polypectomy stays listed and the diagnostic code stays held, as at main
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+                'Date of service: 2026-10-14\nProcedure: Colonoscopy with hot snare polypectomy\n'
+                'The colonoscope was advanced to the cecum and the examination was completed.\n')
+        for body in ('Indication: Prior colonoscopy in 2021; no polyps were removed.\n'
+                     'Findings: A 9 mm polyp in the sigmoid colon.\n',
+                     'Findings: A 9 mm polyp in the sigmoid colon.\nTwo diminutive rectal polyps were not removed.\n',
+                     'Findings: A 9 mm polyp in the sigmoid colon.\nA 30 mm rectal lesion was not resected; it was '
+                     'referred for surgery.\n'):
+            with self.subTest(body):
+                result = run(text + body, corti(('45378', span(text + body, CECUM))))
+                self.assertNotIn(READY, outcome(result, '45378'))
+                self.assertIn('snare', ' '.join(u['label'] for u in result.completeness['unresolved_items']))
 
     def test_a_listed_stent_the_report_says_failed_is_never_ready(self):
         text = ERCP.replace('Procedure: ERCP', 'Procedure: ERCP with biliary stent placement') \
