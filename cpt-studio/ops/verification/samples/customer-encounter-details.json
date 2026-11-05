@@ -203,7 +203,12 @@
       "family_label": "Encounter",
       "prompt": "Which date of service applies?",
       "control": "date",
-      "choices": [],
+      "choices": [
+        {
+          "value": "use_document",
+          "label": "Use document date"
+        }
+      ],
       "allow": [],
       "document_value": "2026-11-03",
       "entered_value": "2026-11-02",
