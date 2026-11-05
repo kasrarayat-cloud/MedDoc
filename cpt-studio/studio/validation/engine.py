@@ -1152,7 +1152,7 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
             old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
-        if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
+        if holds and old.state == 'uncertain' and _negation_resolved(doubt, found, code):
             # The routing-era reader left a negation unresolved ("was complete and was not discontinued") in a passage
             # the documented-service reader reads, clause by clause, as this service's own positive statement: the doubt
             # is that reader's, not the document's. A hedge, a denial or a cancellation still holds.
@@ -1704,9 +1704,16 @@ def _readers_own(reading: checks.Reading) -> bool:
     return reading.status == 'uncertain' and bool(doubts) and all(c.startswith(DOUBT_PREFIX) for c in doubts)
 
 
-def _negation_resolved(doubt: checks.Reading, found: reconcile.Match) -> bool:
+def _negation_resolved(doubt: checks.Reading, found: reconcile.Match, code: str = '') -> bool:
     """The doubt is only an unresolved negation, and the passage is part of the service's positive reading (its
-    statement of performance, a performed act, or a completion read as complete), never of anything it denies."""
+    statement of performance, a performed act, or a completion read as complete), never of anything it denies.
+
+    Harness repair 2026-11-05 (stage 3): a not-done act the passage overlaps refuses the release only where it is of a
+    kind ``code`` accounts for (a base code, which accounts for no act kind, keeps the rule for every act). One of
+    another kind - "... was sampled with cold biopsy forceps for histology; it was not excised by snare." for the
+    biopsy code - is that other act's denial, never a doubt about this one, but only where the documented-service
+    reader reads in that same passage an act of the code's own kind as performed: a denial of another act never makes
+    the code's own act done ("... was seen; it was not excised by snare." still holds the biopsy code)."""
     if not any(c.startswith(DOUBT_PREFIX) for c in doubt.cues) or doubt.start is None:
         return False
     service = found.service
@@ -1714,11 +1721,19 @@ def _negation_resolved(doubt: checks.Reading, found: reconcile.Match) -> bool:
     if service.completion == 'complete':
         positive += list(service.completion_evidence)
     positive += [ev for a in service.acts if a.status == 'performed' for ev in a.evidence]
-    other = [ev for a in service.acts if a.status != 'performed' for ev in a.evidence]
+    profile = reconcile.catalogue.code_profile(code) if code else None
+    kinds = set(profile.covers) if profile is not None else set()
 
     def overlaps(spans):
         return any(doubt.start < t.end and t.start < doubt.end for t in spans)
-    return overlaps(positive) and not overlaps(other)
+    blocking = [ev for a in service.acts if a.status != 'performed' and (not kinds or a.kind in kinds)
+                for ev in a.evidence]
+    another_kind = [ev for a in service.acts if a.status != 'performed' and kinds and a.kind not in kinds
+                    for ev in a.evidence]
+    own_kind_done = [ev for a in service.acts if a.status == 'performed' and a.kind in kinds for ev in a.evidence]
+    if not overlaps(positive) or overlaps(blocking):
+        return False
+    return not overlaps(another_kind) or overlaps(own_kind_done)
 
 
 def _states_unread_act(reading: checks.Reading, found: reconcile.Match, code: str, text: str) -> bool:
