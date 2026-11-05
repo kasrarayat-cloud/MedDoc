@@ -1236,3 +1236,14 @@ HARNESS.md, "Refutation round 2 (2026-11-05)".
 | a denial of a listed removal the readers leave unread | "The snare could not capture the polyp."; "Polyps removed: none."; "The polyp will be removed by EMR at a later date." under a snare listing | 45385 READY on the listing | no act of the listed kind and no removal statement is read |
 | two dilations told in one sentence | "The distal esophageal stricture was dilated with an 18 mm balloon, and a separate pyloric stricture was dilated with a 15 mm balloon." with 43249 and 43245 | both alternatives, the EGD uncoded (a hold) | both codes' passages show both acts, so they compete; CPT Studio never chooses between them |
 | a decompression in an ERCP, an EUS or an enteroscopy | "The distended stomach was decompressed for a gastric volvulus before withdrawal." in an ERCP | not listed, as at main | listing it read an ERCP stent placed "for biliary decompression" as an act left open |
+
+## Harness repair, refutation round 3 (2026-11-05): what the reversions toward main leave
+
+HARNESS.md, "Refutation round 3 (2026-11-05)". Round 3 reverted three releasing rules toward main. What they leave is
+main's own reading, plus one cost on the motivating encounter:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a code's own act beside another act's denial in one passage is held, as main holds it | 88d9db32: "... was sampled with cold biopsy forceps for histology; it was not excised by snare." | Corti's 45380 held (a performed-status question); the member's path is an addendum or a rejection, since this release offers no reviewer confirmation | setting the other act's denial apart believed acts done "at the referring facility", "elsewhere", "historically" or "unsuccessfully" through three rounds |
+| the package's coordinated marking outside its own shape | "marked with 3 mL of India ink and not resected"; "marked distally with tattoo ink and not resected"; "marked with submucosal tattoo for future localization and not resected" alone | 45381 held or excluded, as main reads it | the shape's widenings released forms where no tattoo was placed; a hold is the safe side |
+| a decompression's bare verb outside a failure or attempt frame | "The sigmoid volvulus was detorsed, decompressing the colon." | not read as an act, as at main | reading the bare verb made 45393 and 45337 READY on plans, drugs and tubes |

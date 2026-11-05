@@ -2431,3 +2431,81 @@ added for each, and all twenty-nine are killed.
 - round 1's repairs as they now stand;
 - round 2's inputs, with their controls that must stay READY;
 - `RecordedResidualTests`.
+
+### Refutation round 3 (2026-11-05): a differential check over round 2's rules, and where the pass stops
+
+One read-only lens attacked only round 2's changed rules at `40e183346` (the round-2 repair `90856a7d8` plus a
+checklist-only commit). It tested two differential claims over 306 generated inputs, each on both paths and with and
+without a primary code, against main `8645fd54`:
+- **D1:** no code READY at the head that main does not read READY, apart from the repair package's own marking forms;
+- **D2:** a participant's code READY only where Corti's selection of the same passages is READY.
+
+**D2 held** in all 612 runs. **D1 failed** in three blocking families, each a releasing rule that went beyond main:
+- **LENS-1:** round 2's decompression verb forms made "Neostigmine was given to decompress the colon." and "We elected
+  to decompress the colon at a later date." READY as 45393 or 45337.
+- **LENS-2:** the package's coordinated "marked ... and not resected", as round 2 widened it, released forms where no
+  tattoo was placed: "marked with a photo of the tattoo", "marked with a clip since the tattoo ink ran out", "marked
+  with India ink at the referring facility".
+- **LENS-3:** the stage-3 negation release, as round 2 narrowed it, still believed the code's own act where the reader
+  misses a place or time: "it was biopsied at the referring facility ...; it was not snared".
+
+**Repaired, each toward main:**
+- **The negation release is main's rule, exactly.** The function body is byte-identical to main's apart from its
+  docstring. The stage-3 exception, narrowed twice, is dropped under the two-cycle rule.
+  - The cost is recorded: 88d9db32's own passage "... was sampled with cold biopsy forceps for histology; it was not
+    excised by snare." holds Corti's 45380 again.
+  - The package's correct reading of the snare's denial meets main's conservative release there.
+  - This release offers no reviewer confirmation, so the member's path is an addendum or a rejection.
+- **The decompression vocabulary is main's.** The verb's bare form is read only right after a failure or attempt frame
+  (`ATTEMPT_FRAME`: "unable to", "failed to", "could not", "cannot", "attempted to"), where its act is in doubt:
+  listed or held, never READY. That keeps round 2's directive-named class ("We were unable to decompress the stomach."
+  is listed).
+- **The package's coordinated-denial branch is read at the package's own shape only.**
+  - "marked with [a, an or the] [one of the marker's own descriptors] tattoo / India ink" (`MARKED_WITH`, fail-closed);
+  - nothing but the marker's head noun and its purpose before "and not resected" (`MARKED_TO_DENIAL`).
+
+  The package's binding tests pass. That includes 88d9db32's 45381 structure: an injected tattoo, then "marked with
+  submucosal tattoo for future localization and not resected today" reads no false conflict. Forms outside the shape
+  read as main reads them: held. That covers "marked with 3 mL of India ink", "marked distally with tattoo ink" and
+  "a hypothetical tattoo".
+
+**Measured after round 3's repairs.**
+- **The lens's whole corpus, re-run on the repaired tree against main (651 rows):** 0 D1 flags and 0 D2 flags.
+- **Mutation proofs:** five mutants, one per round-3 rule. All are killed, and the working tree's diff digest is the
+  same before and after.
+
+**Where the pass stops, and why.**
+- Round 3's repairs are reversions to main's own rules, or rules that only hold or list:
+  - the fail-closed modifier list;
+  - the purpose-only gap before the denial;
+  - the frame-bound verb.
+- None of them can make a code READY that main does not.
+- The lens's whole corpus confirms that, and the two claims are now properties the pins assert (D2 in
+  `RecordedResidualTests`).
+- Round 1's and round 2's remaining phrase-level rules are holding rules, or return toward main. Every releasing rule
+  either converged or was dropped under the two-cycle rule. A further round would attack holding rules, whose failure
+  mode is a hold on the safe side.
+- **The releasing rules kept beyond main are the repair package's own**, both asked for by the owner's package:
+  - its purpose rule ("for future localization" is a completed marking's purpose, never its time), narrowed in round 1
+    (time-1: a participle governed by be/is/are/am/to/being states no completed marking);
+  - its coordinated denial, at its exact shape.
+
+  P-ADMIT itself is the directive's authorized change, and D2 bounds it. Admitting codes for two different acts
+  releases nothing Corti's own selection of each would not.
+
+**Superseded in round 2's section above (kept, not rewritten):**
+- the negation release's `OWN_CLAUSE_DENIAL` (dropped: main's rule);
+- "'Marked': the marker may stand anywhere in its own instrument phrase" (now the package's exact shape);
+- "Decompression: the verb's own inflections are read" (now only in a failure or attempt frame).
+
+**Measured on the round-3 tree.**
+- **Full Linux suite:** 5,893 Django tests OK, ops 524, verification 43, node 131, 63 and 135 (run6, 14:04-14:18Z).
+- **H4 battery against main:** the same six declared movements (R8 D3 N9, N15, N17), 0 undeclared, 0 new violations.
+- **H1 replay:** differs by the version labels alone.
+- **88d9db32, re-assessed offline from its retained responses, nothing sent:**
+  - 45381, 43239 (Corti), 43249, 45390 and 45385 (Astra and Fable) are ready;
+  - Corti's 45380 is held with one performed-status question;
+  - the decompression is listed as unsupported, and the encounter reads needs_clarification;
+  - provider runs 107 → 107 and sends 97 → 97;
+  - the tables move by studio_assessment +1, studio_proposal +26, studio_clarification +1, studio_job +1,
+    studio_routingrun +1 and studio_auditevent +2, and by nothing else.

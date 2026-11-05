@@ -257,8 +257,7 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
                          r'established|old|healed|well-healed)\s+){1,3}(?:gastrostomy\s+)?(?:tract|stoma)\b'),
     ('myotomy', r'\bmyotom(?:y|ies)\b'),
     ('tube_placement', r'\b(?:decompression|rectal|colonic)\s+tube\b'),
-    # the verb's own inflections too (refutation round 2, esc-7: "We were unable to decompress the stomach.")
-    ('decompression', r'\bdecompress(?:ion|ed|es|ing)?\b(?!\s+tube)'),
+    ('decompression', r'\bdecompress(?:ion|ed)\b(?!\s+tube)'),
     ('fundoplication', r'\btransoral\s+(?:incisionless\s+)?fundoplication\b|\bTIF\b'),
     ('capsule_study', r'\bcapsule\b'),
     ('manometry', r'\bmanometr(?:y|ic)\b|\bmotility\s+study\b|\bHRM\b'),
@@ -435,9 +434,10 @@ def _not_on_another_predicate(text: str, neg: int, end: int, *, start: Optional[
         return False
     if not re.match(r'not\s+(?:removed|resected|excised)\b', text[neg:], FLAGS):
         return False
-    if re.search(r'\b(?:that|which|who|whose)\b|\b(?:was|were|is|are|been)\b', between, FLAGS):
-        # refutation neg-2: "marked with tattoo ink that was unavailable and not resected" - a predicate of its own
-        # between the marker and the denial: the coordinated denial is not set apart from the marking
+    if not MARKED_TO_DENIAL.fullmatch(between):
+        # refutation neg-2 and round 3 (LENS-2): between the marker and the coordinated denial, nothing but the
+        # marking's own purpose ("for future localization"): never a predicate of its own ("ink that was unavailable"),
+        # a place or provider ("at the referring facility"), or another clause ("since the tattoo ink ran out")
         return False
     return _marking_link(text, clause_start, neg, start, end, allow_marked=True)
 
@@ -448,13 +448,18 @@ PLACED_MARKER_PREDICATE = _rx(r'\b(?:(?:was|were)\s+(?:(?:then|also|successfully
                               r'|(?:injected|tattooed)(?=\s+(?:with|using|into|in|at|for|and|but)\b))')
 # Future localization is the purpose of a completed marking, not the time it was placed. This never masks the
 # marking's own modal, plan or denial, nor an act named inside the purpose ("for future resection").
-MARKED_ONLY = _rx(r'(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked')
-# the marker inside the marking's own instrument phrase ("marked with 3 mL of India ink", "marked distally with tattoo
-# ink"): no clause break, coordinator or predicate between (refutation round 2, over-8: the package's own forms)
-MARKED_WITH = _rx(r'(?:\s+[a-z]+ly)?\s+(?:with|using|by)\b(?:(?!\b(?:and|or|but|nor|then|which|that|who|was|were|is|are'
-                  r'|been)\b)[^,;:.()"\n]){0,60}')
 MARKING_PURPOSE = _rx(r'\bfor\s+(?:the\s+)?(?P<time>future|next)\s+'
                       r'(?:locali[sz]ation|identification|recognition)\b')
+# Refutation round 3 (LENS-2): "marked" names a tattoo placed only where the tattoo heads the marking's own instrument
+# phrase - "marked with tattoo", "marked with submucosal tattoo", "marked with India ink", at most an article and one of
+# the marker's own descriptors between - and the coordinated denial follows it with nothing but the marking's own purpose between.
+# A clip, a photo, a label, a sketch or a place before or after the marker is never that tattoo (rounds 1 to 3).
+MARKED_ONLY = _rx(r'(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked')
+# the one modifier is one of the marker's own descriptors, fail-closed: any other word ("a hypothetical tattoo", "a
+# label reading tattoo") leaves the coordinated form as main reads it, held (round 3, the differential's mk40)
+MARKED_WITH = _rx(r'\s+(?:with|using)\s+(?:(?:an?|the)\s+)?(?:(?:submucosal|carbon|spot|sterile|permanent|black|endoscopic)\s+)?')
+MARKED_TO_DENIAL = _rx(r'\s*(?:ink\s+)?(?:for\s+(?:the\s+)?(?:(?:future|next|later)\s+)?'
+                       r'(?:locali[sz]ation|identification|recognition)\s+)?and\s+')
 
 
 def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_marked: bool = False) -> bool:
@@ -464,15 +469,13 @@ def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_m
                for kind, pattern in ACTS):
         return False
     # "Marked" alone might describe a specimen label, diagram or another administrative act. It can tell a
-    # coordinated tissue-removal denial apart, but never dates or establishes an injection as performed.
+    # coordinated tissue-removal denial apart only at the package's own shape (MARKED_WITH, MARKED_TO_DENIAL), and it
+    # never dates or establishes an injection as performed.
     predicates = MARKING_PREDICATE if allow_marked else PLACED_MARKER_PREDICATE
     for marking in predicates.finditer(text, cs, limit):
         if _unstated_marking(text, marking):
             continue  # "to be injected", "is injected": no completed marking, so neither its purpose nor its denial is one
         if MARKED_ONLY.fullmatch(marking.group(0)):
-            # Refutation neg-2: "marked" names a tattoo placed only as its instrument ("was marked with tattoo"), never
-            # a tattoo named as the subject's place ("The tattoo site ... was marked with a clip") or a label
-            # ('was marked "tattoo site"', "marked on the diagram as the tattoo location")
             if marking.end() <= pos and MARKED_WITH.fullmatch(text, marking.end(), pos):
                 return True
             continue
@@ -532,6 +535,9 @@ ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain
 # an act's own verb right after a failure frame: "unable to", "not able to", "failed to", "could not", "cannot"
 FAILURE_FRAME = _rx(r"\b(?:(?:unable|not\s+able|failed|fails|failing)\s+to|could\s+not|couldn['\u2019]t|cannot|can\s+not)"
                     r"\s+$")
+DECOMPRESS_VERB = _rx(r'\bdecompress\b')
+ATTEMPT_FRAME = _rx(r"\b(?:(?:unable|not\s+able|failed|fails|failing)\s+to|could\s+not|couldn['\u2019]t|cannot|can\s+not"
+                    r"|attempts?\s+to|attempted\s+to)\s+$")
 
 
 def _attempt_or_failure(cues) -> bool:
@@ -3391,6 +3397,13 @@ def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -
                 continue
             (attributive if _attributive_compound(text, m.start(), m.end()) else found).append(
                 (kind, m.start(), m.end()))
+    for m in DECOMPRESS_VERB.finditer(text, start, end):
+        # refutation round 3: the verb's bare form only inside a failure or attempt frame ("We were unable to decompress
+        # the stomach.", "An attempt to decompress ... was unsuccessful.") - an act in doubt, listed or held, never READY;
+        # elsewhere ("elected to decompress", "given to decompress") it is no act mention (LENS-1)
+        if ATTEMPT_FRAME.search(text, max(start, m.start() - 40), m.start()) \
+                and not any(a < m.end() and m.start() < b for _, a, b in found + attributive):
+            found.append(('decompression', m.start(), m.end()))
     if doubtful is not None:
         doubtful.extend(sorted((x for x in attributive if not _attributive_position(text, x[2])), key=lambda x: x[1]))
     return sorted(found, key=lambda x: x[1])

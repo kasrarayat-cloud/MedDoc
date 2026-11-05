@@ -205,7 +205,10 @@ class NegationReleaseTests(SimpleTestCase):
                      'nothing was sent for biopsy; it was not snared.', 'biopsies taken: 0; it was not snared.',
                      'it was sampled with cold biopsy forceps, which yielded nothing; it was not snared.',
                      'it was sampled with cold biopsy forceps, which retrieved no tissue; it was not snared.',
-                     'it was sampled with cold biopsy forceps, with no tissue obtained; it was not snared.'):
+                     'it was sampled with cold biopsy forceps, with no tissue obtained; it was not snared.',
+                     # round 3, LENS-3: an act done elsewhere, historically or unsuccessfully, beside another's denial
+                     'it was biopsied at the referring facility, showing a tubular adenoma; it was not snared.',
+                     'cold forceps biopsies were taken from it elsewhere; it was not snared.'):
             with self.subTest(body):
                 line = self.LEAD + body
                 by_corti, by_astra = both(COLON + line + '\n', '45380', line)
@@ -255,7 +258,16 @@ class TattooPlaceTests(SimpleTestCase):
                      'Specimen jar A was marked "tattoo" and not resected.',
                      'The lesion in the ascending colon was marked as tattoo-free and not resected.',
                      'A 5 mm polyp adjacent to the tattoo was removed with a cold snare.',
-                     'The tattoo site was biopsied.'):
+                     'The tattoo site was biopsied.',
+                     # round 3, LENS-2: no tattoo placed today, the marker outside the package's shape
+                     'The lesion in the ascending colon was marked with a clip since the tattoo ink ran out and not '
+                     'resected.',
+                     'The lesion in the ascending colon was marked with a photo of the tattoo and not resected.',
+                     'The lesion in the ascending colon was marked with a clip since tattoo ink had run out and not '
+                     'resected.',
+                     'The lesion in the ascending colon was marked with India ink at the referring facility and not '
+                     'resected.',
+                     'The lesion in the ascending colon was marked with a label reading tattoo and not resected.'):
             with self.subTest(line):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
                 self.assertNotIn(READY, by_corti)
@@ -263,16 +275,34 @@ class TattooPlaceTests(SimpleTestCase):
 
     def test_a_tattoo_placed_stays_ready(self):
         for line in ('The lesion in the ascending colon was marked with tattoo for localization and not resected.',
+                     'The lesion in the ascending colon was marked with tattoo ink and not resected.',
+                     'The lesion in the ascending colon was marked with India ink and not resected.',
+                     'The lesion in the ascending colon was tattooed and not resected.',
                      'A tattoo was placed distal to the lesion in the ascending colon.',
-                     'India ink was injected adjacent to the polyp in the ascending colon.',
-                     # round 2, over-8: the repair package's own forms
-                     'The lesion in the ascending colon was marked with 3 mL of India ink and not resected.',
-                     'The lesion in the ascending colon was marked with three injections of tattoo ink and not resected.',
-                     'The lesion in the ascending colon was marked distally with tattoo ink and not resected.'):
+                     'India ink was injected adjacent to the polyp in the ascending colon.'):
             with self.subTest(line):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
                 self.assertEqual(by_corti, [READY])
                 self.assertEqual(by_astra, [READY])
+
+
+class MarkedShapeTests(SimpleTestCase):
+    """Round 3: the repair package's coordinated "marked ... and not resected" is read at the package's own shape only
+    (the tattoo heading the instrument phrase, nothing but its purpose before the denial). Round 2's over-8 forms fall
+    outside it and read as main reads them: held, never ready - a hold on the safe side, recorded."""
+
+    def test_a_marker_outside_the_packages_shape_is_held(self):
+        for line in ('The lesion in the ascending colon was marked with 3 mL of India ink and not resected.',
+                     'The lesion in the ascending colon was marked with three injections of tattoo ink and not resected.',
+                     'The lesion in the ascending colon was marked distally with tattoo ink and not resected.',
+                     # the package's own design: "marked" never dates an injection, so its "future" stays a plan here
+                     # (the package's test cites the injected sentence beside it, which stays ready)
+                     'The lesion in the ascending colon was marked with submucosal tattoo for future localization and not '
+                     'resected.'):
+            with self.subTest(line):
+                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
 
 
 class LesionOwnershipTests(SimpleTestCase):
@@ -392,6 +422,7 @@ class DecompressionTests(SimpleTestCase):
         for line in ('Decompression of the stomach was attempted but failed.',
                      'Gastric decompression was attempted but failed.',
                      'Decompression of the gastric volvulus was attempted, without success.',
+                     # round 3: the verb's bare form only in a failure or attempt frame
                      'We were unable to decompress the stomach.', 'An attempt to decompress the stomach was unsuccessful.',
                      'Gastric decompression could not be achieved.', 'The stomach could not be decompressed.',
                      'Decompression of the stomach was not successful.', 'The stomach was decompressed.'):
@@ -406,6 +437,23 @@ class DecompressionTests(SimpleTestCase):
                      'If the stomach becomes distended, decompression will be performed.'):
             with self.subTest(line):
                 self.assertNotIn(('decompression', 'unsupported'), self.unresolved(line)[1])
+
+    def test_the_verbs_bare_forms_never_make_a_decompression_code_ready(self):
+        # round 3, LENS-1: reading "to decompress" made 45393 and 45337 READY where main held them (a plan, a drug, a
+        # rectal tube); the bare forms are not read, and "We were unable to decompress the stomach." is recorded
+        sig = COLON.replace('Colonoscopy report', 'Flexible sigmoidoscopy report').replace(
+            'Procedure: Colonoscopy', 'Procedure: Flexible sigmoidoscopy').replace(
+            'The colonoscope was advanced to the cecum and the examination was completed.',
+            'The sigmoidoscope was advanced to the descending colon.')
+        for head, which, line in ((COLON, '45393', 'We elected to decompress the colon at a later date.'),
+                                  (COLON, '45393', 'The patient was sent for surgery to decompress the colon.'),
+                                  (COLON, '45393', 'Neostigmine was given to decompress the colon.'),
+                                  (COLON, '45393', 'The nurse placed a rectal tube to decompress the colon.'),
+                                  (sig, '45337', 'Neostigmine was given to decompress the colon.')):
+            with self.subTest(line, code=which):
+                by_corti, by_astra = both(head + line + '\n', which, line)
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
 
     def test_a_stent_placed_for_biliary_decompression_opens_nothing(self):
         stent = 'A 10 Fr plastic biliary stent was placed for biliary decompression.'

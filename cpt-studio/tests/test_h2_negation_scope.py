@@ -1,6 +1,9 @@
-"""Harness repair 2026-11-05, stage 3: the routing-era reader's unresolved negation is released only where the
-documented-service reader reads the passage as the service's positive reading and no not-done act of a kind the code
-accounts for overlaps it (engine._negation_resolved). Real engine, no provider or database calls."""
+"""Harness repair 2026-11-05, stage 3, as refutation round 3 left it: the routing-era reader's unresolved negation is
+released only where the documented-service reader reads the passage as the service's positive reading and no not-done
+act overlaps it - main's rule, exactly (engine._negation_resolved). Stage 3 had set another act's denial apart where the
+code's own act read as performed in the passage; three refutation rounds found it believed acts done "at the referring
+facility", "elsewhere", "historically" or "unsuccessfully", so it is dropped under the two-cycle rule, and the 88d9db32
+shape below is held again (HARNESS.md, "Refutation round 3"). Real engine, no provider or database calls."""
 
 from django.test import SimpleTestCase
 
@@ -23,9 +26,11 @@ class OtherKindDenialTests(SimpleTestCase):
     BODY = ('In the distal rectum, a discrete 5 mm erythematous mucosal patch, separate from the sigmoid polyp, was '
             'sampled with cold biopsy forceps for histology; it was not excised by snare.')
 
-    def test_the_biopsy_stands_beside_the_denied_snare(self):
+    def test_the_biopsy_beside_the_denied_snare_is_held_as_main_holds_it(self):
+        # stage 3 pinned READY here; round 3 restored main's release, so the package's correct reading of the snare's
+        # denial ("not excised by snare") holds the biopsy code beside it (a hold, recorded as 88d9db32's cost)
         p = assess(self.BODY, '45380', 'cold biopsy forceps for histology; it was not excised by snare.')
-        self.assertEqual(p.status, 'ready', [c.detail for c in p.checks if c.id == 'service.status'])
+        self.assertEqual(p.status, 'needs_clarification', [c.detail for c in p.checks if c.id == 'service.status'])
 
     def test_the_denied_snare_still_holds_a_snare_code(self):
         # the not-done act is of the code's own kind: the release is refused, as before
