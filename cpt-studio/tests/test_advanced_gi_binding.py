@@ -29,27 +29,33 @@ def assess_body(body, codes):
 
 
 class TattooPredicateTests(SimpleTestCase):
+    # The first three, and test_bare_completed_marking_keeps_its_own_purpose below, were the package's two releases:
+    # harness repair round 6: the repair package's coordinated-denial and purpose rules failed two refutation cycles of their whole-sentence form and are dropped (HARNESS.md "Refutation round 6"); this pins main's reading, the live revision's. The rest are the package's holds, kept.
+
     def test_nominal_tattoo_and_its_purpose_do_not_inherit_resection_denial(self):
         body = ('Carbon tattoo ink was injected into the transverse colon submucosa. '
                 'The transverse colon lesion was marked with submucosal tattoo for future localization '
                 'and not resected today.')
         inv = inventory(body)
-        self.assertFalse(inv.conflicts, inv.conflicts)
-        self.assertFalse([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
+        # main's reading: the coordinated denial reaches the marking's tattoo, which conflicts with the injection
+        self.assertEqual(len(inv.conflicts), 1, inv.conflicts)
+        self.assertTrue([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
         result = assess_body(body, [('45381', 'Carbon tattoo ink was injected into the transverse colon submucosa.')])
-        self.assertEqual(proposal(result, '45381').status, 'ready')
+        self.assertEqual(proposal(result, '45381').status, 'needs_clarification')
 
     def test_future_purpose_does_not_date_a_completed_injection(self):
         body = 'Tattoo ink was injected into the transverse colon submucosa for future localization.'
         tattoo = [a for a in colon(inventory(body)).acts if a.kind == 'tattoo']
         self.assertTrue(tattoo)
-        self.assertEqual({a.status for a in tattoo}, {'performed'})
+        # main's reading: "future" dates the act as planned, and the code is excluded
+        self.assertEqual({a.status for a in tattoo}, {'planned'})
         result = assess_body(body, [('45381', body)])
-        self.assertEqual(proposal(result, '45381').status, 'ready')
+        self.assertNotEqual(proposal(result, '45381').status, 'ready')
 
     def test_noun_tattoo_does_not_inherit_a_tissue_resection_denial(self):
         body = 'The transverse colon lesion was marked with tattoo and not resected today.'
-        self.assertFalse([a for a in colon(inventory(body)).acts if a.kind == 'tattoo' and a.status == 'negated'])
+        # main's reading: the coordinated denial reaches the tattoo
+        self.assertTrue([a for a in colon(inventory(body)).acts if a.kind == 'tattoo' and a.status == 'negated'])
 
     def test_future_tattoo_stays_planned(self):
         body = 'Tattoo ink will be injected into the transverse colon submucosa for future localization.'
@@ -93,7 +99,8 @@ class TattooPredicateTests(SimpleTestCase):
     def test_bare_completed_marking_keeps_its_own_purpose(self):
         body = ('Tattoo ink was injected into the transverse colon submucosa. '
                 'Transverse colon lesion marked with submucosal tattoo for future localization and not resected today.')
-        self.assertFalse(inventory(body).conflicts)
+        # main's reading (the package's release dropped, round 6): one tattoo conflict
+        self.assertEqual(len(inventory(body).conflicts), 1)
 
     def test_marking_an_object_does_not_establish_a_clinical_tattoo(self):
         for body in (

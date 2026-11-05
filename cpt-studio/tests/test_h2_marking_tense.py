@@ -40,9 +40,11 @@ class MarkingTenseTests(SimpleTestCase):
                 self.assertNotIn(('selected', 'ready'), by_corti)
                 self.assertNotIn(('selected', 'ready'), by_astra)
 
-    def test_a_completed_marking_keeps_its_purpose(self):
+    def test_a_completed_marking_with_a_future_purpose_reads_as_main_reads_it(self):
+        # the package's purpose rule failed two refutation cycles of its whole-sentence form and is dropped (round 6):
+        # "for future localization" dates even a completed injection as planned, as at main and the live revision
         for line in DONE:
             with self.subTest(line):
                 by_corti, by_astra = outcomes(line)
-                self.assertEqual(by_corti, [('selected', 'ready')])
-                self.assertEqual(by_astra, [('selected', 'ready')])
+                self.assertNotIn(('selected', 'ready'), by_corti)
+                self.assertNotIn(('selected', 'ready'), by_astra)

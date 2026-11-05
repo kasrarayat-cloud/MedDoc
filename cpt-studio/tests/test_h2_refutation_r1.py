@@ -274,10 +274,9 @@ class TattooPlaceTests(SimpleTestCase):
                 self.assertNotIn(READY, by_astra)
 
     def test_a_tattoo_placed_stays_ready(self):
-        for line in ('The lesion in the ascending colon was marked with tattoo for localization and not resected.',
-                     'The lesion in the ascending colon was marked with tattoo ink and not resected.',
-                     'The lesion in the ascending colon was marked with India ink and not resected.',
-                     'The lesion in the ascending colon was tattooed and not resected.',
+        # round 6: the package's coordinated "marked with tattoo ... and not resected" is dropped and reads as main
+        # reads it, held (PackageSentenceTests); the participle forms below are main's own reading
+        for line in ('The lesion in the ascending colon was tattooed and not resected.',
                      'A tattoo was placed distal to the lesion in the ascending colon.',
                      'India ink was injected adjacent to the polyp in the ascending colon.'):
             with self.subTest(line):
@@ -327,15 +326,16 @@ class MarkedAdverbTests(SimpleTestCase):
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
 
-    def test_the_packages_own_forms_stay_ready(self):
+    def test_the_packages_own_forms_read_as_main_reads_them(self):
+        # round 6: the package's coordinated rule is dropped; its own forms are held, as at main
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
                      'The lesion in the ascending colon was also marked with tattoo and not resected.',
                      'Ascending colon lesion marked with tattoo and not resected.',
                      'Ascending colon polyp marked with India ink and not resected.'):
             with self.subTest(line):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
-                self.assertEqual(by_corti, [READY])
-                self.assertEqual(by_astra, [READY])
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
 
 
 class PackageSentenceTests(SimpleTestCase):
@@ -419,34 +419,45 @@ class PackageSentenceTests(SimpleTestCase):
                 for got in both(COLON + heading + '\n' + line + '\n', '45381', line):
                     self.assertNotIn(READY, got)
 
-    def test_the_packages_own_sentences_stay_ready(self):
+    def test_the_packages_own_sentences_read_as_main_reads_them(self):
+        # round 6: both package rules are dropped (the whole-sentence form failed its second cycle, L6-1: a package
+        # sentence after "Indication: Referred after an outside colonoscopy ..." read READY where main holds it)
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
                      'The transverse colon lesion was marked with tattoo and not resected today.',
                      'India ink was injected adjacent to the lesion in the ascending colon for future localization.',
                      'Tattoo ink was injected into the transverse colon submucosa for future localization.',
-                     'Tattoo ink injected into the transverse colon submucosa for future localization.'):
+                     'Tattoo ink injected into the transverse colon submucosa for future localization.',
+                     # L6-1 and L6-2
+                     'The transverse colon lesion was tattooed for future localization.'):
             with self.subTest(line):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
-                self.assertEqual(by_corti, [READY])
-                self.assertEqual(by_astra, [READY])
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(READY, by_astra)
+        for body in ('Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
+                     'The transverse colon lesion was marked with tattoo and not resected.',
+                     'Indication:\nThe transverse colon lesion was marked with tattoo and not resected today.'):
+            with self.subTest(body):
+                line = body.split('\n')[-1]
+                for got in both(COLON + body + '\n', '45381', line):
+                    self.assertNotIn(READY, got)
 
-    def test_88d9db32s_wrapped_impression_keeps_its_injected_tattoo(self):
+    def test_88d9db32s_shapes_read_as_main_reads_them(self):
         # the encounter's own shapes: the injection stated in the findings, and the impression's coordinated form
-        # wrapped across a line ("... and\nnot resected today.") read whole, so it opens no conflict
+        # wrapped across a line ("... and\nnot resected today."). With the package's coordinated rule dropped (round
+        # 6) the impression's denial reaches its tattoo, which conflicts with the injection: 45381 is held, as at main
+        # and the live revision
         body = ('To facilitate subsequent\nlocalization, sterile carbon-based tattoo ink was injected into the submucosa '
                 'approximately 3 cm distal to this\ntransverse-colon abnormality, on the opposite wall.\nImpression\n'
                 'Distal rectal mucosal\nabnormality biopsied. Separate transverse-colon lesion marked with submucosal '
                 'tattoo for future localization and\nnot resected today.')
         quote = 'sterile carbon-based tattoo ink was injected into the submucosa'
         by_corti, by_astra = both(COLON + body + '\n', '45381', quote)
-        self.assertEqual(by_corti, [READY])
-        self.assertEqual(by_astra, [READY])
-        # the wrapped impression read whole: its tattoo inherits no denial and opens no conflict (a line break inside
-        # the sentence is no stop; the round-4b mutant that stopped there survived the READY check alone)
+        self.assertEqual(by_corti, [('selected', 'needs_clarification')])
+        self.assertNotIn(READY, by_astra)
         from tests.test_advanced_gi_binding import colon, inventory
         inv = inventory(body)
-        self.assertFalse(inv.conflicts, inv.conflicts)
-        self.assertFalse([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
+        self.assertEqual(len(inv.conflicts), 1, inv.conflicts)
+        self.assertTrue([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
 
 
 class ExcisedTests(SimpleTestCase):

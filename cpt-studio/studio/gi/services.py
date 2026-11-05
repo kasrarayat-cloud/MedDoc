@@ -416,8 +416,7 @@ ANOTHER_OCCURRENCE_CUE = 'uncertain: names another occurrence of the service, wh
 COPULAR_OBJECT_CUE = 'uncertain: inside the object of a copular negation ("was not a biopsy of ..."), never denied'
 
 
-def _not_on_another_predicate(text: str, neg: int, end: int, *, start: Optional[int] = None,
-                              clause_start: Optional[int] = None) -> bool:
+def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
     """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end``."""
     if neg < end:
         return False  # the negation precedes or covers the mention ("did not undergo EGD", "not biopsied")
@@ -429,155 +428,7 @@ def _not_on_another_predicate(text: str, neg: int, end: int, *, start: Optional[
     if sub and not (re.search(r'^[^,]*,\s*,?\s*$|,\s*(?:(?:it|this|which)\s+)?$', between[sub.end():])
                     and between[:sub.start()].rstrip().endswith(',')):
         return True
-    if bool(COORDINATED_PREDICATE.fullmatch(between)) and bool(re.search(r'ed\Z', text[:end])):
-        return True
-    # A marking act can be named by its object rather than its predicate: "was marked with tattoo for localization
-    # and not resected". The denied tissue removal is a second predicate, not a denial of marking. Keep shared or
-    # contradictory act denials ("tattoo was not placed", "tattoo was placed and not performed") unchanged.
-    if start is None or clause_start is None or not re.search(r'\band\s+$', between, FLAGS):
-        return False
-    if not re.match(r'not\s+(?:removed|resected|excised)\b', text[neg:], FLAGS):
-        return False
-    if not MARKED_TO_DENIAL.fullmatch(between):
-        # refutation neg-2 and round 3 (LENS-2): between the marker and the coordinated denial, nothing but the
-        # marking's own purpose ("for future localization"): never a predicate of its own ("ink that was unavailable"),
-        # a place or provider ("at the referring facility"), or another clause ("since the tattoo ink ran out")
-        return False
-    if not _package_sentence(text, start, PACKAGE_MARKED_SENTENCE):
-        return False  # round 4 (L4A-1): only inside the package's own whole sentence
-    return _marking_link(text, clause_start, neg, start, end, allow_marked=True)
-
-
-MARKING_PREDICATE = _rx(r'\b(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?(?:marked|injected|tattooed)\b'
-                        r'|(?:marked|injected|tattooed)(?=\s+(?:with|using|into|in|at|for|and|but)\b))')
-PLACED_MARKER_PREDICATE = _rx(r'\b(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?(?:injected|tattooed)\b'
-                              r'|(?:injected|tattooed)(?=\s+(?:with|using|into|in|at|for|and|but)\b))')
-# Future localization is the purpose of a completed marking, not the time it was placed. This never masks the
-# marking's own modal, plan or denial, nor an act named inside the purpose ("for future resection").
-MARKING_PURPOSE = _rx(r'\bfor\s+(?:the\s+)?(?P<time>future|next)\s+'
-                      r'(?:locali[sz]ation|identification|recognition)\b')
-# Refutation round 3 (LENS-2): "marked" names a tattoo placed only where the tattoo heads the marking's own instrument
-# phrase - "marked with tattoo", "marked with submucosal tattoo", "marked with India ink", at most an article and one of
-# the marker's own descriptors between - and the coordinated denial follows it with nothing but the marking's own purpose between.
-# A clip, a photo, a label, a sketch or a place before or after the marker is never that tattoo (rounds 1 to 3).
-MARKED_ONLY = _rx(r'(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked')
-# the one modifier is one of the marker's own descriptors, fail-closed: any other word ("a hypothetical tattoo", "a
-# label reading tattoo") leaves the coordinated form as main reads it, held (round 3, the differential's mk40)
-MARKED_WITH = _rx(r'\s+(?:with|using)\s+(?:(?:an?|the)\s+)?(?:(?:submucosal|carbon|spot|sterile|permanent|black|endoscopic)\s+)?')
-MARKED_TO_DENIAL = _rx(r'\s*(?:ink\s+)?(?:for\s+(?:the\s+)?(?:(?:future|next|later)\s+)?'
-                       r'(?:locali[sz]ation|identification|recognition)\s+)?and\s+')
-# Refutation round 4 (2026-11-05; the author's probe of round 3's restoration, reproduced before repair): a bare
-# "marked" - no "was" or "were" before it - sets the coordinated denial apart only right after the lesion it marks, the
-# package's own telegraphic form ("Transverse colon lesion marked with submucosal tattoo ... and not resected today").
-# After any other word it reads as main reads it, held, fail-closed: an adverb of another time ("The lesion ... was
-# already marked with tattoo and not resected", "originally", "initially", "once") names a tattoo placed before, never
-# today's, and one of manner ("carefully") is held on the safe side. With "was" or "were", MARKING_PREDICATE already
-# admits only then, also and successfully between.
-MARKED_BARE_AFTER = _rx(r'\b(?:lesion|polyp|mass|tumou?r|nodule)\s+\Z')
-# Refutation round 4 (lens A, L4A-1 and L4A-2): both of the repair package's releasing rules had been checked on a span
-# (from "marked" to "not resected", from the predicate to the purpose), and four rounds found the sentence around the span
-# saying another time, place, provider, condition or doubt ("Prior to this procedure, ...", "At the referring facility,
-# ...", "If ...", "It is unknown whether ...", "... at the referring facility.", "Ink not yet injected ...", "Tattoo ink
-# needs to get injected ..."). Each rule now releases only inside one of the package's own WHOLE sentences, fail-closed
-# (the sentence is the engine's own, _sentences; round 5):
-# every word of the sentence is a slot of the template below, so any other word - whatever it says - leaves the sentence
-# as main reads it, held. The sentence is the engine's own (_sentences): it does not cut after an abbreviation, before a
-# lowercase word or a dash, or at a line wrap, so a heading line above the sentence without a stop is part of it (only
-# the four headings below are slots), and a line wrapped inside it (88d9db32's "... and\nnot resected today.") is read
-# whole.
-_PKG_SITE = (r'(?:cecum|cecal|caecum|caecal|ascending|transverse|descending|sigmoid|rectosigmoid|rectum|rectal|colon|'
-             r'colonic|hepatic|splenic|flexure|ileocecal|valve|appendiceal|orifice|terminal|ileum|ileal|proximal|distal|'
-             r'mid|right|left)')
-_PKG_SITE_WORD = rf'{_PKG_SITE}(?:-{_PKG_SITE})?'
-_PKG_ADJECTIVE = (r'(?:separate|second|third|additional|flat|subtle|sessile|pedunculated|large|small|nonlifting|'
-                  r'non-lifting|laterally|spreading|depressed|granular|nongranular|non-granular|ulcerated|polypoid|mucosal)')
-_PKG_SIZE = r'\d+(?:\.\d+)?\s*(?:mm|cm)'
-_PKG_NOUN = r'(?:lesion|polyp|mass|tumou?r|nodule)'
-_PKG_HEADING = r'(?:(?:impression|findings|summary|assessment)\s*:?\s*\n\s*)?'
-_PKG_SUBJECT = (rf'(?:(?:the|a|an)\s+)?(?:(?:{_PKG_ADJECTIVE}|{_PKG_SITE_WORD}|{_PKG_SIZE})\s+){{0,6}}{_PKG_NOUN}'
-                rf'(?:\s+(?:in|at|of)\s+the\s+(?:{_PKG_SITE_WORD}\s+){{0,3}}{_PKG_SITE_WORD})?')
-_PKG_PURPOSE = r'for\s+(?:the\s+)?(?:(?:future|next|later)\s+)?(?:locali[sz]ation|identification|recognition)'
-_PKG_PLACE = (rf'(?:into|in|at|adjacent\s+to|distal\s+to|proximal\s+to|next\s+to|near|beside|around)\s+'
-              rf'(?:(?:the|this|a|an|of|in|at|to|submucosa|submucosal|wall|opposite|site|polypectomy|{_PKG_SITE_WORD}|'
-              rf'{_PKG_NOUN}|{_PKG_ADJECTIVE}|{_PKG_SIZE})\s+){{0,10}}(?:{_PKG_SITE_WORD}|{_PKG_NOUN}|submucosa|wall|site)')
-_PKG_END = r'\s*\.?\s*'
-# the coordinated form: "<lesion> was marked with [submucosal] tattoo [for future localization] and not resected [today]."
-PACKAGE_MARKED_SENTENCE = _rx(
-    rf'\s*{_PKG_HEADING}{_PKG_SUBJECT}\s+(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked\s+(?:with|using)\s+'
-    rf'(?:(?:an?|the)\s+)?(?:(?:submucosal|carbon|spot|sterile|permanent|black|endoscopic)\s+)?'
-    rf'(?:tattoo|india\s+ink|carbon\s+ink)(?:\s+ink)?(?:\s+{_PKG_PURPOSE})?\s+and\s+not\s+resected(?:\s+today)?{_PKG_END}')
-# the purpose: "<ink> was injected <place> for future localization." or "<lesion> was tattooed [<place>] for future
-# localization." - a completed marking stated as such, and nothing else in its sentence
-_PKG_INK = (r'(?:(?:the|a|an)\s+)?(?:(?:sterile|carbon|carbon-based|submucosal|spot|black|permanent)\s+){0,2}'
-            r'(?:tattoo\s+ink|tattoo|india\s+ink|ink)')
-_PKG_FUTURE = r'for\s+(?:the\s+)?(?:future|next)\s+(?:locali[sz]ation|identification|recognition)'
-PACKAGE_PURPOSE_SENTENCE = _rx(
-    rf'\s*{_PKG_HEADING}{_PKG_INK}\s+(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?injected\s+{_PKG_PLACE}\s+'
-    rf'{_PKG_FUTURE}(?:\s+of\s+(?:the\s+)?(?:{_PKG_SITE_WORD}\s+){{0,3}}{_PKG_NOUN})?{_PKG_END}'
-    rf'|\s*{_PKG_HEADING}{_PKG_SUBJECT}\s+(?:was|were)\s+(?:(?:then|also|successfully)\s+)?tattooed(?:\s+{_PKG_PLACE})?\s+'
-    rf'{_PKG_FUTURE}{_PKG_END}')
-# Refutation round 5 (L5-1): the package sentence is the ENGINE's own sentence (_sentences), read once per text. A
-# stop of its own had cut a sentence the engine keeps whole - after "hosp.", "p.m.", "wk.", "Dr.", "...", ". --", a
-# form feed - so the template matched only the tail and the frame before it went unread. One sentence, one reader.
-PACKAGE_SENTENCE_REACH = 600  # a longer sentence is no package sentence (fail-closed, and the template's cost bound)
-
-
-@functools.lru_cache(maxsize=8)
-def _sentence_spans(text: str) -> tuple:
-    spans = tuple(_sentences(text))
-    return tuple(s for s, _ in spans), spans
-
-
-def _package_sentence(text: str, pos: int, template: re.Pattern) -> bool:
-    """Whether the engine's sentence holding ``pos`` is, whole, one of the package's own sentences (``template``)."""
-    starts, spans = _sentence_spans(text)
-    i = bisect.bisect_right(starts, pos) - 1
-    if i < 0:
-        return False
-    start, end = spans[i]
-    if not start <= pos < end or end - start > PACKAGE_SENTENCE_REACH:
-        return False
-    return bool(template.fullmatch(text, start, end))
-
-
-def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_marked: bool = False) -> bool:
-    # Only the marker/injection mentioned as the marking's subject or object receives its predicate. Another act
-    # earlier in the clause (a biopsy, resection, ...) never inherits a marking's status or purpose.
-    if not any(kind in ('tattoo', 'injection') and pattern.fullmatch(text, pos, end)
-               for kind, pattern in ACTS):
-        return False
-    # "Marked" alone might describe a specimen label, diagram or another administrative act. It can tell a
-    # coordinated tissue-removal denial apart only at the package's own shape (MARKED_WITH, MARKED_TO_DENIAL), and it
-    # never dates or establishes an injection as performed.
-    predicates = MARKING_PREDICATE if allow_marked else PLACED_MARKER_PREDICATE
-    for marking in predicates.finditer(text, cs, limit):
-        if _unstated_marking(text, marking):
-            continue  # "to be injected", "is injected": no completed marking, so neither its purpose nor its denial is one
-        if MARKED_ONLY.fullmatch(marking.group(0)):
-            stated = (re.match(r'(?:was|were)\b', marking.group(0), FLAGS)
-                      or MARKED_BARE_AFTER.search(text, max(cs, marking.start() - 40), marking.start()))
-            if stated and marking.end() <= pos and MARKED_WITH.fullmatch(text, marking.end(), pos):
-                return True
-            continue
-        if marking.start() <= pos and end <= marking.end():
-            return True
-        if marking.end() <= pos:
-            link = text[marking.end():pos]
-        elif end <= marking.start():
-            link = text[end:marking.start()]
-        else:
-            continue
-        if not re.search(r'[,;:]|\b(?:and|or|but|not|never)\b', link, FLAGS):
-            return True
-    return False
-
-
-# Harness repair 2026-11-05, refutation time-1: a bare participle the marking predicates match ("injected into",
-# "tattooed for") states a completed marking only where no auxiliary or infinitive marker governs it. "Tattoo ink has yet
-# to be injected ... for future localization", "is to be injected", "is injected", "is being injected" state none, so
-# their "future" stays a plan word and their act is never read as done today; the explicit "was|were" branch and a
-# telegraphic "Tattoo ink injected into ..." keep the package's purpose rule.
-UNSTATED_MARKING_AUX = frozenset(('be', 'is', 'are', 'am', 'to', 'being'))
+    return bool(COORDINATED_PREDICATE.fullmatch(between)) and bool(re.search(r'ed\Z', text[:end]))
 
 
 # Harness repair 2026-11-05, refutation neg-2: a tattoo named as a place - the object of a place preposition, or one
@@ -666,22 +517,8 @@ def _anaphor_size(text: str, ss: int, se: int) -> Optional[float]:
     return _size_mm(m.group(0)) if m else None
 
 
-def _unstated_marking(text: str, marking) -> bool:
-    if re.match(r'(?:was|were)\b', marking.group(0), FLAGS):
-        return False
-    before = re.search(r'(\w+)\s*\Z', text[max(0, marking.start() - 40):marking.start()])
-    return bool(before) and before.group(1).lower() in UNSTATED_MARKING_AUX
 
 
-def _marking_purpose_words(text: str, cs: int, ce: int, pos: int, end: int) -> frozenset:
-    out = set()
-    for purpose in MARKING_PURPOSE.finditer(text, cs, ce):
-        if pos >= purpose.start():
-            continue
-        if _marking_link(text, cs, purpose.start(), pos, end) \
-                and _package_sentence(text, purpose.start(), PACKAGE_PURPOSE_SENTENCE):  # round 4 (L4A-2)
-            out.add(purpose.start('time'))
-    return frozenset(out)
 # "without (any) complication(s) (at all)" ending its clause at a stop, a semicolon, a colon or the line's end ("The
 # following procedures were performed today without any complication at all:" over the polypectomy line): the "without"
 # denies the complication, never the act after it. A phrase that runs on, or a list that goes on after a comma ("without
@@ -2498,7 +2335,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         copular = _copular_negation(text, cs, ce, cs + not_verb.start(), pos, end)
         if copular is not None:
             return copular  # rule 3: "S was not a N of O" denies N at O, never an act in S or in O
-        if _not_on_another_predicate(text, cs + not_verb.start(), end, start=pos, clause_start=cs) \
+        if _not_on_another_predicate(text, cs + not_verb.start(), end) \
                 and not _cues.PURPOSE_WHETHER.match(text, end, cs + not_verb.start()):
             # (P2 READ-HOLD, R8 D3: a purpose phrase between the act and its own negated predicate - "Biopsies to
             # determine whether this represents malignancy were not obtained" - leaves the negation the act's)
@@ -2559,9 +2396,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                  and not REVIEW_OF_RECORDS.search(whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
     if hist and not today:
         return Reading('historical', ('historical: ' + hist.group(0).lower(),))
-    purpose_words = _marking_purpose_words(text, cs, ce, pos, end)
     plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere
-                 and cs + m.start() not in purpose_words
                  and not any(a <= m.start() < b for a, b in manner)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))

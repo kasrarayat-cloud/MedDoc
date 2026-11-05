@@ -2616,3 +2616,54 @@ both reproduced by the author before repair:
 
 **Proof:** three mutants killed, restores verified (a naive splitter in place of the engine's, "excised" put back, the
 reach shrunk). The pins hold all of round 5's forms and all of round 4's.
+
+### Refutation round 6 (2026-11-05): the templates' second cycle, and the two-cycle rule applied
+
+One read-only lens attacked round 5's head `9f1dddcd` against main. D2 held in all 658 cases, and no input came near a
+cost of 10 s (growth linear, 4.5 s at 84 KB). D1 broke again on the whole-sentence templates:
+- **L6-1, blocking.** "Indication: Referred after an outside colonoscopy on 2026-09-01." then "The transverse colon
+  lesion was marked with tattoo and not resected." reads 45381 READY on both paths, where main holds it.
+  - The declared comparator, the plain "India ink was injected adjacent to the lesion in the ascending colon.", is held
+    in the same position, by the routing-era indication reading.
+  - The tattoo most likely came from the outside colonoscopy. The purpose template, "The transverse colon lesion was
+    tattooed for future localization.", leaks the same way.
+- **L6-2, minor.** The coordinated template's own "today" slot sets the clause's "today", which skips the indication
+  hold for "Indication:" then "... and not resected today.".
+
+**Decision: both of the repair package's releasing rules are dropped, under the two-cycle rule.** The rules are the
+coordinated denial set apart from a marking, and the purpose rule ("for future localization" never dates a completed
+marking).
+- Their span form had failed rounds 1 to 4, and their whole-sentence form (round 4b) failed rounds 5 and 6.
+- Every release of either reading found a false READY on plausible wording: another time, another provider, a plan,
+  a doubt, a sentence boundary, and now an indication.
+- The decision was stated before round 6 ran.
+
+**What is removed, restoring main's code:**
+- In `services.py`, every definition only those two rules used is removed: `MARKING_PREDICATE`,
+  `PLACED_MARKER_PREDICATE`, `MARKING_PURPOSE`, the `MARKED_*` rules, the `PACKAGE_*` templates and their slots,
+  `_sentence_spans`, `_package_sentence`, `_marking_link`, `_unstated_marking` and `_marking_purpose_words`.
+  `_not_on_another_predicate` is main's function exactly, its call site is main's, and the clause reader's plan
+  detection is main's.
+- In `detect.py`, routing's consumer of the purpose rule is removed, so `detect.py` differs from main by its version
+  label alone.
+
+**What of the package's patch stays:** its holds, and the readers round 1 repaired. These are the comparison aside
+(`COMPARISON_OBJECT`, `_comparison_objects`), lesion ownership of patches and comparison anatomy, and a tattoo named as a place
+(`TATTOO_AS_PLACE`).
+
+**What the drop changes, and what it means for the directive:**
+- "<lesion> was marked with tattoo ... and not resected" reads as main reads it. The denial reaches the tattoo, so with
+  an injection stated elsewhere a tattoo conflict holds 45381.
+- "for future localization" after an injection dates it as planned, so 45381 is excluded.
+- **88d9db32's 45381 is held by the tattoo conflict, as at main and the live revision.** This is the conflict the
+  package was written to remove.
+- Directive item 3's "tattoo versus resection negation" and "future localization versus future performance" are
+  therefore NOT delivered. The conservative reading is kept, because every release tried read a tattoo not placed today
+  as placed. "Comparison anatomy" and "lesion ownership" are delivered.
+- **A candidate for a later round, not built here:** a restatement-only release. It would set the coordinated denial
+  apart only where the same lesion's tattoo is separately stated performed today in a plain sentence, so the READY
+  rests on that sentence and never on the coordinated one.
+
+**Proof:**
+- The package tests and the pins are re-pinned to main's reading (eight edits, each a reading of main's).
+- Run on round 5's code, the round-6 pins fail 19 times, so they detect both releases.

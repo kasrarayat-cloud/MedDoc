@@ -1271,3 +1271,10 @@ HARNESS.md, "Refutation round 4 (2026-11-05)". Round 4 repaired the regression i
 |---|---|---|---|
 | a code cited on a passage that states only another act's denial, where the code's own act is documented elsewhere | "Biopsies were taken from the cecum with cold forceps. The examination was completed; the rectal patch was not excised by snare.", 45380 citing the second sentence | READY, as at main and at the live revision (a biopsy is documented in the report; the citation is weak support) | the package's bare "excised" that held it failed two refutation cycles (L4B-2, L5-2) and is dropped |
 | a heading's context, when the engine ends the heading as a sentence of its own | "Outside report:" on its own line, then the package's own coordinated sentence | as the plain "India ink was injected ..." reads in that position (READY under an unknown heading; held under History and Prior procedures) | cross-sentence context is read by no reader for any plain act sentence; the package sentence is never read better than one |
+
+### Round 6 (2026-11-05): the repair package's two releasing readings, dropped
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a coordinated "marked with tattoo ... and not resected" | 88d9db32's impression: "Separate transverse-colon lesion marked with submucosal tattoo for future localization and not resected today." | the denial reaches the tattoo; beside an injection stated elsewhere, a tattoo conflict holds 45381 (needs_clarification), as at main and the live revision | the package's release failed six refutation rounds (span form rounds 1 to 4, whole-sentence form rounds 5 and 6): it read tattoos placed at another time or by another provider as today's |
+| "for future localization" after a completed injection | "Tattoo ink was injected into the transverse colon submucosa for future localization." | planned: 45381 excluded, as at main | the purpose rule failed the same rounds ("Ink not yet injected ... for future localization", an indication naming an outside colonoscopy) |
