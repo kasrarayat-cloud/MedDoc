@@ -172,8 +172,10 @@ def operator_encounter() -> dict:
               for n, kind in enumerate(('extract', 'analyze', 'predict', 'astra', 'fable', 'assess', 'astra_peer',
                                         'fable_peer', 'assess'), start=1)]
     participants = [
-        {'name': 'corti', 'label': 'Corti', 'vendor': 'Corti', 'model': 'corti-coding-v2', 'state': 'done',
-         'detail': 'Corti returned 3 codes.', 'run_id': RUNS['corti'], 'returned_model': 'corti-coding-v2',
+        # Corti's coding API names no model (review.HARNESS_PARTICIPANTS: model ''), and none answers by name: the
+        # live operator view of 2026-11-05 serves exactly this, so the walk is tested against it
+        {'name': 'corti', 'label': 'Corti', 'vendor': 'Corti', 'model': '', 'state': 'done',
+         'detail': 'Corti returned 3 codes.', 'run_id': RUNS['corti'], 'returned_model': '',
          'usage': {'creditsConsumed': 3}, 'usage_basis': 'reported', 'estimated_cost_usd': None,
          'codes': ['45380', '45385', '45378'], 'unverified_quotes': 0, 'reused': False},
         {'name': 'astra', 'label': 'Astra', 'vendor': 'OpenAI', 'model': 'gpt-6-astra', 'state': 'done',
@@ -189,7 +191,7 @@ def operator_encounter() -> dict:
          'peer': {'state': 'done', 'run_id': RUNS['fable_peer'], 'codes_added': [], 'unverified_quotes': 0},
          'references': {'retrieved': [], 'used': []}, 'peer_references': {'retrieved': [], 'used': []}},
     ]
-    runs = [run('corti', 'corti', 'primary', 'corti-coding-v2', 'corti-coding-v2', {'creditsConsumed': 3}, 1),
+    runs = [run('corti', 'corti', 'primary', '', '', {'creditsConsumed': 3}, 1),
             run('astra', 'astra', 'independent', 'gpt-6-astra', 'gpt-6-astra-2026-10-01',
                 {'input_tokens': 2100, 'output_tokens': 420}, 2),
             run('fable', 'fable', 'independent', 'claude-fable-5-1', 'claude-fable-5-1',
@@ -266,9 +268,16 @@ def operator_trace() -> dict:
                                                                'arguments': {}, 'refs': [],
                                                                'result_sha256': sha(f'tool {name}'),
                                                                'executed_at': CREATED}]}]}
+    def corti_trace_run():
+        # the live trace of 2026-11-05 (run d24ae7b3, key by key): Corti's run names no model and no response id, and has
+        # no exchanges; it is identified by its endpoint, adapter version and run identity
+        return {**trace_run('corti', 'corti', '', '', 0), 'purpose': 'primary', 'adapter_version': 'corti-coding-v2@cptstudio-1',
+                'endpoint': 'https://api.example.invalid/corti/v2/tools/coding/', 'response_id': '',
+                'usage': {'creditsConsumed': 3}, 'usage_basis': 'provider_reported_credits_not_usd',
+                'estimated_cost_usd': None, 'exchanges': []}
     return {'encounter': {'id': ENC, 'title': TITLE},
             'revision': {'id': REV, 'number': 1, 'text_sha256': sha(TEXT)},
-            'participants': [{'name': 'corti', 'label': 'Corti', 'vendor': 'Corti', 'model': 'corti-coding-v2', 'runs': []},
+            'participants': [{'name': 'corti', 'label': 'Corti', 'vendor': 'Corti', 'model': '', 'runs': [corti_trace_run()]},
                              {'name': 'astra', 'label': 'Astra', 'vendor': 'OpenAI', 'model': 'gpt-6-astra',
                               'runs': [trace_run('astra', 'astra', 'gpt-6-astra', 'gpt-6-astra-2026-10-01', 1)]},
                              {'name': 'fable', 'label': 'Fable', 'vendor': 'Anthropic', 'model': 'claude-fable-5-1',
@@ -389,6 +398,27 @@ def details_html(details: list) -> str:
             + '<button type="button" data-action="save-details">Save details</button></section>')
 
 
+# The phases the page draws as its whole progress panel (app.js PANEL_PHASES); every other phase is one compact line:
+# its title, the time it took and - for a detail asked or a limitation - the server's message (app.js progressPanel;
+# the 2026-11-05 acceptance walk found this sample drawing a finished document as the whole panel, which no page does).
+PANEL_PHASES = {'uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused'}
+COMPACT_TITLES = {'completed': 'Results ready', 'awaiting_detail': 'Results ready', 'partial': 'Results ready, with a limitation'}
+
+
+def progress_html(progress: dict, steps: str, busy: str) -> str:
+    if progress['phase'] not in PANEL_PHASES:
+        message = (f'<p class="progress-message">{esc(progress["message"])}</p>'
+                   if progress['phase'] in ('awaiting_detail', 'partial') and progress.get('message') else '')
+        return (f'<section class="progress-panel progress-done" data-phase="{progress["phase"]}" aria-label="Processing"><div>'
+                f'<p class="progress-summary"><strong>{esc(COMPACT_TITLES[progress["phase"]])}</strong> · finished in '
+                f'<span data-elapsed>4 s</span></p>{message}</div></section>')
+    return (f'<section class="progress-panel{busy}" data-phase="{progress["phase"]}" role="status">'
+            f'<h2>Processing</h2><ol>{steps}</ol><p>Elapsed <span data-elapsed>1 min 04 s</span></p>'
+            f'<p class="progress-message">{esc(progress["message"])}</p>'
+            '<p class="leave-note">You can leave this page: processing continues, and the document stays in Documents.</p>'
+            '</section>')
+
+
 def page_html(enc: dict) -> str:
     progress = enc['progress']
     steps = ''.join(f'<li class="progress-step" data-step="{s["key"]}" data-state="{s["state"]}">{esc(s["label"])}</li>'
@@ -405,11 +435,7 @@ def page_html(enc: dict) -> str:
             '<main id="main">'
             f'<h1>{esc(enc["title"])}</h1>'
             f'{details_html(enc["details_needed"])}'
-            f'<section class="progress-panel{busy}" data-phase="{progress["phase"]}" role="status">'
-            f'<h2>Processing</h2><ol>{steps}</ol><p>Elapsed <span data-elapsed>1 min 04 s</span></p>'
-            f'<p class="progress-message">{esc(progress["message"])}</p>'
-            '<p class="leave-note">You can leave this page: processing continues, and the document stays in Documents.</p>'
-            '</section>'
+            f'{progress_html(progress, steps, busy)}'
             f'<ul class="checks-panel">{checks}</ul>'
             f'<ol class="result-list" aria-label="Suggested CPT codes">{rows}</ol>'
             '<button type="button" class="button" data-action="export">Download</button>'

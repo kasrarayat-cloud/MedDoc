@@ -8,6 +8,11 @@ const path = require('node:path');
 const test = require('node:test');
 
 const vb = require('../verify_browser.cjs');
+// the customer page itself: the walk's progress checks are held to the panel it really draws (the 2026-11-05 acceptance
+// walk failed six checks written against hand-drawn panels no page draws)
+const app = require('../../studio/static/studio/app.js');
+const pageUi = enc => ({ open: new Set(), answers: new Map(), ack: null, reconnecting: false, clock: 0,
+  nowMs: Date.parse(enc?.progress?.server_time || '2026-11-03T22:10:00+00:00') });
 
 const ROOT = path.join(__dirname, '..', '..');
 const TEXT = fs.readFileSync(path.join(__dirname, 'documents', 'gi-08-flexible-sigmoidoscopy-biopsy.txt'), 'utf8');
@@ -3034,8 +3039,7 @@ function fakeSite({ leak = {} } = {}) {
     const code = dialog ? c.codes.find(item => item.id === dialog.proposal) : null;
     const select = code && code.modifier_review ? `<select id="reviewModifier"><option value=""${dialog.modifier ? '' : ' selected'}></option>${['59', 'XS'].map(v => `<option value="${v}"${dialog.modifier === v ? ' selected' : ''}>${v}</option>`).join('')}</select>` : '';
     return `<html><head><title>CPT Studio</title></head><body><main><h1>${c.title}</h1>${leak.toast ? `<div id="toast" role="status">${leak.toast}</div>` : ''}`
-      + `<section class="progress-panel" data-phase="${c.progress.phase}" role="status"><ol>${c.progress.steps.map(s => `<li class="progress-step" data-step="${s.key}" data-state="${s.state}">${s.label}</li>`).join('')}</ol>`
-      + `<p class="progress-message">${c.progress.message}</p><p class="leave-note">You can leave this page.</p></section>`
+      + app.progressPanel(c, pageUi(c))
       + `<ul class="checks-panel">${c.checks.map(k => `<li class="check-step" data-check="${k.key}" data-state="${k.state}">${k.label}</li>`).join('')}</ul>`
       + `<ol class="result-list">${rows}</ol><button type="button" data-action="export"${leak.exportAria ? ` aria-label="${leak.exportAria}"` : ''}>Download</button></main>`
       + `${dialog ? `<dialog id="reviewDialog" open><input type="checkbox" id="reviewAcknowledgement">${select}<textarea id="reviewNote"></textarea><button id="saveReview">Save</button></dialog>` : ''}`
@@ -3341,4 +3345,127 @@ test('the walk without a modifier plan chooses none, and the acceptance reviewer
   const accepted = await walkSite(fakeSite(), { notes: ACC_NOTES, plan: { approve_codes: ['45380'] }, opts: { acceptanceReviewer: true, noAutoApprove: true, account: human } });
   const got = accepted.record.assertions.filter(a => a.status === 'fail').map(a => a.id);
   for (const id of ['persist.decision.45380', 'dom.decision.45380', 'customer.decision.45380', 'decisions.labelled']) assert.ok(got.includes(id), `${id}: ${got.join(', ')}`);
+});
+
+// --- the 2026-11-05 acceptance walk's corrections ------------------------------------------------------------------------
+// The live walk of 24c49a50 failed six checks that were wrong about the page (the compact line held to the whole panel's
+// contract, a message read from the head that the page says in its notice, a model asked of Corti, whose API names
+// none) and missed the upload's client key; and the stopped panel told nobody they could leave, which was the page's.
+// Each check is held here to what the real page draws and the real operator view serves, and to the shape it must fail.
+
+const CUSTOMER_FIXTURES_DIR = path.join(ROOT, 'tests', 'fixtures', 'customer');
+const customerFixture = name => JSON.parse(fs.readFileSync(path.join(CUSTOMER_FIXTURES_DIR, name), 'utf8'));
+const CUSTOMER_FIXTURES = fs.readdirSync(CUSTOMER_FIXTURES_DIR).filter(name => /^encounter-.+\.json$/.test(name)).sort();
+const pageHtml = enc => app.progressPanel(enc, pageUi(enc));
+const pageDom = (enc, edit = html => html) => domOf(`<html><body>${edit(pageHtml(enc))}</body></html>`);
+
+test('checkProgressDom passes on the panel the real page draws for every served state, the compact line included', () => {
+  const kinds = new Set();
+  for (const name of CUSTOMER_FIXTURES) {
+    const enc = customerFixture(name);
+    assert.deepEqual(failed(vb.checkProgressDom(enc, pageDom(enc), [])), [], name);
+    kinds.add(vb.PANEL_PHASES.has(enc.progress.phase) ? 'panel' : 'compact');
+  }
+  assert.deepEqual([...kinds].sort(), ['compact', 'panel']);
+  // what the walk failed on, each read where the page draws it
+  const stopped = customerFixture('encounter-stopped.json');
+  const stoppedIds = ids(vb.checkProgressDom(stopped, pageDom(stopped), []));
+  for (const id of ['progress.dom.whole_panel:pass', 'progress.dom.message:pass', 'progress.dom.error:pass', 'progress.dom.leave_note:pass', 'progress.dom.resume:pass']) {
+    assert.ok(stoppedIds.includes(id), id);
+  }
+  const ready = customerFixture('encounter-ready.json');
+  const readyIds = ids(vb.checkProgressDom(ready, pageDom(ready), []));
+  for (const id of ['progress.dom.compact:pass', 'progress.dom.took:pass', 'progress.dom.still:pass']) assert.ok(readyIds.includes(id), id);
+  assert.ok(!readyIds.some(id => /^progress\.dom\.(steps|leave_note):/.test(id)), 'a finished line has no steps or leave note to hold it to');
+});
+
+test('checkProgressDom fails a waiting, stopped or failed panel folded into the compact line, a finished one drawn whole, and each missing part', () => {
+  const stopped = customerFixture('encounter-stopped.json');
+  const ready = customerFixture('encounter-ready.json');
+  // the stopped document drawn as if finished: one compact line
+  const folded = domOf(`<html><body>${pageHtml(ready).replace('data-phase="completed"', 'data-phase="stopped"')}</body></html>`);
+  assert.ok(failed(vb.checkProgressDom(stopped, folded, [])).includes('progress.dom.whole_panel'));
+  // a finished document drawn as the whole panel
+  const whole = domOf(`<html><body>${pageHtml(stopped).replace('data-phase="stopped"', 'data-phase="completed"')}</body></html>`);
+  assert.ok(failed(vb.checkProgressDom(ready, whole, [])).includes('progress.dom.compact'));
+  // the compact line without the time it took, or still animating
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready, html => html.replace(/ · finished in <span[^>]*>[^<]*<\/span>/, '')), [])), ['progress.dom.took']);
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready), ['svg.icon (spin)'])), ['progress.dom.still']);
+  // the stopped notice gone: its sentence is said nowhere
+  const noNotice = pageDom(stopped, html => html.replace(/<div class="progress-error"[\s\S]*?<\/div><\/div>/, ''));
+  assert.deepEqual(failed(vb.checkProgressDom(stopped, noNotice, [])).sort(), ['progress.dom.error', 'progress.dom.message']);
+  // the stopped panel the 2026-11-05 walk met: no leave note
+  assert.deepEqual(failed(vb.checkProgressDom(stopped, pageDom(stopped, html => html.replace(/<p class="leave-note">[^<]*<\/p>/, '')), [])), ['progress.dom.leave_note']);
+});
+
+test('the sample pages draw the progress panel as the page does for their encounters', () => {
+  const fields = p => p && { phase: p.phase, compact: p.compact, summary: p.summary.replace(/finished in .*$/, 'finished in'), steps: p.steps.length,
+    message: p.message, leave: p.leave, stop: p.stop, resume: p.resume, notice: p.notice };
+  for (const [page, enc] of [['customer-page.html', CUST()], ['customer-page-details.html', DETAILS()]]) {
+    assert.deepEqual(fields(domOf(sample(page)).progress), fields(pageDom(enc).progress), page);
+  }
+});
+
+test('checkProvenance: Corti names no model - its runs stand on endpoint, adapter version and identity - and every other participant still names its models', () => {
+  const op = OP();
+  assert.equal(op.harness.participants[0].model, '', 'the sample serves Corti as the live operator view does');
+  assert.deepEqual(failed(vb.checkProvenance(op, TRACE(), { expectHarness: true })), []);
+  assert.equal(vb.checkProvenance(op, TRACE()).find(r => r.id === 'provenance.returned_models').status, 'pass');
+  for (const [label, mutate] of [['Astra without its model', o => { o.harness.participants[1].model = ''; }],
+    ['Corti without its vendor', o => { o.harness.participants[0].vendor = ''; }]]) {
+    const o = OP();
+    mutate(o);
+    assert.deepEqual(failed(vb.checkProvenance(o, TRACE())), ['provenance.models'], label);
+  }
+  const unanswered = OP();
+  unanswered.harness.participants[2].returned_model = '';
+  assert.equal(vb.checkProvenance(unanswered, TRACE()).find(r => r.id === 'provenance.returned_models').status, 'warn');
+  const corti = TRACE().participants[0].runs;
+  assert.ok(corti.length === 1 && corti[0].requested_model === '' && corti[0].adapter_version, 'the sample traces Corti\'s run as the live trace does');
+  for (const [label, mutate] of [['Corti without its adapter version', t => { t.participants[0].runs[0].adapter_version = ''; }],
+    ['Corti without its endpoint', t => { t.participants[0].runs[0].endpoint = ''; }],
+    ['Corti without its identity', t => { t.participants[0].runs[0].run_identity = ''; }],
+    ['Astra without its model', t => { t.participants[1].runs[0].requested_model = ''; }]]) {
+    const t = TRACE();
+    mutate(t);
+    assert.deepEqual(failed(vb.checkProvenance(OP(), t)), ['provenance.trace'], label);
+  }
+});
+
+test('uploadCarriedClientKey reads the form the page sent, since Playwright serves no body that holds a file', () => {
+  const watch = keys => ({ requests: [{ method: 'GET', path: '/api/encounters' }, { method: 'POST', path: '/api/encounters', ...(keys ? { form_keys: keys } : {}) }] });
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'service_date', 'synthetic_attestation', 'client_key'])), true);
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'synthetic_attestation'])), false);
+  assert.equal(vb.uploadCarriedClientKey(watch(null), ''), false, 'no form seen and no body: not carried');
+  assert.equal(vb.uploadCarriedClientKey(watch(null), 'Content-Disposition: form-data; name="client_key"'), true, 'a text body Playwright did serve');
+  assert.equal(vb.uploadCarriedClientKey(null, ''), false);
+});
+
+test('planProblems: a document expected to fail names a failed state, carries no plan and is walked in agent mode', () => {
+  const notes = { approve: 'Approved in an agent-executed synthetic review.' };
+  const base = { id: 'x-fail', expected_failure: 'extraction_failed' };
+  assert.deepEqual(vb.planProblems(base, notes), []);
+  for (const [label, doc] of [['not a failed state', { ...base, expected_failure: 'failed' }], ['with a plan', { ...base, review_plan: { stop_and_resume: true } }],
+    ['with questions expected', { ...base, expected_no_em_questions: true }]]) {
+    assert.equal(vb.planProblems(doc, notes).length, 1, label);
+  }
+  assert.ok(vb.planProblems(base, { approve: vb.ACCEPTANCE_LABEL }, { acceptanceReviewer: true }).some(p => /agent mode only/.test(p)));
+});
+
+test('checkFailure: the failed panel the page draws, the named state, nothing sent and no code; each broken promise fails', () => {
+  const enc = customerFixture('encounter-failed.json');
+  const op = { state: 'extraction_failed', provider_runs: [] };
+  assert.equal(enc.progress.error.action, 'new_document', 'the scenario: the page offers "Upload a new document"');
+  assert.deepEqual(failed(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])), []);
+  assert.ok(ids(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])).includes('failure.action:pass'));
+  const sent = { id: 'r1', provider: 'corti', purpose: 'primary', state: 'succeeded', sent: true };
+  const cases = [
+    ['failure.state', [enc, { ...op, state: 'provider_failed' }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [sent] }, pageDom(enc)]],
+    ['failure.no_codes', [{ ...clone(enc), codes: [{ code: '45378' }] }, op, pageDom(enc)]],
+    ['failure.customer', [{ ...clone(enc), state: 'ready' }, op, pageDom(enc)]],
+    ['failure.action', [enc, op, pageDom(enc, html => html.replace(/<button type="button" class="button secondary" data-action="upload">[^<]*<\/button>/, ''))]],
+    ['progress.dom.leave_note', [enc, op, pageDom(enc, html => html.replace(/<p class="leave-note">[^<]*<\/p>/, ''))]],
+  ];
+  for (const [id, [c, o, d]] of cases) assert.ok(failed(vb.checkFailure(c, o, d, 'extraction_failed', [])).includes(id), id);
 });
