@@ -154,6 +154,10 @@ COMMON_BUNDLED = (
                                  'EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is '
                                  'not connected).'),
     ('lift_injection', 'A submucosal injection made to lift a lesion for its resection is part of the resection.'),
+    # Harness repair 2026-11-05, refutation multi-1: an endoscopic mucosal resection is a snare-based resection
+    ('resection_technique', 'A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal '
+                            'dissection removes is the technique of that resection, not a separate service (internal '
+                            'profile rule).'),
 )
 ENDOSCOPIC_QUESTIONS = (
     ('extent', 'How far was the instrument advanced (the landmark reached)?'),
@@ -203,7 +207,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         documentation=('the depth reached (beyond the second portion of the duodenum; whether the ileum was reached)',
                        'each intervention, its anatomy and technique'),
         acts=('biopsy', 'hot_biopsy', 'snare', 'ablation', 'bleeding_control', 'stent', 'foreign_body', 'dilation',
-              'tube_placement', 'peg', 'tube_replacement'),
+              'tube_placement', 'peg', 'tube_replacement', 'decompression'),
         bundled=COMMON_BUNDLED, questions=ENDOSCOPIC_QUESTIONS, evidence=PROCEDURE_EVIDENCE, rules=PROCEDURE_RULES),
     FamilyEntry(
         'gi.colonoscopy', 'Colonoscopy', SUPPORTED, ('colonoscopy',),
@@ -223,7 +227,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         documentation=('the stations examined (limited to one organ and adjacent structures, or esophagus, stomach and '
                        'duodenum)', 'the target of any fine-needle aspiration or biopsy and the passes made',
                        'any drainage or injection'),
-        acts=('eus_exam', 'fna', 'injection', 'drainage'),
+        acts=('eus_exam', 'fna', 'injection', 'drainage', 'decompression'),
         bundled=(('biopsy', 'A forceps biopsy at an upper GI site of the same upper examination is read under the '
                             'upper GI family when the document records that upper endoscopy with a biopsy of its '
                             'own; one the document does not place at an upper GI site of an upper examination (a '
@@ -244,7 +248,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                        'removal, stent placement, dilation, cholangioscopy, lithotripsy)', 'stents placed (number, '
                        'duct)'),
         acts=('biopsy', 'sphincterotomy', 'stone_extraction', 'lithotripsy', 'cholangioscopy', 'stent',
-              'stent_removal', 'stent_exchange', 'dilation', 'ablation', 'pressure_measurement'),
+              'stent_removal', 'stent_exchange', 'dilation', 'ablation', 'pressure_measurement', 'decompression'),
         bundled=(('cannulation', 'Cannulation and contrast injection are part of the ERCP itself.'),
                  ('injection', 'Contrast injection during ERCP is part of the examination.'),
                  ('clip', COMMON_BUNDLED[0][1])),
@@ -353,7 +357,9 @@ def family_codes_act(family: str, kind: str) -> bool:
     one act for coding, as the reconciliation reads them). Harness repair 2026-11-05 (stage 6): the shared
     ENDOSCOPIC_ACTS list gives every endoscopic family a decompression act, and only colonoscopy and sigmoidoscopy codes
     account for one (45393, 44408, 45337); an upper endoscopy's decompression is therefore an act no code of its service
-    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported')."""
+    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported'). Refutation compl-2: an
+    enteroscopy, an endoscopic ultrasound and an ERCP list their own acts, which had no decompression, so the act was
+    dropped unlisted; every endoscopic family now lists it, and none of those three has a code for it."""
     covers = {k for profile in CODES.values() if profile.family == family for k in profile.covers}
     return kind in covers or (kind in ('tattoo', 'injection') and bool(covers & {'tattoo', 'injection'}))
 

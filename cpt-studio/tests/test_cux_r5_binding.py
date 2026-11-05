@@ -65,6 +65,10 @@ HOLD_ONLY = DECLARATION['amendment_20261104_hold_only']
 R5B = DECLARATION['amendment_20261104_hold_only_r5b']
 DECLARED = {(name, code): (before, after) for name, code, before, after in R5B['battery']}
 READINGS = {tuple(key.split(' | ')): reading for key, reading in R5B['readings'].items()}
+# The harness repair's amendment (2026-11-05), measured after its code (refutation multi-3: a prophylactic hemostatic
+# clip is never control of bleeding done): it governs wherever round 5b disagrees, on the R2 rows alone.
+H2R = DECLARATION['amendment_20261105_harness_repair']
+READINGS.update({tuple(key.split(' | ')): reading for key, reading in H2R['readings'].items()})
 PREFIX = 'R8 R5 '
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
@@ -226,11 +230,13 @@ class HoldOnlyRowsTests(SimpleTestCase):
         self.assertEqual(sorted(recorded), sorted(battery.R5_RESIDUALS))
         for name, (text, codes) in battery.R5_RESIDUALS.items():
             result = read(name, text, codes)
+            closed = H2R['residuals_closed'].get(name, {})
             for code, cell in recorded[name].items():
                 with self.subTest(name, code=code):
-                    self.assertEqual(result[code][0], cell)
-            # an honest truth that reads a violation on main, installed and here: recorded, never a register row
-            self.assertTrue(any(violations for *_, violations in result.values()), name)
+                    self.assertEqual(result[code][0], closed.get(code, cell))
+            # an honest truth that reads a violation on main, installed and here: recorded, never a register row - but
+            # the harness repair closed the prophylactic hemostatic clip's (H2R): those read no violation now
+            self.assertEqual(any(violations for *_, violations in result.values()), not closed, name)
             self.assertNotIn(name, battery.CASES)
 
 
@@ -239,7 +245,7 @@ class PlacementTests(SimpleTestCase):
     puts it (family, kind, status, lesion), and carries the cue exactly where the amendment says."""
 
     def test_every_act_is_where_main_puts_it_with_its_declared_cue(self):
-        declared = R5B['inventory_acts']
+        declared = {**R5B['inventory_acts'], **H2R['inventory_acts']}  # H2R: the R2 rows' bleeding control in doubt
         texts = {name: text for name, (text, _) in battery.CASES.items() if name in declared}
         texts.update({name: text for name, (text, _) in battery.R5_RESIDUALS.items()})
         self.assertEqual(sorted(texts) + ['mara rev1'], sorted(declared))
@@ -274,12 +280,15 @@ class FourShapesTests(SimpleTestCase):
         name = 'R8 R5 R2 dash combined'
         inv = inventory(text_of(name))
         polyp_b = lesion_id(inv, 'gi.colonoscopy', '12 mm')
-        self.assertEqual([(a.lesion, CUE in a.cues) for a in acts(inv, kind='bleeding_control')], [(polyp_b, True)])
+        # the harness repair (H2R, refutation multi-3): "hemostatic" alone leaves the bleeding control in doubt, so the
+        # act is no longer a performed one tied by a name, and 45382 is held as an act in doubt (round 5b: named_only)
+        self.assertEqual([(a.lesion, a.status, CUE in a.cues, services.HEMOSTATIC_CUE in a.cues)
+                          for a in acts(inv, kind='bleeding_control')], [(polyp_b, 'uncertain', False, True)])
         self.assertEqual([(a.lesion, CUE in a.cues) for a in acts(inv, 'gi.colonoscopy', 'clip')], [(polyp_b, False)])
         result = read(name)
         self.assertEqual({code: result[code][:3] for code in result},
                          {'43239': (READY, [], 'service'), '45385': (READY, [], 'service'),
-                          '45382': (HELD, ['performed_status'], 'named_only')})
+                          '45382': (HELD, ['performed_status'], 'act_missing')})
 
 
 class BaseCodeTests(SimpleTestCase):
@@ -566,14 +575,15 @@ class SiteOnlyLiftTests(SimpleTestCase):
     CLIP = 'Impression: The hemostatic clip was placed prophylactically at the Polyp B stalk site during the colonoscopy.'
 
     def test_a_restatement_naming_no_site_of_its_own_keeps_the_hold(self):
-        for name, line, code in (('R8 R5 R1 dash', self.WITHDRAWN, '45380'),
-                                 ('R8 R5 R2 dash combined', self.CLIP, '45382')):
+        # the harness repair (H2R): the R2 row's 45382 is held as an act in doubt ("hemostatic" alone), not named_only
+        for name, line, code, reason in (('R8 R5 R1 dash', self.WITHDRAWN, '45380', 'named_only'),
+                                         ('R8 R5 R2 dash combined', self.CLIP, '45382', 'act_missing')):
             with self.subTest(name):
                 text, codes = battery.CASES[name]
-                self.assertEqual(read(name)[code][:3], (HELD, ['performed_status'], 'named_only'))  # the row alone
+                self.assertEqual(read(name)[code][:3], (HELD, ['performed_status'], reason))  # the row alone
                 restated = text.rstrip('\n') + '\n' + line + '\n'
                 self.assertEqual(read(name, text=restated, codes=codes)[code],
-                                 (HELD, ['performed_status'], 'named_only', []))
+                                 (HELD, ['performed_status'], reason, []))
 
 
 class HeldCodeCarriesItsActsTests(SimpleTestCase):
@@ -582,8 +592,9 @@ class HeldCodeCarriesItsActsTests(SimpleTestCase):
     held."""
 
     def test_every_named_only_cell_names_its_acts(self):
-        declared = R5B['named_only_support_acts']
-        self.assertEqual(sorted(declared), sorted(R5B['named_only_cells']))
+        closed = H2R['named_only_cells_closed']  # the harness repair: the R2 combined row's 45382 is held as in doubt
+        declared = {key: ids for key, ids in R5B['named_only_support_acts'].items() if key not in closed}
+        self.assertEqual(sorted(declared), sorted(cell for cell in R5B['named_only_cells'] if cell not in closed))
         by_row = {}
         for key, ids in declared.items():
             name, code = key.split(' | ')

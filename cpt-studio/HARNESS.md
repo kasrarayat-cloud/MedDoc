@@ -2235,3 +2235,102 @@ built, measured and refuted is appended below it as it happens.
 
   The label and digest pins moved too: test_gi4_state, test_harness_engine_parity, test_harness2_r2_parity,
   test_harness_pipeline, and the two version tests. No safety assertion was dropped.
+
+### Refutation round 1 (2026-11-05): six lenses over the finished diff, and what changed
+
+The mandatory refutation pass ran over the finished diff at `3907cd592`. Six lenses, each in its own read-only sandbox,
+were told to find counterexamples: time, false approval, negation, ownership, multiple lesions, and misleading
+completeness. They reported sixteen findings: twelve blocking, three major and one minor. Every finding but one was
+reproduced on the committed head before any repair. The exception is fa-2, whose behaviour P-ADMIT's own text already
+declares; only its claim is corrected (below).
+
+**The common shape, and why the repairs are in the shared readers.** Under D14, a reader gap was a conservative failure.
+A gap that left a false open act beside Corti's correct code gave an alternative and kept coding incomplete. P-ADMIT
+lets a participant fill such a gap READY, and Corti's own selection of the same passages was READY too: C2's
+equivalence held throughout. So every repair is in a reader both paths read (`studio/gi/services.py`,
+`studio/validation/reconcile.py`, `studio/gi/catalogue.py`, the engine's own-passage release), never a guard on the
+participant path alone. Several of the gaps were Corti-path residuals the owner's directive now asks to close:
+other-provider services, prophylactic clipping, failed or planned services, and EMR components.
+
+| finding | what read wrong | the rule repaired |
+|---|---|---|
+| time-1 | "Tattoo ink has yet to be injected ... for future localization" read as a completed marking | a bare participle governed by "be/is/are/am/to/being" states no completed marking (`_unstated_marking`) |
+| fa-1 | "Procedure: Colonoscopy with hot snare polypectomy" made the snare READY over "No polyps were removed.", "Hot snare polypectomy failed." and "will be removed ... at a later date" | a procedure line lists what its report documents. Where the report states a listed act planned, attempted, failed or hedged, or states a removal of a lesion not done, failed or planned with no technique named, and documents no such act done, the listing establishes nothing (`LISTED_WITHHELD_CUE`). An attempt or a failure keeps its act, in doubt, rather than dropping it for want of a predicate |
+| neg-1, neg-3 | "nothing was biopsied", "zero biopsies were taken", "the decision was made not to biopsy it", "from none of the polyps", "which yielded no tissue" read as done, and beside another act's denial released the routing-era hold | the closed class of negative quantifiers (`NEG_LEAD` and `NEG_OTHER` take "nothing" and the zero numeral); a negated infinitive (`NOT_TO_BEFORE`); a negative object (`NONE_AS_OBJECT`); an outcome of nothing obtained (`NO_YIELD_AFTER`) |
+| neg-2 | "The tattoo site ... was marked with a clip", 'was marked "tattoo"', "a polyp adjacent to the tattoo", "the existing tattoo" read as a tattoo placed | "marked" names a tattoo placed only as its instrument ("marked with tattoo": `MARKED_ONLY`, `MARKED_WITH`). A tattoo named as a place is no tattoo act: a noun adjunct ("tattoo site"), the object of a place preposition, or one already there (`TATTOO_AS_PLACE`). A coordinated "and not resected" is never set apart from the marking over a predicate of its own ("ink that was unavailable") |
+| own-1 | "removed with a hot snare at 25 cm from the anal verge" unbound the snare from its polyp | a distance names a landmark, never the act's site (`DISTANCE_FROM`) |
+| own-2 | ", separate from the cecal polyp and located in the sigmoid colon," dropped the polyp's own site, and "The 8 mm polyp" then fell back to the 7 mm one | the aside closes before a coordinated participle (`_COORDINATED_PARTICIPLE`); a sized anaphor refers back only to a lesion of its size (`_anaphor_size`) |
+| own-3 | a pathology addendum's "removed by cold snare polypectomy" (and a nursing or anesthesia entry's act) made a code READY | only the physician's documentation establishes the act a code accounts for (`reconcile.OWN_ROLES` in `match`); another role's act alone holds the code with a question naming that entry |
+| own-4 | the EMR's lift injection told in a sentence of its own released 45381 READY by its own passage | the own-passage release reads the passage's act as the reconciliation would and never releases one that is part of another documented act (`_passage_act_included`: held, `act_included`) |
+| multi-1 | "resected by EMR with a hot snare" admitted 45385 beside 45390 | a snare or hot-forceps removal of the lesion an EMR or ESD resects is that resection's technique (`resection_technique`) |
+| multi-2 | "biopsies were taken from a 10 mm sigmoid polyp, which was then removed" left the biopsy unbound | a lesion named with a site adjective and a creating lead is recorded (`LESION_SITED`) |
+| multi-3 | "Two hemostatic clips were placed prophylactically" read as control of bleeding | the adjective "hemostatic" names a device or a treatment, never that bleeding was controlled: a bleeding-control act it alone names is in doubt (`HEMOSTATIC_CUE`). Not a prophylaxis word list: round 4b's R4c read one and was refuted by G5, H1 and H4 |
+| multi-4 | an esophageal and a pyloric dilation code competed, and the reason said "participants" of one participant's two codes | claims are per act its own passages show (`_claimed`); the reason reads "independent readings propose ..." |
+| compl-1 | "Decompression of the stomach was attempted but failed." was skipped as not performed | an act no code of its family accounts for is listed whatever its outcome (`reconcile.reconcile`, uncertain acts too) |
+| compl-2 | a decompression in an ERCP, EUS or enteroscopy was dropped unlisted | every endoscopic family lists decompression (`catalogue`); none of those three codes it |
+| fa-2 (minor) | a second participant's agreement with a different quote moves the evidence and the fingerprint | declared behaviour (P-ADMIT adds its proposers and their passages); the effect is conservative, since an earlier approval is invalidated and never carried. C2's claim is corrected here: agreement never changes a decision, but it can change the evidence and so the fingerprint |
+
+**Over-reach of the repairs themselves, found by the suites before any commit.** Each of these was a movement from a
+pinned READY, now narrowed:
+- **Found by the targeted suites.**
+  - The first withholding rule counted any body act left uncertain, including one uncertain only because no
+    performance statement was read. That demoted svc-42's tube replacement and turned its service uncertain.
+  - `LESION_SITED` first also read a sized restatement with no lead. It created a second lesion for R8 R5 Z1's "2. 8 mm
+    sigmoid colon polyp removed".
+- **Found by the full suite (5,884 tests: 17 failures, all mine).**
+  - `LESION_SITED` recorded a lesion that was only observed. Under "Findings: A 6 mm sigmoid polyp was seen.", the
+    checked "Biopsy" box on a merged form line beside the snare's sentence was read as a biopsy of the polyp then
+    removed, and held. The same rule made a rectal EUS's "A 3 cm rectal mass was staged" relabel its biopsy, and turned
+    an impression's "one gastric polyp and one sigmoid polyp" into two new lesions. It now reads only a sized mention
+    with a creating lead whose own clause names an act, places it by its own site adjective, and binds a recorded
+    lesion of the same size at that site before making one.
+  - The withholding rule counted a form question's "?" as a hedge ("Was the FNA performed? No").
+  - It also counted a plan reading taken from a plan section or label: the "3. Upcoming procedures" item that engine
+    @4's time_plan ruling reads as performed under its procedure line.
+  - It also counted a future service ("repeat colonoscopy with snare polypectomy in 3 years").
+  - Only a statement against the listed act today counts now (`_against_listing`): an attempt or a failure of it; a
+    plan to do it at a lesion documented today; or a plan its own words state, in a clause that names no service.
+
+**Mutation proofs.** Twenty-eight mutants were run, one per rule and per narrowing condition. Each was asserted
+applied, run against the tests that should kill it, and restored from a copy with its sha256 compared; the working
+tree's diff digest is the same before and after every batch. Two survived at first, and each was a finding about the
+tests:
+- the comparison-aside assertion was vacuous: it ran after its loop and compared a string with itself;
+- every marking input was also decided by a neighbouring rule.
+
+Both tests were strengthened, the two mutants were re-run, and all twenty-eight are killed. Pins:
+`tests/test_h2_refutation_r1.py`, plus `tests/test_h2_marking_tense.py` for time-1.
+
+**Declared movements on the Corti-only path, measured after the code.**
+- The prophylactic hemostatic clip rows (`tests/fixtures/gi4/declarations/cux-r5-binding.json`,
+  `amendment_20261105_harness_repair`, a union with 0 lines removed):
+  - R8 R5 R2's combined row stays held, now as an act in doubt rather than a named-only act;
+  - the three colonoscopy-only residual rows move from READY to held and read no violation;
+  - ACCURACY-RESIDUALS' recorded residual for this shape is closed.
+- The H4 battery against main 8645fd54 moved six codes, with 0 new violations:
+  - R8 D3 N9, N15 and N17, the "snare header" rows: 45385 held → excluded, citing the body's own denial or plan, and
+    reinstatable;
+  - in the same rows, 45378 held → READY. It is no longer held as included in a polypectomy not done.
+
+  Both moves agree with the rows' truths. They are declared, measured after the code, in
+  `tests/fixtures/gi4/declarations/h2-repair-r1.json`.
+- The H1 replay differs from main by the three version labels alone.
+
+**Recorded limitations (not repaired here).**
+- "The lesion was marked with tattoo ink that was unavailable." with no coordinated denial still reads a tattoo placed,
+  on both paths. It is pre-existing at main: a relative-clause denial of the marker. The "and not resected" form the lens
+  reported is repaired.
+- "Bleeding was stopped with two clips." and "Active bleeding was controlled with two hemostatic clips." read no act in
+  the inventory: "stopped" and "controlled" are not act predicates, the same at main. Corti's 45382 stands on its own
+  passage (the own-passage release). A participant's fills no open item, so it stays an alternative. That is
+  conservative, and the predicate list was not widened for it.
+- "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa, ..." leaves the polyp without a site, because
+  the aside's object is the polyp's own neighbourhood. Its snare is never moved to another polyp, but its site is not
+  named.
+- Two of the multiple-lesions lens's cases wait on a coding ruling and are not decided here:
+  - ablation of an EMR's margins (APC);
+  - a hot-forceps partial removal finished with a cold snare on one polyp.
+- A plan at today's lesion inside a future service withholds a removal that only the procedure line lists, when the
+  body says only that the polyp was seen: "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1
+  year." holds 45385 (a false hold, on the safe side). "Any residual polyp" falls back to today's polyp, and telling a
+  deferral from a surveillance plan would be a word list.

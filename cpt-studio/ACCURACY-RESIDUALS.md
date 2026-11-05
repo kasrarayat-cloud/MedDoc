@@ -1182,3 +1182,30 @@ Measured by the lead before code:
 
 No member answer can confirm the binding itself. Whether a reviewer should be able to confirm "this act was part of
 this procedure" is an open product question, recorded for the owner.
+
+## Harness repair, refutation round 1 (2026-11-05): what closed, and what is left
+
+The refutation pass over the participant-admission diff is recorded in HARNESS.md, "Refutation round 1 (2026-11-05)".
+This section records only what it changed about the residuals above, and what it adds. Nothing above is rewritten.
+
+**Closed.**
+- The row "a prophylactic hemostatic clip read as control of bleeding in a colonoscopy-only note" (round 5, the R2
+  rows) is closed. The adjective "hemostatic" no longer states that bleeding was controlled: a bleeding-control act it
+  alone names reads in doubt, so 45382 is held with a question.
+  - It is not round 4b's refuted prophylaxis list (R4c): no purpose word is read.
+  - The three colonoscopy-only residual rows read no violation now, measured in
+    `cux-r5-binding.json` `amendment_20261105_harness_repair`.
+- The r1 missed-9 shape is closed: "Procedure: ... with hot snare polypectomy" beside a body that says no polyp was
+  removed, or that the removal failed or is planned. The listing no longer makes the act READY (HARNESS.md's withheld
+  listing).
+
+**Added (each pre-existing at main 8645fd54; none reads READY where the lens's input reads not done, except the
+first).**
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a relative-clause denial of the marker | "The lesion was marked with tattoo ink that was unavailable." | 45381 READY, both paths | a predicate on the marker's own noun; the coordinated form ("... and not resected") is repaired |
+| bleeding control told with a predicate the inventory does not read | "Bleeding was stopped with two clips."; "Active bleeding was controlled with two hemostatic clips." | Corti READY (own passage); a participant's an alternative | "stopped" and "controlled" are not act predicates; widening the list reaches far beyond bleeding |
+| a comparison whose object is the lesion's own neighbourhood | "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa, was removed with a hot snare." | the snare at no lesion, never another polyp's | telling a neighbourhood from another lesion would be a word list |
+| acts a coding ruling must place | an EMR's margins ablated by APC; a hot-forceps partial removal finished with a cold snare on one polyp | each code admitted READY beside the other | whether they are one service is a coding question, not a reading one |
+| a plan at today's lesion inside a future service, beside a removal only the procedure line lists | "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1 year." under "Procedure: Colonoscopy with hot snare polypectomy", the body saying only that the polyp was seen | 45385 held (the listing withheld) | a false hold, on the safe side: the plan is read at today's polyp ("any residual polyp" falls back to it), and telling a deferral ("will be removed at a later colonoscopy") from a surveillance plan would be a word list |

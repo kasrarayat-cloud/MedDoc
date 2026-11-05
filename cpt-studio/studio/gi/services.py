@@ -230,7 +230,10 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
                          r'|\bbleed\w*\s+(?:was\s+|were\s+)?(?:controlled|treated|stopped|arrested)\b'
                          r'|\b(?:bipolar|multipolar|heater\s+probe|thermal)\s+(?:coagulation|probe|cautery)\b'),
     ('clip', r'\b(?:hemo|endo)?clips?\b|\bclipp(?:ed|ing)\b'),
-    ('tattoo', r'\btattoo(?:ed|ing|s)?\b|\bIndia\s+ink\b|\bcarbon\s+particle\s+suspension\b'),
+    # a noun adjunct of a place ("the tattoo site", "the tattooed segment") names where a tattoo is, never a tattoo
+    # placed (harness repair 2026-11-05, refutation neg-2; the snare's "snare site" below is the same rule)
+    ('tattoo', r'\btattoo(?:ed|ing|s)?\b(?!\s+(?:site|location|area|scar|region|segment)s?\b)|\bIndia\s+ink\b'
+               r'|\bcarbon\s+particle\s+suspension\b'),
     ('injection', r'\b(?:submucosal\s+)?inject(?:ion|ions|ed)\b'),
     ('band_ligation', r'\b(?:band(?:ed|ing)?\s+ligation|variceal\s+band(?:ing)?|bands?\s+(?:were|was)\s+(?:placed|applied|'
                       r'deployed|fired)|banded)\b|\b(?:placed|applied|deployed|fired)\s+(?:\w+\s+){0,3}?(?:rubber\s+)?bands\b'
@@ -266,6 +269,14 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
 ))
 ACT_KINDS = tuple(kind for kind, _ in ACTS)
 # Kinds whose mere naming in a sentence is not an act (they name a thing): they are acts only with an act predicate.
+BLEEDING_CONTROL = dict(ACTS)['bleeding_control']
+# Refutation fa-1: a removal stated with no technique named ("No polyps were removed.", "The polyp will be removed at a
+# later date."), read for the procedure line's listed removals only (build: LISTED_WITHHELD_CUE)
+REMOVAL_WORD = _rx(r'\b(?:removed|resected|excised|removal|resection)\b')
+REMOVAL_ACT_KINDS = ('snare', 'hot_biopsy', 'emr', 'esd')
+LISTED_CUE = 'performed: listed on the procedure line'
+LISTED_WITHHELD_CUE = ('uncertain: the report states the act its procedure line lists as not done, failed, planned or '
+                       'in doubt')
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
                         'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
@@ -297,10 +308,13 @@ BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|excised|r
 # past its limit). A letter label takes its digits whole, or with a numbered label after them ("A12." is "A1" "2."), as
 # the old opening could: the same openings reach the same negation word.
 NEG_OPENING = r'^(?:[\s\-*•(]|[A-Z]{1,3}(?:\d{2,4}[.)]|\d{1,2}(?!\d))|\d{1,2}[.)])*'
-NEG_LEAD = _rx(NEG_OPENING + r'(?:no|neither|none|nor|without|there\s+was\s+no'
-               r'|there\s+were\s+no)\b')
-NEG_OTHER = _rx(NEG_OPENING + r'(?:no|neither|none|nor|there\s+(?:was|were)\s+no)'
-                r'(?:\s+(?:other|further|additional|more|another|separate|repeat)\b'
+# Harness repair 2026-11-05, refutation neg-1 and neg-3: the closed class of negative quantifiers includes "nothing"
+# and the zero numeral as a determiner ("nothing was biopsied", "zero biopsies were taken", "0 polyps were removed"),
+# which had read as acts done - and, beside another act's denial, released the routing-era hold.
+NEG_LEAD = _rx(NEG_OPENING + r'(?:no|neither|none|nor|without|nothing|there\s+was\s+no'
+               r'|there\s+were\s+no|(?:zero|0)(?=[ \t]+[a-z]))\b')
+NEG_OTHER = _rx(NEG_OPENING + r'(?:no|neither|none|nor|nothing|there\s+(?:was|were)\s+no)'
+                r'(?:\s+(?:other|further|additional|more|another|separate|repeat|else)\b'
                 # a limit on acts beyond the documented ones: "No tissue was sampled beyond the three containers"
                 r'|\b[^.;\n]{0,80}?\b(?:beyond|other\s+than|except(?:\s+for)?|apart\s+from|besides|in\s+addition\s+to)\s+'
                 r'(?:the|those|these|what|that|this|its|their|\w+\s+(?:listed|described|documented|noted))\b)')
@@ -313,6 +327,11 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
                r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
+# "the decision was made not to biopsy it", "elected not to remove the polyp": at most three words from "not to" to the
+# mention, none of them a coordinator (refutation neg-1)
+NOT_TO_BEFORE = _rx(r'\bnot\s+to\s+(?:(?!(?:and|but|or|then)\b)[\w-]+\s+){0,3}$')
+# "biopsies were obtained from none of the polyps": the act's own predicate, then a negative quantifier as its object
+NONE_AS_OBJECT = _rx(r'\s+(?:was|were)\s+(?:[\w-]+\s+){1,2}?(?:from|of|on|at|in)\s+(?:none|neither|no)\b')
 # A negation's list ends where another clause opens after it - a subordinator or a temporal preposition ("No bleeding
 # occurred after the biopsies were obtained", "There were no complications after biopsies were taken", "No residual
 # bleeding followed once two hemoclips were placed"): an act inside that clause is outside the negated list and reads by
@@ -419,6 +438,10 @@ def _not_on_another_predicate(text: str, neg: int, end: int, *, start: Optional[
         return False
     if not re.match(r'not\s+(?:removed|resected|excised)\b', text[neg:], FLAGS):
         return False
+    if re.search(r'\b(?:that|which|who|whose)\b|\b(?:was|were|is|are|been)\b', between, FLAGS):
+        # refutation neg-2: "marked with tattoo ink that was unavailable and not resected" - a predicate of its own
+        # between the marker and the denial: the coordinated denial is not set apart from the marking
+        return False
     return _marking_link(text, clause_start, neg, start, end, allow_marked=True)
 
 
@@ -428,6 +451,8 @@ PLACED_MARKER_PREDICATE = _rx(r'\b(?:(?:was|were)\s+(?:(?:then|also|successfully
                               r'|(?:injected|tattooed)(?=\s+(?:with|using|into|in|at|for|and|but)\b))')
 # Future localization is the purpose of a completed marking, not the time it was placed. This never masks the
 # marking's own modal, plan or denial, nor an act named inside the purpose ("for future resection").
+MARKED_ONLY = _rx(r'(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked')
+MARKED_WITH = _rx(r'\s+(?:with|using|by)\s+(?:(?:an?|the)\s+)?(?:[\w-]+\s+){0,2}')
 MARKING_PURPOSE = _rx(r'\bfor\s+(?:the\s+)?(?P<time>future|next)\s+'
                       r'(?:locali[sz]ation|identification|recognition)\b')
 
@@ -442,6 +467,15 @@ def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_m
     # coordinated tissue-removal denial apart, but never dates or establishes an injection as performed.
     predicates = MARKING_PREDICATE if allow_marked else PLACED_MARKER_PREDICATE
     for marking in predicates.finditer(text, cs, limit):
+        if _unstated_marking(text, marking):
+            continue  # "to be injected", "is injected": no completed marking, so neither its purpose nor its denial is one
+        if MARKED_ONLY.fullmatch(marking.group(0)):
+            # Refutation neg-2: "marked" names a tattoo placed only as its instrument ("was marked with tattoo"), never
+            # a tattoo named as the subject's place ("The tattoo site ... was marked with a clip") or a label
+            # ('was marked "tattoo site"', "marked on the diagram as the tattoo location")
+            if marking.end() <= pos and MARKED_WITH.fullmatch(text, marking.end(), pos):
+                return True
+            continue
         if marking.start() <= pos and end <= marking.end():
             return True
         if marking.end() <= pos:
@@ -453,6 +487,80 @@ def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_m
         if not re.search(r'[,;:]|\b(?:and|or|but|not|never)\b', link, FLAGS):
             return True
     return False
+
+
+# Harness repair 2026-11-05, refutation time-1: a bare participle the marking predicates match ("injected into",
+# "tattooed for") states a completed marking only where no auxiliary or infinitive marker governs it. "Tattoo ink has yet
+# to be injected ... for future localization", "is to be injected", "is injected", "is being injected" state none, so
+# their "future" stays a plan word and their act is never read as done today; the explicit "was|were" branch and a
+# telegraphic "Tattoo ink injected into ..." keep the package's purpose rule.
+UNSTATED_MARKING_AUX = frozenset(('be', 'is', 'are', 'am', 'to', 'being'))
+
+
+# Harness repair 2026-11-05, refutation neg-2: a tattoo named as a place - the object of a place preposition, or one
+# already in place - is no tattoo act.
+TATTOO_AS_PLACE = _rx(r'\b(?:adjacent\s+to|next\s+to|near(?:\s+to)?|beside|close\s+to|distal\s+to|proximal\s+to'
+                      r'|opposite(?:\s+to)?|beyond|around|toward(?:s)?|across\s+from|at|from)\s+'
+                      r'(?:(?:the|a|an|this|that|its|prior|previous(?:ly\s+placed)?|old|earlier|existing|pre-?existing'
+                      r'|known)\s+){0,3}$|\b(?:existing|pre-?existing)\s+$')
+# Refutation own-1: "removed with a hot snare at 25 cm from the anal verge": a distance names a landmark it is measured
+# from; the landmark is no site of the act.
+DISTANCE_REACH = 48
+DISTANCE_FROM = _rx(r'\b\d+(?:\.\d+)?\s*(?:cm|centimet(?:er|re)s?|mm)\s+(?:from|proximal\s+to|distal\s+to|above|below)'
+                    r'\s+(?:the\s+)?$')
+# Refutation multi-3: "Two hemostatic clips were placed prophylactically ...": the adjective names the device; a
+# bleeding-control act it alone names is in doubt (held with a question), never control of bleeding done.
+HEMOSTATIC_ADJECTIVE = _rx(r'hemostatic')
+HEMOSTATIC_CUE = 'uncertain: "hemostatic" names a device or a treatment, not that bleeding was controlled'
+# Refutation fa-1 and compl-1: an attempt or a failure ("Hot snare polypectomy failed.", "Gastric decompression was
+# attempted but failed.") states the act was tried, so the act is kept in doubt rather than dropped for want of a
+# predicate.
+ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain: unsuccessful', 'uncertain: abandoned')
+
+
+# Refutation neg-1: the act's own outcome stated as nothing obtained, in its own clause with no coordinator or clause
+# opener between ("which yielded no tissue", "yielding no specimen"): the act was tried, so it reads in doubt (held),
+# never done - the meaning cues.UNDONE_ACT gives the own-passage release.
+NO_YIELD_AFTER = _rx(r'(?:(?!\b(?:and|but|or|then|after|before|while|because|since|whereas)\b)[^.;:\n]){0,80}?'
+                     r'\b(?:yield(?:s|ed|ing)?|obtain(?:s|ed|ing)?|produc(?:es|ed|ing))\s+no\b')
+
+
+def _attempt_or_failure(cues) -> bool:
+    return bool(cues) and cues[0].startswith(ATTEMPT_OR_FAILURE_CUES)
+
+
+SECTION_PLAN_CUES = ('planned: plan', 'planned: in a plan section')
+
+
+def _against_listing(text: str, act: Act) -> bool:
+    """Whether a body act of a listed kind states that act otherwise today (refutation fa-1, as narrowed by the full
+    suite): an attempt or a failure of it; or a plan to do it at a lesion documented today ("The polyp will be removed
+    by hot snare at a later date."); or a plan its own words state ("Polypectomy will be performed at a later date.")
+    in a clause that names no service - a plan read from a plan section or label alone, or one inside another
+    occurrence of a service ("repeat colonoscopy with snare polypectomy in 3 years"), is no statement about today's."""
+    if act.status == 'uncertain':
+        return _attempt_or_failure(act.cues)
+    if act.status != 'planned':
+        return False
+    if act.lesion:
+        return True
+    if not act.cues or act.cues[0].startswith(SECTION_PLAN_CUES):
+        return False
+    return not any(pattern.search(text, ev.start, ev.end) for ev in act.evidence for _, _, pattern in SERVICES)
+
+
+def _anaphor_size(text: str, ss: int, se: int) -> str:
+    """The size an anaphoric lesion mention opening the sentence names ("The 8 mm polyp ..."), spaces removed, or ''."""
+    m = ANAPHORA.match(text, ss, se)
+    size = re.search(r'(\d+(?:\.\d+)?)\s*(mm|cm)\b', m.group(0), FLAGS) if m else None
+    return f'{size.group(1)}{size.group(2).lower()}' if size else ''
+
+
+def _unstated_marking(text: str, marking) -> bool:
+    if re.match(r'(?:was|were)\b', marking.group(0), FLAGS):
+        return False
+    before = re.search(r'(\w+)\s*\Z', text[max(0, marking.start() - 40):marking.start()])
+    return bool(before) and before.group(1).lower() in UNSTATED_MARKING_AUX
 
 
 def _marking_purpose_words(text: str, cs: int, ce: int, pos: int, end: int) -> frozenset:
@@ -648,6 +756,13 @@ LESION = _rx(r'(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d
              r'raised|pale|nonbleeding|non-bleeding|bleeding|hypoechoic|irregular|ulcerated|clean-based|semi-?pedunculated|'
              r'serrated|small|large|diminutive|lateral\s+spreading|laterally\s+spreading|polypoid|submucosal|'
              r'subepithelial|carpet-?like|erythematous|mucosal)[\s,]+){0,3})(?P<noun>' + LESION_NOUN + r')\b')
+# Harness repair 2026-11-05, refutation multi-2: a lesion named with a site adjective or noun adjunct before its noun
+# ("a 10 mm sigmoid polyp", "a 2 cm antral ulcer") is the lesion mention LESION reads without it; read only from a lead
+# word, so every other position fails at once. Only a creating lead: a restatement with a size and no lead ("2. 8 mm
+# sigmoid colon polyp removed with a cold snare.") or with "the" keeps the reading it had (R8 R5 Z1: it is Polyp A).
+LESION_SITED = _rx(r'(?=\b(?:an?|one|two|three|four|five|six|several|multiple|another)\b)'
+                   + LESION.pattern.replace('(?P<noun>', '(?P<site>(?:' + '|'.join(
+                       f'(?:{pattern.pattern})' for _, _, pattern in ANATOMY) + r')\s+)(?P<noun>', 1))
 # the leads of a lesion mention that describes a lesion of its own (with a size, or a number): the inventory records it
 CREATING_LEADS = ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several', 'multiple', 'a separate', 'another')
 SPECIMEN = _rx(r'\b(?:specimen|jar|container|bottle|pot)s?\s+(?P<label>[A-Z0-9]{1,2})\b|\((?:jar|specimen|container)\s+'
@@ -2258,7 +2373,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if (not auxiliaries or own or negated_again) and not _outside_negation(between, after):
             return Reading('negated', ('negated: the clause opens with a negation that covers its list',))
     head = before[-60:]
-    negation = re.search(r'\b(?:no|without|w/o|nor|neither)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS)
+    negation = re.search(r'\b(?:no|without|w/o|nor|neither|nothing|zero)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS)
     if negation and not re.search(r'\b(?:no|without)\s+(?:immediate\s+)?(?:complications?|bleeding|perforation)\b', head,
                                   FLAGS):
         # Read from the negation word on (refutation r1, release lens): no auxiliary after it, or only the act's own
@@ -2272,6 +2387,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                 and not _outside_negation(tail, after):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
+    if NOT_TO_BEFORE.search(before) and not _outside_negation(before[NOT_TO_BEFORE.search(before).end():], after):
+        return Reading('negated', ('negated: a negated infinitive over it ("not to")',))
+    if NONE_AS_OBJECT.match(after):
+        return Reading('negated', ('negated: a negative quantifier is its own predicate\'s object',))
     denied = _denied_before(text, cs, pos, before, after)
     if denied:
         return Reading('negated', (denied,))
@@ -2464,6 +2583,8 @@ def _failed_act(text: str, cs: int, ce: int, pos: int, end: int) -> str:
     before the mention as its attribute ("an unsuccessful polypectomy": cues.FAILED_ACT_BEFORE, at most three words
     between, no mark). Read only to hold (the act reads uncertain); HEDGE_WORDS, shared with other readers, is not
     widened. Bounded: the matches of one clause."""
+    if NO_YIELD_AFTER.match(text, end, ce):
+        return 'yielded nothing'  # refutation neg-1: "sampled with cold biopsy forceps, which yielded no tissue"
     for m in _cues.FAILED_ACT.finditer(text, end, ce):
         between = text[end:m.start()]
         if ACT_VERB.search(between) or NEGATION_SCOPE_END.search(between) \
@@ -3217,10 +3338,15 @@ def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, in
 # A comparison's object names a different lesion, not a second target of the clause's act. Do not remove that source
 # text or its quotation; exclude only references in an explicitly closed comma aside or parentheses. An unpunctuated
 # comparison might continue into another subject: leave that older reading unchanged rather than invent its scope.
+# Harness repair 2026-11-05, refutation own-2: the aside's object is a noun phrase; a coordinated participle after it
+# ("separate from the cecal polyp and located in the sigmoid colon") is the subject's own predicate, so the aside
+# closes before it and the subject keeps its own site.
+_COORDINATED_PARTICIPLE = r'\band\s+(?:[a-z]+(?:ed|en|ing)|found)\b'
 _COMPARISON_NOUNS = (r'(?:separate|distinct|different)\s+from\s+'
                      r'(?:(?!\b(?:was|were|is|are|has|have|had|will|shall|could|would|should|may|might|whereas)\b)'
-                     r'[^,;:.()\n]){1,160}')
-COMPARISON_OBJECT = _rx(r',\s*' + _COMPARISON_NOUNS + r',|\(\s*' + _COMPARISON_NOUNS + r'\)')
+                     r'(?!' + _COORDINATED_PARTICIPLE + r')[^,;:.()\n]){1,160}')
+COMPARISON_OBJECT = _rx(r',\s*' + _COMPARISON_NOUNS + r'(?:,|(?=\s+' + _COORDINATED_PARTICIPLE + r'))|\(\s*'
+                        + _COMPARISON_NOUNS + r'\)')
 
 
 def _comparison_objects(text: str, start: int, end: int) -> list[tuple[int, int]]:
@@ -4369,6 +4495,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # R1c-r3 (round 3, A2): a denial's second reading at the labelled lesion R1c unbinds it from (service draft,
         # act), added once every act is read so no other act's id moves
         second_readings: list = []
+        removal_otherwise: list[int] = []  # refutation fa-1: removals stated not done, failed or planned, no technique
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             read_end = min(se, ss + SENTENCE_READ_CHARS)
@@ -4387,6 +4514,26 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 continue
             described: Optional[list[int]] = None  # rule 1: _described_starts of this sentence, read when first needed
             cls = clauses_of(ss, read_end)
+            # Refutation multi-2 (LESION_SITED), narrowed by the full suite: only a sized mention whose own clause names
+            # an act ("biopsies were taken from a 10 mm sigmoid polyp") - never an observation ("Findings: A 6 mm sigmoid
+            # polyp was seen.", "A 3 cm rectal mass was staged"), whose recording would move the binding of every act
+            # beside it (test_repairs_r4_ingest's checked twin, the rectal EUS's biopsy label)
+            sited = [m for m in LESION_SITED.finditer(text, ss, read_end) if m.group('size')
+                     and not any(a <= m.start() < b for a, b in comparisons)
+                     and any(_clause_for(cls, m.start())[0] <= m0 < _clause_for(cls, m.start())[1]
+                             for _, m0, _ in mentions)]
+            if sited:
+                lesion_matches = sorted([m for m in lesion_matches if not any(s.end() == m.end() for s in sited)]
+                                        + sited, key=lambda m: m.start())
+            for rm in REMOVAL_WORD.finditer(text, ss, read_end):
+                rc = _clause_for(cls, rm.start())
+                if not LESION_NOUN_RX.search(text, rc[0], rc[1]) \
+                        or any(k in REMOVAL_ACT_KINDS and rc[0] <= m0 < rc[1] for k, m0, _ in mentions):
+                    continue  # no lesion removed is named, or its technique is (read as that act below)
+                said = read_clause(text, rc, rm.start(), rm.end(), service_date=service_date, dates=dates, part=part,
+                                   in_today_report=part.kind == 'report')
+                if said.status in ('negated', 'cancelled', 'planned') or _attempt_or_failure(said.cues):
+                    removal_otherwise.append(rm.start())
             anatomy_all = [a for a in _anatomy_in(text, ss, read_end)
                            if not any(lo <= a[2] < hi for lo, hi in comparisons)]
             regions = {region for _, region, _, _ in anatomy_all}
@@ -4450,12 +4597,20 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                 anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
                 size = re.sub(r'\s+', ' ', (lm.group('size') or '').strip())
+                sited_mention = 'site' in lm.re.groupindex
+                if sited_mention:
+                    # its own site adjective places it (never the clause's first site), and a recorded lesion of the
+                    # same size at that site is the one it restates
+                    anat = [a for a in anatomy_all if lm.start('site') <= a[2] < lm.end('site')] or anat
                 if part.noted and (anat or size) and (status or lesion_status(clause, lm, part)) not in (
                         'negated', 'historical', 'planned'):
                     note_last[part.start] = (beyond, None, lm.start())  # L1e-r3: the part's last lesion, so far
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
+                if sited_mention and anat and lead not in ('another', 'a separate') and not lm.group('sep'):
+                    existing = next((x for x in reversed(d.lesions) if x.anatomy == anat[0][0] and x.size
+                                     and x.size.replace(' ', '') == size.replace(' ', '')), None)
                 # rule 1: the label whose definition heads this mention; a lesion restated under another definition line
                 # of a label it is bound to (a specimen table's "COL-1: ascending colon" over "2 mm polyp") is that
                 # lesion, never a new one - only in its own service and only where its size and its site agree with it
@@ -4522,7 +4677,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         sentence_lesions.append(beyond_last[1])
                 else:
                     fam = part_family
-                    if fam and fam in last_lesion:
+                    said = _anaphor_size(text, ss, se)
+                    if fam and fam in last_lesion and (not said or not last_lesion[fam].size
+                                                       or said == last_lesion[fam].size.replace(' ', '')):
+                        # "The 8 mm polyp, ..." never refers back to the 7 mm polyp before it (refutation own-2)
                         sentence_lesions.append(last_lesion[fam])
             # an act's lesion is at one known place only when every lesion its sentence names is at the same places
             # (_lesion_for picks one of several by position)
@@ -4532,6 +4690,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # Acts in this sentence.
             for kind, ms, me in mentions:
                 clause = _clause_for(cls, ms)
+                if kind == 'tattoo' and TATTOO_AS_PLACE.search(text, max(clause[0], ms - 60), ms):
+                    continue  # "a polyp adjacent to the tattoo", "the existing tattoo": a place, no tattoo placed
                 own_anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]]
                 anat = own_anat or anatomy_all
                 region = anat[0][1] if anat else ''
@@ -4631,7 +4791,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # snare-resected nor retrieved")
                 has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
                                     or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms)
-                                    or ms in doubtful_at)
+                                    or ms in doubtful_at or _attempt_or_failure(reading.cues))
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):
@@ -4662,6 +4822,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # under "Interventions:", never under "Consent obtained for:", and never the only word that a
                     # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
+                if kind == 'bleeding_control' and reading.status == 'performed' \
+                        and HEMOSTATIC_ADJECTIVE.fullmatch(text, ms, me) and not any(
+                            not HEMOSTATIC_ADJECTIVE.fullmatch(m.group(0))
+                            for m in BLEEDING_CONTROL.finditer(text, bc[0], bc[1])):
+                    reading = Reading('uncertain', reading.cues + (HEMOSTATIC_CUE,))
                 reading = held_under_denial(text, ms, reading, service_date)
                 if ms in doubtful_at and reading.status not in ('negated', 'cancelled'):
                     continue  # R2a: a doubtful compound stands only as a denial, never as an act done
@@ -4680,8 +4845,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d.scopes.append((part.start, part.end) if part.kind == 'report' and part.family == fam
                                     else (ss, se))
                 lesion = bound if bound is not None else (_lesion_for(sentence_lesions, ms) if fam else None)
-                if lesion is not None and bound is None and own_anat \
-                        and not _covers_of(text, own_anat) & site_covers(lesion.anatomy):
+                own_sites = [a for a in own_anat
+                             if not DISTANCE_FROM.search(text, max(clause[0], a[2] - DISTANCE_REACH), a[2])]
+                if lesion is not None and bound is None and own_sites \
+                        and not _covers_of(text, own_sites) & site_covers(lesion.anatomy):
                     # An act's own clause can name a new subject beyond the lesion recorded earlier in the sentence.
                     # Never describe a cecal act as the earlier rectal patch's merely because the latter was recorded.
                     lesion = None
@@ -4764,6 +4931,27 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             phantom = {i for f, i in indwelling if f == fam}
             if any(a.kind == 'stent' and a.status == 'performed' and a.id not in phantom for a in d.acts):
                 d.acts = [a for a in d.acts if a.id != act_id]
+        # Harness repair 2026-11-05, refutation fa-1: a procedure line lists what its report documents. Where the report
+        # itself states an act the line lists as planned, attempted, failed or in doubt - or, for a removal, states a
+        # removal of a lesion not done, failed or planned with no technique named ("No polyps were removed.") - and
+        # documents no such act done, the listing establishes nothing: the act stays in doubt (held with a question,
+        # never ready on the line alone). Rule 4 reads a report title the same way. A denial that names the act is the
+        # conflict _conflicts keeps, as before.
+        for d in drafts.values():
+            body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}
+            for i, a in enumerate(d.acts):
+                if a.status != 'performed' or LISTED_CUE not in a.cues or a.kind in body_done:
+                    continue
+                # only a statement against the listed act today counts (_against_listing): never an act left
+                # uncertain for want of a performance statement (svc-42), a form question ("Was the FNA performed?"),
+                # a plan section or label reading of a performed item (engine @4's time_plan ruling), or a future
+                # service ("repeat colonoscopy with snare polypectomy in 3 years")
+                stated = any(b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)
+                             for b in d.acts)
+                kindless = a.kind in REMOVAL_ACT_KINDS and not body_done & set(REMOVAL_ACT_KINDS) and any(
+                    lo <= pos < hi for pos in removal_otherwise for lo, hi in d.scopes)
+                if stated or kindless:
+                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,))
     except _Capped as exc:
         problems.append(str(exc))
     services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]

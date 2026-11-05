@@ -447,20 +447,34 @@ def _open_items_covered(candidate: '_Selection', code: str, open_items: Sequence
 
 
 def _claimed(candidate: '_Selection', items: Sequence[tuple]) -> set:
-    """What an admissible participant code claims (HARNESS.md P-ADMIT): each open item of one act it accounts for, and,
-    for an item that is a whole service left without a proposal, the documented acts of that service the code is read
-    as accounting for (its match's acts), or the service itself for a code that accounts for none of them (a base code).
-    Two different codes compete only where they claim one same thing: an EGD's dilation code and its biopsy code both
-    account for the EGD left without a proposal, and never compete; two dilation codes for its one dilation do."""
+    """What an admissible participant code claims (HARNESS.md P-ADMIT): the documented acts it is read as accounting
+    for - for an open item of one act kind, the service's acts of that kind; for a whole service left without a
+    proposal, its match's acts - narrowed to those its own exact passages show (an act's evidence overlaps one of them),
+    or all of them where its passages show none; and the service itself for a code that accounts for no act of it (a
+    base code). Two different codes compete only where they claim one same act: an EGD's dilation code and its biopsy
+    code never compete, two dilation codes for its one dilation do, and an esophageal and a pyloric dilation code for
+    two different dilations do not (refutation multi-4: both had been left alternatives, the EGD uncoded)."""
     match = candidate.evaluation.match if candidate.evaluation is not None else None
+    spans = [(e.start, e.end) for e in candidate.evidence]
+
+    def shown(acts):
+        own = [a for a in acts if any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)]
+        return own or list(acts)
+
     claimed = set()
     for service, family, act, label in items:
+        svc = match.service if match is not None and match.service.id == service else None
         if act:
-            claimed.add(('item', service, family, act, label))
+            acts = [a for a in (svc.acts if svc is not None else ()) if a.status == 'performed'
+                    and a.role in reconcile.OWN_ROLES
+                    and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
+            if not acts:
+                claimed.add(('item', service, family, act, label))
+            claimed.update(('act', service, a.kind, a.lesion or ','.join(a.anatomy)) for a in shown(acts))
             continue
-        acts = match.acts if match is not None and match.service.id == service else ()
+        acts = match.acts if svc is not None else ()
         if acts:
-            claimed.update(('act', service, a.kind, a.lesion or ','.join(a.anatomy)) for a in acts)
+            claimed.update(('act', service, a.kind, a.lesion or ','.join(a.anatomy)) for a in shown(acts))
         else:
             claimed.add(('service', service, family))
     return claimed
@@ -484,6 +498,8 @@ def _not_added_why(candidate: '_Selection', code: str, accounts: bool, open_item
         return ((candidate.scope_reason or NO_EVIDENCE).rstrip('.') if candidate.evaluation is None
                 else 'the document states the act it accounts for both as done and as not done (both are '
                      'kept; neither is chosen)' if match is not None and match.reason == 'conflict'
+                else 'the act it accounts for is part of another documented act, not a separate service'
+                if match is not None and match.reason == 'act_included'
                 else 'the act it accounts for is not documented as done in the service left unresolved')
     if not accounts:
         return f'it accounts for no documented service or act {left_by} left unresolved'
@@ -1228,6 +1244,20 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         # that act at all - it neither denies it nor gives the passage to another service - so the code's own reading
         # stands, and says so. Only where nothing in that passage says the act was not done (_own_passage_may_stand:
         # P2 READ-HOLD); otherwise the inventory's act_missing hold stays.
+        included = _passage_act_included(old.decisive, found, code, text)
+        if included:
+            # Harness repair 2026-11-05, refutation own-4: the act the passage states is part of another documented
+            # act, as the reconciliation reads such an act (reconcile._bundled): "a 17 mm flat lesion was lifted by a
+            # submucosal injection of saline" beside the lesion's EMR is the EMR's lift, so 45381 is held as the
+            # one-sentence form is (act_included), never released READY on the routing-era reading
+            what = ' or '.join(reconcile.act_label(k) for k in reconcile.catalogue.code_profile(code).covers)
+            return replace(found, reason='act_included',
+                           detail=f'The {reconcile.service_label(found.service)} is documented as '
+                                  f'{found.service.status}; the {what} {code} accounts for, read from its own passage '
+                                  f'by the routing-era reader ({checks.cite(old.decisive)}), is part of another '
+                                  f'documented act: {included} No separate {what} is documented for this code.',
+                           question=f'The {what} documented ({checks.cite(old.decisive)}) is part of another procedure '
+                                    f'documented with it. Was a separate {what} performed on the date of service?')
         positive_state = 'incomplete' if found.service.status == 'incomplete' else 'performed'
         return replace(found, state=positive_state, reason='own_passage', question='',
                        detail=f'The {reconcile.service_label(found.service)} is documented as {found.service.status}; '
@@ -1799,6 +1829,26 @@ def _states_unread_act(reading: checks.Reading, found: reconcile.Match, code: st
     # patterns - an attributive act compound ("biopsy-proven Barrett esophagus", "a biopsy-confirmed adenoma")
     # presupposes an earlier act and states none today, so it never stands for the act this code accounts for
     return any(kind in kinds for kind, _, _ in gi_services._acts_in(text, reading.start, reading.end))
+
+
+def _passage_act_included(reading: checks.Reading, found: reconcile.Match, code: str, text: str) -> str:
+    """Why the act of ``code``'s kinds that its own passage names is part of another act ``found.service`` documents,
+    as the reconciliation reads a documented act of that kind there (reconcile._bundled: the lift injection of a lesion
+    the service resects by EMR or ESD, a resection's own snare, a clip), or ''. Read only on the own-passage release,
+    whose act the inventory does not read by definition (refutation own-4)."""
+    profile = reconcile.catalogue.code_profile(code)
+    if profile is None or reading.start is None:
+        return ''
+    passage = text[reading.start:reading.end]
+    span = gi_services._span(text, reading.start, reading.end)
+    for kind, pattern in gi_services.ACTS:
+        if kind in profile.covers and pattern.search(passage):
+            why = reconcile._bundled(found.service, gi_services.Act(id='', service=found.service.id, kind=kind,
+                                                                    status='performed', role='physician',
+                                                                    evidence=(span,)))
+            if why:
+                return why
+    return ''
 
 
 def _own_passage_may_stand(reading: checks.Reading, found: reconcile.Match, code: str, text: str, inventory) -> bool:
@@ -3091,7 +3141,7 @@ PARTICIPANT_NOT_ADDED = ('a quote found verbatim in the document does not by its
 PARTICIPANT_PEER_ONLY = ("it was proposed only in peer review, after the participant had seen its peers' conclusions, and "
                          "only a code a participant's first reading proposes, before any peer conclusion is shown to it, "
                          'is checked for admission')
-PARTICIPANT_COMPETING = ('independent participants propose different codes for the same documented act ({codes}); CPT '
+PARTICIPANT_COMPETING = ('independent readings propose different codes for the same documented act ({codes}); CPT '
                          'Studio does not choose between them')
 PARTICIPANT_UNREAD = ('the documented-service reading was not available, so no participant code could be checked '
                       'against it')

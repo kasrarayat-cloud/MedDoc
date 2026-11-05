@@ -31,6 +31,7 @@ from studio.validation import checks
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
 INVENTORY_SOURCE = 'cpt-studio:gi-services@4'  # the inventory's label (services.INVENTORY_VERSION)
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
+OWN_ROLES = ('physician', 'unknown')  # whose documentation of the procedure the reconciliation counts
 # Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
 STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',
               'gi.anorectal': 'manometry'}
@@ -169,8 +170,12 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                        + ', which another code accounts for.')
         return Match(positive, service, (), 'service', detail)
     kinds = profile.covers
-    done = tuple(a for a in service.acts if a.kind in kinds and a.status == 'performed')
-    denied = tuple(a for a in service.acts if a.kind in kinds and a.status in ('negated', 'cancelled'))
+    # Harness repair 2026-11-05, refutation own-3: an act documented only in another role's entry (a pathology
+    # addendum's "removed by cold snare polypectomy", a nursing or anesthesia record) is no act of the physician's
+    # documentation of the procedure; the reconciliation never counts it (reconcile), and no code is read as done on it
+    own = tuple(a for a in service.acts if a.role in OWN_ROLES)
+    done = tuple(a for a in own if a.kind in kinds and a.status == 'performed')
+    denied = tuple(a for a in own if a.kind in kinds and a.status in ('negated', 'cancelled'))
     conflict = next((c for c in inventory.conflicts if c.service == service.id
                      and (c.subject in kinds or any(k in ('tattoo', 'injection') for k in kinds)
                           and c.subject in ('tattoo', 'injection'))), None)
@@ -216,7 +221,17 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         return Match('not_performed', service, (), 'act_denied',
                      f'The {name} is documented as {service.status}, but the document states the {what} was not '
                      f'performed: {quote(denied[0].evidence[0])}.')
-    doubted = next((a for a in service.acts if a.kind in kinds and a.status == 'uncertain' and a.evidence), None)
+    reported = next((a for a in service.acts if a.kind in kinds and a.status == 'performed' and a.role not in OWN_ROLES
+                     and a.evidence), None)
+    if reported is not None:
+        return Match('uncertain', service, (), 'act_missing',
+                     f'The {name} is documented as {service.status}, but the {what} is documented only in a '
+                     f'{reported.role} entry, never in the physician\'s documentation of the procedure: '
+                     f'{quote(reported.evidence[0])}.',
+                     question=f'The {what} is documented only in a {reported.role} entry '
+                              f'({quote(reported.evidence[0], 120)}). Was a {what} performed in the {name} on the date '
+                              'of service?')
+    doubted = next((a for a in own if a.kind in kinds and a.status == 'uncertain' and a.evidence), None)
     if doubted is not None:
         # The document names the act and leaves it in doubt ("It is unclear whether biopsies were taken."): held with
         # that passage, never reported as an act the document does not mention. Still 'act_missing' - no such act is
@@ -578,6 +593,16 @@ def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
     if act.kind == 'injection' and any(a.kind in ('emr', 'esd') and a.status == 'performed'
                                        and (not act.lesion or a.lesion == act.lesion) for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['lift_injection']
+    if act.kind in ('snare', 'hot_biopsy') and any(
+            a.kind in ('emr', 'esd') and a.status == 'performed'
+            and ((act.lesion and a.lesion == act.lesion)
+                 or (not act.lesion and any(_overlaps(e.start, e.end, f.start, f.end)
+                                            for e in act.evidence for f in a.evidence)))
+            for a in service.acts):
+        # Harness repair 2026-11-05, refutation multi-1: "resected by EMR with a hot snare" reads an EMR and a snare at
+        # one lesion; the snare is the resection's own technique, never a second removal charged beside it. A snare at
+        # another lesion keeps its own code (and its distinct-lesion consideration).
+        return dict(catalogue.COMMON_BUNDLED)['resection_technique']
     if family is not None:
         for kind, why in family.bundled:
             if kind == act.kind:
@@ -688,7 +713,18 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
         covers = {kind for p in profiles if p is not None and p.family == service.family for kind in p.covers}
         seen_acts: set[tuple] = set()
         for act in service.acts:
-            if act.status != 'performed' or act.role not in ('physician', 'unknown'):
+            if act.status == 'uncertain' and act.role in OWN_ROLES and act.kind in entry.acts \
+                    and act.kind not in catalogue.UNSUPPORTED_ACTS and _bundled(service, act) is None \
+                    and not catalogue.family_codes_act(service.family, act.kind):
+                # Harness repair 2026-11-05, refutation compl-1: "Decompression of the stomach was attempted but
+                # failed." - an act no code of the family accounts for is listed whatever its outcome (the directive:
+                # never hide a therapeutic or failed decompression to clear completeness)
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}, '
+                                             'attempted or in doubt: no code profile of this service accounts for it',
+                                             act.evidence[:2], 'unsupported'))
+                continue
+            if act.status != 'performed' or act.role not in OWN_ROLES:
                 continue
             act = _needle_sampling(service, act) or act
             key = (act.kind, act.lesion or ','.join(act.anatomy))
