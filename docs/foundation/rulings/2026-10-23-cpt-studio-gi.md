@@ -2281,3 +2281,173 @@ before it is repaired; then one narrow check of those repairs only; a further ro
 
 (k) **Funding ceilings are not reintroduced.** Usage is recorded per run, one provider call at a time, with finite
 deadlines, duplicate prevention and Stop, as installed.
+
+## Owner directive, 2026-11-05 (second message) — genuinely independent admission, Fable's contract, recoverable Stop, the remaining interpretation repairs
+
+Received by session a12d8fb3 at about 20:24Z, after the install of `e6d451f03d86` and its record (#1476), verbatim:
+
+> Continue the existing CPT Studio GI repair. Do not restart the project or discard the existing checklist and evidence.
+>
+> Astra and Fable are primary code-finding participants. Corti remains another contributor, not a whitelist or veto over their proposals. I want the complete harness working before calling the GI release complete.
+>
+> Keep cpt.quillmd.com accessible while repairing, testing and installing updates.
+>
+> REQUIRED BEHAVIOR
+>
+> An explicit, source-supported proposal from Astra or Fable must be eligible for human review even when Corti:
+> - omitted the code;
+> - returned another code;
+> - listed that code only as an alternative.
+>
+> Use a provider-neutral validation path. Reusing shared validation code is fine; requiring Corti to select or endorse the proposal is not.
+>
+> Do not automatically promote every number mentioned by a model. Distinguish an explicit proposal from a raw alternative, rejected suggestion or quoted example. Require correct procedure, actual performance, date, provider, anatomy, lesion, technique and supporting evidence. Model agreement alone never establishes correctness, and no model approves a code.
+>
+> “Passes the same path as Corti” is insufficient proof while that path has known negation and timing defects.
+>
+> FIRST: FIND MY CURRENT OMITTED CODE
+>
+> Inspect my latest identifiable synthetic GI test and determine exactly why its code was “not considered.” Do not assume it is the earlier PDF or assume Corti caused it.
+>
+> Trace:
+> document → each independent assessment → normalized proposals → source validation → reconciliation → customer display.
+>
+> Report the encounter, code, originating proposal, exact exclusion reason and responsible component. If the exclusion is clinically justified, explain it; otherwise repair the shared cause. Do not force a code into the results merely to satisfy this request.
+>
+> If the exact recent encounter cannot be identified, ask only for its link or code while continuing the independently actionable repairs below.
+>
+> CHECKLIST — UPDATE THE EXISTING CPT-HARNESS-CHECKLIST.md
+>
+> Keep items 3, 5 and 10 PARTIAL until their missing requirements actually pass. Tick [x] only with current evidence. Report this checklist after each major stage; do not silently drop requested repairs and declare completion.
+>
+> [ ] 1. Diagnose the current omission.
+> Identify whether it comes from response parsing, proposal admission, source interpretation, catalogue coverage, bundling, missing documentation or display. Preserve the original result and raw responses.
+>
+> [ ] 2. Fix Fable’s response contract.
+> Inspect the three rejected responses and the unexpected fields in not_coded[0]. Repair the request/schema/normalization mismatch without disabling validation or silently discarding clinically meaningful content.
+>
+> Preserve raw output and validate the normalized result. Prove that a fresh real Fable response is accepted and actually contributes to the assessment—not merely that a request succeeded.
+>
+> [ ] 3. Verify genuinely independent proposal admission.
+> Test these cases:
+> - Only Astra proposes a supported service.
+> - Only Fable proposes a supported service.
+> - Corti disagrees, but the document supports the independent proposal.
+> - Models agree on an unsupported, denied or historical service.
+> - A number appears only in an alternative list.
+>
+> Supported explicit proposals must reach review regardless of provider. Unsupported suggestions must remain held or excluded with an accurate reason. Mere alternatives must not be promoted.
+>
+> [ ] 4. Repair the remaining interpretation defects.
+> Address tattoo versus resection negation, completed marking versus future localization, historical references inside current reports, and the demonstrated Word routing errors.
+>
+> Protect “not snared,” “never removed,” prior procedures, other-provider procedures and genuine contradictions. Bind every action to its own procedure, lesion and time. Fix shared logic rather than hardcoding a document or code list.
+>
+> Do not restore the rejected automatic decompression-bundling experiment.
+>
+> [ ] 5. Repair recoverable Stop/Resume.
+> Keep duplicate prevention. Reconcile the original request’s outcome before deciding whether a new attempt is permitted. Do not blindly resend an unknown request, reset consumed identities or permanently lose a participant merely because processing was stopped.
+>
+> Preserve attempt lineage and prove recovery without duplicate submissions.
+>
+> [ ] 6. Prove the complete harness.
+> For a fresh case, obtain usable real Corti, Astra and Fable first assessments, frozen before peer access, with peer reviews stored separately.
+>
+> A refused, malformed, interrupted or skipped response means PARTIAL participation. Do not tick “full harness” because credentials exist, calls were recorded or two participants completed.
+>
+> [ ] 7. Verify review, reconciliation and downloads.
+> Recompute code relationships after clarification and review decisions, after reload and before export. Preserve valid bundling, distinct-lesion relationships and unresolved modifier/reference limitations.
+>
+> Verify saved decisions and an actual downloaded report. Keep provider identities and technical traces confined to protected operator diagnostics. Doctors should see simple code rows, evidence, meaningful questions and truthful progress.
+>
+> [ ] 8. Test and install.
+> Run required Linux tests/CI and an independent refutation of the finished diff. Repair demonstrated regressions without weakening safeguards.
+>
+> Install through the normal declared deployment and rollback process. Reassess retained cases without provider sends first, then run a small fresh Word/PDF acceptance set using the existing standing synthetic-testing authority. Preserve all previous records, failures and approvals.
+>
+> [ ] 9. Report release readiness honestly.
+> Return:
+> - The corrected checklist and evidence paths.
+> - Exact installed revision.
+> - Why my specific code was excluded and its verified final outcome.
+> - Proof that Astra and Fable both contributed usable live results.
+> - Fresh acceptance and actual-download results.
+> - Remaining clinical, security, reference and licensing limitations.
+>
+> Resolve or explicitly account for the reported PDF-security advisories before claiming readiness for wider uploads.
+>
+> Continue through repair, installation and verification using existing authorized access. No repeated funding questions for already-authorized private testing, no new subscriptions or agreements, and no real-patient processing.
+>
+> I want a working GI product, but do not claim clinical accuracy, billing readiness or complete three-engine operation while known failures remain.
+
+### Session interpretation, 2026-11-05 (a12d8fb3, on receipt of the second message) — recorded, not owner-ruled
+
+(a) **This message supersedes the morning's interpretation (c) where they differ.** Two rules of (c) are withdrawn,
+because together they made Corti's selection a veto over the participants' proposals:
+- the gap-filling admission rule: a participant's code entered only where it accounted for an item Corti's decidable
+  proposals left unresolved;
+- its "neither is added" rule for two participant codes on one item.
+
+Interpretations (b) and (d) stand:
+- (b): only an explicit first-reading proposal can enter. A peer review's additional codes, a `not_coded` entry, a
+  candidate and an alternative never do.
+- (d): no model approves a code.
+
+(b) **The provider-neutral path.** Each explicit proposal is validated on its own merits, by the same per-code
+validation whoever proposed it. Validation never depends on another proposer selecting, omitting or listing the code.
+It checks:
+- scope and exact evidence in context;
+- that the documented service was performed on the date, by this report's physician;
+- that the act the code requires is documented as performed, with its anatomy, lesion and technique;
+- the passages' support, the required facts, and the reference and relationship checks.
+
+A code no decidable proposal carries, and that passes, becomes a proposal of origin `participant`. Sometimes codes of
+different proposers, Corti included, account for one documented act as alternatives for it. Then each reaches review
+and is held by one question naming the others. CPT Studio does not choose, and no code is preferred because of who
+proposed it.
+
+(c) **The path's own defects come first.** "Passes the same path as Corti" proves nothing while that path misreads
+negation and time. So:
+- the shared readers are repaired before the new admission is relied on;
+- the acceptance cases of item 3 are written against each document's meaning, not against what the path did before.
+
+(d) **What counts as source support is CPT Studio's reading of the document, never a participant's.** None of these add
+anything (I3):
+- a quote existing verbatim;
+- a model's confidence or its stated modifiers;
+- agreement between models.
+
+A participant's code whose act CPT Studio's readers cannot establish is held or listed, with the reason it could not be
+established. It is never made ready on the quote.
+
+(e) **39f0ac49 is the reference case** (stage 1:
+`docs/cpt-harness/repair3-20261105/stage1-trace-39f0ac49.md`). Its two assessments, six member answers and five runs are
+kept. It is re-assessed from its retained responses, with sends disabled, after the install.
+
+(f) **Stop and Resume:**
+- A Stop is honoured at a boundary the harness controls.
+- An exchange already sent is reconciled before any new attempt: from its recorded outcome, or from the provider's own
+  record of it where the provider offers one.
+- A new attempt carries a new identity, linked to the attempt it follows.
+- An unknown outcome that cannot be reconciled stays blocked and reported. It is never resent blindly.
+
+(g) **Fable's contract:**
+- The rejected readings are kept exactly as received.
+- The repair is to the request and the normalization, and the normalized reading is still validated strictly.
+- A field a participant adds beyond the contract is kept in the protected record. It is never silently dropped and never
+  read as clinical content.
+
+(h) **Items 3, 5 and 10 of the morning's checklist section stay partial** until their missing requirements pass. Item
+5's earlier tick is corrected to partial: Fable's walk readings were refused 3 of 3, and h2b lost Astra's peer review to
+the Stop, so the complete harness was never proven.
+
+(i) **The refutation pass keeps the two-cycle rule:**
+- a releasing rule refuted twice is dropped, and its inputs are pinned as recorded residuals;
+- findings are reproduced before repair;
+- failures are preserved.
+
+(j) **pypdf 6.21.2's advisories (interpretation 68)** are resolved, or explicitly accounted for, before any claim of
+readiness for wider uploads.
+
+(k) **Funding.** The standing authority for private synthetic testing applies and no ceiling is reintroduced. Usage is
+recorded per run, with finite deadlines, duplicate prevention and Stop.
