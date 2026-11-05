@@ -31,10 +31,12 @@ ASTRA_TOOLS = [{'type': 'function', 'name': tool['name'], 'description': tool['d
                 'parameters': tool['parameters'], 'strict': True} for tool in prompt.TOOLS]
 FABLE_TOOLS = [{'name': tool['name'], 'description': tool['description'], 'input_schema': tool['parameters'],
                 'strict': True} for tool in prompt.TOOLS]
-FABLE_SYSTEM = prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA)
-FABLE_PEER_SYSTEM = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+FABLE_SYSTEM_3 = prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA)
+FABLE_PEER_SYSTEM_3 = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+FABLE_SYSTEM = FABLE_SYSTEM_3 + prompt.fields_instruction()  # harness-4 (HARNESS.md, "Harness repair 3", F-CONTRACT)
+FABLE_PEER_SYSTEM = FABLE_PEER_SYSTEM_3 + prompt.fields_instruction()
 # Fable's harness-3 system prompts, pinned: a change to either is a change to the request, so it comes with a new
-# adapter version (HARNESS.md 12.8).
+# adapter version (HARNESS.md 12.8). harness-3's stay pinned, so its stored runs' bodies are rebuilt exactly.
 FABLE_SYSTEM_SHA256 = {'first': 'b07c140b936d2183cfe71f2be024b89ac2670fb75269658a7a79aa16032e2174',
                        'peer': '2518d218c437e4991a58fe53375a006a50f89550a4dde1c081e5dc2bbfc623ba'}
 # Astra's requests on the test fixtures as the harness@2 head built them (9d773838c, before Fable's harness-3 change),
@@ -185,7 +187,7 @@ class FableRequestTests(OfflineTestCase):
         self.assertEqual(request.body, {
             'model': 'claude-fable-5-1',
             'max_tokens': 16000,
-            'system': prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA),
+            'system': prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA) + prompt.fields_instruction(),
             'messages': [{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf',
                                                 'data': {'$original_sha256': ORIGINAL['sha256'],
@@ -196,7 +198,7 @@ class FableRequestTests(OfflineTestCase):
             'tool_choice': {'type': 'auto'},
         })
         self.assertEqual((request.provider, request.adapter_version),
-                         ('fable', 'anthropic-messages@cptstudio-harness-3'))
+                         ('fable', 'anthropic-messages@cptstudio-harness-4'))
         self.assertEqual(request.contexts, (NOTE,))
 
     def test_no_forbidden_field_is_ever_built_and_no_output_format(self):
@@ -218,18 +220,24 @@ class FableRequestTests(OfflineTestCase):
     def test_the_system_prompt_is_the_instructions_unchanged_then_the_schema_and_one_instruction(self):
         """HARNESS.md 12.8: nothing at Anthropic constrains the answer, so the system prompt gives its shape - the
         reading schema, serialized deterministically - with one instruction; the instructions before it are Astra's
-        exactly."""
+        exactly. harness-4 (F-CONTRACT) adds one line after the schema; harness-3's prompt is unchanged."""
         system = self.fable.build_request(NOTE, PAGES, 'paste', None).body['system']
         self.assertTrue(system.startswith(prompt.INSTRUCTIONS))
-        blank, instruction, encoded, end = system[len(prompt.INSTRUCTIONS):].split('\n')
-        self.assertEqual((blank, instruction, end), (
-            '', 'Answer with exactly one JSON object that matches this JSON Schema, and nothing else:', ''))
+        blank, instruction, encoded, fields, end = system[len(prompt.INSTRUCTIONS):].split('\n')
+        self.assertEqual((blank, instruction, fields, end), (
+            '', 'Answer with exactly one JSON object that matches this JSON Schema, and nothing else:',
+            'Give every object exactly the fields this schema lists for it. Add no other field, not even an empty one '
+            'or a note: an explanation belongs only in a field the schema has for it.', ''))
         self.assertEqual(json.loads(encoded), prompt.SCHEMA)
         self.assertEqual(encoded, json.dumps(prompt.SCHEMA, sort_keys=True, separators=(',', ':')))
         self.assertEqual(system, FABLE_SYSTEM)
-        self.assertEqual(hashlib.sha256(FABLE_SYSTEM.encode()).hexdigest(), FABLE_SYSTEM_SHA256['first'])
-        self.assertEqual(hashlib.sha256(FABLE_PEER_SYSTEM.encode()).hexdigest(), FABLE_SYSTEM_SHA256['peer'])
+        self.assertEqual(hashlib.sha256(FABLE_SYSTEM_3.encode()).hexdigest(), FABLE_SYSTEM_SHA256['first'])
+        self.assertEqual(hashlib.sha256(FABLE_PEER_SYSTEM_3.encode()).hexdigest(), FABLE_SYSTEM_SHA256['peer'])
         self.assertEqual(anthropic_fable.system_prompt(prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA), FABLE_PEER_SYSTEM)
+        self.assertEqual(anthropic_fable.system_prompt(prompt.INSTRUCTIONS, prompt.SCHEMA,
+                                                       anthropic_fable.ADAPTER_VERSION_3), FABLE_SYSTEM_3)
+        with self.assertRaises(ValueError):
+            anthropic_fable.system_prompt(prompt.INSTRUCTIONS, prompt.SCHEMA, anthropic_fable.ADAPTER_VERSION_2)
 
     def test_the_schema_text_is_deterministic_and_the_function_pure(self):
         def reordered(value):
@@ -320,7 +328,7 @@ class SharedRequestTests(OfflineTestCase):
                     instructions = prompt.INSTRUCTIONS
                 else:  # no format to hold a schema: Fable's is fixed text in its system prompt (HARNESS.md 12.8)
                     self.assertEqual(body['output_config'], {'effort': 'medium'})
-                    instructions = FABLE_SYSTEM
+                    instructions = FABLE_SYSTEM  # harness-4: the fields line too (F-CONTRACT)
                 self.assertEqual(body.pop('tools'), ASTRA_TOOLS if adapter.name == 'astra' else FABLE_TOOLS)
                 strings, pending = [], [body]
                 while pending:

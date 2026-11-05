@@ -307,9 +307,11 @@ def refusal(provider: str, adapter_version: str, requested_model: str, returned_
 
 
 def read(answer: str, source: str, *, provider: str, adapter_version: str, requested_model: str, returned_model: str,
-         question_ids: Sequence[str], frozen_inputs: Sequence, refs_retrieved=frozenset()) -> PeerReview:
+         question_ids: Sequence[str], frozen_inputs: Sequence, refs_retrieved=frozenset(),
+         set_aside_unknown: bool = False) -> PeerReview:
     """The peer review in ``answer`` (the vendor's output text), its quotes located in ``source`` (the revision text the
-    request carried as its context 0)."""
+    request carried as its context 0). ``set_aside_unknown``: as reading.read's (Fable's harness-4; HARNESS.md, "Harness
+    repair 3", F-CONTRACT): the fields the peer schema does not declare are set aside, named and not read."""
     refs = reading.retrieved_refs(refs_retrieved)
     frozen = tuple((name, sha256) for name, sha256 in frozen_inputs)
 
@@ -324,22 +326,29 @@ def read(answer: str, source: str, *, provider: str, adapter_version: str, reque
         parsed = reading.strict_json_text(answer)
     except reading.JSONRefused as exc:
         return refused(f'the answer {exc}')
+    notes: tuple[str, ...] = ()
+    if set_aside_unknown:
+        parsed, removed = reading.set_aside(parsed, prompt.PEER_SCHEMA)
+        if len(removed) > reading.MAX_SET_ASIDE:
+            return refused(reading.too_many_set_aside(len(removed)))
+        notes = tuple(reading.set_aside_note(item) for item in removed)
     error = reading.schema_error(parsed, prompt.PEER_SCHEMA, 'the peer review')
     if error:
         return refused(f'the answer breaks the peer-review schema: {error}')
     error = reading.bound_error(parsed, _TOP_LISTS)
     if error:
         return refused(error)
-    return _Reader(source).read(parsed, tuple(question_ids), refs, provider=provider, adapter_version=adapter_version,
-                                requested_model=requested_model, returned_model=returned_model, frozen_inputs=frozen)
+    return _Reader(source, notes).read(parsed, tuple(question_ids), refs, provider=provider,
+                                       adapter_version=adapter_version, requested_model=requested_model,
+                                       returned_model=returned_model, frozen_inputs=frozen)
 
 
 class _Reader:
     """Builds a PeerReview from a schema-valid, bounded answer, recording item-level problems in order."""
 
-    def __init__(self, source: str):
+    def __init__(self, source: str, notes: tuple[str, ...] = ()):
         self.locator = reading.Locator(source)
-        self.problems: list[str] = []
+        self.problems: list[str] = list(notes)  # the fields reading.set_aside removed, first (F-CONTRACT)
         self.unverified = 0
 
     def quotes(self, items) -> tuple:

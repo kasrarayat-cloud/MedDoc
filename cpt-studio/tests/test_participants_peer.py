@@ -21,8 +21,8 @@ from studio.providers.base import ProviderUnavailable, canonical_body, request_s
 from studio.types import PageSpan, ParticipantReading, ProviderRequest, from_jsonable, sha256_json, to_jsonable
 
 from tests.test_participants_support import (NOTE, ORIGINAL, PAGE_BREAK, PAGES, OfflineTestCase, astra_envelope,
-                                             astra_with, changed, fable_envelope, fable_harness_2, fable_with,
-                                             fixture_bytes, fixture_reading)
+                                             astra_with, changed, fable_envelope, fable_harness_2, fable_harness_3,
+                                             fable_with, fixture_bytes, fixture_reading)
 
 CORTI = {'selected': [{'code': '45385', 'evidence': ['was removed with a cold snare']}]}
 CORTI_SHA256 = hashlib.sha256(b'synthetic corti response bytes').hexdigest()
@@ -188,7 +188,8 @@ class _PeerContract:
             instructions = prompt.PEER_INSTRUCTIONS
         else:  # no format: the peer schema is fixed text in Fable's system prompt (HARNESS.md 12.8)
             self.assertEqual(body['output_config'], {'effort': 'medium'})
-            instructions = prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+            instructions = (prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+                            + prompt.fields_instruction())  # harness-4 (F-CONTRACT)
         self.assertEqual(body.pop('tools'), self.module.tools())
         strings, pending = [], [body]
         while pending:
@@ -388,12 +389,20 @@ class _PeerContract:
                          [(True, ''), (False, 'not found'), (False, 'too short')])
         self.assertEqual(review.unverified_quotes, 2)
 
+    # Whether a field outside the peer schema refuses the review whole: a constrained answer's (Astra's) does; a
+    # harness-4 Fable answer's is set aside instead (HARNESS.md, "Harness repair 3", F-CONTRACT; FablePeerTests)
+    extra_field_refuses = True
+
     def test_schema_breaches_refuse_the_review_whole(self):
         position = GOOD['code_positions'][0]
         cases = {
             'a missing field': ({key: value for key, value in GOOD.items() if key != 'references_used'},
                                 "the peer review lacks the required field 'references_used'"),
             'an extra field': (peer_answer(summary='x'), "the peer review has a field the schema does not allow"),
+            'a missing field beside an extra one': (
+                dict({key: value for key, value in GOOD.items() if key != 'references_used'}, summary=''),
+                "the peer review has a field the schema does not allow" if self.extra_field_refuses
+                else "the peer review lacks the required field 'references_used'"),
             'settled that is not true or false': (peer_answer(question_answers=[
                 dict(GOOD['question_answers'][0], settled='yes')]), 'question_answers[0].settled is not true or false'),
             'settled as a number': (peer_answer(question_answers=[dict(GOOD['question_answers'][0], settled=1)]),
@@ -402,6 +411,8 @@ class _PeerContract:
                                                      'code_positions[0].position is not one of the values'),
             'positions that are not a list': (peer_answer(code_positions={}), 'code_positions is not a list'),
         }
+        if not self.extra_field_refuses:
+            del cases['an extra field']
         for label, (value, expect) in cases.items():
             with self.subTest(label):
                 review = self.read(self.answer(value))
@@ -561,7 +572,8 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
         return {
             'model': 'claude-fable-5-1',
             'max_tokens': 16000,
-            'system': prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA),
+            'system': (prompt.PEER_INSTRUCTIONS + prompt.schema_instruction(prompt.PEER_SCHEMA)
+                       + prompt.fields_instruction()),  # harness-4 (F-CONTRACT)
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': framed},
                                                       {'type': 'text', 'text': document}]}],
             'output_config': {'effort': 'medium'},  # no format: Anthropic's grammar limit (HARNESS.md 12.8)
@@ -569,12 +581,14 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
             'tool_choice': {'type': 'auto'},
         }
 
-    # --- harness-3: an answer nothing at Anthropic constrained (HARNESS.md 12.8) --------------------------------------
+    extra_field_refuses = False  # harness-4 sets it aside (F-CONTRACT)
+
+    # --- harness-4 (as harness-3): an answer nothing at Anthropic constrained (HARNESS.md 12.8) -----------------------
 
     def test_an_answer_alone_in_a_single_fence_is_read_as_the_bare_one(self):
         bare = self.read(self.answer(GOOD), refs={'ncci-2026-ch6-c-1'})
         self.assertEqual((bare.refused, bare.problems, bare.adapter_version),
-                         (False, (), 'anthropic-messages@cptstudio-harness-3'))
+                         (False, (), 'anthropic-messages@cptstudio-harness-4'))
         for text in (f'```json\n{json.dumps(GOOD)}\n```', f'```\n{json.dumps(GOOD, indent=2)}\n```',
                      f'\n {json.dumps(GOOD)} \n'):
             with self.subTest(text=text[:10]):
@@ -596,11 +610,41 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
                     'The peer review was not used: the answer is not valid JSON ('), review.problems)
                 self.assertNotIn('SYNTHETIC-MODEL-PROSE', review.problems[0])
         review = self.read(self.answer(f'```json\n{json.dumps(peer_answer(summary="x"))}\n```'))
+        self.assertEqual((review.refused, review.problems), (False, (
+            "top-level field 'summary' is outside the schema; it held 3 characters, kept in the raw response, and it "
+            'was set aside and not read (an answer nothing constrained, HARNESS.md F-CONTRACT).',)))
+        harness_3 = self.harness_3_request()
+        review = anthropic_fable.read_peer(harness_3, self.answer(f'```json\n{json.dumps(peer_answer(summary="x"))}'
+                                                                  '\n```'))
         self.assertEqual(review.problems, ("The peer review was not used: the answer breaks the peer-review schema: "
                                            "the peer review has a field the schema does not allow ('summary').",))
         review = self.read(self.answer('SYNTHETIC-MODEL-PROSE-0002', stop_reason='refusal',
                                        stop_details={'category': 'cyber'}))  # the vendor's refusal comes first (I6)
         self.assertEqual(review.problems, ('The peer review was not used: the model refused (category cyber).',))
+
+    def harness_3_request(self):
+        """The harness-3 peer request for the inputs harness_2_request uses: its stored runs are read as before."""
+        _, current = self.harness_2_request()
+        body = fable_harness_3(current.body)
+        return ProviderRequest(provider='fable', adapter_version=anthropic_fable.ADAPTER_VERSION_3, body=body,
+                               canonical_sha256=request_sha256(body), contexts=(NOTE,))
+
+    def test_a_stored_harness_3_peer_review_is_read_exactly_as_before_and_harness_4_sets_extras_aside(self):
+        harness_3 = self.harness_3_request()
+        _, current = self.harness_2_request()
+        self.assertIs(registry.peer_reader('fable', anthropic_fable.ADAPTER_VERSION_3), anthropic_fable.read_peer)
+        then = anthropic_fable.read_peer(harness_3, self.answer(GOOD))
+        now = anthropic_fable.read_peer(current, self.answer(GOOD))
+        self.assertEqual((then.refused, then.adapter_version), (False, anthropic_fable.ADAPTER_VERSION_3))
+        self.assertEqual(dataclasses.replace(then, adapter_version=anthropic_fable.ADAPTER_VERSION), now)
+        noted = peer_answer(code_positions=[dict(GOOD['code_positions'][0], reason_detail='')])
+        self.assertTrue(anthropic_fable.read_peer(harness_3, self.answer(noted)).refused)
+        kept = anthropic_fable.read_peer(current, self.answer(noted))
+        self.assertFalse(kept.refused)
+        self.assertEqual(dataclasses.replace(kept, problems=()), dataclasses.replace(now, problems=()))
+        self.assertEqual(len(kept.problems), 1)
+        self.assertTrue(kept.problems[0].startswith('code_positions[0] field a value of 13 characters is outside the '
+                                                    'schema; it was empty'), kept.problems)
 
     def harness_2_request(self):
         """The harness@2 adapter's own peer request for fixed inputs (its body's sha256 is pinned in
@@ -619,7 +663,8 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
         older, current = self.harness_2_request()
         self.assertEqual(older.canonical_sha256, 'c5c4278b192df32a27238f5362ceb01a5b9ed03112515f89549f8d023789e92f')
         self.assertIs(registry.peer_reader('fable', anthropic_fable.ADAPTER_VERSION_2), anthropic_fable.read_peer)
-        self.assertEqual(anthropic_fable.PEER_READ_VERSIONS, ('anthropic-messages@cptstudio-harness-3',
+        self.assertEqual(anthropic_fable.PEER_READ_VERSIONS, ('anthropic-messages@cptstudio-harness-4',
+                                                              'anthropic-messages@cptstudio-harness-3',
                                                               'anthropic-messages@cptstudio-harness-2'))
         review = anthropic_fable.read_peer(older, self.answer(GOOD))
         self.assertEqual((review.refused, review.adapter_version), (False, anthropic_fable.ADAPTER_VERSION_2))
@@ -634,7 +679,8 @@ class FablePeerTests(_PeerContract, OfflineTestCase):
 
     def test_a_body_is_read_only_as_the_version_whose_shape_it_has(self):
         older, current = self.harness_2_request()
-        relabelled = (dataclasses.replace(current, adapter_version=anthropic_fable.ADAPTER_VERSION_2),  # harness-3 body
+        relabelled = (dataclasses.replace(current, adapter_version=anthropic_fable.ADAPTER_VERSION_2),  # harness-4 body
+                      dataclasses.replace(current, adapter_version=anthropic_fable.ADAPTER_VERSION_3),  # harness-4 body
                       dataclasses.replace(older, adapter_version=anthropic_fable.ADAPTER_VERSION))  # harness@2 body
         for request in relabelled:
             with self.subTest(version=request.adapter_version):

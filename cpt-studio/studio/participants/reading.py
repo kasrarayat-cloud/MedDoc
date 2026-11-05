@@ -26,6 +26,13 @@ An answer no structured-output mode constrained (Fable's since anthropic-message
 is first reduced by sole_object - one implementation for the reading and the peer review - to the one JSON object it
 must be, alone or alone in a single json code fence; anything else refuses it whole. The object's text is then read
 here (or by peer.py) exactly as any answer is.
+
+Since anthropic-messages@cptstudio-harness-4 (HARNESS.md, "Harness repair 3", F-CONTRACT), such an answer's object
+fields that its schema does not declare are first set aside (set_aside), for that version alone. None of them is read,
+and each is named in the reading's problems: where it was, whether it was empty, and its size, never its text. The raw
+response keeps them. What remains is validated exactly as before (types, enums, every required field), so an answer
+that lacks a field or gives one a wrong type is still refused whole. More than MAX_SET_ASIDE such fields refuse it
+whole too. A constrained answer (Astra's) and every earlier version's stored answer are read exactly as before.
 """
 from __future__ import annotations
 
@@ -57,6 +64,7 @@ MAX_EXTRACTION_ISSUES = 64
 MAX_REFERENCES = 64  # references_used entries (harness-reading@2, HARNESS.md 11.2)
 MAX_SPANS = 8  # occurrences located per quote
 MIN_QUOTE_CHARACTERS = 8  # non-space characters a quote needs before it is located at all
+MAX_SET_ASIDE = 64  # fields outside the schema an unconstrained answer may carry before it is refused whole
 CODE = re.compile(r'[0-9]{4}[0-9A-Z]')
 UNITS = range(1, 100)
 TOO_SHORT, NOT_FOUND = 'too short', 'not found'
@@ -225,9 +233,11 @@ def refusal(provider: str, adapter_version: str, requested_model: str, returned_
 
 
 def read(answer: str, source: str, *, provider: str, adapter_version: str, requested_model: str,
-         returned_model: str, refs_retrieved=frozenset()) -> ParticipantReading:
+         returned_model: str, refs_retrieved=frozenset(), set_aside_unknown: bool = False) -> ParticipantReading:
     """The reading in ``answer`` (the vendor's output text), its quotes located in ``source`` (the revision text the
-    request carried as its context 0), each reference it used checked against ``refs_retrieved``."""
+    request carried as its context 0), each reference it used checked against ``refs_retrieved``.
+    ``set_aside_unknown``: the answer of a version whose output nothing constrained and whose reading sets aside the
+    fields its schema does not declare (set_aside; Fable's harness-4); False reads it exactly as before."""
     refs = retrieved_refs(refs_retrieved)
 
     def refused(reason: str) -> ParticipantReading:
@@ -241,6 +251,12 @@ def read(answer: str, source: str, *, provider: str, adapter_version: str, reque
         parsed = strict_json_text(answer)
     except JSONRefused as exc:
         return refused(f'the answer {exc}')
+    notes: tuple[str, ...] = ()
+    if set_aside_unknown:
+        parsed, removed = set_aside(parsed, prompt.SCHEMA)
+        if len(removed) > MAX_SET_ASIDE:
+            return refused(too_many_set_aside(len(removed)))
+        notes = tuple(set_aside_note(item) for item in removed)
     error = schema_error(parsed)
     if error:
         return refused(f'the answer breaks the reading schema: {error}')
@@ -248,7 +264,7 @@ def read(answer: str, source: str, *, provider: str, adapter_version: str, reque
     if error:
         return refused(error)
     return _Reader(source, provider=provider, adapter_version=adapter_version, requested_model=requested_model,
-                   returned_model=returned_model).read(parsed, refs)
+                   returned_model=returned_model, notes=notes).read(parsed, refs)
 
 
 def retrieved_refs(value) -> frozenset:
@@ -263,6 +279,51 @@ def retrieved_refs(value) -> frozenset:
 
 
 # --- schema --------------------------------------------------------------------------
+
+def set_aside(value, schema: dict) -> tuple[object, tuple[tuple[str, bool, int], ...]]:
+    """(``value`` with every object field its schema does not declare removed, the removed fields). For the answer of a
+    version whose output nothing constrained (Fable's since anthropic-messages@cptstudio-harness-4; HARNESS.md, "Harness
+    repair 3", F-CONTRACT). Each removed field is (where it was, whether its value was empty, the length of that value
+    as canonical JSON). ``where`` is a path of declared names and list positions, with the field's own name as _name
+    gives it, never its text. Empty means JSON null, or an empty string, list or object. Only an object's fields that
+    its schema does not declare are removed, and only inside a value of the type the schema gives, so whatever breaks
+    the schema otherwise is left for schema_error to refuse. Nothing else is changed, and ``value`` is not mutated."""
+    removed: list[tuple[str, bool, int]] = []
+
+    def walk(node, node_schema: dict, path: str):
+        kind = node_schema.get('type')
+        if kind == 'object' and isinstance(node, dict):
+            properties = node_schema['properties']
+            kept = {}
+            for key, item in node.items():
+                if key in properties:
+                    kept[key] = walk(item, properties[key], f'{path}.{key}' if path else key)
+                else:
+                    where = f'{path} field {_name(key)}' if path else f'top-level field {_name(key)}'
+                    empty = item is None or (isinstance(item, (str, list, dict)) and len(item) == 0)
+                    size = len(json.dumps(item, sort_keys=True, separators=(',', ':'), ensure_ascii=False))
+                    removed.append((where, empty, size))
+            return kept
+        if kind == 'array' and isinstance(node, list):
+            return [walk(item, node_schema['items'], f'{path}[{index}]') for index, item in enumerate(node)]
+        return node
+
+    return walk(value, schema, ''), tuple(removed)
+
+
+def set_aside_note(item: tuple[str, bool, int]) -> str:
+    """The problem that names one field set_aside removed: where it was, and that it was empty or how long it was."""
+    where, empty, size = item
+    what = 'was empty' if empty else f'held {size:,} characters, kept in the raw response'
+    return (f'{where} is outside the schema; it {what}, and it was set aside and not read '
+            '(an answer nothing constrained, HARNESS.md F-CONTRACT).')
+
+
+def too_many_set_aside(count: int) -> str:
+    """Why an answer with more than MAX_SET_ASIDE fields outside its schema is refused whole."""
+    return (f'the answer carries {count:,} fields outside its schema, more than the {MAX_SET_ASIDE} this adapter sets '
+            'aside')
+
 
 def schema_error(value, schema: Optional[dict] = None, subject: str = 'the reading') -> str:
     """The first place ``value`` breaks ``schema`` (prompt.SCHEMA by default), or ''; ``subject`` names the whole value
@@ -444,10 +505,10 @@ class Locator:
 class _Reader:
     """Builds a ParticipantReading from a schema-valid, bounded reading, recording item-level problems in order."""
 
-    def __init__(self, source: str, **identity):
+    def __init__(self, source: str, notes: tuple[str, ...] = (), **identity):
         self.locator = Locator(source)
         self.identity = identity
-        self.problems: list[str] = []
+        self.problems: list[str] = list(notes)  # the fields set_aside removed, first (F-CONTRACT)
         self.unverified = 0
 
     def quotes(self, items) -> tuple[LocatedQuote, ...]:

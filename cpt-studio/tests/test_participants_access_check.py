@@ -1,7 +1,7 @@
 """The participant access check (HARNESS.md 8, 11.2, 12.8; checklist item 1.3): it refuses unless the participant is
 live, the installation synthetic-only and authorized, and the single-flight lock free; it sends one request through the
 real adapter's tool loop and its real session factory (the tools answered by a trivial local executor) - Fable's the
-harness-3 one, with no output format - prints one JSON receipt with no secret in it - every exchange's ids included -
+harness-4 one, with no output format - prints one JSON receipt with no secret in it - every exchange's ids included -
 writes nothing to the database and releases the lock. Offline: requests.Session is patched to return a fake session;
 data is synthetic."""
 from __future__ import annotations
@@ -194,17 +194,19 @@ class AccessCheckTests(OfflineDatabaseTestCase):
         self.assertEqual(receipt['reading']['codes'], ['45385', '45380'])
         self.assertLockFree()
 
-    def test_fable_sends_the_harness_3_request_with_no_output_format(self):
-        """HARNESS.md 12.8: the check sends the pipeline's own Fable request - no output format, the reading schema in
-        the system prompt, the two strict tools with tool_choice auto - and reads its answer as the pipeline does."""
+    def test_fable_sends_the_harness_4_request_with_no_output_format(self):
+        """HARNESS.md 12.8 and F-CONTRACT: the check sends the pipeline's own Fable request - no output format, the
+        reading schema and the fields line in the system prompt, the two strict tools with tool_choice auto - and reads
+        its answer as the pipeline does."""
         raw = fixture_bytes('fable-colonoscopy.response.json')
         receipt, error, session = self.check('fable', FakeResponse(200, raw, headers={'request-id': 'req_synth_3'}))
         self.assertIsNone(error)
         (call,) = session.calls
         sent = json.loads(call['data'])
-        self.assertEqual(receipt['adapter_version'], 'anthropic-messages@cptstudio-harness-3')
+        self.assertEqual(receipt['adapter_version'], 'anthropic-messages@cptstudio-harness-4')
         self.assertEqual(sent['output_config'], {'effort': 'medium'})
-        self.assertEqual(sent['system'], prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA))
+        self.assertEqual(sent['system'], prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA)
+                         + prompt.fields_instruction())
         self.assertEqual(([tool['name'] for tool in sent['tools']], [tool['strict'] for tool in sent['tools']],
                           sent['tool_choice']), (['cms_code_facts', 'cms_policy_passages'], [True, True],
                                                  {'type': 'auto'}))

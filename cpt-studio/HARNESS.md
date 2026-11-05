@@ -2737,3 +2737,63 @@ docs/deploy-reports/20261105-cpt-studio-e6d451f0-install-and-walk3.md. Every rec
 3. **The routing-era reader's family label** read h2b's colonoscopy as historical ("an outside colonoscopy" in the
    Indication) and h2c's upper endoscopy as uncertain (the report's title alone). Both are identical at main. The
    documented-service reader still made h2b's codes READY. h2c's 43248 is held by that doubt.
+
+## Harness repair 3 (2026-11-05, second message): independent admission, Fable's contract, recoverable Stop
+
+The owner's second message of 2026-11-05 is recorded verbatim, with the session's interpretation (a)-(k), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. Its checklist is `CPT-HARNESS-CHECKLIST.md`, "Harness repair 3".
+In the owner's words: "Astra and Fable are primary code-finding participants. Corti remains another contributor, not
+a whitelist or veto over their proposals." Stage 1 traced the owner's latest omitted code (39f0ac49's 43247:
+`docs/cpt-harness/repair3-20261105/stage1-trace-39f0ac49.md`). This section is the contract of each part, written
+before or with its code; what was measured and refuted is appended below it as it happens.
+
+### F-CONTRACT: Fable's response contract (anthropic-messages@cptstudio-harness-4)
+
+**What failed:** all three of Fable's walk readings of 2026-11-05 (h2a `d5f99664`, h2b `cdf5bd52`, h2c `83e6e90f`;
+`claude-fable-5-1`, `end_turn`, each one JSON object alone in a ```json fence) were refused whole by the reading
+schema. Each had one or two fields of its own on `not_coded[0]`, all empty:
+
+| run | `not_coded[0]`'s extra fields |
+|---|---|
+| h2a | `"code_note": ""` |
+| h2b | `"service_ids_note": null` |
+| h2c | `"evidence_note": ""` and `"reason_detail": ""` |
+
+No other item in any of the three answers had a field outside the schema, and nothing else was wrong with them.
+
+**Why the vendor cannot constrain it:** 12.8 measured that Anthropic refuses the reading schema as `output_config.format`
+beside the reference tools ("The compiled grammar is too large"), strict tools or not, even flattened. A strict
+`submit_reading` tool would compile the same schema into the same grammar. So the answer stays unconstrained, and the
+repair is to the request and to CPT Studio's own normalization.
+
+**The repair:**
+- **Request:** the harness-3 request with one more line after the schema (`prompt.FIELDS_INSTRUCTION`): every object
+  gets exactly the fields the schema lists, and no other field, not even an empty one or a note. It is Fable's alone,
+  so `READING_VERSION` and Astra's requests are unchanged (their sha256 on the fixtures stay pinned).
+- **Normalization:** a harness-4 answer's object fields that its schema does not declare are set aside before
+  validation (`reading.set_aside`), for the reading and the peer review alike. Each is named in the reading's problems:
+  where it was, whether it was empty, its size as canonical JSON, never its text. The raw response keeps it. A
+  set-aside field is never read, exactly as a reading's free-text `basis` never is: CPT Studio reads a participant's
+  codes, enumerated reasons and verbatim quotes, never its words.
+- **Validation is not relaxed:** what remains is validated exactly as before (types, enums, every required field, the
+  bounds and the located quotes). A missing field, a wrong type, a value no enum allows, or a declared field inside an
+  undeclared one still refuses the answer whole. More than 64 fields outside the schema (`MAX_SET_ASIDE`) refuse it
+  whole too.
+- **Versions:** a stored harness-3 run is read exactly as it was: the three walk answers stay refused in their
+  recorded assessments, and they would be refused again on a re-assessment. A constrained answer (Astra's strict
+  structured output) that broke its own schema is still refused whole.
+
+**Measured (tests):** `tests/test_participants_reading.py` FableContractTests reads the three walk answers' stored bytes
+(`tests/fixtures/participants/fable-walk/`, sha256 prefixes `ef60812dcaa8e6d3`, `bc621389dcc7c821`, `5918482ac44558f1`,
+with their runs' context 0):
+- read as harness-3, each is refused with the walk's own sentence;
+- read as harness-4, each reads its codes (h2a six, h2b two, h2c two) and names each extra field as set aside, never
+  repeating its name;
+- the same answer with the extra fields deleted reads identically, problems apart;
+- a non-empty extra field (a note naming another code) is set aside by its size, and that code is never read.
+
+`tests/test_participants_peer.py` covers the same for the peer review. All 319 participant tests pass, and so do the
+pipeline and API modules.
+
+**Still to prove (checklist item 2):** a fresh, real Fable answer accepted and contributing to an assessment, on the
+installed release.

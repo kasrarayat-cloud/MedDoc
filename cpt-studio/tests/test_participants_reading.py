@@ -6,6 +6,7 @@ in one json code fence), and Fable's earlier versions' stored runs read exactly 
 (test_participants_support)."""
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
 import json
@@ -19,8 +20,8 @@ from studio.types import EvidenceSpan, ExtractionIssue, ParticipantLesion, Provi
 
 from tests.test_participants_support import (FIXTURE_SHA256, FIXTURES, NOTE, ORIGINAL, PAGE_BREAK, PAGES,
                                              OfflineTestCase, astra_envelope, astra_tool_call, astra_with, changed,
-                                             code, empty_reading, fable_envelope, fable_harness_2, fable_with,
-                                             fixture_bytes, fixture_reading, service)
+                                             code, empty_reading, fable_envelope, fable_harness_2, fable_harness_3,
+                                             fable_with, fixture_bytes, fixture_reading, service)
 
 # Model-written text shaped like a descriptor (synthetic placeholder wording, refutation round 1, IND-2): never repeated
 REFUSAL_WORDING = ('I will not code this. 45385 is SYNTHETIC-DESCRIPTOR-WORDING with removal of lesion(s) by snare '
@@ -393,11 +394,11 @@ class SoleObjectTests(OfflineTestCase):
 
 
 class FableUnconstrainedAnswerTests(OfflineTestCase):
-    """HARNESS.md 12.8: a harness-3 Fable answer, which nothing at Anthropic constrained, is read only when it is
-    exactly one JSON object, alone or alone in a single json code fence; anything else is refused whole in CPT Studio's
-    own words. Then everything that already happened happens: strict JSON, CPT Studio's own schema validation, the
-    bounds and the located quotes (I7) - and before all of it the wrong-model, fallback and stop-reason refusals
-    (I6)."""
+    """HARNESS.md 12.8: a harness-4 Fable answer (as a harness-3 one), which nothing at Anthropic constrained, is read
+    only when it is exactly one JSON object, alone or alone in a single json code fence; anything else is refused whole
+    in CPT Studio's own words. Then everything that already happened happens: strict JSON, CPT Studio's own schema
+    validation, the bounds and the located quotes (I7) - and before all of it the wrong-model, fallback and stop-reason
+    refusals (I6)."""
 
     def setUp(self):
         super().setUp()
@@ -406,7 +407,7 @@ class FableUnconstrainedAnswerTests(OfflineTestCase):
         self.answer = json.dumps(fixture_reading())
         self.good = self.adapter.read(self.request, fixture_bytes('fable-colonoscopy.response.json'))
         self.assertEqual((self.good.refused, self.good.problems, self.good.unverified_quotes,
-                          self.good.adapter_version), (False, (), 0, 'anthropic-messages@cptstudio-harness-3'))
+                          self.good.adapter_version), (False, (), 0, 'anthropic-messages@cptstudio-harness-4'))
 
     def read(self, text, **fields):
         return self.adapter.read(self.request, fable_with(text, **fields))
@@ -469,9 +470,12 @@ class FableUnconstrainedAnswerTests(OfflineTestCase):
         def fenced(value):
             return f'```json\n{value if isinstance(value, str) else json.dumps(value)}\n```'
         good = fixture_reading()
+        lacking = dict(good)
+        del lacking['not_coded']
         cases = {
-            fenced(dict(good, summary='x')):
-                "the answer breaks the reading schema: the reading has a field the schema does not allow ('summary')",
+            # harness-4 sets a field outside the schema aside (FableContractTests); a field the schema requires is
+            # still required, and a wrong type still refuses the answer whole
+            fenced(lacking): "the answer breaks the reading schema: the reading lacks the required field 'not_coded'",
             fenced(changed(good, codes=[dict(good['codes'][0], units='1')])):
                 'the answer breaks the reading schema: codes[0].units is not an integer',
             fenced('{"date_of_service":{"value":"","evidence":[]},"date_of_service":{"value":"","evidence":[]}}'):
@@ -525,7 +529,8 @@ class FableEarlierVersionTests(OfflineTestCase):
                          for version in (anthropic_fable.ADAPTER_VERSION_2, anthropic_fable.ADAPTER_VERSION_1)}
 
     def test_each_version_is_still_read_and_reads_as_the_harness_2_head_read_it(self):
-        self.assertEqual(anthropic_fable.READ_VERSIONS, ('anthropic-messages@cptstudio-harness-3',
+        self.assertEqual(anthropic_fable.READ_VERSIONS, ('anthropic-messages@cptstudio-harness-4',
+                                                         'anthropic-messages@cptstudio-harness-3',
                                                          'anthropic-messages@cptstudio-harness-2',
                                                          'anthropic-messages@cptstudio-harness-1'))
         raw = fixture_bytes('fable-colonoscopy.response.json')
@@ -555,14 +560,170 @@ class FableEarlierVersionTests(OfflineTestCase):
 
     def test_a_harness_3_answer_is_never_read_as_an_earlier_version_nor_an_earlier_one_as_harness_3(self):
         fenced = fable_with(f'```json\n{json.dumps(fixture_reading())}\n```')
-        self.assertFalse(self.adapter.read(self.current, fenced).refused)  # harness-3 reads its fence
+        self.assertFalse(self.adapter.read(self.current, fenced).refused)  # harness-4 reads its fence, as harness-3 did
         self.assertTrue(anthropic_fable.read_response(self.requests[anthropic_fable.ADAPTER_VERSION_2], fenced).refused)
-        for version in ('anthropic-messages@cptstudio-harness-4', 'anthropic-messages@cptstudio-harness-0'):
+        for version in ('anthropic-messages@cptstudio-harness-5', 'anthropic-messages@cptstudio-harness-0'):
             request = dataclasses.replace(self.current, adapter_version=version)
             with self.subTest(version=version):
                 self.assertEqual(self.adapter.read(request, fenced).problems, (
                     f"The reading was not used: it was recorded for 'fable' with adapter {version!r}, not 'fable' with "
-                    "'anthropic-messages@cptstudio-harness-3'.",))
+                    "'anthropic-messages@cptstudio-harness-4'.",))
+
+
+WALK = FIXTURES / 'fable-walk'  # Fable's three refused walk answers of 2026-11-05 and their runs' context 0
+# (answer sha256 prefix, what the harness-3 schema check said, the set-aside field names, the codes its reading
+# proposes)
+WALK_ANSWERS = {
+    'h2a': ('ef60812dcaa8e6d3', 'a value of 9 characters', ('code_note',),
+            ('43249', '43251', '43239', '45385', '45380', '45381')),
+    'h2b': ('bc621389dcc7c821', 'a value of 16 characters', ('service_ids_note',), ('45390', '45380')),
+    'h2c': ('5918482ac44558f1', 'a value of 13 characters', ('evidence_note', 'reason_detail'), ('43239', '43248')),
+}
+
+
+class FableContractTests(OfflineTestCase):
+    """HARNESS.md, "Harness repair 3", F-CONTRACT: a harness-4 Fable answer's fields outside its schema are set aside
+    before it is validated - named in the problems (where, empty or not, size; never the text), never read - and what
+    remains is validated exactly as strictly as before. A stored harness-3 answer is read exactly as it was on the walk:
+    refused whole for the same field."""
+
+    def setUp(self):
+        super().setUp()
+        self.adapter = FableParticipant(self.tmp / 'never-read.env')
+        self.request = self.adapter.build_request(NOTE, PAGES, 'paste', None)
+        self.harness_3 = self.harness_3_request(self.request)
+
+    @staticmethod
+    def harness_3_request(request, context=None):
+        body = fable_harness_3(request.body)
+        return ProviderRequest(provider='fable', adapter_version=anthropic_fable.ADAPTER_VERSION_3, body=body,
+                               canonical_sha256=request_sha256(body), contexts=(context or request.contexts[0],))
+
+    def read(self, value, request=None):
+        return self.adapter.read(request or self.request, fable_with(f'```json\n{json.dumps(value)}\n```'))
+
+    def test_the_three_refused_walk_answers_are_read_and_their_extra_fields_named(self):
+        for name, (prefix, field, extras, codes) in WALK_ANSWERS.items():
+            raw = (WALK / f'{name}.response.json').read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest()[:16], prefix)  # the stored bytes, unchanged
+            context = (WALK / f'{name}.context.txt').read_text(encoding='utf-8')
+            request = dataclasses.replace(self.request, contexts=(context,))
+            with self.subTest(walk=name):
+                then = anthropic_fable.read_response(self.harness_3_request(request, context), raw)
+                self.assertEqual((then.refused, then.problems), (True, (
+                    'The reading was not used: the answer breaks the reading schema: not_coded[0] has a field the '
+                    f'schema does not allow ({field}).',)))
+                now = anthropic_fable.read_response(request, raw)
+                self.assertFalse(now.refused, now.problems)
+                self.assertEqual(tuple(item.code for item in now.codes), codes)
+                set_aside = [line for line in now.problems if 'outside the schema' in line]
+                self.assertEqual(len(set_aside), len(extras))
+                for line, extra in zip(set_aside, extras):
+                    self.assertTrue(line.startswith(f'not_coded[0] field a value of {len(extra)} characters is '
+                                                    'outside the schema; it was empty, and it was set aside'), line)
+                    self.assertNotIn(extra, line)  # the model-written name is never repeated (I9)
+                # the set-aside fields are the only difference: the same answer without them reads identically
+                envelope = json.loads(raw)
+                text = envelope['content'][-1]['text']
+                answer = json.loads(reading.sole_object(text)[0])
+                for extra in extras:
+                    del answer['not_coded'][0][extra]
+                envelope['content'][-1]['text'] = json.dumps(answer)
+                clean = anthropic_fable.read_response(request, json.dumps(envelope).encode())
+                self.assertEqual(dataclasses.replace(now, problems=tuple(line for line in now.problems
+                                                                         if line not in set_aside)), clean)
+
+    def test_a_field_outside_the_schema_with_content_is_set_aside_named_by_its_size_and_never_read(self):
+        good = fixture_reading()
+        noted = changed(good, codes=[dict(good['codes'][0], note=f'{PROSE_MARK} see 45390 instead')]
+                        + good['codes'][1:], summary={'codes': ['45390'], 'why': PROSE_MARK})
+        result = self.read(noted)
+        base = self.read(good)
+        self.assertFalse(result.refused)
+        self.assertEqual(dataclasses.replace(result, problems=()), dataclasses.replace(base, problems=()))
+        sizes = [len(json.dumps(value, sort_keys=True, separators=(',', ':')))
+                 for value in (noted['codes'][0]['note'], noted['summary'])]
+        self.assertEqual(sizes, [len(noted['codes'][0]['note']) + 2, 54])  # as canonical JSON, quotes included
+        self.assertEqual(result.problems[:2], (
+            f"codes[0] field 'note' is outside the schema; it held {sizes[0]} characters, kept in the raw response, "
+            'and it was set aside and not read (an answer nothing constrained, HARNESS.md F-CONTRACT).',
+            f"top-level field 'summary' is outside the schema; it held {sizes[1]} characters, kept in the raw "
+            'response, and it was set aside and not read (an answer nothing constrained, HARNESS.md F-CONTRACT).'))
+        for line in result.problems:
+            self.assertNotIn(PROSE_MARK, line)
+            self.assertNotIn('45390', line)
+        self.assertNotIn('45390', [item.code for item in result.codes])  # a code named only there is never read
+        # the same answer as harness-3 recorded it is refused whole, as it always was
+        self.assertTrue(self.read(noted, self.harness_3).refused)
+
+    def test_validation_is_not_relaxed_by_the_set_aside(self):
+        good = fixture_reading()
+        lacking = copy.deepcopy(good)
+        del lacking['codes'][0]['units']
+        cases = {
+            'a required field missing': (lacking, "codes[0] lacks the required field 'units'"),
+            'a wrong type': (changed(good, codes=[dict(good['codes'][0], units='1')]),
+                             'codes[0].units is not an integer'),
+            'a value no enum allows': (changed(good, codes=[dict(good['codes'][0], confidence='certain')]),
+                                       'codes[0].confidence is not one of the values the schema allows'),
+            'an object where a string belongs': (changed(good, codes=[dict(good['codes'][0], code={'value': '45385'})]),
+                                                 'codes[0].code is not a string'),
+            'a declared field inside an unknown one':
+                (changed(good, extra={'codes': good['codes']}, codes='45385'), 'codes is not a list'),
+        }
+        for label, (value, expect) in cases.items():
+            with self.subTest(label):
+                result = self.read(value)
+                self.assertTrue(result.refused)
+                self.assertTrue(result.problems[0].startswith(
+                    f'The reading was not used: the answer breaks the reading schema: {expect}'), result.problems)
+
+    def test_nested_fields_are_set_aside_where_the_schema_declares_objects_only(self):
+        good = fixture_reading()
+        lesion = {'site': 'sigmoid colon', 'size': '6 mm', 'morphology': 'sessile', 'action': 'removed',
+                  'specimen': 'jar 1', 'margin_note': ''}
+        value = changed(good, services=[dict(good['services'][0], lesions=[lesion], extent_detail=None)],
+                        date_of_service=dict(good['date_of_service'], value_note=[]))
+        result = self.read(value)
+        self.assertFalse(result.refused, result.problems)
+        self.assertEqual([line.split(' is outside')[0] for line in result.problems[:3]],
+                         ['date_of_service field a value of 10 characters',
+                          'services[0].lesions[0] field a value of 11 characters',
+                          'services[0] field a value of 13 characters'])  # in the answer's own order
+        self.assertEqual(result.services[0].lesions, (ParticipantLesion(site='sigmoid colon', size='6 mm',
+                                                                        morphology='sessile', action='removed',
+                                                                        specimen='jar 1'),))
+
+    def test_more_than_the_limit_refuses_the_answer_whole_and_set_aside_never_mutates(self):
+        good = fixture_reading()
+        many = dict(good, **{f'extra_{index}': '' for index in range(reading.MAX_SET_ASIDE + 1)})
+        result = self.read(many)
+        self.assertEqual((result.refused, result.problems), (True, (
+            f'The reading was not used: the answer carries {reading.MAX_SET_ASIDE + 1} fields outside its schema, more '
+            f'than the {reading.MAX_SET_ASIDE} this adapter sets aside.',)))
+        at_limit = dict(good, **{f'extra_{index}': '' for index in range(reading.MAX_SET_ASIDE)})
+        self.assertFalse(self.read(at_limit).refused)
+        before = json.dumps(many, sort_keys=True)
+        kept, removed = reading.set_aside(many, prompt.SCHEMA)
+        self.assertEqual(json.dumps(many, sort_keys=True), before)
+        self.assertEqual((len(removed), reading.schema_error(kept)), (reading.MAX_SET_ASIDE + 1, ''))
+
+    def test_astra_and_the_earlier_versions_still_refuse_any_field_outside_the_schema(self):
+        good = fixture_reading()
+        noted = changed(good, not_coded=[dict(item, code_note='') for item in good['not_coded']] or
+                        [{'service_ids': [], 'code': '', 'reason': 'other', 'evidence': [], 'code_note': ''}])
+        astra = AstraParticipant(self.tmp / 'never-read.env')
+        astra_request = astra.build_request(NOTE, PAGES, 'paste', None)
+        self.assertTrue(astra.read(astra_request, astra_with(noted)).refused)  # a constrained answer that breaks it
+        self.assertTrue(self.read(noted, self.harness_3).refused)
+        self.assertFalse(self.read(noted).refused)
+
+    def test_the_request_asks_for_exactly_the_schemas_fields(self):
+        system = self.request.body['system']
+        self.assertTrue(system.endswith(prompt.schema_instruction(prompt.SCHEMA) + prompt.fields_instruction()))
+        self.assertEqual(prompt.fields_instruction(), prompt.FIELDS_INSTRUCTION + '\n')
+        self.assertEqual(self.harness_3.body['system'], prompt.INSTRUCTIONS + prompt.schema_instruction(prompt.SCHEMA))
+        self.assertEqual(fable_harness_3(self.request.body)['tools'], self.request.body['tools'])
 
 
 class ReadingTests(OfflineTestCase):

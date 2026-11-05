@@ -16,14 +16,14 @@ secret in it: what was called, which model was asked for and which answered, the
 the latency, the usage as reported with its estimated cost, and a summary of the reading. Nothing is written to the
 database. The exit status is 1 when the request did not succeed or its answer was not used.
 
-Astra's and Fable's request is the pipeline's own (Astra's harness@2 one; Fable's harness-3 one, with no output format
-and the schema in its system prompt, HARNESS.md 12.8), so it offers the reference tools and runs as the pipeline's
-does, through the tool loop (send_loop, HARNESS.md 11.2), and its answer is read by the pipeline's reader. The tools
-are answered here by a trivial local executor that returns a fixed synthetic note and no reference data: the check
-proves access and the loop's mechanics, not the CMS sources. The receipt gives the number of exchanges and, for each,
-its outcome, its request and response sha256 and the vendor's request and response ids (Astra's client request id
-too), and each tool call's id and tool. The loop is given PARTICIPANT_SEND_DEADLINE_SECONDS, inside the installer's
-limit for the whole check.
+Astra's and Fable's request is the pipeline's own (Astra's harness@2 one; Fable's harness-4 one, with no output format
+and the schema and the fields line in its system prompt, HARNESS.md 12.8 and F-CONTRACT), so it offers the reference
+tools and runs as the pipeline's does, through the tool loop (send_loop, HARNESS.md 11.2), and its answer is read by the
+pipeline's reader. The tools are answered here by a trivial local executor that returns a fixed synthetic note and no
+reference data: the check proves access and the loop's mechanics, not the CMS sources. The receipt gives the number of
+exchanges and, for each, its outcome, its request and response sha256 and the vendor's request and response ids (Astra's
+client request id too), and each tool call's id and tool. The loop is given PARTICIPANT_SEND_DEADLINE_SECONDS, inside
+the installer's limit for the whole check.
 
 Before each later exchange the loop asks, as the pipeline's loop does, whether this database session still holds the
 single-flight lock (refutation round 4, sends-1): the session is idle for the whole loop, and once it has ended the lock

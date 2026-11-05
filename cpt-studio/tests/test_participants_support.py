@@ -205,11 +205,30 @@ def changed(reading: dict, **fields) -> dict:
     return result
 
 
-def fable_harness_2(body: dict) -> dict:
-    """The harness@2 body for the input a harness-3 Fable ``body`` was built from (HARNESS.md 12.8): the instructions
-    alone as the system prompt and the schema as output_config.format; everything else the same. Tests only."""
+def fable_harness_3(body: dict) -> dict:
+    """The harness-3 body for the input a harness-4 Fable ``body`` was built from (HARNESS.md, "Harness repair 3",
+    F-CONTRACT): the system prompt without its last line (prompt.fields_instruction); everything else the same. Tests
+    only."""
     from studio.participants import prompt
 
+    for instructions, schema in ((prompt.INSTRUCTIONS, prompt.SCHEMA), (prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA)):
+        if body['system'] == instructions + prompt.schema_instruction(schema) + prompt.fields_instruction():
+            older = copy.deepcopy(body)
+            older['system'] = instructions + prompt.schema_instruction(schema)
+            return older
+    raise AssertionError('not a harness-4 Fable body')
+
+
+def fable_harness_2(body: dict) -> dict:
+    """The harness@2 body for the input a harness-4 (or harness-3) Fable ``body`` was built from (HARNESS.md 12.8): the
+    instructions alone as the system prompt and the schema as output_config.format; everything else the same. Tests
+    only."""
+    from studio.participants import prompt
+
+    try:
+        body = fable_harness_3(body)
+    except AssertionError:
+        pass  # already a harness-3 body
     for instructions, schema in ((prompt.INSTRUCTIONS, prompt.SCHEMA), (prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA)):
         if body['system'] == instructions + prompt.schema_instruction(schema):
             older = copy.deepcopy(body)

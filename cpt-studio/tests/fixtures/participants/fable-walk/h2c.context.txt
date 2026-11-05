@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Upper Endoscopy Report (fictional)
+Date of service: October 28, 2026
+Endoscopist: Tobias Wrenfield, MD (fictional)
+Patient: Test Patient Calloway (fictional) | MRN: SYN-61177
+Indications: Barrett esophagus surveillance; intermittent dysphagia.
+Sedation: Monitored anesthesia care by the anesthesia service.
+Procedure
+The gastroscope was passed to the second portion of the duodenum. A salmon-colored segment of Barrett esophagus
+extended from 32 to 35 cm. Four-quadrant biopsies were taken with cold forceps every 2 cm through the Barrett segment.
+A guide wire was placed into the stomach under direct vision, the gastroscope was withdrawn, and Savary-Gilliard
+dilators of 14, 15 and 16 mm were passed over the wire with moderate resistance at the gastroesophageal junction. The
+gastroscope was reintroduced and showed mild mucosal disruption only. The stomach and duodenum were otherwise normal.
+The stomach was decompressed and the endoscope was withdrawn.
+Impression
+Barrett esophagus, biopsied. Esophageal narrowing dilated over a guide wire to 16 mm.
+Plan
+Await pathology. Repeat endoscopy depending on histology.
+Electronically signed by Tobias Wrenfield, MD (fictional), October 28, 2026
