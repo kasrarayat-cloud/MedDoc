@@ -16,7 +16,11 @@ concurrency:
 jobs:
   python:
     name: Fresh application tests
-    runs-on: ubuntu-latest
+    # Pinned 2026-11-05: ubuntu-latest moved to Ubuntu 26.04.1 (runner image 20261028.624), whose ffmpeg 8.0.1 fails the
+    # rebuild's audio tests ("Error parsing Opus packet header", core.tests.test_audio_submission: 12 failures in run
+    # 42064001352). They were validated on Ubuntu 24.04 with ffmpeg 6.1.1 (run 42051813030 passed an hour earlier). Moving
+    # off this pin is the rebuild's audio pipeline's own change to make, measured against ffmpeg 8.
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     services:
       postgres:
