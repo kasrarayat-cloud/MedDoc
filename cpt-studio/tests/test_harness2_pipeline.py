@@ -177,17 +177,20 @@ class LoopParticipant(ReplayParticipant):
         self.first_loops, self.peer_loops = [], []
         self.endpoint = LIVE_MODULES[name].ENDPOINT
 
-    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None):
+    def send_loop(self, request, *, deadline_s, client_request_id, original_bytes, execute_tool, should_stop=None,
+                  carried=()):
         phase = 'peer' if is_peer(request.body) else 'first'
         queued = self.peer_loops if phase == 'peer' else self.first_loops
         steps = list(queued.pop(0) if queued else (self.peer if phase == 'peer' else self.first))
         record = {'phase': phase, 'request': request.canonical_sha256, 'deadline_s': deadline_s,
                   'client_request_id': client_request_id, 'execute_tool': execute_tool, 'bodies': [],
-                  'original': hashlib.sha256(original_bytes).hexdigest() if original_bytes else None}
+                  'original': hashlib.sha256(original_bytes).hexdigest() if original_bytes else None,
+                  'carried': len(carried), 'turns': []}
         self.loops.append(record)
 
         def post(turn, body, deadline):
             record['bodies'].append(body)
+            record['turns'].append(turn)
             if turn > len(steps):
                 raise AssertionError(f'{self.name} {phase}: no scripted answer for exchange {turn}')
             step = steps[turn - 1]
@@ -205,7 +208,8 @@ class LoopParticipant(ReplayParticipant):
         return loop.run(self, request, post=post, parse_turn=self.live.parse_turn, follow_up=self.live.follow_up,
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
-                        max_request_bytes=self.max_request_bytes, body_keys=self.live.BODY_KEYS, **stop)
+                        max_request_bytes=self.max_request_bytes, body_keys=self.live.BODY_KEYS, carried=carried,
+                        **stop)
 
     def loops_of(self, phase):
         return [record for record in self.loops if record['phase'] == phase]
@@ -562,36 +566,94 @@ class RefusalWordingTests(Harness2Case):
 
 class StopInLoopTests(Harness2Case):
     """Refutation round 1, sends-3 (HARNESS.md 2: a Stop observed before sending): a member's Stop recorded while a tool
-    loop runs ends it before its next exchange. The run records what was sent and has no final answer, so it is failed
-    and its request is never sent again; the stage ends stopped, and a member's Resume goes on from it."""
+    loop runs ends it before its next exchange. The run records what was sent and has no final answer; the stage ends
+    stopped. Harness repair 3, F-STOP: such a run is resumable, and a member's Resume continues it - a run of its own,
+    linked to the stopped one, that sends from the next exchange on and never an exchange again - so a Stop no longer
+    loses the participant for the revision."""
 
-    def test_a_stop_recorded_while_the_loop_runs_ends_it_before_the_next_exchange(self):
-        encounter_id = self.create()
-
-        def stopped_then_asks(body):
+    def stop_during(self, encounter_id, step):
+        def stopped_then(body):
             jobs.stop_encounter(self.encounter(encounter_id), self.reviewer)  # the member's Stop lands mid-loop
-            return asks('astra', facts_call('call_astra_1', ['99213']))
-        self.adapters['astra'].first = [stopped_then_asks, answered('astra', ASTRA_READING)]
+            return step
+        return stopped_then
+
+    def test_a_stop_recorded_while_the_loop_runs_ends_it_before_the_next_exchange_and_resume_continues_it(self):
+        encounter_id = self.create()
+        self.adapters['astra'].first = [self.stop_during(encounter_id, asks('astra', facts_call('call_astra_1',
+                                                                                                ['99213']))),
+                                        answered('astra', ASTRA_READING)]
         drain()
         (astra,) = self.runs_of(encounter_id, 'astra', 'independent')
         (loop_record,) = self.adapters['astra'].loops_of('first')
         self.assertEqual(len(loop_record['bodies']), 1)  # exchange 2 was never sent
         self.assertEqual((astra.state, astra.sent, astra.exchanges.count()), ('failed', True, 1))
         self.assertEqual(astra.error, loop.STOPPED.format(number=1, plural=''))
+        self.assertEqual(astra.scope['stopped_after_turn'], 1)  # resumable: every exchange complete
+        (exchange,) = astra.exchanges.all()
+        self.assertEqual([call.tool for call in exchange.tool_calls.all()], ['cms_code_facts'])  # answered, recorded
         job = [j for j in self.jobs_of(encounter_id) if j.kind == 'astra'][-1]
         self.assertEqual((job.state, job.error), ('cancelled', jobs.STOPPED_IN_LOOP_MESSAGE))
         self.assertEqual(self.encounter(encounter_id).state, 'stopped')
         self.assertEqual((self.sent('fable', 'first'), self.kinds(encounter_id)[-1]), (0, 'astra'))
-        # a member's Resume goes on: the stopped request is never sent again, and the chain runs to its end
+        # a member's Resume continues the stopped loop from exchange 2: exchange 1 is never sent again
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual((self.sent('astra', 'first'), self.sent('fable', 'first')), (1, 1))
-        later = self.runs_of(encounter_id, 'astra', 'independent')[-1]
-        self.assertEqual((later.state, later.sent), ('not_sent', False))
-        self.assertTrue(later.error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        first, later = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual(first, astra)
+        self.assertEqual((later.state, later.sent, later.request_sha256), ('succeeded', True, astra.request_sha256))
+        self.assertNotEqual(later.run_identity, astra.run_identity)  # a new attempt, its own identity
+        self.assertEqual((later.scope['continues'], later.scope['continues_after_turn']), (str(astra.pk), 1))
+        self.assertEqual(list(later.exchanges.values_list('turn', flat=True)), [2])
+        _, resumed = self.adapters['astra'].loops_of('first')
+        self.assertEqual((resumed['carried'], resumed['turns']), (1, [2]))
+        sent_bodies = [exchange.request_sha256 for run in (astra, later) for exchange in run.exchanges.all()]
+        self.assertEqual(len(sent_bodies), len(set(sent_bodies)))  # no exchange sent twice
         record = self.records(self.encounter(encounter_id).current_assessment)
-        self.assertEqual((record['astra']['state'], record['fable']['state']), ('not_sent', 'read'))
-        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
+        self.assertEqual((record['astra']['state'], record['astra']['run'], record['fable']['state']),
+                         ('read', str(later.pk), 'read'))
+        self.assertEqual((record['astra']['exchanges'], record['astra']['tool_calls']), (2, 1))  # the whole loop
+        reading_, _ = jobs.participant_reading(later)
+        self.assertEqual([(ref.ref, ref.retrieved) for ref in reading_.references_used],
+                         [(f'fact:{PFS_KEY}:99213:status', True), ('rule-01', False)])  # the carried tool's ref
+        self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (1, 1))
+        events = [event.data for event in models.AuditEvent.objects.filter(encounter_id=encounter_id,
+                                                                           event='provider.sending')
+                  if event.data.get('run') == str(later.pk)]
+        self.assertEqual([(event['continues'], event['continues_after_turn']) for event in events], [(str(astra.pk), 1)])
+
+    def test_a_continuation_stopped_again_is_continued_again_and_the_chain_reads_whole(self):
+        encounter_id = self.create()
+        self.adapters['astra'].first = [
+            self.stop_during(encounter_id, asks('astra', facts_call('call_astra_1', ['99213']))),
+            self.stop_during(encounter_id, asks('astra', passages_call('call_astra_2', 'ncci_endoscopy_rules'),
+                                                number=2)),
+            answered('astra', ASTRA_READING, number=3)]
+        drain()
+        for _ in range(2):
+            self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+            drain()
+        runs = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual([(run.state, list(run.exchanges.values_list('turn', flat=True))) for run in runs],
+                         [('failed', [1]), ('failed', [2]), ('succeeded', [3])])
+        self.assertEqual([run.scope.get('continues') for run in runs], [None, str(runs[0].pk), str(runs[1].pk)])
+        self.assertEqual([loop_['turns'] for loop_ in self.adapters['astra'].loops_of('first')], [[1], [2], [3]])
+        self.assertEqual(jobs.continued_runs(runs[2]), runs)
+        record = self.records(self.encounter(encounter_id).current_assessment)['astra']
+        self.assertEqual((record['state'], record['run'], record['exchanges'], record['tool_calls']),
+                         ('read', str(runs[2].pk), 3, 2))
+
+    def test_a_loop_that_failed_is_no_stopped_attempt_and_is_never_sent_again(self):
+        encounter_id = self.create()
+        self.adapters['astra'].first = [asks('astra', facts_call('call_astra_1', ['99213'])), failed()]
+        drain()
+        (astra,) = self.runs_of(encounter_id, 'astra', 'independent')
+        self.assertEqual((astra.state, 'stopped_after_turn' in astra.scope), ('failed', False))
+        revision, adapter = self.encounter(encounter_id).current_revision, self.adapters['astra']
+        request = adapter.build_request(revision.text, jobs._participant_pages(revision), 'paste', None)
+        self.assertEqual(request.canonical_sha256, astra.request_sha256)
+        self.assertIsNone(jobs._stopped_attempt(self.encounter(encounter_id), adapter, request,
+                                                models.ProviderRun.INDEPENDENT))
+        self.assertEqual(jobs._failed_before(self.encounter(encounter_id), adapter, request), astra)
 
 
 class SingleExchangeRunTests(Harness2Case):

@@ -180,10 +180,11 @@ class AstraParticipant:
                           client_request_id=client_request_id, original_bytes=original_bytes)
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str,
-                  original_bytes: Optional[bytes], execute_tool, should_stop=None) -> loop.LoopOutcome:
+                  original_bytes: Optional[bytes], execute_tool, should_stop=None, carried=()) -> loop.LoopOutcome:
         """The run's tool loop (loop.run): at most max_exchanges exchanges within the loop deadline (``deadline_s``,
         never more than loop_deadline), each read within exchange_read_timeout clamped to the time left; a member's Stop
-        (``should_stop``) is observed before every exchange after the first."""
+        (``should_stop``) is observed before every exchange after the first. ``carried``: the exchanges of the stopped
+        run this run continues (loop.run, F-STOP); its own exchanges' client request ids carry their turn numbers."""
         longest = CLIENT_REQUEST_ID_CHARS - len(f'-{self.max_exchanges}')
         client_error = ''
         if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID.fullmatch(client_request_id) \
@@ -200,7 +201,7 @@ class AstraParticipant:
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
                         max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS, client_error=client_error,
-                        should_stop=should_stop)
+                        should_stop=should_stop, carried=carried)
 
     def _post(self, body: dict, *, deadline: float, read_timeout: float, client_request_id: str,
               original_bytes) -> RawExchange:

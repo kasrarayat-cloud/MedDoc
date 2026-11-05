@@ -337,7 +337,9 @@ class _LoopContract:
 
     # --- a member's Stop (refutation round 1, sends-3: HARNESS.md 2, a Stop observed before sending) ------------------
 
-    def test_a_stop_is_observed_before_the_tools_are_answered_and_nothing_more_is_sent(self):
+    def test_a_stop_is_observed_once_the_tools_are_answered_and_nothing_more_is_sent(self):
+        """F-STOP: the last answer's tool calls are answered (CPT Studio's own lookups; nothing is sent) before the Stop
+        is read, so the stopped loop's last exchange is complete - what a continuation carries."""
         answer = self.tool_answer(self.facts_call())
         asked = []
 
@@ -347,11 +349,65 @@ class _LoopContract:
         outcome, session, _, _, executor = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2),
                                                          should_stop=should_stop)
         self.assertEqual(len(session.calls), 1)  # the exchange that asked for tools, then nothing
-        self.assertEqual((executor.calls, asked), ([], [True]))  # its tool calls were never answered
+        self.assertEqual((len(executor.calls), asked), (1, [True]))  # answered, then the Stop read once
         self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.stopped), ('failed', True, True))
         self.assertEqual(outcome.final.error, loop.STOPPED.format(number=1, plural=''))
-        self.assertEqual([(record.outcome, record.tool_calls) for record in outcome.exchanges], [('succeeded', ())])
+        self.assertEqual([(record.outcome, len(record.tool_calls)) for record in outcome.exchanges], [('succeeded', 1)])
         self.assertEqual(outcome.final.response_bytes, answer)
+
+    def test_a_continuation_sends_only_the_next_exchange_and_reads_as_the_whole_loop(self):
+        """F-STOP: a run that continues a stopped loop carries its exchanges - each request rebuilt and proved by its
+        stored sha256, each tool result re-hashed - and sends from the next exchange on, never one again."""
+        answer = self.tool_answer(self.facts_call())
+        stopped, first, _, request, _ = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2),
+                                                      should_stop=lambda: True)
+        self.assertEqual((len(first.calls), stopped.stopped), (1, True))
+        uninterrupted, whole, _, _, _ = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2))
+        session = FakeSession(self.ok(self.final_raw, 2))
+        adapter, _ = self.make(session)
+        executor = FakeExecutor()
+        outcome = adapter.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID, original_bytes=None,
+                                    execute_tool=executor, carried=stopped.exchanges)
+        self.assertEqual((len(session.calls), executor.calls), (1, []))  # one exchange, no tool answered again
+        self.assertEqual(json.loads(session.calls[0]['data']), json.loads(whole.calls[1]['data']))  # exchange 2
+        self.assertNotEqual(session.calls[0]['data'], first.calls[0]['data'])
+        self.assertEqual([record.turn for record in outcome.exchanges], [2])
+        self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.stopped), ('succeeded', True, False))
+        self.assertEqual(outcome.exchanges[0].request_sha256, uninterrupted.exchanges[1].request_sha256)
+        self.assertEqual(outcome.final.response_bytes, uninterrupted.final.response_bytes)
+
+    def test_a_continuation_that_does_not_match_its_record_sends_nothing(self):
+        answer = self.tool_answer(self.facts_call())
+        stopped, _, _, request, _ = self.run_loop(self.ok(answer), self.ok(self.final_raw, 2),
+                                                  should_stop=lambda: True)
+        (record,) = stopped.exchanges
+        (call,) = record.tool_calls
+        final = self.ok(self.final_raw, 1)
+        cases = {
+            'another request': dataclasses.replace(record, request_sha256='0' * 64),
+            'not the first turn': dataclasses.replace(record, turn=2),
+            'a failed exchange': dataclasses.replace(record, outcome='failed'),
+            'a tool result changed': dataclasses.replace(record, tool_calls=(dataclasses.replace(
+                call, result={'changed': True}),)),
+            'a tool call not answered': dataclasses.replace(record, tool_calls=()),
+            'a final answer': dataclasses.replace(record, response_bytes=self.final_raw),
+        }
+        for label, carried in cases.items():
+            with self.subTest(label):
+                session = FakeSession(final)
+                adapter, _ = self.make(session)
+                outcome = adapter.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID,
+                                            original_bytes=None, execute_tool=FakeExecutor(), carried=(carried,))
+                self.assertEqual((outcome.final.outcome, outcome.final.sent, outcome.exchanges, session.calls),
+                                 ('not_sent', False, (), []))
+                self.assertTrue(outcome.final.error.startswith('Nothing was sent: the stopped run this run continues '
+                                                               'cannot be continued exactly ('), outcome.final.error)
+        session = FakeSession(final)
+        adapter, _ = self.make(session, max_exchanges=1)
+        outcome = adapter.send_loop(request, deadline_s=540, client_request_id=CLIENT_REQUEST_ID, original_bytes=None,
+                                    execute_tool=FakeExecutor(), carried=stopped.exchanges)
+        self.assertEqual((outcome.final.outcome, session.calls), ('not_sent', []))
+        self.assertIn('the most one run may make', outcome.final.error)
 
     def test_a_stop_while_the_tools_are_answered_is_observed_before_the_next_exchange_is_sent(self):
         requested = []

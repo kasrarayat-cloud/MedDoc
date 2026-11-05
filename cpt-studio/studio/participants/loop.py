@@ -17,10 +17,19 @@ How a loop ends:
   asks for tools after the last exchange allowed ("the tool-call limit was reached"), when it asks for tool calls CPT
   Studio cannot answer, or when the loop's deadline passes before its tool calls are answered. Nothing more is sent.
 - 'failed' and ``stopped`` when the caller's ``should_stop`` says a member's Stop was recorded (refutation round 1,
-  sends-3: a Stop is observed before sending, HARNESS.md 2). It is asked wherever the loop would go on - before the
-  tool calls of an answer are answered, and again before the next exchange is sent - so no exchange after the first is
+  sends-3: a Stop is observed before sending, HARNESS.md 2). It is asked wherever the loop would go on - once the tool
+  calls of an answer are answered, and again right before the next exchange is sent - so no exchange after the first is
   ever sent once a Stop is recorded; the exchanges sent so far are kept. A check that raises stops the loop too (CPT
   Studio never sends on without knowing). A final answer is never cut short: nothing is asked once one arrives.
+  Since harness repair 3 (HARNESS.md, "Harness repair 3", F-STOP) the tool calls of the last answer are answered before
+  the Stop is read - CPT Studio's own lookups, nothing is sent - so a stopped loop ends with every exchange complete:
+  its answer read, its tool calls answered and recorded. That is what lets a later run continue it.
+- A continuation (``carried``, F-STOP): the exchanges of the stopped run(s) it continues, in order. The loop rebuilds,
+  exchange by exchange, the request each carried exchange recorded, and proves it (its stored form's sha256 must be
+  the recorded one). Each carried answer must ask for tool calls, and its recorded tool results must be the ones it
+  answered with, re-hashed. Only then does the loop send, from the next exchange on: no carried exchange is ever sent
+  again, and the run counts them against max_exchanges. Anything that does not match refuses the loop before it
+  sends, 'not_sent' with no exchange recorded.
 - 'succeeded' only when the last exchange is the final answer: one that asks for no tool call. The reader then reads or
   refuses it exactly as a single answer (another model's answer, a refusal or a cut-off answer is final, never acted on).
 
@@ -181,11 +190,12 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         parse_turn: Callable[[bytes], Turn], follow_up: Callable[[dict, Turn, tuple], dict],
         execute_tool, deadline_s, longest_s: float, max_exchanges: int, max_tool_result_bytes: int,
         max_request_bytes: int, body_keys: frozenset, client_error: str = '',
-        should_stop: Optional[Callable[[], bool]] = None) -> LoopOutcome:
+        should_stop: Optional[Callable[[], bool]] = None, carried: Sequence[ExchangeRecord] = ()) -> LoopOutcome:
     """The loop for ``request`` (built by ``adapter``). ``post(turn, body, deadline)`` sends one exchange of a stored
     body under http.post's discipline and never raises once it has begun to send; ``deadline_s`` is the caller's,
     never more than ``longest_s``; ``client_error``, when not '', refuses the loop before it starts; ``should_stop()``,
-    when given, says whether a member's Stop was recorded (asked before the loop goes on after each exchange)."""
+    when given, says whether a member's Stop was recorded (asked before the loop goes on after each exchange).
+    ``carried``: the exchanges of the stopped run(s) this run continues (F-STOP), sent by them and never again."""
     model = adapter.requested_model
     if not valid_deadline(deadline_s):
         return _refused('The loop deadline must be a positive number of seconds; nothing was sent.')
@@ -203,6 +213,11 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         return _refused(client_error, model)
     records, raws, stopped = [], [], False
     body, sha256, number = request.body, request.canonical_sha256, 0
+    if carried:
+        resumed = _resumed(tuple(carried), body, sha256, parse_turn, follow_up, model, body_keys, max_exchanges)
+        if isinstance(resumed, str):
+            return _refused(resumed, model)
+        body, sha256, number = resumed
     on_exchange = _ON_EXCHANGE.get()
     while True:
         number += 1
@@ -226,13 +241,15 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
         elif monotonic() >= deadline:
             end = ('failed', "The loop's deadline passed before the participant's tool calls were answered; nothing "
                              'more was sent.')
-        elif halt := _halt(should_stop, number):
-            end, stopped = ('failed', halt), True
         else:
+            # F-STOP: the calls are answered before a Stop is read (CPT Studio's own lookups; nothing is sent), so a
+            # stopped loop's last exchange is complete and a later run can continue it exactly
             answered, complete = _answer(turn.calls, execute_tool, deadline, max_tool_result_bytes)
             if not complete:
                 end = ('failed', "The loop's deadline passed while CPT Studio was answering the participant's tool "
                                  'calls; nothing more was sent.')
+            elif halt := _halt(should_stop, number):
+                end, stopped = ('failed', halt), True
         records.append(ExchangeRecord(
             turn=number, request_body=body, request_sha256=sha256, outcome=raw.outcome, http_status=raw.http_status,
             response_bytes=raw.response_bytes, response_sha256=raw.response_sha256, latency_ms=raw.latency_ms,
@@ -255,6 +272,51 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
                     end, stopped = ('failed', halt), True
         if end is not None:
             return LoopOutcome(final=_final(raws, *end), exchanges=tuple(records), stopped=stopped)
+
+
+CONTINUATION_REFUSED = ('Nothing was sent: the stopped run this run continues cannot be continued exactly ({why}), so '
+                        'no exchange of it was sent again and none was added.')
+
+
+def _resumed(carried: tuple, body: dict, sha256: str, parse_turn, follow_up, model: str, body_keys: frozenset,
+             max_exchanges: int):
+    """(the next exchange's body, its sha256, the number of carried exchanges) of a continuation (F-STOP), or why it
+    cannot continue (CONTINUATION_REFUSED). Every carried exchange must be one this loop would have sent - its turn the
+    next, its recorded request the body rebuilt so far (by its stored form's sha256) - and have succeeded with an
+    answer that asks for tool calls, every one of them answered, in order, with a recorded result whose canonical JSON
+    re-hashes to its recorded sha256: the result exactly as the participant was given it. Nothing here sends."""
+    def refused(why: str) -> str:
+        return CONTINUATION_REFUSED.format(why=why)
+
+    for index, record in enumerate(carried, start=1):
+        if not isinstance(record, ExchangeRecord) or record.turn != index:
+            return refused(f'exchange {index} is not the next one recorded')
+        if record.request_sha256 != sha256:
+            return refused(f'exchange {index} recorded another request')
+        if record.outcome != 'succeeded' or not isinstance(record.response_bytes, (bytes, bytearray)):
+            return refused(f'exchange {index} did not succeed')
+        turn = _turn(parse_turn, RawExchange(outcome='succeeded', sent=True,
+                                             response_bytes=bytes(record.response_bytes)))
+        if not turn.calls or _unanswerable(turn.calls):
+            return refused(f'the answer of exchange {index} asks for no tool call it can be continued with')
+        answered = tuple(record.tool_calls)
+        if [call.call_id for call in turn.calls] != [call.call_id for call in answered]:
+            return refused(f'the tool calls of exchange {index} were not all answered')
+        outputs = []
+        for call in answered:
+            encoded = _encoded(call.result)
+            if encoded is None or hashlib.sha256(encoded).hexdigest() != call.result_sha256:
+                return refused(f'a tool result of exchange {index} no longer matches its record')
+            outputs.append((call.call_id, encoded.decode('utf-8')))
+        try:
+            body = follow_up(body, turn, tuple(outputs))
+            http.check_shape(body, model, body_keys)
+            sha256 = hashlib.sha256(canonical_body(body)).hexdigest()
+        except Exception as exc:  # CPT Studio's own code: nothing has left
+            return refused(f'exchange {index + 1} could not be built ({type(exc).__name__})')
+    if len(carried) >= max_exchanges:
+        return refused(f'it already made {len(carried)} exchanges, the most one run may make')
+    return body, sha256, len(carried)
 
 
 def _halt(should_stop, number: int) -> str:
