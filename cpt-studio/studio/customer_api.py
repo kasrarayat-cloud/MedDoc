@@ -624,7 +624,10 @@ def code_rows(assessment, current, views, membership=None, details=()):
             'decision': _decision_json(decision),
             '_decision': str(decision.pk) if decision is not None else None,
         })
-    other_codes, listed = [], set()
+    # Harness repair 2026-11-05: a code the numbered list already suggests is never listed again as "not suggested" (the
+    # bounded second review's own selection of a code a primary proposal carries, an admitted participant's copy of a
+    # code CPT Studio excluded for its evidence): the operator console keeps every row
+    other_codes, listed = [], {row['code'] for row in rows if row['code']}
     for proposal in others:
         code = _code(proposal.code)
         if not code or code in listed:

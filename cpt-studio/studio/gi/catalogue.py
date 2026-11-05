@@ -348,6 +348,16 @@ def code_profile(code: str):
     return CODES.get(code)
 
 
+def family_codes_act(family: str, kind: str) -> bool:
+    """Whether a code of ``family`` in this catalogue accounts for an act of ``kind`` (a tattoo and an injection are
+    one act for coding, as the reconciliation reads them). Harness repair 2026-11-05 (stage 6): the shared
+    ENDOSCOPIC_ACTS list gives every endoscopic family a decompression act, and only colonoscopy and sigmoidoscopy codes
+    account for one (45393, 44408, 45337); an upper endoscopy's decompression is therefore an act no code of its service
+    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported')."""
+    covers = {k for profile in CODES.values() if profile.family == family for k in profile.covers}
+    return kind in covers or (kind in ('tattoo', 'injection') and bool(covers & {'tattoo', 'injection'}))
+
+
 # The documented act a code of a family this catalogue does not reconcile accounts for (gi.other is recognised and
 # listed, never reconciled). Read only where the inventory documents no service of the code's family but documents
 # this act in another family's service: the code's passages are then checked against that act, and the service is named

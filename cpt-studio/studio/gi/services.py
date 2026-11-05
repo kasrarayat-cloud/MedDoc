@@ -44,7 +44,7 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@3'
+INVENTORY_VERSION = 'gi-services@4'
 
 FLAGS = re.A | re.I
 

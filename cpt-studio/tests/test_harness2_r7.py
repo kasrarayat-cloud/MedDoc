@@ -208,16 +208,17 @@ class SummarySentenceTests(r6m.MeaningCase):
         self.assertIn(r6m.NEVER_DECIDE, self.download(encounter_id))
 
     def test_a_provider_code_excluded_for_evidence_or_scope_carries_no_participant_s_code(self):
-        """display-3 (b): Corti's 45385 with no exact passage is excluded, and Astra's 45385 is listed as its own
-        alternative - a code the provider also proposed, which the sentence had said is judged on the provider's
-        passages; and the same of an HCPCS code Corti selected, which is outside the GI profiles."""
+        """display-3 (b): Corti's 45385 with no exact passage is excluded, and Astra's 45385 stands apart from it - a
+        code the provider also proposed, which the sentence had said is judged on the provider's passages; and the same
+        of an HCPCS code Corti selected, which is outside the GI profiles. HARNESS.md P-ADMIT (2026-11-05): Astra's
+        45385, on the snare sentence, is admitted (D14 had listed it); its HCPCS code stays listed."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, 'The polyp was removed with a hot snare.')
         with inexact(1, '45385'):
             encounter_id = self.scenario(text, [('45378', r6m.CECUM), ('45385', r6m.SEEN)],
                                          astra=hp.reading(codes=[('45385', 'The polyp was removed with a hot snare.')]))
         detail = self.detail(encounter_id)
         self.assertEqual(sorted((p['code'], p['bucket'], participant(p)) for p in r6m.proposals(detail)),
-                         [('45378', 'selected', False), ('45385', 'alternative', True), ('45385', 'excluded', False)])
+                         [('45378', 'selected', False), ('45385', 'excluded', False), ('45385', 'selected', True)])
         self.assert_closing(detail)
         encounter_id = self.scenario(r6m.COLON, [('45378', r6m.CECUM), ('G0121', r6m.CECUM)],
                                      astra=hp.reading(codes=[('G0121', r6m.CECUM)]))
@@ -377,7 +378,11 @@ class AlternativeRationaleTests(r6m.MeaningCase):
         self.assertTrue(item['rationale'].endswith('Informational only. 1 passage of the document quoted verbatim.'),
                         item['rationale'])
         self.assertNotIn('evidence passage', item['rationale'])
-        self.assertIn(r6m.D14_REASON, item['rationale'])
+        # HARNESS.md P-ADMIT (2026-11-05): the failed act's sentence accounts for nothing left open, and its reason says
+        # so (D14's reason before)
+        said = r6m.not_added_reason(item['exclusion_reason'])
+        self.assertTrue(said, item['exclusion_reason'])
+        self.assertIn(said, item['rationale'])
 
 
 # --- display-6: a provider passage that does not show the coded act is never titled evidence for it -----------------

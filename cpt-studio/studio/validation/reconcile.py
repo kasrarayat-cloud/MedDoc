@@ -29,7 +29,7 @@ from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
-INVENTORY_SOURCE = 'cpt-studio:gi-services@3'  # the inventory's label (services.INVENTORY_VERSION)
+INVENTORY_SOURCE = 'cpt-studio:gi-services@4'  # the inventory's label (services.INVENTORY_VERSION)
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
 # Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
 STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',
@@ -193,6 +193,22 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      question=f'The {what} ({quote(done[0].evidence[0], 120)}) is tied to the {name} only by a '
                               f'lesion\'s name. Was a {what} performed in the {name} on the date of service?')
     if done:
+        # Harness repair 2026-11-05 (stage 6): an act the reconciliation reads as part of another documented act
+        # (_bundled: the lift injection of a lesion the service resects by EMR or ESD, the biopsy of a lesion it then
+        # removes, a prophylactic clip, ...) is never what a code accounts for while the service documents an act of the
+        # code's kinds that is not; where every such act is part of another, the code is held with that reading, never
+        # ready - no separate act is documented for it, and an EMR's components are never charged apart from it.
+        own = tuple(a for a in done if _bundled(service, a) is None)
+        if not own:
+            listed = '; '.join(describe_act(service, a) for a in done[:4])
+            why = _bundled(service, done[0])
+            return Match('uncertain', service, done, 'act_included',
+                         f'The {name} is documented as {service.status} with {listed}, which is part of another '
+                         f'documented act: {why} No separate {what} is documented for this code.',
+                         question=f'The {what} documented ({quote(done[0].evidence[0], 120)}) is part of another '
+                                  f'procedure documented with it. Was a separate {what} performed on the date of '
+                                  'service?')
+        done = own
         listed = '; '.join(describe_act(service, a) for a in done[:4])
         return Match(positive, service, done, 'service',
                      f'The {name} is documented as {service.status} with {listed}.')
@@ -700,6 +716,17 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                 bundled.append(Bundled(service.id, act.kind, describe_act(service, act), why))
                 continue
             if act.kind not in entry.acts:
+                continue
+            if not catalogue.family_codes_act(service.family, act.kind):
+                # Harness repair 2026-11-05 (stage 6): an act the family lists that no code of the family accounts for
+                # (catalogue.family_codes_act: a stomach decompression in an upper endoscopy) is listed for the
+                # reviewer as one no code of this service accounts for - routine, therapeutic or failed alike, for
+                # nothing here reads which it was - never bundled, never sent for a second review (SECOND_REVIEW_REASONS:
+                # no code it could select accounts for it), and never dropped: it keeps coding completeness open
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}: no code '
+                                             'profile of this service accounts for it', act.evidence[:2],
+                                             'unsupported'))
                 continue
             if act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'}):
                 continue

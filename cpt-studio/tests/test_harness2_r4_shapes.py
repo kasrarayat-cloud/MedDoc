@@ -389,10 +389,10 @@ class EngineListingTests(OfflineTestCase):
                                   he.code(colon, '4538', he.BIOPSY), he.code(colon, 'g0121', he.BIOPSY),
                                   he.code(colon, '45380', he.BIOPSY), he.code(colon, 'G0121', he.CECUM)])
         result = he.run(colon, he.corti(('45385', he.span(colon, he.SNARE))), [astra])
-        # moved by refutation round 6 (R6-MEANING, the session's D14): 45380, in a code's shape, is read and listed -
-        # never a proposal (it was selected)
+        # HARNESS.md P-ADMIT (2026-11-05): 45380, in a code's shape and on the biopsy passage, is read and admitted (as
+        # before D14, which listed it); G0121 is out of scope and listed
         self.assertEqual([(p.code, p.bucket) for p in result.proposals],
-                         [('45385', 'selected'), ('45380', 'alternative'), ('G0121', 'alternative')])
+                         [('45385', 'selected'), ('45380', 'selected'), ('G0121', 'alternative')])
         summary = he.encounter_check(result, 'participants.summary').detail
         self.assertIn('It proposed 3 codes (45385, 45380, G0121), 3 quoting the document verbatim. '
                       + engine.participant_unlisted_codes(3, 'It'), summary)

@@ -37,6 +37,28 @@ from tests.test_pipeline_api import drain
 # so that a change of its wording is a change of this pin
 D14_REASON = ("a quote found verbatim in the document does not by itself show that the coded act was done at this "
               "encounter, and in this release a participant's code is never added as a proposal of its own")
+# HARNESS.md P-ADMIT (owner directive 2026-11-05) replaced D14: a participant's code no decidable proposal carries is
+# checked for admission, and one that is not admitted says why in one of these reasons (engine._not_added_why and the
+# merge's own). Each assertion below that pinned D14's reason now pins that one of them is given and D14's sentence never
+# is; every other strict invariant of the meaning findings stands as it was (D14_REASON is kept as that record).
+P_ADMIT_REASONS = (engine.PARTICIPANT_PEER_ONLY, engine.PARTICIPANT_NOT_SHOWN, engine.PARTICIPANT_NOT_ESTABLISHED,
+                   engine.PARTICIPANT_UNREAD,
+                   'it accounts for no documented service or act the other proposals left unresolved',
+                   'the act it accounts for is not documented as done in the service left unresolved',
+                   'the document states the act it accounts for both as done and as not done',
+                   'the document reads what it accounts for as not performed on the date of service',
+                   'the coverage catalogue does not establish which documented act it accounts for',
+                   'independent participants propose different codes for the same documented act')
+
+
+def not_added_reason(reason):
+    """The P-ADMIT reason a participant's not-admitted code gives, or '' where it gives none of them or D14's."""
+    if D14_REASON in reason or 'but not added as a proposal: ' not in reason:
+        return ''
+    after = reason.split('but not added as a proposal: ', 1)[1]
+    return next((item for item in P_ADMIT_REASONS if after.startswith(item)), '')
+
+
 ACK = review.ACKNOWLEDGEMENTS['human']
 
 # --- the findings' documents (synthetic) ------------------------------------------------------------------------------
@@ -269,7 +291,9 @@ class D14EngineTests(SimpleTestCase):
     """Each meaning finding's input, and every phrasing its verifier measured: the participant's code is an alternative
     with CPT Studio's own reason, and everything about Corti's proposals and the reconciliation is what the engine makes
     with no participant at all - so no participant's code is ever selected or ready, holds or recasts Corti's base
-    code (services.base_included), covers a documented act or clears an unresolved item."""
+    code (services.base_included), covers a documented act or clears an unresolved item. Under HARNESS.md P-ADMIT
+    (2026-11-05) every one of these inputs is still such an alternative - it is read by the provider's own path and
+    admitted by none of its rules - and its reason is P-ADMIT's (not_added_reason), never D14's."""
 
     def assert_d14(self, text, corti_codes, participants, only, provider_status='succeeded'):
         codes = corti(*((value, span(text, quote)) for value, quote in corti_codes))
@@ -280,7 +304,7 @@ class D14EngineTests(SimpleTestCase):
             self.assertEqual([(p.bucket, p.status, p.reinstatable) for p in items],
                              [('alternative', 'informational', False)], (value, text[-120:]))
             self.assertTrue(items[0].key.startswith('altp:'), items[0].key)
-            self.assertIn(f'but not added as a proposal: {D14_REASON}. ', items[0].exclusion_reason)
+            self.assertTrue(not_added_reason(items[0].exclusion_reason), items[0].exclusion_reason)
             self.assertFalse(any(p.code == value and p.bucket != 'alternative' for p in result.proposals), value)
         self.assertEqual(corti_part(result), list(alone.proposals), text[-160:])
         self.assertEqual(result.clarifications, alone.clarifications)
@@ -402,7 +426,7 @@ class D14EngineTests(SimpleTestCase):
                 peered = run(text, (), [reviewed('fable', [], review=peer('fable',
                                                                           additional=(code(text, '45385', line),)))])
                 self.assertEqual([(p.bucket, p.status) for p in peered.proposals], [('alternative', 'informational')])
-                self.assertIn(D14_REASON, peered.proposals[0].exclusion_reason)
+                self.assertIn(engine.PARTICIPANT_PEER_ONLY, peered.proposals[0].exclusion_reason)
 
     def test_time_2_beside_corti_s_correct_base_code(self):
         """time-2: Corti's 45378 on today's cecal intubation keeps its own question (never "Is 45378 reported
@@ -422,20 +446,26 @@ class D14EngineTests(SimpleTestCase):
                 self.assertTrue(result.completeness['unresolved_items'])
                 self.assertEqual(result.completeness['included_by'], alone.completeness['included_by'])
 
-    def test_a_documented_act_a_participant_codes_stays_unresolved(self):
-        """The rule's plain case (tests.test_harness_engine's MergeTests moved with it): the biopsy Corti did not code
-        is documented as done, and a participant's 45380 on it is listed, never a proposal - so the biopsy stays
-        unresolved and completeness is what Corti's code alone leaves."""
+    def test_a_documented_act_a_participant_codes_is_admitted(self):
+        """The rule's plain case, moved by HARNESS.md P-ADMIT (2026-11-05; D14 listed it and left the biopsy
+        unresolved): the biopsy Corti did not code is documented as done and shown by the participant's own passage, so
+        its 45380 is read by the provider's own path, admitted as a selected proposal of origin participant that only a
+        member can approve, and the biopsy is no longer unresolved; Corti's 45385 keeps its bucket and status."""
         text = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\n'
                 'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n' + CECUM + '\nA 9 mm '
                 'pedunculated polyp in the sigmoid colon was removed with a hot snare.\nA separate 12 mm flat lesion '
                 'in the ascending colon was biopsied with cold forceps.\n')
-        result, alone = self.assert_d14(text, [('45385', 'was removed with a hot snare')],
-                                        [read('astra', [code(text, '45380', 'was biopsied with cold forceps')])],
-                                        ['45380'])
-        self.assertEqual([(i['family'], i['act']) for i in result.completeness['unresolved_items']],
+        codes = corti(('45385', span(text, 'was removed with a hot snare')))
+        result = run(text, codes, [read('astra', [code(text, '45380', 'was biopsied with cold forceps')])])
+        alone = run(text, codes)
+        (biopsy,) = [p for p in result.proposals if p.code == '45380']
+        self.assertEqual((biopsy.bucket, biopsy.status, biopsy.support['origin'], biopsy.support['proposed_by']),
+                         ('selected', 'ready', 'participant', ['astra']))
+        self.assertEqual([(i['family'], i['act']) for i in alone.completeness['unresolved_items']],
                          [('gi.colonoscopy', 'biopsy')])
-        self.assertEqual(result.completeness['state'], alone.completeness['state'])
+        self.assertEqual(result.completeness['unresolved_items'], [])
+        snare = [(p.bucket, p.status) for p in result.proposals if p.code == '45385']
+        self.assertEqual(snare, [(p.bucket, p.status) for p in alone.proposals if p.code == '45385'])
 
     def test_with_no_usable_corti_answer_nothing_is_a_proposal(self):
         """Corti failed (I10: it blocks only itself): the participants still read and are recorded, and none of their
@@ -443,11 +473,18 @@ class D14EngineTests(SimpleTestCase):
         text = doc(COLON, SEEN, FAILED)
         result = run(text, (), [read('astra', [code(text, '45385', FAILED)]),
                                 read('fable', [code(text, '45378', CECUM)])], provider_status='failed')
+        # HARNESS.md P-ADMIT (2026-11-05): Corti's failure blocks only itself (I10), so a first-reading proposal is
+        # checked for admission as beside an answer. Fable's 45378 on today's completed examination is admitted; Astra's
+        # 45385 on "Hot snare polypectomy failed." is not (it accounts for nothing left open), with P-ADMIT's reason.
         self.assertEqual([(p.code, p.bucket, p.status) for p in result.proposals],
-                         [('45385', 'alternative', 'informational'), ('45378', 'alternative', 'informational')])
-        self.assertTrue(all(D14_REASON in p.exclusion_reason for p in result.proposals))
+                         [('45378', 'selected', 'ready'), ('45385', 'alternative', 'informational')])
+        self.assertEqual(result.proposals[0].support['origin'], 'participant')
+        self.assertTrue(not_added_reason(result.proposals[1].exclusion_reason), result.proposals[1].exclusion_reason)
         provider = next(c for c in result.encounter_checks if c.id == 'provider.status')
-        self.assertIn('so there are no CPT proposals', provider.detail)  # true: none is a proposal
+        # never "so there are no CPT proposals" beside a proposal (engine._Harness.provider_checks)
+        self.assertNotIn('so there are no CPT proposals', provider.detail)
+        self.assertIn('so it proposed no codes. The proposals listed come only from the independent participants (Fable)',
+                      provider.detail)
 
     def test_the_scope_and_unlocated_reasons_still_come_first(self):
         """The existing reasons apply first: a code out of the CPT scope says so, and a code none of whose quotes was
@@ -462,7 +499,8 @@ class D14EngineTests(SimpleTestCase):
         self.assertNotIn(D14_REASON, reasons['G0105'])
         self.assertIn(engine.UNLOCATED, reasons['45380'])
         self.assertNotIn(D14_REASON, reasons['45380'])
-        self.assertIn(D14_REASON, reasons['45385'])
+        self.assertTrue(not_added_reason(reasons['45385']), reasons['45385'])
+        self.assertNotIn(D14_REASON, reasons['45385'])
 
 
 # --- D14 through the pipeline: every surface, and Corti's proposals as with no participant configured -----------------
@@ -479,7 +517,7 @@ class D14PipelineTests(MeaningCase):
             rows = [p for p in proposals(detail) if p['code'] == value]
             self.assertEqual([(p['bucket'], p['status'], p['allowed_actions'], p['reinstatable']) for p in rows],
                              [('alternative', 'informational', [], False)], value)
-            self.assertIn(D14_REASON, rows[0]['exclusion_reason'])
+            self.assertTrue(not_added_reason(rows[0]['exclusion_reason']), rows[0]['exclusion_reason'])
             made = self.post(f'/api/encounters/{encounter_id}/decisions',
                              {'proposal_id': rows[0]['id'], 'action': 'approve', 'acknowledgement': ACK,
                               'note': 'Synthetic attempt.'})
@@ -504,9 +542,11 @@ class D14PipelineTests(MeaningCase):
         # the page: no code card for it, and its Alternatives row gives CPT Studio's reason, with no action
         page = browser('page()', detail)
         self.assertNotIn(f'id="card-{item["id"]}"', page)
-        reason = json.dumps(D14_REASON)
+        said = not_added_reason(item['exclusion_reason'])
+        self.assertTrue(said, item['exclusion_reason'])
+        reason = json.dumps(said)
         row = browser(f'visible(page()).split("\\n").filter(line => line.includes({reason})).join("\\n")', detail)
-        self.assertIn(D14_REASON, row)
+        self.assertIn(said, row)
         # card-scoped (refutation round 7, falsegreen-3): the page draws a card's badge and its code on separate lines,
         # so the per-line check this replaces could never fail
         self.assertEqual(browser('cards(page()).map(visible).filter(card => card.split("\\n").includes("45385") '
@@ -515,7 +555,7 @@ class D14PipelineTests(MeaningCase):
         draft = self.download(encounter_id, 'draft', 'txt')
         listed = [line for line in draft.splitlines() if '45385' in line and 'never selectable' in line]
         self.assertEqual(len(listed), 1, draft)
-        self.assertIn(D14_REASON, listed[0])
+        self.assertIn(not_added_reason(item['exclusion_reason']), listed[0])
         rows = [r for r in csv_rows(self.download(encounter_id, 'draft', 'csv'))
                 if r['code'] == '45385' and r['item_list'] in ('approved', 'rejected', 'undecided', 'excluded',
                                                                 'alternative')]
@@ -883,14 +923,19 @@ class SourceHighlightTitleTests(MeaningCase):
 # provider also proposed, in scope and with an exact passage, is recorded on that proposal"); moved by round 9
 # (wording-4): a selection in a response refused whole is no selection merge sees, so the clause names a response CPT
 # Studio used (it was "... selected, in scope and with an exact passage, or that its bounded second review added ...")
+# The sentence of HARNESS.md P-ADMIT (2026-11-05), written out so that a change of its wording is a change of this pin;
+# D14's, which it replaces, said that every other code "is listed as an alternative and never added as a proposal".
 NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
                 'proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its '
                 "bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers "
-                "judge on the provider's passages alone; any other code a participant gives in a CPT or HCPCS code's "
-                'shape, including one the provider only listed, one its second review listed without adding and one in a '
-                'provider response CPT Studio did not use, is listed as an alternative and never added as a proposal, and '
-                "one in neither shape is counted and never listed; and a participant's questions are notes that never "
-                'block.')
+                "judge on the provider's passages alone; a code a participant's independent first reading proposes, "
+                "quoting the document verbatim, is read by those same readers from that reading's exact passages and "
+                'added as a proposal of its own only where they read it as accounting for a documented service or act the '
+                'other proposals left unresolved, and not where another participant proposes a different code for the '
+                'same act; it is then held or ready by those readers alone, and only a reviewer approves it; any other '
+                "code a participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is "
+                "listed as an alternative, and one in neither shape is counted and never listed; and a participant's "
+                'questions are notes that never block.')
 SAME_RULES = "by the same rules as the proposal provider's"
 
 

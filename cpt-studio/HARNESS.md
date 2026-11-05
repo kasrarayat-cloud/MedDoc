@@ -2124,3 +2124,114 @@ built, measured and refuted is appended below it as it happens.
   service's positive reading and overlaps no not-done act **of a kind the code accounts for**; before, any not-done act
   it overlapped refused the release, so "... was sampled with cold biopsy forceps for histology; it was not excised by
   snare." held 45380 once the patch read the denied snare. A not-done act of the code's own kind still refuses it.
+
+### As built (2026-11-05, before the refutation pass)
+
+- **P-ADMIT** is `engine._Harness.merge`, with `first_proposers`, `_first_evidence` and `_claimed`. The second review's
+  coverage rule and its not-added reasons are two shared helpers, `_open_items_covered` and `_not_added_why`, that
+  `_second_review` and the merge both call. The refactor alone was measured identical: H1 replay EQUAL, H4 battery 0
+  movements, and the second-review, parity and reconcile modules 59 tests OK.
+- **Competition is judged per act, refined from the contract above.** A code claims each act item it accounts for.
+  Where a whole service was left without a proposal, it claims the acts its own match reads, or the service itself for
+  a base code (`_claimed`). Claiming the whole-service item alone made an EGD's dilation code and its biopsy code
+  compete for "the EGD has no supported proposal", so neither was added. Two codes for one dilation still compete.
+- **A code the readers hold is admitted held,** as the second review's is, so its question reaches the reviewer; it is
+  never ready. Measured on the meaning-check classes through two agreeing participants: a failed snare, "No polyps
+  were removed." and a planned EMR each stay an alternative, because they account for nothing left open. "Last
+  colonoscopy: 9 mm polyp removed with hot snare." is admitted held with a question, which is what Corti's own
+  selection of that passage gets.
+- **Stage 6, an act no code of its family accounts for** (`catalogue.family_codes_act`, `reconcile.reconcile`). The
+  shared endoscopic act list gives the upper GI family a decompression act, and no upper GI code accounts for one; only
+  45393, 44408 and 45337 do. Such an act is now listed `unsupported`: "no code profile of this service accounts for
+  it". It is never bundled and never sent for a second review (no code that review could select accounts for it). It
+  keeps coding completeness open whether the decompression was routine, therapeutic or failed, since nothing here reads
+  which it was. That is not the rejected experiment's rule, which moved routine-looking decompression into the bundled
+  list and so out of completeness. Across the whole catalogue this is the only family and act pair with that gap.
+- **Stage 6, an act that is part of another documented act** (`reconcile.match`). An act `_bundled` reads as part of
+  another (the lift injection of a lesion resected by EMR or ESD, the biopsy of a lesion then removed, a prophylactic
+  clip) is never what a code accounts for while the service documents a separate act of the code's kinds. Where every
+  such act is part of another, the code is held (`act_included`, its question on `performed_status`) and never ready.
+  Before, 88d9db32's 45381 counted the ascending EMR's lift injection as its first act, so its modifier note put it on
+  the EMR's lesion. It now accounts for the separate tattoo only. It is not `base_included`, because the review overlay
+  re-derives every `base_included` hold from the diagnostic-base rule and drops one that rule does not give.
+- **The operator console** marks an admitted proposal "Independent participant". Customer code rows are built from
+  structured fields and fixed sentences only (`customer_api.code_rows`), so they carry no origin.
+- **88d9db32, re-assessed offline from its retained responses** (a throwaway copy of the live database; provider runs
+  107 before and after, sent 97 before and after). 43239, 45380 and 45381 (Corti's) and 43249, 45390 and 45385 (both
+  participants') are selected and ready. No question is open. The lift injections and the clip are listed as part of
+  the EMR. The decompression stays open as `unsupported`. Each of 45380, 45385 and 45390 carries the distinct-lesion
+  modifier consideration (59 or XS, if an NCCI edit pairs the codes; NCCI PTP is not connected).
+- **Recorded, not repaired:**
+  - The heading "Impression and disposition" is read as a plan section, so 43239, 43249, 45381 and 45390 each carry a
+    warn naming the Impression's "Symptomatic Schatzki ring, successfully dilated to 18 mm." as planned. It moves no
+    status and no customer sentence.
+  - A participant's not-coded entry about another occurrence of a code is attached as `participants.disagree`: Fable's
+    "45390 not performed" names the transverse lesion left in place and is attached to the ascending EMR, and its
+    "45385 not performed" names the historical polypectomy and is attached to today's snare. The warn quotes the
+    passage and decides nothing.
+  - The tattoo is read "at the colon", because "3 cm distal to this transverse-colon abnormality" names a hyphenated
+    site the anatomy reader does not parse. So 45381 is offered no distinct-site modifier review against 45390.
+
+### As built, continued: what the integration found and changed (2026-11-05, before the refutation pass)
+
+- **Exact evidence in its complete context.** A first-reading code is admitted only where at least one of its own
+  passages shows the act it accounts for, as the support reading reads it (`reconcile.support` 'pass').
+  - Found by the meaning-check battery (tests/test_harness2_r6_meaning.py) at integration: under "Procedure:
+    Colonoscopy with hot snare polypectomy", a participant's 45385 on "The polyp was left in place." was admitted
+    READY on the title's reading alone (`PARTICIPANT_NOT_SHOWN`).
+  - Corti's own selection of that passage is READY too. That is the installed negation-3 class (12.14), left as it is
+    (I1).
+  - A code whose own passages leave its act in doubt (support 'not_applicable') is not admitted either
+    (`PARTICIPANT_NOT_ESTABLISHED`). Admitted held, it would count as covering the act and could hold Corti's base
+    code as included in it (the meaning check's time-2).
+  - On every meaning-check input (negation-1..3, ownership-1, -4, time-1, -2, and each verifier's phrasings) the
+    participant's code is a not-admitted alternative. Corti's proposals, the clarifications and the reconciliation equal
+    the participants-disabled run in every case, as D14 pinned; only the reason is P-ADMIT's.
+- **Corti refused or failed (I10).** A first-reading proposal is checked for admission exactly as beside an answer.
+  The provider check then says "so it proposed no codes. The proposals listed come only from the independent
+  participants (...)". That is the pre-D14 sentence of `provider_status_beside_participants`, reachable again.
+  - The readiness blocker "The provider response was not used" stands only where no code can be decided, so a member
+    can decide an admitted code.
+  - A response refused whole is no available answer: coding completeness says "the provider response was not
+    available" even where admitted codes account for every act. Before, it read `complete_pending_review` (found by
+    tests/test_harness2_r8.py at integration).
+  - On the Corti-only path this one rule moves one parity case, `response-refused`, by its completeness reason alone
+    (declared below).
+- **Wording.** An admitted proposal's first sentence names every participant that proposed it, each in its phase, as
+  its record does. Its evidence is its first readings' spans alone.
+  - The peer-only reason reads "it was proposed only in peer review, after the participant had seen its peers'
+    conclusions, and only a code a participant's first reading proposes, before any peer conclusion is shown to it, is
+    checked for admission". It never calls the code independent.
+- **The customer page** lists a code under "other codes" only where the numbered list does not already suggest it.
+  Before, 88d9db32's 43239, 45380 and 45381 were listed both as ready and as "Listed as an alternative only; not
+  suggested for approval" (the second review's "a primary proposal already carries it" rows), and an admitted copy of
+  a code CPT Studio excluded for its evidence would have added more.
+- **A test-harness gap.** `tests/test_harness_pipeline.recording_engine` calls the real engine without the
+  participants, so no `HarnessCase` pipeline test ever exercised the participants' merge.
+  `tests/test_h2_customer_admission.py` runs the real engine through the pipeline and scans every customer response,
+  page payload and download, for every role, for a participant, model or provider name.
+- **Labels.** gi-routing@6 to @7, gi-services@3 to @4, cpt-studio-validation@6 to @7; gi-context@4 is unchanged. No
+  fingerprint reads a label (`engine._fingerprint`: each check's id and status only), so a label alone invalidates no
+  decision. With the labels put back to installed b0dc3446c64c's (`tests.test_gi4_state.HARNESS_REPAIR_INSTALLED_LABELS`)
+  this head makes the served release's pins exactly:
+  - every engine parity case but `response-refused`, which differs by its completeness reason alone
+    (`ServedLabelParityTests`);
+  - the imported-reference digests `a71679b8af53` and `ab443cf12017`;
+  - the superscript digest `fd0b37c42efd`.
+
+  At its own labels the head makes `04acca130770`, `b9687931fc58` and `66345791125e`.
+- **I1, measured against main 8645fd54 on the working tree:** H4 battery 0 movements, 0 undeclared, 0 new violations
+  (278 rows, 454 codes); H1 replay EQUAL. Neither instrument holds an input that reaches the stage-6 rules. They are
+  pinned by tests/test_h2_participant_admission.py.
+- **Moved pins, each saying so in place.** D14's pins are moved to P-ADMIT's behaviour, restoring the pre-D14
+  assertion wherever P-ADMIT agrees with it:
+  - tests/test_harness2_r6_meaning.py (D14's sentence replaced by P-ADMIT's reasons; two tests whose premise was D14
+    now pin admission);
+  - tests/test_harness_engine.py (MergeTests, AgreementNeverPromotesTests, ContradictionTests, DeterminismTests,
+    EncounterTests, PeerReviewTests);
+  - test_harness2_r2_evidence (CortiLeadTests, as before D14), r2_wording and r3_truth (the admitted cards, as before
+    D14; a peer-only code still listed);
+  - r4_shapes, r7, r8, r9.
+
+  The label and digest pins moved too: test_gi4_state, test_harness_engine_parity, test_harness2_r2_parity,
+  test_harness_pipeline, and the two version tests. No safety assertion was dropped.
