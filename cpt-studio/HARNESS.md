@@ -2334,3 +2334,100 @@ Both tests were strengthened, the two mutants were re-run, and all twenty-eight 
   body says only that the polyp was seen: "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1
   year." holds 45385 (a false hold, on the safe side). "Any residual polyp" falls back to today's polyp, and telling a
   deferral from a surveillance plan would be a word list.
+
+### Refutation round 2 (2026-11-05): three lenses over the repairs, and the two-cycle rule
+
+A narrow second round ran over round 1's repairs at `5b1dc0466`: the repair `e88afe58b` plus a commit that touches only
+the checklist. Three read-only lenses worked against comparison trees of main `8645fd54` and of round 1's head
+`3907cd592`:
+- an escape lens, for variants the repairs do not close;
+- an over-reach lens, for genuine services the repairs now lose;
+- a cost lens, for the cost of the new readings, coding completeness and the customer surfaces.
+
+They reported 27 reproduced findings:
+
+| lens | blocking | major | minor |
+|---|---|---|---|
+| escape | 9 | 2 | 0 |
+| over-reach | 1 | 10 | 0 |
+| cost | 1 | 3 | 1 |
+
+**What round 2 showed.** Round 1's phrase-level repairs failed in both directions:
+- near-synonyms escaped them: "zero (0) biopsies", "at the level of the tattoo", "25-cm from the anal verge";
+- widened forms denied genuine services: "from no fewer than six sites" read as a denial, "which produced no bleeding"
+  as nothing obtained, "the bleeding ulcer ... treated with two hemostatic clips" as a device name only.
+
+A third round of phrases would not converge.
+
+**What was decided, and what was not.** Admission stays at the directive's literal standard: equivalent eligibility, with
+a participant's code READY exactly where Corti's own selection of the same passages would be. One alternative was
+considered and rejected: admitting every participant code held for a member's confirmation.
+- A held performed-status code offers a member no confirming answer. `review._actions` offers Approve only on READY, and
+  the reviewer-confirmation path (4.6) is an open owner question.
+- So the recovered codes would have been unapprovable, which defeats the directive's purpose.
+
+Under the programme's two-cycle rule, every rule that did not converge in two cycles is dropped:
+- `LESION_SITED` (multi-2);
+- `NOT_TO_BEFORE`, `NONE_AS_OBJECT` and `NO_YIELD_AFTER` (neg-1's extensions);
+- the act-list decompression additions (compl-2): "a stent placed for biliary decompression" opened completeness;
+- the other-role filter in `reconcile.match` (own-3). The role reader takes an impression after "Pathology results:
+  pending." as the pathology entry, so the filter held Corti's correct code.
+
+Their inputs are pinned as the readers' recorded residuals (`RecordedResidualTests`). The pin checks the directive's
+equivalent standard: on none of them is a participant's code READY where Corti's selection of the same passages is not.
+
+**Kept, each narrowed to what it now requires:**
+- **The negation release (stage 3):** an own-kind act counts as done only where its own clause carries no negation marker
+  of the closed class (`OWN_CLAUSE_DENIAL`: no, not, none, nothing, neither, nor, never, without, zero, against, unable,
+  cannot, n't, a bare 0).
+- **The resection's technique:** both acts at one lesion with agreeing sites, or neither at a lesion, in one clause naming
+  one site at most (`_one_resection`).
+- **A lift injection:** the resection's only at an agreeing site (`_sites_agree`). The own-passage release's act carries
+  its passage's sites (cost-4: a steroid injection into a rectal stricture is no cecal EMR's lift).
+- **"Hemostatic":** a stated bleeding object keeps the act ("the bleeding ulcer", "the actively bleeding vessel", oozing;
+  `BLEEDING_PRESENT`). A control statement under a negation never switches the rule off (`NEGATED_BEFORE`).
+- **The withheld listing:**
+  - a hedge of the act's own clause counts, never a form question's mark;
+  - a removal statement with no technique is read both ways: a removal stated done keeps the listing;
+  - it is read once per clause, for at most `REMOVAL_READ_CAP` clauses;
+  - a report of one procedure is its own scope;
+  - a removal planned for another occurrence of a service says nothing about today's.
+- **Decompression:**
+  - the verb's own inflections are read;
+  - a failure frame ("unable to", "failed to", "could not") keeps the act in doubt;
+  - a failed attempt read as a denial is listed (`FAILED_ATTEMPT`), never a mere denial ("was not attempted") or a
+    counterfactual.
+- **"Marked":** the marker may stand anywhere in its own instrument phrase, which covers the repair package's own forms.
+- **A distance:** a number and a unit in a relation to a landmark.
+- **A sized anaphor:** sizes are compared as numbers ("0.8 cm" is "8 mm").
+- **A whole service:** admitted only on a code whose acts include the physician's own, which is the reconciliation's own
+  role rule.
+
+**None of these releases beyond what main read**, apart from the repair package's own marking forms. Every kept or new
+rule either holds, lists, or returns toward the installed reading.
+
+**Cost.** The adversarial shape that had made the assess stage time out (120 s against 0.9 s) now assesses in 1.04 s at
+50,000 characters and 4.83 s at 400,000. The removal-word shapes take 3.6 s at 400,000.
+
+**Mutation proofs.** Twenty-nine mutants were run: nineteen for round 2's rules, and ten re-proving round 1's rules whose
+code moved. Each was asserted applied and its restore verified by sha256, and the working tree's diff digest is the same
+before and after. Two survived at first, each because a neighbouring rule decided its input. A deciding input was
+added for each, and all twenty-nine are killed.
+
+**Measured on the round-2 tree.**
+- **H4 battery against main 8645fd54:** the same six declared movements as round 1 (R8 D3 N9, N15, N17), 0 undeclared,
+  0 new violations.
+- **H1 replay:** differs by the version labels alone.
+- **88d9db32, re-assessed offline from its retained responses on a throwaway copy of the live database:**
+  - Corti's 43239, 45380 and 45381 and the participants' 43249, 45390 and 45385 are ready;
+  - the decompression is listed as unsupported;
+  - provider runs 107 → 107 and sends 97 → 97;
+  - the tables move by studio_assessment +1, studio_proposal +26, studio_job +1, studio_routingrun +1 and
+    studio_auditevent +2, and by nothing else.
+- **The installer's state recomputation**, run offline on a fresh copy, changes no encounter
+  (`{"encounters": 55, "changed": {}}`).
+
+**Pins.** `tests/test_h2_refutation_r1.py` is rewritten to hold three things:
+- round 1's repairs as they now stand;
+- round 2's inputs, with their controls that must stay READY;
+- `RecordedResidualTests`.

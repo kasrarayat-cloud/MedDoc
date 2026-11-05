@@ -432,7 +432,8 @@ def _open_items_covered(candidate: '_Selection', code: str, open_items: Sequence
     # missing service behind a held proposal (refutation r1, sends lens)
     # R1a-r5 (hold-only): an act tied to its service only by a lesion's name is documented as done; its code is
     # added and held (named_only), never dropped to an alternative that leaves the service silently uncoded
-    supported = match is not None and (match.state in ('performed', 'incomplete') or match.reason == 'named_only')
+    supported = match is not None and (match.state in ('performed', 'incomplete') or match.reason == 'named_only') \
+        and (not match.acts or any(a.role in reconcile.OWN_ROLES for a in match.acts))
     return [item for item in open_items if (
         (item[1] == candidate.family and ((item[2] == '' and supported) or item[2] in profile.covers
                                           or (item[2] in ('tattoo', 'injection') and {'tattoo', 'injection'}
@@ -1782,6 +1783,10 @@ def _readers_own(reading: checks.Reading) -> bool:
     return reading.status == 'uncertain' and bool(doubts) and all(c.startswith(DOUBT_PREFIX) for c in doubts)
 
 
+OWN_CLAUSE_DENIAL = re.compile(r"\b(?:no|not|none|nothing|neither|nor|never|without|w/o|zero|against|unable|cannot)\b"
+                               r"|n['\u2019]t\b|(?<![\d.,])\b0\b(?![.,]\d)", re.I)
+
+
 def _negation_resolved(doubt: checks.Reading, found: reconcile.Match, code: str = '') -> bool:
     """The doubt is only an unresolved negation, and the passage is part of the service's positive reading (its
     statement of performance, a performed act, or a completion read as complete), never of anything it denies.
@@ -1808,7 +1813,11 @@ def _negation_resolved(doubt: checks.Reading, found: reconcile.Match, code: str 
                 for ev in a.evidence]
     another_kind = [ev for a in service.acts if a.status != 'performed' and kinds and a.kind not in kinds
                     for ev in a.evidence]
-    own_kind_done = [ev for a in service.acts if a.status == 'performed' and a.kind in kinds for ev in a.evidence]
+    # refutation round 2, esc-3: the reader's performed reading of the code's own act is believed only where that act's
+    # own clause carries no negation marker of the closed class ("zero (0) biopsies were taken", "biopsies taken: 0",
+    # "the decision was made against biopsy", "which yielded nothing"); any other holds, as main held
+    own_kind_done = [ev for a in service.acts if a.status == 'performed' and a.kind in kinds for ev in a.evidence
+                     if not OWN_CLAUSE_DENIAL.search(ev.text)]
     if not overlaps(positive) or overlaps(blocking):
         return False
     return not overlaps(another_kind) or overlaps(own_kind_done)
@@ -1843,9 +1852,11 @@ def _passage_act_included(reading: checks.Reading, found: reconcile.Match, code:
     span = gi_services._span(text, reading.start, reading.end)
     for kind, pattern in gi_services.ACTS:
         if kind in profile.covers and pattern.search(passage):
+            sites = tuple(dict.fromkeys(name for name, _, _, _ in gi_services._anatomy_in(text, reading.start,
+                                                                                            reading.end)))
             why = reconcile._bundled(found.service, gi_services.Act(id='', service=found.service.id, kind=kind,
                                                                     status='performed', role='physician',
-                                                                    evidence=(span,)))
+                                                                    anatomy=sites, evidence=(span,)))
             if why:
                 return why
     return ''

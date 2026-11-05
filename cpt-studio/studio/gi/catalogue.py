@@ -207,7 +207,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         documentation=('the depth reached (beyond the second portion of the duodenum; whether the ileum was reached)',
                        'each intervention, its anatomy and technique'),
         acts=('biopsy', 'hot_biopsy', 'snare', 'ablation', 'bleeding_control', 'stent', 'foreign_body', 'dilation',
-              'tube_placement', 'peg', 'tube_replacement', 'decompression'),
+              'tube_placement', 'peg', 'tube_replacement'),
         bundled=COMMON_BUNDLED, questions=ENDOSCOPIC_QUESTIONS, evidence=PROCEDURE_EVIDENCE, rules=PROCEDURE_RULES),
     FamilyEntry(
         'gi.colonoscopy', 'Colonoscopy', SUPPORTED, ('colonoscopy',),
@@ -227,7 +227,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
         documentation=('the stations examined (limited to one organ and adjacent structures, or esophagus, stomach and '
                        'duodenum)', 'the target of any fine-needle aspiration or biopsy and the passes made',
                        'any drainage or injection'),
-        acts=('eus_exam', 'fna', 'injection', 'drainage', 'decompression'),
+        acts=('eus_exam', 'fna', 'injection', 'drainage'),
         bundled=(('biopsy', 'A forceps biopsy at an upper GI site of the same upper examination is read under the '
                             'upper GI family when the document records that upper endoscopy with a biopsy of its '
                             'own; one the document does not place at an upper GI site of an upper examination (a '
@@ -248,7 +248,7 @@ CATALOGUE: dict[str, FamilyEntry] = {e.family: e for e in (
                        'removal, stent placement, dilation, cholangioscopy, lithotripsy)', 'stents placed (number, '
                        'duct)'),
         acts=('biopsy', 'sphincterotomy', 'stone_extraction', 'lithotripsy', 'cholangioscopy', 'stent',
-              'stent_removal', 'stent_exchange', 'dilation', 'ablation', 'pressure_measurement', 'decompression'),
+              'stent_removal', 'stent_exchange', 'dilation', 'ablation', 'pressure_measurement'),
         bundled=(('cannulation', 'Cannulation and contrast injection are part of the ERCP itself.'),
                  ('injection', 'Contrast injection during ERCP is part of the examination.'),
                  ('clip', COMMON_BUNDLED[0][1])),
@@ -357,9 +357,10 @@ def family_codes_act(family: str, kind: str) -> bool:
     one act for coding, as the reconciliation reads them). Harness repair 2026-11-05 (stage 6): the shared
     ENDOSCOPIC_ACTS list gives every endoscopic family a decompression act, and only colonoscopy and sigmoidoscopy codes
     account for one (45393, 44408, 45337); an upper endoscopy's decompression is therefore an act no code of its service
-    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported'). Refutation compl-2: an
-    enteroscopy, an endoscopic ultrasound and an ERCP list their own acts, which had no decompression, so the act was
-    dropped unlisted; every endoscopic family now lists it, and none of those three has a code for it."""
+    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported'). Refutation round 1's compl-2
+    (an ERCP's, EUS's or enteroscopy's decompression dropped unlisted, as those families list their own acts) is not
+    repaired here: listing it read an ERCP stent placed "for biliary decompression" as an act left open (round 2,
+    over-11), so it is recorded (ACCURACY-RESIDUALS)."""
     covers = {k for profile in CODES.values() if profile.family == family for k in profile.covers}
     return kind in covers or (kind in ('tattoo', 'injection') and bool(covers & {'tattoo', 'injection'}))
 
