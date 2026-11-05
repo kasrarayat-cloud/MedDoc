@@ -1,8 +1,8 @@
-"""Harness repair 2026-11-05, refutation time-1: the repair package's purpose rule ("for future localization" is a
-completed marking's purpose, never its time) applies only to a marking stated as done. A bare participle an auxiliary
-or an infinitive marker governs ("to be injected", "is injected") states none, so its "future" stays a plan word and
-45381 is never READY on it - through Corti's selection or a participant's first reading. Real engine, no provider or
-database calls."""
+"""Harness repair 2026-11-05, refutation time-1, and harness repair 3 (F-TIME R): the purpose rule ("for future
+localization" is a completed marking's purpose, never its time) applies only to a marking stated as done. A bare
+participle an auxiliary or an infinitive marker governs ("to be injected", "is injected") states none, so its "future"
+stays a plan word and 45381 is never READY on it - through Corti's selection or a participant's first reading. Real
+engine, no provider or database calls."""
 from django.test import SimpleTestCase
 
 from tests.test_harness_engine import code, corti, read, run, span
@@ -40,11 +40,10 @@ class MarkingTenseTests(SimpleTestCase):
                 self.assertNotIn(('selected', 'ready'), by_corti)
                 self.assertNotIn(('selected', 'ready'), by_astra)
 
-    def test_a_completed_marking_with_a_future_purpose_reads_as_main_reads_it(self):
-        # the package's purpose rule failed two refutation cycles of its whole-sentence form and is dropped (round 6):
-        # "for future localization" dates even a completed injection as planned, as at main and the live revision
+    def test_a_completed_marking_with_a_future_purpose_is_ready(self):
+        # round 6 dropped the package's whole-sentence purpose rule. Harness repair 3 (F-TIME R, one rule in cues for
+        # both readers): "for future localization" is the purpose's time where the clause states the marking done, so
+        # a completed marking is READY on both paths (the owner's second message of 2026-11-05, item 4)
         for line in DONE:
             with self.subTest(line):
-                by_corti, by_astra = outcomes(line)
-                self.assertNotIn(('selected', 'ready'), by_corti)
-                self.assertNotIn(('selected', 'ready'), by_astra)
+                self.assertEqual(outcomes(line), ([('selected', 'ready')], [('selected', 'ready')]))

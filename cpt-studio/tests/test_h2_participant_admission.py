@@ -66,15 +66,38 @@ class AdmissionTests(SimpleTestCase):
         self.assertFalse([p for p in result.proposals if p.code == '45385' and p.bucket == 'selected'])
         self.assertIn(('snare', 'not_covered'), unresolved(result))
 
-    def test_a_participant_never_chooses_between_codes_for_one_act(self):
+    def test_codes_for_one_act_both_reach_review_and_neither_is_chosen(self):
+        """P-ADMIT2: two participants' different codes for the one documented dilation both reach review, each held
+        by one question naming the other; CPT Studio chooses neither (P-ADMIT had listed both as alternatives and left
+        the service without a proposal)."""
         text = EGD_HEAD + DILATION + '\n'
         result = run(text, corti(), [read('astra', [code(text, '43249', DILATION)]),
                                      read('fable', [code(text, '43248', DILATION)])])
-        for value in ('43249', '43248'):
+        for value, rival in (('43249', '43248'), ('43248', '43249')):
             item = proposal(result, value)
-            self.assertEqual(item.bucket, 'alternative', value)
-            self.assertIn('propose different codes for the same documented act', item.exclusion_reason)
-        self.assertIn(('', 'no_proposal'), unresolved(result))  # the service is still left without a proposal
+            self.assertEqual((item.bucket, item.status, origin(item)), ('selected', 'needs_clarification',
+                                                                        'participant'), value)
+            self.assertEqual(item.support['competes'], [rival])
+            self.assertEqual([q.fact for q in item.clarifications if q.fact == engine.COMPETING_FACT],
+                             [engine.COMPETING_FACT])
+            held = next(c for c in item.checks if c.id == engine.COMPETING_CHECK)
+            self.assertEqual(held.status, 'warn')
+            for word in ('Corti', 'Astra', 'Fable', 'participant'):
+                self.assertNotIn(word, held.detail)  # the question is the same for every origin
+        self.assertNotIn(('', 'no_proposal'), unresolved(result))
+
+    def test_a_participant_code_corti_covered_the_act_with_another_code_reaches_review_and_both_are_held(self):
+        """P-ADMIT2, the owner's second message: "even when Corti ... returned another code". Corti's 43248 and Astra's
+        43249 for the one dilation: both reach review, each held naming the other; Corti's code is held exactly as the
+        participant's is, and the participant's is never preferred either."""
+        text = EGD_HEAD + DILATION + '\n'
+        result = run(text, corti(('43248', span(text, DILATION))), [read('astra', [code(text, '43249', DILATION)])])
+        corti_code, astra_code = proposal(result, '43248'), proposal(result, '43249')
+        self.assertEqual((origin(astra_code), astra_code.bucket), ('participant', 'selected'))
+        for item, rival in ((corti_code, '43249'), (astra_code, '43248')):
+            self.assertEqual((item.status, item.support['competes']), ('needs_clarification', [rival]))
+        alone = proposal(run(text, corti(('43248', span(text, DILATION)))), '43248')
+        self.assertEqual(alone.status, 'ready')  # beside no participant's code, Corti's code reads as before
 
     def test_codes_for_different_acts_of_one_unproposed_service_never_compete(self):
         biopsy = 'Cold forceps biopsies of the gastric antrum were obtained for histology.'
@@ -91,13 +114,20 @@ class AdmissionTests(SimpleTestCase):
         item = proposal(result, '43249')
         self.assertEqual((item.bucket, origin(item)), ('selected', 'participant'))
 
-    def test_a_code_that_accounts_for_nothing_left_open_stays_an_alternative(self):
+    def test_a_base_code_beside_the_interventions_reaches_review_held_by_the_base_rule(self):
+        """P-ADMIT2: a participant's diagnostic base code beside Corti's interventions is admitted - it accounts for the
+        documented colonoscopy whatever Corti's codes cover - and the base rule holds it exactly as it holds Corti's
+        own base code there (P-ADMIT had listed it as accounting for nothing left open)."""
         result = run(COLON, corti(('45380', span(COLON, BIOPSY)), ('45385', span(COLON, SNARE))),
                      [read('astra', [code(COLON, '45378', 'The colonoscope was advanced to the cecum')])])
         base = proposal(result, '45378')
-        self.assertEqual(base.bucket, 'alternative')
-        self.assertIn('accounts for no documented service or act the other proposals left unresolved',
-                      base.exclusion_reason)
+        self.assertEqual((base.bucket, base.status, origin(base)), ('selected', 'needs_clarification', 'participant'))
+        self.assertEqual([q.fact for q in base.clarifications], ['base_included'])
+        by_corti = proposal(run(COLON, corti(('45380', span(COLON, BIOPSY)), ('45385', span(COLON, SNARE)),
+                                             ('45378', span(COLON, 'The colonoscope was advanced to the cecum')))),
+                            '45378')
+        self.assertEqual((base.status, [c.id for c in base.checks if c.id != 'participants.disagree']),
+                         (by_corti.status, [c.id for c in by_corti.checks]))
 
 
 class ProtectedReadingTests(SimpleTestCase):

@@ -1,0 +1,23 @@
+{
+  "package": "Harness repair 3 (owner's second message of 2026-11-05; HARNESS.md \"Harness repair 3\"): the H4 battery's movements against origin/main 406843018f0800e7216c5ee105da61ff1ed98f40 (the installed e6d451f03d86's runtime).",
+  "measured_after_code": true,
+  "provenance": "Not declared before the code: measured by python -m ops.gi4.battery --base 406843018f08 --head <the h3-dev working tree> after the repairs (battery-h3-3), and each movement read against its row's provisional truth before it was written here. A first run (battery-h3-2) also moved R8 D10's 45378 from ready to held: F-SECTIONS T had made an attached prior report's title open a procedure section, so its date of service competed with this report's; the plain title did the same on main. _attached_titles keeps such a title in its history section, and D10 no longer moves.",
+  "battery": [
+    [
+      "R8 R5 X3 an EGD by another provider, the snare code",
+      "45385",
+      "selected/needs_clarification",
+      "selected/ready"
+    ],
+    [
+      "R8 R5 Y4 a separately reported same-day EGD",
+      "45385",
+      "selected/needs_clarification",
+      "selected/ready"
+    ]
+  ],
+  "why": {
+    "R8 R5 X3 an EGD by another provider, the snare code": "Truth done (Polyp A removed with a cold snare today). \"EGD performed today by Dr. Other Endoscopist (fictional), reported separately.\" now reads its EGD as another provider's (F-TIME P, a named agent no physician line names), so the colonoscopy's snare is no longer held by a second family of this report.",
+    "R8 R5 Y4 a separately reported same-day EGD": "Truth done. \"EGD performed immediately before this procedure; see separate report.\" now reads the EGD as before this procedure (F-TIME B), never this report's service, so the snare is no longer held by it."
+  }
+}

@@ -68,7 +68,8 @@ FACT_WORDS = {'service_date': 'the date of service', 'setting': 'the place of se
               'completion': 'whether the examination was completed', 'em_basis': 'the basis for the visit level',
               'target': 'the structure examined', 'cannulation': 'whether cannulation was achieved',
               'performed_status': 'whether the service was performed', 'base_included': 'how the codes are reported',
-              'separate_em': 'a separate office visit'}
+              'separate_em': 'a separate office visit',
+              'competing_codes': 'which of the codes proposed for the same act the documentation supports'}
 LIMITATIONS = (
     'CPT descriptions are not shown: no licensed CPT descriptor is connected.',
     'CPT code-set membership for the date of service is not verified.',

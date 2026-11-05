@@ -381,6 +381,32 @@ def _service_named(line: str) -> bool:
     return bool(cues.FS_ABBREVIATION.search(line)) or any(p.search(line) for _, p in cues.SERVICE_PATTERNS)
 
 
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-SECTIONS T): a procedure report's title with a short aside after
+# it ("Colonoscopy Report (Final)", "Upper Endoscopy Report (amended)", "EGD Procedure Note (fictional)") is the title
+# PROCEDURE_TITLE reads, which ends at "report" or "note": the walk's h2b and h2c titles carried one, so their
+# procedure's title opened no section and routing read the colonoscopy as historical and the EGD as uncertain. The aside
+# is one to three words of letters, in parentheses, closing the line; none that says another time, a plan, a doubt or a
+# denial (_ASIDE_DENY) - and the line keeps every other condition the title rule has.
+_TITLE_ASIDE = re.compile(r'[ \t]*\((?P<words>[A-Za-z]+(?:[ -][A-Za-z]+){0,2})\)[ \t]*$', re.A)
+_ASIDE_DENY = re.compile(r'\b(?:not?|non|cancel\w*|abort\w*|stopped|plan\w*|schedul\w*|pending|future|upcoming|next|'
+                         r'proposed|requested|ordered|order|booking|consent|pre|post|prior|previous|earlier|outside|'
+                         r'old|history|historical|copy|copied|template|blank|sample|example|draft|deferred|postponed|'
+                         r'declined|refused|incomplete|failed|attempted|possible|probable|query|tentative)\b',
+                         re.A | re.I)
+
+
+def _aside_title(line: str) -> Optional[str]:
+    """The title before its aside when ``line`` is a procedure report's title with a short aside after it (see above),
+    else None."""
+    aside = _TITLE_ASIDE.search(line)
+    if aside is None or _ASIDE_DENY.search(aside.group('words')):
+        return None
+    bare = line[:aside.start()]
+    if cues.PROCEDURE_TITLE.match(bare.strip()) and _service_named(bare) and not _TITLE_QUALIFIER.search(line):
+        return bare.rstrip()
+    return None
+
+
 def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     """(kind, label, heading span) when the line [ls, le) is a heading line."""
     body_start = _PREFIX.match(text, ls, le).end()
@@ -402,6 +428,11 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     if kind is None and colon < 0 and cues.PROCEDURE_TITLE.match(line.strip()) and _service_named(line) \
             and not _TITLE_QUALIFIER.search(line):
         kind = 'procedure'
+    if kind is None and colon < 0:
+        titled = _aside_title(line)
+        if titled is not None:  # F-SECTIONS T: the title without its aside ("(Final)") is the heading
+            kind, raw = 'procedure', titled
+            label = normalize_label(raw)
     if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
         kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
     if kind is None and colon < 0 and _bare_label(raw):
@@ -1043,6 +1074,8 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
         else:
             resumes.append((i + 1, header))
             header = None
+    _inline_services(text, lines, headings, inside)  # F-SECTIONS L (harness repair 3)
+    _attached_titles(text, lines, headings)  # F-SECTIONS T (harness repair 3)
     for i, heading in headings.items():
         if heading and heading[1] in _SEC_TODAY_LABELS and not text[heading[2].end:lines[i][1]].strip():
             answer = next((text[ls:le] for ls, le in lines[i + 1:i + 3] if text[ls:le].strip()), '')
@@ -1053,6 +1086,83 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
                 and lines[i + 1][0] < len(text) and text[heading[2].end:lines[i][1]].strip():
             field_labels.append(i)  # "Referral: Dr. B. Synthetic", "Orders: CBC" (structure:5; round 4c sections:5)
     return headings, inside, resumes, field_ends, field_labels
+
+
+def _attached_titles(text: str, lines: list[tuple[int, int]], headings: dict) -> None:
+    """F-SECTIONS T (harness repair 3; the battery's R8 D10): a report title that is the first line under a history
+    heading with nothing after its colon ("Attached prior report:" then "Upper endoscopy report (fictional)") titles the
+    attached report. It stays in the history section and never opens a procedure section of today's report, so the
+    attached report's own date of service never competes with this one's. A title with an aside read as its title
+    (_aside_title) and one without are read alike. In place."""
+    previous = None
+    for i, (ls, le) in enumerate(lines):
+        if not text[ls:le].strip():
+            continue
+        heading = headings.get(i)
+        if heading and heading[0] == 'procedure' and ':' not in heading[2].text and previous is not None:
+            above = headings.get(previous)
+            if above and above[0] == 'history' and not text[above[2].end:lines[previous][1]].strip():
+                headings[i] = None
+        previous = i
+
+
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-SECTIONS L): in a procedure report, a paragraph that opens with
+# one service's name as its label and narrates that examination's course ("Upper endoscopy: The gastroscope was advanced
+# ...", "Colonoscopy: After repositioning, a pediatric colonoscope was introduced ...") is that procedure's own part: it
+# opens a procedure section. The owner's 39f0ac49 wrote its parts so, and its Indications section ran on over both
+# procedure narratives, which routing then read as an indication's: both families uncertain, every code held. A label
+# with text after it is otherwise a field (content), and stays one unless every condition holds:
+# - the document's head carries a procedure report's own fields (procedure_report_head) and no title of a note written
+#   around a procedure (around_procedure_title);
+# - the label is one service's name and nothing else (_service_name_only), and the line starts a paragraph: the line
+#   before ends a sentence, a label or nothing;
+# - the part's first sentence states the examination's course (cues.COURSE) and carries no date, no plan, history or
+#   cancellation cue (_NOT_TODAYS), and no record of another occurrence stands above it (under_another_occurrence);
+# - no history or plan section is in force (a heading above it of either kind, or an earlier part's).
+_INLINE_LABEL = re.compile(r'[ \t]*(?P<label>[A-Za-z][A-Za-z ()/-]{0,60}?)[ \t]*:[ \t]*(?=\S)', re.A)
+_INLINE_SENTENCE_END = re.compile(r'[.!?](?=\s|$)')
+INLINE_PART_REACH = 400  # characters of a part's first sentence read for its course (bounded work per line)
+
+
+def _inline_service(text: str, lines: list[tuple[int, int]], i: int) -> Optional[tuple[str, str, Span]]:
+    """The procedure heading the line ``i`` opens as a service's own labelled part (see above), else None."""
+    ls, le = lines[i]
+    found = _INLINE_LABEL.match(text, ls, le)
+    if found is None or _service_name_only(found.group('label')) is None:
+        return None
+    if i > 0:
+        before = text[lines[i - 1][0]:lines[i - 1][1]].strip()
+        if before and before[-1] not in '.!?:':
+            return None  # the line before runs on into this one
+    start = found.end()
+    end = _INLINE_SENTENCE_END.search(text, start, min(len(text), start + INLINE_PART_REACH))
+    stop = end.end() if end else min(len(text), start + INLINE_PART_REACH)
+    if not cues.COURSE.search(text, start, stop):
+        return None
+    if _ITEM_DATE.search(text, ls, stop) or any(pattern.search(text, ls, stop) for pattern in _NOT_TODAYS):
+        return None
+    if under_another_occurrence(text, ls):
+        return None
+    label = found.group('label').strip()
+    h_start = ls + found.group(0).index(label)
+    h_end = text.index(':', h_start + len(label)) + 1
+    return 'procedure', normalize_label(label), Span(h_start, h_end, text[h_start:h_end])
+
+
+def _inline_services(text: str, lines: list[tuple[int, int]], headings: dict, inside: set) -> None:
+    """``headings`` with the procedure headings the services' own labelled parts open (F-SECTIONS L), in place."""
+    if not procedure_report_head(text) or around_procedure_title(text):
+        return
+    current = None
+    for i in range(len(lines)):
+        if headings.get(i):
+            current = headings[i][0]
+            continue
+        if i in inside or current in ('history', 'plan'):
+            continue
+        heading = _inline_service(text, lines, i)
+        if heading is not None:
+            headings[i], current = heading, heading[0]
 
 
 @functools.lru_cache(maxsize=16)

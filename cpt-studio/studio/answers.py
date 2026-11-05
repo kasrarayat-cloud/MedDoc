@@ -38,6 +38,7 @@ from django.db import transaction
 from . import audit, jobs, models, review
 from .gi import context as gi_context
 from .gi.profiles import PROFILES
+from .validation.engine import COMPETING_FACT
 from .validation.reconcile import act_label
 
 NOT_DOCUMENTED, CANNOT_CONFIRM = models.MemberAnswer.NOT_DOCUMENTED, models.MemberAnswer.CANNOT_CONFIRM
@@ -78,6 +79,9 @@ PROMPTS = {
     'base_included': 'Is this diagnostic examination reported separately from the other procedures on this date?',
     'separate_em': 'Is a significant, separately identifiable visit documented beside the procedure?',
     'units': 'How many units were performed?',
+    # harness repair 3 (HARNESS.md, P-ADMIT2): answered by the review decision, never by a detail answer
+    COMPETING_FACT: 'More than one code is proposed for the same documented act. Reject the code the documentation '
+                    'does not support; the code left is then ready for review.',
 }
 CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
 DEFAULT_PROMPT = 'A detail this code depends on is not clear in the document.'
@@ -467,7 +471,9 @@ def _rows(encounter, assessment, view=None):
             row.entered_value = values.get(row.fact) or None
             row.prompt = PROMPTS[row.fact]
         else:
-            row.allow = [] if row.scope == 'encounter' else [NOT_DOCUMENTED, CANNOT_CONFIRM]
+            # codes competing for one act are settled by rejecting one (P-ADMIT2): no detail answer fits the question
+            row.allow = [] if row.scope == 'encounter' or row.fact == COMPETING_FACT \
+                else [NOT_DOCUMENTED, CANNOT_CONFIRM]
             subject = row.fact.split(':', 1)[1] if row.fact.startswith('conflict:') else ''
             row.prompt = CONFLICT_PROMPT.format(act=act_label(subject)) if subject else PROMPTS.get(row.fact,
                                                                                                    DEFAULT_PROMPT)

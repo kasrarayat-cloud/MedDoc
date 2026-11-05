@@ -102,6 +102,10 @@ class _Selection:
     # 'participant' only: the rationale's first sentence - who proposed it, in which phase, and that Corti did not
     # (HARNESS.md 11.4), never "Selected by" (_Harness._lead)
     lead: str = ''
+    # P-ADMIT2 (harness repair 3): the other decidable codes that claim one same documented act as this one, where at
+    # least one of the two is a participant's admitted code; each is then held by one question naming the others
+    # (competing_hold), whoever proposed it, and a reviewer's rejection of the others releases it (review_view)
+    competes: tuple[str, ...] = ()
 
     @property
     def profile(self) -> ServiceProfile:
@@ -506,6 +510,80 @@ def _not_added_why(candidate: '_Selection', code: str, accounts: bool, open_item
         return f'it accounts for no documented service or act {left_by} left unresolved'
     if candidate.evaluation is None:
         return (candidate.scope_reason or NO_EVIDENCE).rstrip('.')
+    return 'the document reads what it accounts for as not performed on the date of service'
+
+
+def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
+    """Every documented service and act the reconciliation reads as needing a code, as if nothing were proposed
+    (P-ADMIT2): (service, family, act, label) - each service the reading reads done with no proposal, act '' (what the
+    reconciliation lists for it), and each of its acts the reconciliation would list as not covered by a code of its
+    service that accounts for none of them (its family's diagnostic base code: the reconciliation's own reading of which
+    acts are separate services, its bundling included - a lift injection inside an EMR is none). The same items
+    _open_items_covered reads for the second review, over the whole document instead of what other codes left open."""
+    services, _, _ = reconcile.reconcile(inventory, [], procedure_day=procedure_day)
+    items = [(u.service, u.family, u.act, u.label) for u in services if u.reason in ('no_proposal', 'not_covered')]
+    families = {u.family for u in services if u.reason == 'no_proposal'}
+    bases = [(next(code for code, profile in reconcile.catalogue.CODES.items()
+                   if profile.family == family and profile.base), family)
+             for family in sorted(families)
+             if any(profile.family == family and profile.base for profile in reconcile.catalogue.CODES.values())]
+    if bases:
+        acts, _, _ = reconcile.reconcile(inventory, bases, procedure_day=procedure_day)
+        items += [(u.service, u.family, u.act, u.label) for u in acts if u.reason == 'not_covered' and u.act]
+    return items
+
+
+def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selection'],
+                 documented: Sequence[tuple], inventory) -> dict[str, tuple[str, ...]]:
+    """code -> the codes it competes with (P-ADMIT2, harness repair 3): two different decidable codes compete where
+    each claims one same documented act (_claimed: an EGD's dilation code and its biopsy code never do; two dilation
+    codes for its one dilation do), and at least one of them is a participant's admitted code (``admissible``: code ->
+    (its reading, the documented items it accounts for, its first proposers)). A participant's code competes with every
+    other such code, a proposal provider's or a second review's only with the participants' (two codes the proposal
+    provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
+    CPT Studio never chooses between codes, nor prefers one for its proposer."""
+    claims_of: dict[str, set] = {code: _claimed(candidate, items) for code, (candidate, items, _) in admissible.items()}
+    for selection in selections:
+        if selection.evaluation is None or selection.excluded or selection.code in claims_of:
+            continue
+        items = (_open_items_covered(selection, selection.code, documented, inventory)
+                 if inventory is not None else [])
+        claims_of[selection.code] = _claimed(selection, items) if items else set()
+    holders: dict[tuple, set] = {}
+    for code, claimed in claims_of.items():
+        for claim in claimed:
+            holders.setdefault(claim, set()).add(code)
+    out: dict[str, tuple[str, ...]] = {}
+    for code, claimed in claims_of.items():
+        rivals = {other for claim in claimed for other in holders[claim] if other != code}
+        if code not in admissible:
+            rivals &= set(admissible)  # a decidable code competes only with the participants' codes
+        if rivals:
+            out[code] = tuple(sorted(rivals))
+    return out
+
+
+def _not_admitted_why(candidate: '_Selection', code: str, accounts: bool, documented: Sequence[tuple]) -> str:
+    """Why a participant's first-reading proposal, read by the per-code path as ``candidate``, is not added as a
+    proposal (P-ADMIT2): what CPT Studio's own reading of the document leaves it - never what another proposer did with
+    the code. ``accounts``: it accounts for a documented service or act the reading reads done (``documented``)."""
+    profile = reconcile.catalogue.code_profile(code)
+    match = candidate.evaluation.match if candidate.evaluation is not None else None
+    if profile is None:
+        return 'the coverage catalogue does not establish which documented act it accounts for'
+    if candidate.evaluation is None:
+        return (candidate.scope_reason or NO_EVIDENCE).rstrip('.')
+    if candidate.excluded:
+        return 'the document reads what it accounts for as not performed on the date of service'
+    if match is not None and match.reason == 'conflict':
+        return ('the document states the act it accounts for both as done and as not done (both are kept; neither is '
+                'chosen)')
+    if match is not None and match.reason == 'act_included':
+        return 'the act it accounts for is part of another documented act, not a separate service'
+    if not any(family == candidate.family for _, family, _, _ in documented):
+        return PARTICIPANT_NO_SERVICE
+    if not accounts:
+        return PARTICIPANT_NO_ACT
     return 'the document reads what it accounts for as not performed on the date of service'
 
 
@@ -2460,6 +2538,24 @@ def base_hold(code: str, family: str, key: str, included: Sequence[str], service
                               question=f'Is {code} reported separately from {", ".join(included)} for this examination?'))
 
 
+COMPETING_CHECK, COMPETING_FACT = 'proposals.competing', 'competing_codes'
+
+
+def competing_hold(code: str, family: str, key: str, rivals: Sequence[str], service) -> tuple[Check, ClarificationSpec]:
+    """The proposals.competing check and the competing_codes question of a code that claims one same documented act as
+    ``rivals`` (P-ADMIT2, harness repair 3): CPT Studio does not choose between them, whoever proposed each, so each is
+    held for the reviewer, never excluded; a reviewer's rejection of the others releases it (review_view). ``service``:
+    the documented service it was matched to. No proposer is named: the question is the same for every origin."""
+    service_name = reconcile.service_label(service) if service is not None else 'service'
+    codes = checks._join([code, *rivals])
+    reason = (f'{codes} are each proposed for one same documented act of the {service_name}. CPT Studio does not '
+              'choose between them: each is held for the reviewer, not excluded, until the others are rejected.')
+    return (Check(COMPETING_CHECK, 'Codes proposed for the same documented act', 'warn', reason, reconcile.SOURCE),
+            ClarificationSpec(scope='proposal', fact=COMPETING_FACT, family=family, proposal_key=key, reason=reason,
+                              question=(f'{codes} are proposed for the same documented act. Reject the code or codes '
+                                        'the documentation does not support; the one left is then ready for review.')))
+
+
 def endoscopic_rows(pairs) -> dict:
     """code -> PFS row, of every (code, PFS row or None) pair of an active code that has a row: what the CMS PFS
     endoscopic-family check reads of the other codes (checks.endoscopic_check's ``active``)."""
@@ -2614,6 +2710,10 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         held, question = base_within_hold(s.code, s.family, key, within, m.service if m else None)
         found.append(held)
         clarifications.append(question)
+    if s.competes and not s.excluded:
+        held, question = competing_hold(s.code, s.family, key, s.competes, m.service if m else None)
+        found.append(held)
+        clarifications.append(question)
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
@@ -2673,6 +2773,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         exclusion = _service_exclusion(m) if m is not None else checks.exclusion_reason(outcome, name)
     context_values = _relevant_context(s.family, enc, bool(pctc))
     support = _support_json(m, supported, s.origin)
+    if s.competes and not s.excluded:
+        support = {**support, 'competes': list(s.competes)}  # what review_view releases the hold by (P-ADMIT2)
     if used:
         # what a decision rests on: the confirmed facts, their values and passages (a decision made on one confirmed
         # reading never carries to another), and in the record the confirmations read
@@ -3138,6 +3240,10 @@ PARTICIPANT_COMPETING = ('independent readings propose different codes for the s
                          'Studio does not choose between them')
 PARTICIPANT_UNREAD = ('the documented-service reading was not available, so no participant code could be checked '
                       'against it')
+# P-ADMIT2 (harness repair 3): what CPT Studio's own reading leaves a participant's code that accounts for nothing it
+# reads done - a failed, denied, earlier, planned or another provider's act among them - never what another proposer did
+PARTICIPANT_NO_SERVICE = 'no service of its family is documented as done on the date of service'
+PARTICIPANT_NO_ACT = 'the act it accounts for is not documented as done on the date of service'
 PARTICIPANT_LEFT_BY = 'the other proposals'
 PARTICIPANT_NOT_SHOWN = ('none of its passages shows the act it accounts for, as CPT Studio reads them; a code carried '
                          "only by CPT Studio's own reading of another passage is never added for a participant")
@@ -3594,12 +3700,10 @@ class _Harness:
         it counts as covering what it accounts for, and only a member's decision approves it. ``corti_listed`` and
         ``corti_second_listed`` word its rationale's first sentence (_lead)."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
-        open_items: list[tuple] = []
-        if inventory is not None:
-            active = [(s.code, s.family) for s in selections if not s.excluded]
-            unresolved, _, _ = reconcile.reconcile(inventory, active, procedure_day=procedure_day)
-            open_items = [(u.service, u.family, u.act, u.label) for u in unresolved
-                          if u.reason in ('no_proposal', 'not_covered')]
+        # P-ADMIT2 (owner directive 2026-11-05, second message): every documented service and act the reading reads
+        # done, as if nothing were proposed - never only what the other proposals left open, so no proposer's selection,
+        # or its silence, decides whether a participant's code reaches review
+        documented = _documented_items(inventory, procedure_day) if inventory is not None else []
         order: list[str] = []
         why: dict[str, str] = {}
         admissible: dict[str, tuple] = {}  # code -> (its reading, the open items it accounts for, its first proposers)
@@ -3622,7 +3726,7 @@ class _Harness:
             else:
                 group = [ProviderCode('selected', 'participant', code, '', self._first_evidence(code, first))]
                 candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
-                items = _open_items_covered(candidate, code, open_items, inventory)
+                items = _open_items_covered(candidate, code, documented, inventory)
                 supported = candidate.evaluation.support if candidate.evaluation is not None else None
                 if items and candidate.evaluation is not None and not candidate.excluded:
                     # Exact evidence in its complete context (owner directive 2026-11-05): at least one of the
@@ -3639,28 +3743,25 @@ class _Harness:
                     else:
                         why[code] = PARTICIPANT_NOT_SHOWN
                 else:
-                    why[code] = _not_added_why(candidate, code, bool(items), open_items, PARTICIPANT_LEFT_BY)
-        claims: dict[tuple, list[str]] = {}
-        keys = {code: _claimed(candidate, items) for code, (candidate, items, _) in admissible.items()}
-        for code, claimed in keys.items():
-            for key in claimed:
-                claims.setdefault(key, []).append(code)
+                    why[code] = _not_admitted_why(candidate, code, bool(items), documented)
+        competes = _competition(admissible, selections, documented, inventory)
         added, listed = [], []
         for code in order:
             if code in admissible:
                 candidate, items, first = admissible[code]
-                rivals = sorted({other for key in keys[code] for other in claims[key] if other != code})
-                if not rivals:
-                    # its evidence is its first readings' spans alone (proposers); its first sentence names every
-                    # participant that proposed it, each in its own phase, as its record does (recorded)
-                    added.append(replace(candidate, origin='participant', proposers=first,
-                                         lead=self._lead(code, self.proposers(code), selections, corti_listed,
-                                                         corti_second_listed)))
-                    continue
-                why[code] = PARTICIPANT_COMPETING.format(codes=checks._join([code, *rivals]))
+                # its evidence is its first readings' spans alone (proposers); its first sentence names every
+                # participant that proposed it, each in its own phase, as its record does (recorded). A code another
+                # decidable code claims one same act as is added too, and both are held (P-ADMIT2: competes)
+                added.append(replace(candidate, origin='participant', proposers=first,
+                                     lead=self._lead(code, self.proposers(code), selections, corti_listed,
+                                                     corti_second_listed),
+                                     competes=competes.get(code, ())))
+                continue
             names = tuple(n for n in PARTICIPANT_ORDER if n in self.codes[code])
             listed.append(self._alternative(len(listed), code, names, why[code]))
-        return list(selections) + added, tuple(listed)
+        kept = [replace(s, competes=competes[s.code]) if s.code in competes and s.evaluation is not None
+                and not s.excluded else s for s in selections]
+        return kept + added, tuple(listed)
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
         """A participant's code that is not a proposal, saying why: informational, never approvable. ``names``: every

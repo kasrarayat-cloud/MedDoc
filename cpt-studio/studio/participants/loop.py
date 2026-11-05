@@ -248,8 +248,6 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
             if not complete:
                 end = ('failed', "The loop's deadline passed while CPT Studio was answering the participant's tool "
                                  'calls; nothing more was sent.')
-            elif halt := _halt(should_stop, number):
-                end, stopped = ('failed', halt), True
         records.append(ExchangeRecord(
             turn=number, request_body=body, request_sha256=sha256, outcome=raw.outcome, http_status=raw.http_status,
             response_bytes=raw.response_bytes, response_sha256=raw.response_sha256, latency_ms=raw.latency_ms,
@@ -258,6 +256,10 @@ def run(adapter, request: ProviderRequest, *, post: Callable[[int, dict, float],
             finished_at=finished))
         raws.append(raw)
         _hand(on_exchange, records[-1])  # recorded as it ends, before anything more is sent
+        if end is None and (halt := _halt(should_stop, number)):
+            # the Stop is read once the exchange is complete and recorded (F-STOP); a session whose recording met an
+            # ended connection is the caller's new one, so its own check reads the lock it no longer holds (sends-1)
+            end, stopped = ('failed', halt), True
         if end is None:
             try:
                 following = follow_up(body, turn, tuple((record.call_id, output) for record, output in answered))

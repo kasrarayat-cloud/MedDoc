@@ -243,7 +243,15 @@ ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, 
                  r'|(?<!extraction\s)(?<!occlusion\s)(?<!retrieval\s)\bballoon\s+(?:was\s+)?inflated\s+(?:\w+\s+){0,2}?to\s+'
                  r'\d{1,2}(?:\.\d)?\s*mm\b'),
     ('stent', r'\bstents?\b'),
-    ('foreign_body', r'\bforeign\s+bod(?:y|ies)\b|\bfood\s+(?:bolus|impaction)\b'),
+    # Harness repair 3 (HARNESS.md, "Harness repair 3", F-ACTS): the food boluses a report names by what they are ("an
+    # impacted meat bolus"), and a bolus named alone where its own clause states it removed ("the bolus was removed
+    # through the mouth": the owner's 39f0ac49, whose 43247 no act accounted for). A bolus a medication or a lift is
+    # given as never names one ("a 50 mg bolus of propofol was given"); "pushed" names no removal, so it stays no act.
+    ('foreign_body', r'\bforeign\s+bod(?:y|ies)\b|\b(?:food|meat|steak|chicken|beef|pork|bread|vegetable)\s+'
+                     r'(?:bolus(?:es)?|impactions?)\b|\bimpacted\s+(?:food|meat)\b'
+                     r'|\bbolus\b(?=[^.;\n]{0,40}?\b(?:was|were)\s+(?:then\s+|successfully\s+|subsequently\s+'
+                     r'|completely\s+|gently\s+|endoscopically\s+)?'
+                     r'(?:removed|retrieved|extracted|cleared|dislodged)\b)'),
     ('sphincterotomy', r'\b(?:biliary\s+|pancreatic\s+)?(?:sphincterotomy|papillotomy)\b'),
     ('stone_extraction', r'\bstones?\b|\bcalcul(?:us|i)\b|\bsludge\b|\bballoon\s+(?:sweep|extraction)\b|\bbasket\b'),
     ('lithotripsy', r'\blithotrips(?:y|ies)\b'),
@@ -325,7 +333,12 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                + r")\b(?:\s+be)?"
                r"|\bnot\s+(?:performed|done|obtained|taken|removed|resected|treated|sampled|biopsied|placed|injected|"
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
-               r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
+               r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?"
+               # Harness repair 3 (HARNESS.md, "Harness repair 3", F-TIME N): a fragment's own negation, with no
+               # auxiliary before it - "Ink never injected", "Biopsies not yet obtained", "Polyp not snared" - as routing
+               # reads it ('negated: never obtained'); the act reader had read each as done
+               r"|\b(?:never|not\s+(?:yet|ever|actually))\s+(?:been\s+)?" + ACT_PARTICIPLES + r"\b"
+               r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded)\b")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
 # A negation's list ends where another clause opens after it - a subordinator or a temporal preposition ("No bleeding
 # occurred after the biopsies were obtained", "There were no complications after biopsies were taken", "No residual
@@ -411,10 +424,60 @@ ANOTHER_OCCURRENCE_CUE = 'uncertain: names another occurrence of the service, wh
 COPULAR_OBJECT_CUE = 'uncertain: inside the object of a copular negation ("was not a biopsy of ..."), never denied'
 
 
-def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
-    """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end``."""
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-NEG S): "<done participle> with <instrument> [for <purpose>] and not
+# <participle of another act>" - "The lesion was marked with tattoo and not resected", 88d9db32's "Separate
+# transverse-colon lesion marked with submucosal tattoo for future localization and not resected today" - gives its "not"
+# to the coordinated predicate, as the participle form "was tattooed and not resected" already does: the instrument's act
+# keeps its reading by every other rule (time, place, section, hedge), never released by this one. Read at that shape
+# only: the participle right after "was"/"were" or a lesion noun (no adverb: "already marked" stays held), at most two
+# modifier words before the instrument that are no preposition, relative or participle ("a label reading tattoo", "a
+# photo of the tattoo", "3 mL of India ink" stay held), nothing but a purpose phrase before "and not", and the negated
+# participle another act's (never the instrument's own kind: "injected ... and not tattooed" stays the injection's).
+# (INSTRUMENT_LEAD is defined after LESION_NOUN, below)
+INSTRUMENT_PURPOSE_AND = _rx(r'(?:\s+for\s+(?:[\w-]+\s+){0,3}?[\w-]+)?,?\s+and\s+')
+ANOTHER_ACT_NOT = _rx(r'not\s+(?P<p>resected|removed|excised|snared|biopsied|sampled|retrieved|ablated|dilated|clipped|'
+                      r'treated|cut|transected)\b')
+INSTRUMENT_LEAD_CHARS = 120  # characters before an instrument mention read for its participle
+
+
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-TIME F): an act read as done in one clause and, in a later clause
+# of the same sentence, the same act - named again as a definite noun ("the polypectomy", "the tattoo") - stated failed
+# or not done ("..., but the polypectomy was unsuccessful", "...; the tattoo did not take"): a contradiction, held,
+# never read as done. A later mention of another occurrence ("the second polypectomy") holds too, on the safe side.
+LATER_FAILURE_CUE = 'uncertain: a later clause of its sentence states the same act failed or not done: '
+DEFINITE_BEFORE = _rx(r'\bthe\s+(?:[\w-]+\s+){0,2}$')
+
+
+def _later_failure(text: str, cls, clause, kind: str, mentions, *, service_date, dates, part) -> str:
+    """The later definite mention of ``kind`` itself (a related kind's denial is the conflict reader's) in a later
+    clause of the sentence whose own reading is a denial, a cancellation, an incompleteness or a failure (F-TIME F),
+    or ''."""
+    for k2, s2, e2 in mentions:
+        if k2 != kind or s2 < clause[1]:
+            continue
+        c2 = _clause_for(cls, s2)
+        if c2[0] < clause[1] or not DEFINITE_BEFORE.search(text, max(c2[0], s2 - 40), s2):
+            continue
+        if (k2 == 'tattoo' and TATTOO_AS_PLACE.search(text, max(c2[0], s2 - 60), s2)) \
+                or (k2 == 'snare' and re.match(r'[ \t]*site\b', text[e2:e2 + 8], FLAGS)):
+            continue  # a place, as the act loop reads it
+        later = read_clause(text, c2, s2, e2, service_date=service_date, dates=dates, part=part,
+                            in_today_report=part.kind == 'report')
+        if later.status in ('negated', 'cancelled', 'incomplete') or _attempt_or_failure(later.cues):
+            return ' '.join(text[s2:e2].split())
+    return ''
+
+
+def _not_on_another_predicate(text: str, neg: int, end: int, pos: Optional[int] = None) -> bool:
+    """Whether the negation at ``neg`` governs a predicate other than the act mention ending at ``end`` (starting at
+    ``pos``, when given: F-NEG S, above)."""
     if neg < end:
         return False  # the negation precedes or covers the mention ("did not undergo EGD", "not biopsied")
+    if pos is not None and INSTRUMENT_LEAD.search(text, max(0, pos - INSTRUMENT_LEAD_CHARS), pos) \
+            and INSTRUMENT_PURPOSE_AND.fullmatch(text, end, neg) \
+            and (other := ANOTHER_ACT_NOT.match(text, neg)) is not None \
+            and other.group('p')[:4].lower() not in text[pos:end].lower():
+        return True
     between = text[end:neg]
     sub = SUBORDINATOR.search(between)
     # a subordinate clause the negation lies inside ("... if intake does not improve"), never one set off by commas
@@ -489,7 +552,10 @@ def _against_listing(text: str, act: Act) -> bool:
     in a clause that names no service - a plan read from a plan section or label alone, or one inside another
     occurrence of a service ("repeat colonoscopy with snare polypectomy in 3 years"), is no statement about today's."""
     if act.status == 'uncertain':
-        return _attempt_or_failure(act.cues) or _hedged(act.cues)
+        # F-TIME (harness repair 3): a condition or an open question, an infinitive, or a later failure of the same act
+        # doubts today's act as a hedge does; another facility's or provider's act says nothing about today's listing
+        return _attempt_or_failure(act.cues) or _hedged(act.cues) \
+            or (bool(act.cues) and act.cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
     if act.status != 'planned':
         return False
     if act.lesion:
@@ -534,7 +600,11 @@ REPLACED = _rx(r'(?<![\w/-])(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+op
 REPLACED_CUE = 'negated: named as replaced by another service'
 CANCEL_WORDS = _rx(r'\b(?:cancel(?:l)?ed|declined|refused|deferred|postponed|aborted\s+before|not\s+attempted)\b')
 HISTORY_WORDS = _rx(r'\b(?:prior|previous(?:ly)?|history\s+of|historical|in\s+the\s+past|ago|earlier|remote|old|formerly'
-                    r'|last\s+(?:year|month|week|time|visit|seen)|had\s+(?:a|an|undergone|been|had)|status\s+post|s/p'
+                    r'|last\s+(?:year|month|week|time|visit|seen|yr|yrs|wk|wks|mo|mos|mth)'
+                    r'|had\s+(?:a|an|undergone|been|had)|status\s+post|s/p'
+                    # Harness repair 3 (F-TIME B): a day before today, and a time before the patient came
+                    r'|yesterday|the\s+(?:day|night|evening|morning)\s+before|before\s+(?:(?:the|her|his|their)\s+)?'
+                    r'(?:referral|admission|transfer|presentation)'
                     r'|prior-record|mentioned\s+in\s+the\s+preprocedure\s+history)\b'
                     # another facility's study ("an outside EUS-guided biopsy", "at an outside hospital"), never a margin
                     # ("an incision outside the marks")
@@ -693,6 +763,10 @@ INTENT_WORDS = (('screening', _rx(r'\bscreening\b')), ('surveillance', _rx(r'\bs
                 ('diagnostic', _rx(r'\bdiagnostic\b|\bsymptom-?driven\b')))
 LESION_NOUN = (r'(?:polyps?|lesions?|mass(?:es)?|nodules?|tumou?rs?|ulcers?|adenomas?|stricture|ring|varix|varices|'
                r'angioectas(?:ia|iae)|AVMs?|cysts?|plaques?|erosions?|patch(?:es)?|abnormalit(?:y|ies))')
+# F-NEG S (above _not_on_another_predicate): the instrument's participle, right after "was"/"were" or a lesion noun
+INSTRUMENT_LEAD = _rx(r'(?:\b(?:was|were)\s+|\b' + LESION_NOUN + r'\s+)' + ACT_PARTICIPLES + r'\s+with\s+'
+                      r'(?:(?:a|an|the|some)\s+)?(?:(?!(?:of|for|to|at|from|in|on|by|with|that|which|who|as|and|or|but|'
+                      r'not|no)\b)[A-Za-z-]+(?<!ing)(?<!ed)\s+){0,2}$')
 LESION = _rx(r'(?P<lead>\b(?:an?|one|two|three|four|five|six|several|multiple|\d+|the|this|that|a\s+separate|another)\s+)?'
              r'(?P<sep>separate\s+)?(?P<size>(?:\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?(?:mm|cm)|\d+[- ](?:mm|cm))'
              r'(?:\s+and\s+\d+(?:\.\d+)?\s*(?:mm|cm))?\s+)?(?P<morph>(?:(?:sessile|pedunculated|flat|depressed|'
@@ -1109,6 +1183,17 @@ def _documented_today(text: str, lines, service_date: Optional[date], dates, dat
     return frozenset(found)
 
 
+def _inline_service_part(lay, ls: int) -> Optional[tuple[str, Span]]:
+    """(family, label span) when the section reader opened, at the line starting at ``ls``, the procedure section of a
+    service's own labelled part (sections._inline_service: its label is one service's name and nothing else); else
+    None. One rule for both readers, so the inventory's parts and routing's sections cut such a part at the same line."""
+    section = lay.section_at(ls)
+    if section.start != ls or section.kind != 'procedure' or section.heading is None or section.heading.start < ls:
+        return None
+    family = _sections._service_name_only(section.heading.text.rstrip(': \t'))
+    return (family, section.heading) if family else None
+
+
 def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tuple[_Part, ...]:
     """The document cut into report parts (a part about one service, from its title to the next title), role parts
     (a nursing, anesthesia, pathology or radiology entry, to the next heading) and other text. A history or plan part
@@ -1140,6 +1225,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     notes: dict[int, tuple[str, str]] = {}  # cut index -> (noted, host) of the parts a note label opened (L1e)
     blocks: set[int] = set()  # cut indexes of L1d's parts of no family
     labelled_now = None  # L1f: (cut, family, host) of the labelled part while it is the running one
+    inline_running = False  # F-SECTIONS L: a service's own labelled part is the running one
     block_now = None  # L1d-r3: (cut, running family, role, kind) of L1d's part of no family while it is the running one
     for index, (ls, le) in enumerate(lines):
         line = text[ls:le]
@@ -1178,6 +1264,22 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                 title_marks.append((ls, False))
                 family = block_now[1]
             block_now = None
+        inline = _inline_service_part(lay, ls)
+        if inline is not None:
+            # Harness repair 3 (HARNESS.md, "Harness repair 3", F-SECTIONS L): the section reader opened a procedure
+            # section for a service's own labelled part ("Upper endoscopy: The gastroscope was advanced ..."): that part
+            # is the service's, as a bare service heading's lines are, so an act it states with no site of its own ("the
+            # bolus was removed through the mouth") is that service's. Read before the line-length guard: the label's
+            # line carries the part's first sentence.
+            cuts.append((ls, inline[0], 'physician', inline[1], 'section'))
+            inline_running = True
+            continue
+        if inline_running and cuts[-1][4] == 'section' and lay.section_at(ls).start == ls \
+                and lay.section_at(ls).kind not in _sections.POSITIVE_KINDS:
+            # ... and it ends where the layout opens a section of another kind ("Impression: ...", "Plan: ...", however
+            # long its line): the encounter's shared sections belong to no one service, as after a bare service heading
+            cuts.append((ls, family, 'physician', None, kind_now))
+            inline_running = False
         if not stripped or len(stripped) > 100:
             continue
         if cuts[-1][4] in ('history', 'plan') and _sections.FORM_BLOCK.fullmatch(stripped):
@@ -2230,6 +2332,92 @@ def _in_an_aside(text: str, cs: int, d) -> bool:
     return paren >= 0 and ')' not in text[paren:d.start]
 
 
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-TIME): the time, place and condition an act's clause states.
+# B - a reference to today that a preposition of precedence governs ("prior to this procedure", "before this
+#     examination") names the time an act came before, never today - unless a predicate of its own follows it ("before
+#     this procedure was completed": a clause of today's procedure).
+BEFORE_TODAY = _rx(r'\b(?:prior\s+to|before|preceding|ahead\s+of|in\s+advance\s+of)\s+'
+                   r'(?:the\s+(?:start|beginning)\s+of\s+)?$')
+TODAY_PREDICATE_AFTER = _rx(r'\s+(?:was|were|is|are|had|has|began|begun|started|ended|completed|finished)\b')
+BEFORE_TODAY_REACH = 40  # characters before a today's reference read for its preposition
+# C - a mention inside a clause that a condition or an open question opens ("If the lesion was tattooed, ...", "It is
+#     unknown whether the polyp was removed", "unless biopsies were taken") is not stated done. Read from the opener to the
+#     mention with no clause mark between (a comma closes a fronted condition: "If needed, biopsies were obtained" is the
+#     plan word's).
+CONDITION_OPENER = _rx(r'\b(?:if|unless|whether|in\s+case|provided\s+that|assuming(?:\s+that)?)\b')
+CONDITION_CUE = 'uncertain: inside a condition or an open question ("if", "whether"): not stated done'
+# P - another facility, provider or source in the act's clause ("at the referring facility", "per outside report",
+#     "(outside report)", "by the referring endoscopist", "elsewhere", "according to the patient", "per Dr. Smith")
+#     leaves where and by whom it was done unestablished: held, never read as this report's act.
+OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|outlying|external|another|different|originating)\s+'
+                   r'(?:(?!(?:and|or|but|was|were|is|are|with|for)\b)[\w-]+\.?\s+){0,2}?'
+                   r'(?:hospitals?|hosp|facilit(?:y|ies)|fac|cent(?:er|re)s?|ctr|institutions?|clinics?|practices?|'
+                   r'offices?|physicians?|doctors?|endoscopists?|gastroenterologists?|surgeons?|providers?|teams?|'
+                   r'reports?|records?|notes?|letters?|documentation|charts?)\b'
+                   r'|\belsewhere\b|\baccording\s+to\b|\bas\s+reported\s+by\b|\breportedly\b|\bby\s+report\b'
+                   r'|\bper\s+(?:Dr\b\.?|Doctor\b)\s*[A-Za-z]')
+OTHER_SOURCE_CUE = 'uncertain: its clause names another facility, provider or source: '
+# P, a named agent: "by Dr. Synthetic Surgeon" in the act's clause, where no physician line of the report names that
+# person by the surname ("Endoscopist: Synthetic Endoscopist, MD"): who did it is not established as this report's
+# physician. The report's own physician named as the agent ("by Dr. Smith" under "Endoscopist: John Smith, MD") is not.
+AGENT_NAMED = re.compile(r"\b" + ACT_PARTICIPLES + r"(?:\s+(?!(?:and|or|but)\b)[\w-]+){0,4}?\s+by\s+(?:Dr\b\.?|Doctor\b)"
+                         r"\s*(?P<name>[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+){0,2})")
+PHYSICIAN_LINE = re.compile(r'(?im)^[ \t]*(?:endoscopist|physician|proceduralist|performing\s+physician|attending|'
+                            r'operator|provider|surgeon)\s*:[ \t]*(?P<names>[^\n]{1,120})')
+AGENT_CUE = 'uncertain: its clause attributes it to a named person not established as this report\u2019s physician: '
+
+
+@functools.lru_cache(maxsize=64)
+def _report_physician_words(text: str) -> frozenset:
+    """The words of the report's physician lines ("Endoscopist: Synthetic Endoscopist, MD"), lower-cased."""
+    return frozenset(w.lower() for m in PHYSICIAN_LINE.finditer(text)
+                     for w in re.findall(r"[A-Za-z][A-Za-z'-]{1,}", m.group('names')))
+# R - "for future localization": a purpose's time, never the act's (cues.PURPOSE_FUTURE, shared with routing).
+PERFECT_STATEMENT = _rx(r'\b(?:has|have)\s+been\s+(?:then\s+|also\s+)?' + ACT_PARTICIPLES + r'\b')
+# I - a predicate that an infinitive marker governs ("is to be injected", "has yet to be injected", "needs to get
+#     injected", "remains to be done") states nothing done.
+INFINITIVE_BEFORE = _rx(r'\bto\s+(?:be|get)\s+(?:(?:then|also|[\w-]+ly)\s+){0,2}$')
+ACT_PARTICIPLE_WORD = _rx(r'\b' + ACT_PARTICIPLES + r'\b')
+INFINITIVE_CUE = 'uncertain: its predicate is an infinitive ("to be ..."), which states nothing done'
+
+
+def _today_reading(said: str) -> tuple[bool, str]:
+    """(whether ``said`` says today, the precedence phrase of a today's reference it governs - F-TIME B - or '')."""
+    today, before = False, ''
+    for m in TODAY_WORDS.finditer(said):
+        lead = BEFORE_TODAY.search(said, max(0, m.start() - BEFORE_TODAY_REACH), m.start())
+        if lead is not None and not TODAY_PREDICATE_AFTER.match(said, m.end()):
+            before = before or ' '.join(said[lead.start():m.end()].split()).lower()
+        else:
+            today = True
+    return today, before
+
+
+FRAME_REACH = 100  # characters before a clause read for the sentence's fronted frame
+_FRAME_BOUNDARY = re.compile(r'[.!?;:\n]')
+_FRAME_PREDICATE = _rx(r'\b(?:was|were|is|are|be|been|being|has|have|had|did|does|will|would)\b')
+
+
+def _fronted_frame(text: str, cs: int) -> str:
+    """The sentence's fronted frame before the clause starting at ``cs`` ("Elsewhere, ", "Per outside report, "): the
+    text from the last sentence or clause mark before it, within FRAME_REACH, when it states no predicate of its own;
+    else ''. F-TIME P reads it with the clause."""
+    lo = max(0, cs - FRAME_REACH)
+    marks = [m.end() for m in _FRAME_BOUNDARY.finditer(text, lo, cs)]
+    frame = text[marks[-1] if marks else lo:cs]
+    return '' if _FRAME_PREDICATE.search(frame) or ACT_VERB.search(frame) else frame
+
+
+def _infinitive_only(text: str, cs: int, ce: int) -> bool:
+    """Whether every act participle of the clause [cs, ce) is governed by an infinitive marker (F-TIME I), and the clause
+    has no finite act predicate."""
+    if ACT_VERB.search(text, cs, ce) or PERFECT_STATEMENT.search(text, cs, ce):
+        return False
+    words = [m.start() for m in ACT_PARTICIPLE_WORD.finditer(text, cs, ce)]
+    words += [m.start() for m in BARE_PARTICIPLE.finditer(text, cs, ce)]
+    return bool(words) and all(INFINITIVE_BEFORE.search(text, max(cs, w - 40), w) for w in words)
+
+
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
@@ -2330,7 +2518,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         copular = _copular_negation(text, cs, ce, cs + not_verb.start(), pos, end)
         if copular is not None:
             return copular  # rule 3: "S was not a N of O" denies N at O, never an act in S or in O
-        if _not_on_another_predicate(text, cs + not_verb.start(), end) \
+        if _not_on_another_predicate(text, cs + not_verb.start(), end, pos) \
                 and not _cues.PURPOSE_WHETHER.match(text, end, cs + not_verb.start()):
             # (P2 READ-HOLD, R8 D3: a purpose phrase between the act and its own negated predicate - "Biopsies to
             # determine whether this represents malignancy were not obtained" - leaves the negation the act's)
@@ -2349,18 +2537,32 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return Reading('negated', (REPLACED_CUE,))
     if CANCEL_WORDS.search(whole):
         return Reading('cancelled', ('cancelled: ' + CANCEL_WORDS.search(whole).group(0).lower(),))
+    opener = None
+    for opener in CONDITION_OPENER.finditer(text, cs, pos):
+        pass
+    if opener is not None and not re.search(r'[,;:()]', text[opener.end():pos]):
+        return Reading('uncertain', (CONDITION_CUE,))  # F-TIME C
     # Time: a date in the clause - the act's own; a date of something else never dates it (_date_owner).
     # Whether the sentence says today is read over the coordinated predicates an own_time cut joins to this clause
     # (_Clause.joined), as before that cut: the cut moves another predicate's time words, never the sentence's TODAY
     # word (7c8 skeptic, sk:1). Every other time word below is still the clause's own.
     joined = getattr(clause, 'joined', None)
     said = text[slice(*_bounded_clause(text, joined, pos, end))] if joined else whole
-    today = bool(TODAY_WORDS.search(said))
+    # F-TIME P and B: the sentence's fronted frame, set off by a comma with no predicate of its own ("Previously, ",
+    # "Prior to this procedure, ", "Per outside report, "), is read with the clause for its time, place and source:
+    # whether a clause cut separates it ("Previously, the lesion was ...") or not ("Previously, polyps were ...") never
+    # changes what it says
+    frame = _fronted_frame(text, joined[0] if joined else cs)
+    frame = frame if frame.rstrip().endswith(',') else ''
+    tcs = cs - len(frame) if not joined else cs
+    twhole = text[tcs:ce]
+    said = frame + said
+    today, before_today = _today_reading(said)  # F-TIME B
     act_said = bool(ACT_VERB.search(said))
     other_time = ''
-    for d in _dates_in(dates, cs, ce):
-        owner = _date_owner(text, d, cs, pos, ce)
-        if not owner and today and ((d.precision == 'year' and d.bare) or _in_an_aside(text, cs, d)):
+    for d in _dates_in(dates, tcs, ce):
+        owner = _date_owner(text, d, tcs, pos, ce)
+        if not owner and today and ((d.precision == 'year' and d.bare) or _in_an_aside(text, tcs, d)):
             # a bare year, or a date in a parenthetical aside ("Alex Synthetic (03/04/1961) underwent colonoscopy
             # today"), never outweighs the clause's "today" (7c8 skeptic, sk:3): held, never dated
             owner = 'other'
@@ -2369,7 +2571,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                 other_time = f'{text[d.start:d.end]} is dated by another clause or event'
             continue
         if service_date is None:
-            if d.precision == 'year' and HISTORY_WORDS.search(whole):
+            if d.precision == 'year' and HISTORY_WORDS.search(twhole):
                 return Reading('historical', (f'historical: {text[d.start:d.end]} with a history word',))
             if d.precision in ('day', 'month'):
                 # A dated statement cannot be placed in time without the service date ("Colonoscopy 2026-09-03: a 6
@@ -2382,21 +2584,32 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             return Reading('historical', (f'historical: {text[d.start:d.end]} is before the service date',))
         if rel > 0:
             return Reading('planned', (f'planned: {text[d.start:d.end]} is after the service date',))
+    if before_today and not today:
+        return Reading('historical', ('historical: ' + before_today,))  # F-TIME B
     # A history or plan word dates the act unless it describes another noun of the clause (ATTRIBUTIVE_TIME): that one
     # leaves the act's time in doubt (refutation r1, negtime-5).
-    elsewhere = _elsewhere_time_words(text, cs, ce, pos)
-    manner = [m.span() for m in MANNER_PHRASE.finditer(whole)]
-    hist = next((h for h in HISTORY_WORDS.finditer(whole) if cs + h.start() not in elsewhere
+    elsewhere = _elsewhere_time_words(text, tcs, ce, pos)
+    manner = [m.span() for m in MANNER_PHRASE.finditer(twhole)]
+    hist = next((h for h in HISTORY_WORDS.finditer(twhole) if tcs + h.start() not in elsewhere
                  and not any(a <= h.start() < b for a, b in manner)
-                 and not REVIEW_OF_RECORDS.search(whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
+                 and not REVIEW_OF_RECORDS.search(twhole, max(0, h.start() - 30), min(len(twhole), h.end() + 40))),
+                None)
     if hist and not today:
         return Reading('historical', ('historical: ' + hist.group(0).lower(),))
-    plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere
-                 and not any(a <= m.start() < b for a, b in manner)), None)
+    purpose = [m.span() for m in _cues.PURPOSE_FUTURE.finditer(twhole) if not m.start() <= pos - tcs < m.end()] \
+        if _cues.PURPOSE_FUTURE.search(twhole) and _cues.stated_done(text, tcs, ce) else []  # F-TIME R
+    plan = next((m for m in PLAN_WORDS.finditer(twhole) if tcs + m.start() not in elsewhere
+                 and not any(a <= m.start() < b for a, b in manner + purpose)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
-    skipped = next((cs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(whole)
-                    if cs + m.start() in elsewhere), None) if elsewhere else None
+    source = OTHER_SOURCE.search(said)
+    if source is not None:
+        return Reading('uncertain', (OTHER_SOURCE_CUE + ' '.join(source.group(0).split()),))  # F-TIME P
+    agent = AGENT_NAMED.search(said)
+    if agent is not None and agent.group('name').split()[-1].lower() not in _report_physician_words(text):
+        return Reading('uncertain', (AGENT_CUE + 'Dr. ' + agent.group('name'),))  # F-TIME P, a named agent
+    skipped = next((tcs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(twhole)
+                    if tcs + m.start() in elsewhere), None) if elsewhere else None
     if skipped is not None and not other_time:
         other_time = f'it describes \u201c{elsewhere[skipped]}\u201d, not this act'
     # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
@@ -2434,6 +2647,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if other_time and not today:
             # stated done, but a time in its clause is something else's: its own time is not established (held)
             return Reading('uncertain', (OTHER_TIME_CUE + other_time,))
+        if _infinitive_only(text, cs, ce):
+            return Reading('uncertain', (INFINITIVE_CUE,))  # F-TIME I
         if in_today_report or today or part.kind == 'report':
             return Reading('performed', ('performed: an act predicate in a current report',))
         return Reading('performed', ('performed: an act predicate',))
@@ -4701,6 +4916,11 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # refutation round 2, esc-7: the act's own verb in a failure frame ("We were unable to decompress
                     # the stomach.", "failed to snare it") states an attempt that failed: kept, in doubt
                     reading = Reading('uncertain', ('uncertain: failed',) + reading.cues)
+                if reading.status == 'performed':
+                    contradicted = _later_failure(text, cls, clause, kind, mentions, service_date=service_date,
+                                                  dates=dates, part=part)
+                    if contradicted:
+                        reading = Reading('uncertain', (LATER_FAILURE_CUE + contradicted,) + reading.cues)  # F-TIME F
                 has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
                                     or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms)
                                     or ms in doubtful_at or _attempt_or_failure(reading.cues))

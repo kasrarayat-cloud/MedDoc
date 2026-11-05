@@ -175,10 +175,26 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
     return _without_overlaps(found)
 
 
-def _clause_cues(text: str) -> tuple[Cue, ...]:
+def _purpose_future(text: str, lay, services, cue: Cue) -> bool:
+    """Whether ``cue`` is the "future" of a purpose (cues.PURPOSE_FUTURE: "for future localization") in a sentence that
+    states an act done, with no service named inside the purpose: then it dates nothing (HARNESS.md, "Harness repair
+    3", F-TIME R - the same rule the documented-service reader applies)."""
+    if cue.status != 'planned' or cue.name != 'upcoming' or cue.text.lower() != 'future':
+        return False
+    ss, se = lay.sentence_for(cue.start, cue.end)
+    for m in cues.PURPOSE_FUTURE.finditer(text, max(ss, cue.start - 40), min(se, cue.end + 60)):
+        if m.start() <= cue.start < m.end():
+            if any(s.start < m.end() and m.start() < s.end for s in services):
+                return False  # a service named inside the purpose: the purpose's time is its own
+            return cues.stated_done(text, ss, se)
+    return False
+
+
+def _clause_cues(text: str, lay=None, services=()) -> tuple[Cue, ...]:
     """Every clause-scope cue in the text, matched once over the whole text. The "?" of the unread mark extraction
     writes ("[?]", symbols.BOX_UNREAD_MARK) is no question-mark hedge: the item it marks is held as unread (BOX_UNREAD),
-    and its neighbours on the line are not doubted by it (round 5 extraction:8)."""
+    and its neighbours on the line are not doubted by it (round 5 extraction:8). With the layout and the service
+    mentions, a purpose's "future" in a sentence that states an act done is set aside (_purpose_future)."""
     found = []
     for status, entries in (('cancelled', cues.CANCELLED_CLAUSE), ('incomplete', cues.INCOMPLETE_CLAUSE),
                             ('historical', cues.HISTORICAL_CLAUSE), ('planned', cues.PLANNED_CLAUSE),
@@ -187,6 +203,8 @@ def _clause_cues(text: str) -> tuple[Cue, ...]:
             found.extend(Cue(m.start(), m.end(), status, name, m.group(0)) for m in pattern.finditer(text)
                          if not (name == 'question mark'
                                  and text.startswith(_BOX_SYMBOLS.BOX_UNREAD_MARK, max(0, m.start() - 1))))
+    if lay is not None:
+        found = [c for c in found if not _purpose_future(text, lay, services, c)]
     return tuple(sorted(found, key=lambda c: (c.start, c.end)))
 
 
@@ -7174,8 +7192,10 @@ def _p2_folded_analysis(an: Analysis) -> Optional['Analysis']:
             lay = layout(folded)
             interventions = tuple(Intervention(label, families, m.start(), m.end())
                                   for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(folded))
-            an.memo[key] = Analysis(folded, lay, _service_mentions(folded), _em_mentions(folded, lay),
-                                    _clause_cues(folded), ctx.find_dates(folded), an.service_date, interventions)
+            mentions = _service_mentions(folded)
+            an.memo[key] = Analysis(folded, lay, mentions, _em_mentions(folded, lay),
+                                    _clause_cues(folded, lay, mentions), ctx.find_dates(folded), an.service_date,
+                                    interventions)
     return an.memo[key]
 
 
@@ -8380,7 +8400,8 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
-    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
+    mentions = _service_mentions(text)
+    an = Analysis(text, lay, mentions, _em_mentions(text, lay), _clause_cues(text, lay, mentions),
                   ctx.find_dates(text), effective, interventions)
     return an, _route(an)
 

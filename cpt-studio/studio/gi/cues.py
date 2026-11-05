@@ -477,6 +477,27 @@ MEDICATION = rx(r'\b(?:aspirin|clopidogrel|plavix|prasugrel|ticagrelor|warfarin|
 
 # --- planned: the service is in the future ---------------------------------------
 
+# Harness repair 3 (HARNESS.md, "Harness repair 3", F-TIME R), one rule for both readers (routing's clause cues and the
+# documented-service reader's read_clause): "for future localization", "for a future surgical resection" is a purpose's
+# time, never the act's, where its sentence states an act done - a past or perfect statement, or a fragment's own
+# participle after its noun phrase ("Tattoo ink injected into ...", "Separate transverse-colon lesion marked with ...")
+# - and no service is named inside the purpose ("for future colonoscopy" keeps its plan). Never a present, a modal, an
+# infinitive or a negation: "is injected", "is to be injected", "could get injected", "not yet injected" keep "future".
+PURPOSE_FUTURE = rx(r'\bfor\s+(?:(?:the|a|an|any)\s+)?future\s+[\w-]+(?:\s+[\w-]+)?')
+PAST_OR_PERFECT = rx(r'\b(?:was|were)\s+(?:then\s+|also\s+|subsequently\s+)?[a-z]+(?:ed|en|ne|wn)\b'
+                     r'|\b(?:has|have)\s+been\s+(?:then\s+|also\s+)?[a-z]+(?:ed|en|ne|wn)\b')
+_NOT_A_DONE_LEAD = (r'(?!(?:to|will|would|shall|should|could|can|may|might|must|is|are|be|being|been|has|have|had|was|'
+                    r'were|not|never|no|already|once|previously|formerly|originally|initially|earlier|recently|also|then|'
+                    r'subsequently|later|again|still|just|soon|eventually|ideally|hopefully|possibly|probably|if|unless|'
+                    r'whether|for|per)\b)')
+DONE_FRAGMENT = rx(r'[^\w\n]*(?:' + _NOT_A_DONE_LEAD + r'[\w-]+\s+){1,6}?' + _NOT_A_DONE_LEAD + r'[a-z]+(?:ed|en)\b')
+
+
+def stated_done(text: str, start: int, end: int) -> bool:
+    """Whether [start, end) states an act done (F-TIME R, above)."""
+    return bool(PAST_OR_PERFECT.search(text, start, end) or DONE_FRAGMENT.match(text, start, end))
+
+
 _NUMBER = r'(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a\s+few|several)'
 PLANNED_PRE = (
     ('upcoming', _pre(r'upcoming|future|planned|scheduled|proposed|anticipated|next', _HIST_FILLER, 3)),

@@ -41,14 +41,15 @@ D14_REASON = ("a quote found verbatim in the document does not by itself show th
 # checked for admission, and one that is not admitted says why in one of these reasons (engine._not_added_why and the
 # merge's own). Each assertion below that pinned D14's reason now pins that one of them is given and D14's sentence never
 # is; every other strict invariant of the meaning findings stands as it was (D14_REASON is kept as that record).
+# P-ADMIT2 (harness repair 3): the reasons say what CPT Studio's own reading leaves the code, never what another proposer
+# did with it, so the gap-filling reasons ("... the other proposals left unresolved") and the competing one (both codes
+# are now added and held) are gone
 P_ADMIT_REASONS = (engine.PARTICIPANT_PEER_ONLY, engine.PARTICIPANT_NOT_SHOWN, engine.PARTICIPANT_NOT_ESTABLISHED,
-                   engine.PARTICIPANT_UNREAD,
-                   'it accounts for no documented service or act the other proposals left unresolved',
-                   'the act it accounts for is not documented as done in the service left unresolved',
+                   engine.PARTICIPANT_UNREAD, engine.PARTICIPANT_NO_SERVICE, engine.PARTICIPANT_NO_ACT,
                    'the document states the act it accounts for both as done and as not done',
                    'the document reads what it accounts for as not performed on the date of service',
                    'the coverage catalogue does not establish which documented act it accounts for',
-                   'independent participants propose different codes for the same documented act')
+                   'the act it accounts for is part of another documented act, not a separate service')
 
 
 def not_added_reason(reason):

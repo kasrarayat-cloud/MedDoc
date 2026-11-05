@@ -2797,3 +2797,154 @@ pipeline and API modules.
 
 **Still to prove (checklist item 2):** a fresh, real Fable answer accepted and contributing to an assessment, on the
 installed release.
+
+### F-STOP: a member's Stop is recoverable (Resume continues the stopped tool loop)
+
+**What failed:** h2b's Astra peer review was lost to a Stop. The Stop ended the run, and the next attempt was refused
+as a duplicate of a sent attempt whose outcome was not reconciled. Resume could not continue it, and resending blindly
+would have been a duplicate.
+
+**The contract (interpretation (f)):**
+- A Stop is honoured at a boundary the harness controls: after an exchange is recorded, never between sending a
+  request and recording its answer (`loop.run`: the Stop is checked after the exchange is handed to the recorder).
+- A stopped run records `scope.stopped_after_turn`. Its recorded exchanges are its outcome: each one's request sha256,
+  its answer, its tool calls and their results' sha256.
+- Resume makes a new run, with a new identity, that `continues` the stopped one (`scope.continues`,
+  `continues_after_turn`). The new run carries the stopped run's exchanges into its first request (`loop._resumed`)
+  only after verifying each one against its record: turn order, request sha256, a successful answer, its tool calls,
+  and its results' sha256. Any mismatch refuses the continuation (`CONTINUATION_REFUSED`) and nothing is sent.
+- Duplicate prevention is kept. A sent attempt with no recorded outcome stays blocked and is reported, never resent.
+  Only a stopped attempt with a recorded outcome (`_stopped_attempt`: the newest finished, failed, sent attempt that
+  carries the marker) is continued.
+- Lineage is kept: `continued_runs` and `loop_runs` give the chain. The participant record's exchange and tool-call
+  counts cover the whole chain, and every run keeps its own record.
+
+**Measured (tests):** `tests/test_participants_loop.py` (answered, then stopped; continuation verified; a mismatched
+record refused) and `tests/test_harness2_pipeline.py` StopInLoopTests (3).
+
+### F-SECTIONS: a procedure report's title with an aside, and its services' inline labels
+
+**What failed:**
+- **T:** the walk's h2b and h2c Word reports had titles with an aside ("Colonoscopy Report (fictional)").
+  `PROCEDURE_TITLE` ended at "report" or "note", so the title opened no section. Routing then read h2b's colonoscopy
+  as historical and h2c's EGD as uncertain.
+- **L:** 39f0ac49's two procedures are each a paragraph labelled with its service ("Upper endoscopy: The gastroscope
+  was advanced ..."). No layout section opened for them, so both were read as uncertain and every code was held.
+
+**The rules (`sections.py`, shared by both readers through the layout):**
+- **T:** a title followed by one to three words of letters in parentheses that close the line is the title before the
+  aside. The aside must not say another time, a plan, a doubt or a denial (`_ASIDE_DENY`: "(planned)", "(prior)",
+  "(cancelled)", "(not performed)", "(2019)", "(draft)", "(outside)", "(pre-op)" open nothing). Every other condition
+  of the title rule is kept.
+- **L:** a paragraph labelled with one service's name (`_inline_service`), in a procedure report, opens that service's
+  part when the labelled text narrates the examination's own course. "Narrates" means an instrument advanced or passed,
+  in the same sentence as the label, with no date. It opens nothing:
+  - under a history heading;
+  - with a date;
+  - with no course;
+  - outside a procedure report;
+  - on a line that continues the sentence above it;
+  - under another occurrence of the service ("Outside records").
+- **The documented-service reader** cuts the part there too (`services._inline_service_part`). It cuts back at the
+  next layout section that is not a positive kind, so the colonoscopy's part never swallows the Impression or the
+  Plan.
+
+**Measured (tests):** `tests/test_h3_repairs.py` TitleAsideTests and InlineServiceLabelTests. On the pre-repair code,
+the title, label and walk subtests fail. The counter-cases pass on both.
+
+### F-ACTS: a food bolus named by what it is, or a bolus its own clause states removed
+
+**What failed:** the documented-service reader knew the `foreign_body` act only as "foreign body", "food bolus" or
+"food impaction". 39f0ac49 says "impacted meat bolus ... the bolus was removed", so no act was read for 43247.
+
+**The rule (`services.ACTS`, foreign_body):** a foreign body or bodies; a named food bolus or impaction (food, meat,
+steak, chicken, beef, pork, bread, vegetable); "impacted food" or "impacted meat"; and a bolus whose own clause states
+it removed, retrieved, extracted, cleared or dislodged within 40 characters.
+- These are no removal: "A 50 mg bolus of propofol was given", "A saline bolus was injected", "An impacted meat bolus
+  was found", "The food bolus was pushed into the stomach", "No food impaction was seen". Each is pinned.
+
+### P-ADMIT2: a participant's code is validated on its own merits, whatever any other proposer did
+
+**Replaces P-ADMIT's gap-filling rule and its "neither is added" rule** (interpretation (a)). An explicit
+first-reading proposal from Astra or Fable is admitted where CPT Studio's own readers read it as accounting for a
+documented service or act done on the date of service (`engine._documented_items`). Corti selecting it, omitting it,
+listing it, or covering the act with another code changes nothing.
+- **Not admitted:** a code whose family has no service documented as done on the date (`PARTICIPANT_NO_SERVICE`), and
+  a code whose act is not documented as done (`PARTICIPANT_NO_ACT`). Each is listed with that reason.
+- **Competing codes:** codes of different proposers, Corti's included, that account for the same documented act each
+  reach review. Each is held by one question (`proposals.competing`, fact `competing_codes`) that names the other codes
+  and no proposer. CPT Studio chooses none, and no code is preferred because of who proposed it.
+  - A decidable code competes only with participants' codes. Two codes Corti selected never hold each other.
+  - The hold is recomputed at read time (`review_view`). A reviewer's rejection of a rival releases the code left, or
+    rewords its question when fewer rivals remain.
+  - A member's answer never releases it, and the page offers no detail answer for it. Its prompt says to reject the
+    unsupported code (`answers.PROMPTS[COMPETING_FACT]`), and the server refuses any answer to it (`NOT_OFFERED`).
+- **Unchanged:**
+  - a peer review's additional codes, a `not_coded` entry, a candidate and an alternative never enter;
+  - no model approves;
+  - support is CPT Studio's reading (interpretation (d));
+  - the origin stays in protected diagnostics.
+
+**Measured (tests):** `tests/test_h3_repairs.py` AdmissionCaseTests, one per case the directive names:
+- only Astra;
+- only Fable;
+- Corti disagrees and the document supports;
+- the models agree on a failed, denied, planned or historical service;
+- a number only in an alternative list.
+
+It also has CompetitionReviewTests, and `tests/test_h2_participant_admission.py`. On the pre-repair code the
+admission cases fail.
+
+### F-TIME and F-NEG S: negation, time, place and condition bound to the act (item 4)
+
+"Passes the same path as Corti" proves nothing while that path misreads negation and time (interpretation (c)). Before
+these rules, the documented-service reader read every sentence below as an act done today, and the code READY on
+Corti's selection and on a participant's alike. Routing read most of them the same way.
+
+| rule | what it reads | was READY before, now held |
+|---|---|---|
+| **N** (`NOT_VERB`) | a fragment's own negation, with no auxiliary: "never" or "not yet/ever/actually" before an act participle, and "not" before snared, excised, tattooed, dilated, ablated, clipped, retrieved, extracted, deployed or banded | "Ink never injected ...", "Biopsies not yet obtained ...", "Saline not yet injected ..." |
+| **B** (`_today_reading`, `HISTORY_WORDS`) | a today's reference governed by a preposition of precedence ("prior to this procedure", "before this examination"), unless a predicate follows it; "yesterday", "the day before", "before referral/admission/transfer/presentation"; "last wk./yr./mo." | "Prior to this procedure, ... was removed", "Before referral, ...", "Last wk. ..." |
+| **C** (`CONDITION_OPENER`) | a mention inside a clause that "if", "unless", "whether", "in case", "provided that" or "assuming" opens, with no clause mark between | "If ... was removed ..., surgery would follow", "It is unknown whether ... was removed" |
+| **P** (`OTHER_SOURCE`, `AGENT_NAMED`) | another facility, provider or source in the act's clause or its fronted frame: an outside, referring, sending, outlying, external, another, different or originating facility, physician, endoscopist, report or record; "elsewhere"; "according to"; "reportedly"; "per Dr. X". Also an act participle's agent "by Dr. X" whom no physician line of the report names by surname | "At the referring facility, ...", "... at the referring facility", "Per outside report, ...", "(outside report)", "Per Dr. Smith ...", "... by Dr. Synthetic Surgeon" |
+| **I** (`_infinitive_only`) | every act participle of the clause governed by "to be" or "to get", with no finite act predicate | "Tattoo ink is to be injected ...", "... has yet to be ...", "... needs to get injected" |
+| **F** (`_later_failure`) | a later clause of the same sentence that names the same act again as a definite noun and states it failed or not done | "... removed with a cold snare, but the polypectomy was unsuccessful", "...; the tattoo did not take" |
+
+- **The fronted frame:** a sentence's comma-set frame with no predicate of its own ("Previously, ", "Prior to this
+  procedure, ", "Per outside report, ") is read with the clause for time, place and source. Whether a clause cut
+  separates it never changes what it says. Before, "Previously, polyps were removed" was historical and
+  "Previously, the lesion was tattooed" was not.
+- **Holds, not exclusions:** C, P, I and F hold (uncertain). Only dated or history-worded acts are historical.
+- **Against the listing:** C, I and F count against a procedure line's listing as a hedge does (`_against_listing`).
+  An act at another facility says nothing about today's listing.
+
+**The two releasing rules, each narrow, each through every rule above:**
+- **F-NEG S** (`INSTRUMENT_LEAD`): "<done participle> with <instrument> [for <purpose>] and not <another act's
+  participle>" gives its "not" to the coordinated predicate. The participle "was tattooed and not resected" already
+  read that way.
+  - It applies only at that shape: the participle right after "was"/"were" or a lesion noun, at most two modifier
+    words that are no preposition, relative or participle, nothing but a purpose phrase before "and not", and a negated
+    participle of another act.
+  - These stay held as before: "already/also/carefully marked", "a label reading tattoo", "a photo of the tattoo",
+    "3 mL of India ink", "tattoo ink that was unavailable", "injected ... and not tattooed".
+  - The instrument's own act keeps every other reading (time, place, section, hedge).
+- **F-TIME R** (`cues.PURPOSE_FUTURE`, `cues.stated_done`; one rule for both readers): "for (a/the) future <noun>" is
+  the purpose's time where the sentence states the act done and no service is named inside the purpose. "Done" means a
+  past or perfect statement, or a fragment's own participle after its noun phrase.
+  - Routing drops that cue (`detect._purpose_future`), and the act reader does not count it.
+  - "is injected", "is to be injected", "could get injected", "got injected", "not yet injected" and "for future
+    colonoscopy" keep "future".
+
+**Changed pins (each recorded in its test):** the round-6 residuals that read the coordinated and purpose forms "as
+main reads them" now read as their participle and plain forms do. That is READY for a completed marking today,
+88d9db32's own shapes included, with no false tattoo conflict. Each is equal to the participle form under the same
+heading (D1, never better).
+- `tests/test_h2_refutation_r1.py`: MarkedShapeTests, MarkedAdverbTests, PackageSentenceTests and DifferentActsTests
+  (the withdrawn "neither is added").
+- `tests/test_h2_marking_tense.py`.
+- `tests/test_harness2_r8.py` (the operator summary sentence, `checks.PARTICIPANTS_NEVER_DECIDE`, now states P-ADMIT2).
+
+**Residuals, recorded:**
+- a contradiction across sentences ("The lesion was tattooed. The tattoo did not take.") is left to the conflict reader;
+- a named agent who is the report's physician but whose surname is on no physician line is held, on the safe side;
+- an adverb before the instrument's participle stays held.
