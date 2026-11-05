@@ -2509,3 +2509,39 @@ without a primary code, against main `8645fd54`:
   - provider runs 107 → 107 and sends 97 → 97;
   - the tables move by studio_assessment +1, studio_proposal +26, studio_clarification +1, studio_job +1,
     studio_routingrun +1 and studio_auditevent +2, and by nothing else.
+
+### Refutation round 4 (2026-11-05): round 3's restored "marked", attacked before install
+
+PR #1472 merged as `92b24d3b9f5b`. Before writing its install declaration, the author probed round 3's one new releasing
+rule: the package's coordinated "marked with <tattoo> ... and not resected" (`MARKED_WITH`, `MARKED_TO_DENIAL`). The
+probe used 22 lines, then a 36-case differential against main on both paths. The directive keeps historical, planned
+and other-provider services protected, so the probe aimed there.
+
+**Reproduced on `92b24d3b9f5b`, both paths:**
+- "The lesion in the ascending colon was already marked with tattoo and not resected." reads 45381 READY, where main
+  holds it.
+- So do "originally", "initially" and "once" marked, the bare "Ascending colon lesion already marked ...", and the
+  manner adverb "carefully".
+
+The cause is in `MARKING_PREDICATE`'s second alternative: it matches a bare "marked" after any word. With
+"was/were", only then, also and successfully are admitted, and `_unstated_marking` reads only be, is, are, am, to and
+being as unstated. "Previously", "earlier", "formerly", a year, "at the prior colonoscopy", "by <another provider>",
+plans, modals and denials were all held already.
+
+**Repaired:** a bare "marked" sets the coordinated denial apart only right after the lesion it marks (`MARKED_BARE_AFTER`:
+lesion, polyp, mass, tumour, nodule). That is the package's own telegraphic form, "Transverse colon lesion marked with
+submucosal tattoo ... and not resected today". After any other word the form reads as main reads it: held. 88d9db32's
+form ("was marked with ...") is unaffected.
+
+**Measured:**
+- Pins in `MarkedAdverbTests`: the time forms never READY with or without a primary code, and the package's forms
+  READY.
+- Three mutants killed, restores verified by sha256.
+- The 36-case differential: READY beyond main only on the package's own forms ("was marked with tattoo and not
+  resected", "was also marked ...").
+- The lens corpus (651 rows): 0 D1 and 0 D2 flags.
+
+**Not introduced by this change, and recorded:** "was already tattooed and not resected", "India ink was already
+injected adjacent to the lesion" and "Tattoo ink had already been injected ..." read 45381 READY on Corti's path at main
+and at the live revision, as here. They are pinned under the equivalent standard in `RecordedResidualTests`, and listed
+in ACCURACY-RESIDUALS.md "Harness repair, refutation round 4".

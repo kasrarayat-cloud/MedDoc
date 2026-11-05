@@ -460,6 +460,14 @@ MARKED_ONLY = _rx(r'(?:(?:was|were)\s+(?:(?:then|also|successfully)\s+)?)?marked
 MARKED_WITH = _rx(r'\s+(?:with|using)\s+(?:(?:an?|the)\s+)?(?:(?:submucosal|carbon|spot|sterile|permanent|black|endoscopic)\s+)?')
 MARKED_TO_DENIAL = _rx(r'\s*(?:ink\s+)?(?:for\s+(?:the\s+)?(?:(?:future|next|later)\s+)?'
                        r'(?:locali[sz]ation|identification|recognition)\s+)?and\s+')
+# Refutation round 4 (2026-11-05; the author's probe of round 3's restoration, reproduced before repair): a bare
+# "marked" - no "was" or "were" before it - sets the coordinated denial apart only right after the lesion it marks, the
+# package's own telegraphic form ("Transverse colon lesion marked with submucosal tattoo ... and not resected today").
+# After any other word it reads as main reads it, held, fail-closed: an adverb of another time ("The lesion ... was
+# already marked with tattoo and not resected", "originally", "initially", "once") names a tattoo placed before, never
+# today's, and one of manner ("carefully") is held on the safe side. With "was" or "were", MARKING_PREDICATE already
+# admits only then, also and successfully between.
+MARKED_BARE_AFTER = _rx(r'\b(?:lesion|polyp|mass|tumou?r|nodule)\s+\Z')
 
 
 def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_marked: bool = False) -> bool:
@@ -476,7 +484,9 @@ def _marking_link(text: str, cs: int, limit: int, pos: int, end: int, *, allow_m
         if _unstated_marking(text, marking):
             continue  # "to be injected", "is injected": no completed marking, so neither its purpose nor its denial is one
         if MARKED_ONLY.fullmatch(marking.group(0)):
-            if marking.end() <= pos and MARKED_WITH.fullmatch(text, marking.end(), pos):
+            stated = (re.match(r'(?:was|were)\b', marking.group(0), FLAGS)
+                      or MARKED_BARE_AFTER.search(text, max(cs, marking.start() - 40), marking.start()))
+            if stated and marking.end() <= pos and MARKED_WITH.fullmatch(text, marking.end(), pos):
                 return True
             continue
         if marking.start() <= pos and end <= marking.end():

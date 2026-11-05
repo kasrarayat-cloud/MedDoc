@@ -1247,3 +1247,12 @@ main's own reading, plus one cost on the motivating encounter:
 | a code's own act beside another act's denial in one passage is held, as main holds it | 88d9db32: "... was sampled with cold biopsy forceps for histology; it was not excised by snare." | Corti's 45380 held (a performed-status question); the member's path is an addendum or a rejection, since this release offers no reviewer confirmation | setting the other act's denial apart believed acts done "at the referring facility", "elsewhere", "historically" or "unsuccessfully" through three rounds |
 | the package's coordinated marking outside its own shape | "marked with 3 mL of India ink and not resected"; "marked distally with tattoo ink and not resected"; "marked with submucosal tattoo for future localization and not resected" alone | 45381 held or excluded, as main reads it | the shape's widenings released forms where no tattoo was placed; a hold is the safe side |
 | a decompression's bare verb outside a failure or attempt frame | "The sigmoid volvulus was detorsed, decompressing the colon." | not read as an act, as at main | reading the bare verb made 45393 and 45337 READY on plans, drugs and tubes |
+
+## Harness repair, refutation round 4 (2026-11-05): a marking dated by an adverb the readers do not know
+
+HARNESS.md, "Refutation round 4 (2026-11-05)". Round 4 repaired the regression its probe found: round 3's restored
+"marked" had released earlier-time forms. What it leaves is main's own reading:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| an injection or tattoo predicate after an adverb of another time the readers do not list ("already", "originally") reads as done today | "The lesion in the ascending colon was already tattooed and not resected."; "India ink was already injected adjacent to the lesion in the ascending colon."; "Tattoo ink had already been injected into the ascending colon." | 45381 READY on Corti's path, at main, at the live revision and here; a participant's reading is READY exactly there (the equivalent standard, pinned) | not made by this change; a time-adverb rule in the shared act reader reaches every family and was not measured in this round. "Previously", "earlier", "formerly", a year and "at the prior colonoscopy" are held |

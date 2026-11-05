@@ -305,6 +305,39 @@ class MarkedShapeTests(SimpleTestCase):
                 self.assertNotIn(READY, by_astra)
 
 
+class MarkedAdverbTests(SimpleTestCase):
+    """Round 4: round 3's restored "marked" took any word before a bare "marked", so a tattoo placed at another time
+    read as today's 45381, READY on both paths where main holds it. Reproduced on the merge commit 92b24d3b9f5b."""
+
+    def test_a_marking_dated_to_another_time_is_never_ready(self):
+        for line in ('The lesion in the ascending colon was already marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was originally marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was initially marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was once marked with tattoo and not resected.',
+                     'Ascending colon lesion already marked with tattoo and not resected.',
+                     'Ascending colon lesion originally marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was earlier marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was formerly marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was previously marked with tattoo and not resected.',
+                     # an adverb of manner: held on the safe side
+                     'The lesion in the ascending colon was carefully marked with tattoo and not resected.'):
+            for primary in ((), (('45378', CECUM),)):
+                with self.subTest(line, primary=bool(primary)):
+                    by_corti, by_astra = both(COLON + line + '\n', '45381', line, primary)
+                    self.assertNotIn(READY, by_corti)
+                    self.assertNotIn(READY, by_astra)
+
+    def test_the_packages_own_forms_stay_ready(self):
+        for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
+                     'The lesion in the ascending colon was also marked with tattoo and not resected.',
+                     'Ascending colon lesion marked with tattoo and not resected.',
+                     'Ascending colon polyp marked with India ink and not resected.'):
+            with self.subTest(line):
+                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
+                self.assertEqual(by_corti, [READY])
+                self.assertEqual(by_astra, [READY])
+
+
 class LesionOwnershipTests(SimpleTestCase):
     """own-1 and own-2: a distance names a landmark, never the act's site (round 2, esc-5: a number and a unit in a
     relation to it); a comparison aside closes before the subject's own predicate; a sized anaphor refers back only to
@@ -523,7 +556,7 @@ class ProcedureLineTests(SimpleTestCase):
 
 class RecordedResidualTests(SimpleTestCase):
     """The readers' recorded residuals the refutation lenses reached (ACCURACY-RESIDUALS.md, "Harness repair,
-    refutation rounds 1 and 2"): not repaired here - each was a phrase-level rule that did not converge in two cycles,
+    refutation rounds 1 to 4"): not repaired here - each was a phrase-level rule that did not converge in two cycles,
     or the same at main on Corti's path. What is pinned is the directive's equivalent standard: a participant's code is
     READY only where Corti's selection of the same passages is READY, so admission adds no false READY of its own."""
     EMR = 'A 25 mm flat lesion in the ascending colon was removed by endoscopic mucosal resection.'
@@ -566,6 +599,15 @@ class RecordedResidualTests(SimpleTestCase):
         # compl-2: a decompression in a family whose act list has none (reverted in round 2, over-11)
         (ERCP + 'A biliary sphincterotomy was performed.\nThe distended stomach was decompressed for a gastric volvulus '
                 'before withdrawal.\n', '43262', 'A biliary sphincterotomy was performed.', []),
+        # round 4: an injection or tattoo predicate after an adverb of another time reads as done today, READY on
+        # Corti's path at main and at the live revision as here (a reader residual this change neither made nor
+        # repairs; ACCURACY-RESIDUALS.md "Harness repair, refutation round 4")
+        (COLON + 'The lesion in the ascending colon was already tattooed and not resected.\n', '45381',
+         'The lesion in the ascending colon was already tattooed and not resected.', []),
+        (COLON + 'India ink was already injected adjacent to the lesion in the ascending colon.\n', '45381',
+         'India ink was already injected adjacent to the lesion in the ascending colon.', []),
+        (COLON + 'Tattoo ink had already been injected into the ascending colon.\n', '45381',
+         'Tattoo ink had already been injected into the ascending colon.', []),
     )
 
     def test_a_participants_code_is_ready_only_where_cortis_is(self):
