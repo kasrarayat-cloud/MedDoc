@@ -3400,7 +3400,7 @@ test('checkProgressDom fails a waiting, stopped or failed panel folded into the 
 
 test('the sample pages draw the progress panel as the page does for their encounters', () => {
   const fields = p => p && { phase: p.phase, compact: p.compact, summary: p.summary.replace(/finished in .*$/, 'finished in'), steps: p.steps.length,
-    message: p.message, leave: p.leave, stop: p.stop, resume: p.resume, notice: p.notice };
+    message: p.message, leave: p.leave, stop: p.stop, resume: p.resume, notice: p.notice, elapsed_present: p.elapsed_present };
   for (const [page, enc] of [['customer-page.html', CUST()], ['customer-page-details.html', DETAILS()]]) {
     assert.deepEqual(fields(domOf(sample(page)).progress), fields(pageDom(enc).progress), page);
   }
@@ -3433,8 +3433,11 @@ test('checkProvenance: Corti names no model - its runs stand on endpoint, adapte
 });
 
 test('uploadCarriedClientKey reads the form the page sent, since Playwright serves no body that holds a file', () => {
-  const watch = keys => ({ requests: [{ method: 'GET', path: '/api/encounters' }, { method: 'POST', path: '/api/encounters', ...(keys ? { form_keys: keys } : {}) }] });
+  const watch = (keys, uuid = true) => ({ requests: [{ method: 'GET', path: '/api/encounters' },
+    { method: 'POST', path: '/api/encounters', ...(keys ? { form_keys: keys, client_key_uuid: uuid } : {}) }] });
   assert.equal(vb.uploadCarriedClientKey(watch(['file', 'service_date', 'synthetic_attestation', 'client_key'])), true);
+  // an empty or malformed key is no key to the server (api._client_key), so it is not carried (refutation, 2026-11-05)
+  assert.equal(vb.uploadCarriedClientKey(watch(['file', 'synthetic_attestation', 'client_key'], false)), false);
   assert.equal(vb.uploadCarriedClientKey(watch(['file', 'synthetic_attestation'])), false);
   assert.equal(vb.uploadCarriedClientKey(watch(null), ''), false, 'no form seen and no body: not carried');
   assert.equal(vb.uploadCarriedClientKey(watch(null), 'Content-Disposition: form-data; name="client_key"'), true, 'a text body Playwright did serve');
@@ -3446,7 +3449,9 @@ test('planProblems: a document expected to fail names a failed state, carries no
   const base = { id: 'x-fail', expected_failure: 'extraction_failed' };
   assert.deepEqual(vb.planProblems(base, notes), []);
   for (const [label, doc] of [['not a failed state', { ...base, expected_failure: 'failed' }], ['with a plan', { ...base, review_plan: { stop_and_resume: true } }],
-    ['with questions expected', { ...base, expected_no_em_questions: true }]]) {
+    ['with questions expected', { ...base, expected_no_em_questions: true }],
+    ['with an extraction its walk never checks', { ...base, expected_extraction: { status_in: ['ok'] } }],
+    ['with codes its walk never checks', { ...base, author_expected_cpt: ['45378'], must_not_code: [] }]]) {
     assert.equal(vb.planProblems(doc, notes).length, 1, label);
   }
   assert.ok(vb.planProblems(base, { approve: vb.ACCEPTANCE_LABEL }, { acceptanceReviewer: true }).some(p => /agent mode only/.test(p)));
@@ -3459,13 +3464,96 @@ test('checkFailure: the failed panel the page draws, the named state, nothing se
   assert.deepEqual(failed(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])), []);
   assert.ok(ids(vb.checkFailure(enc, op, pageDom(enc), 'extraction_failed', [])).includes('failure.action:pass'));
   const sent = { id: 'r1', provider: 'corti', purpose: 'primary', state: 'succeeded', sent: true };
+  // the operator view's own run shape (serializers._provider_run_json): no `sent` key at all (refutation, 2026-11-05)
+  const live = OP().provider_runs[0];
+  assert.ok(!('sent' in live), 'the sample serves runs as the operator view does');
   const cases = [
     ['failure.state', [enc, { ...op, state: 'provider_failed' }, pageDom(enc)]],
     ['failure.nothing_sent', [enc, { ...op, provider_runs: [sent] }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [live] }, pageDom(enc)]],
+    ['failure.nothing_sent', [enc, { ...op, provider_runs: [{ ...live, state: 'not_sent' }] }, pageDom(enc)]],
+    ['progress.dom.panel', [enc, op, domOf('<html><body></body></html>')]],
     ['failure.no_codes', [{ ...clone(enc), codes: [{ code: '45378' }] }, op, pageDom(enc)]],
     ['failure.customer', [{ ...clone(enc), state: 'ready' }, op, pageDom(enc)]],
     ['failure.action', [enc, op, pageDom(enc, html => html.replace(/<button type="button" class="button secondary" data-action="upload">[^<]*<\/button>/, ''))]],
     ['progress.dom.leave_note', [enc, op, pageDom(enc, html => html.replace(/<p class="leave-note">[^<]*<\/p>/, ''))]],
   ];
   for (const [id, [c, o, d]] of cases) assert.ok(failed(vb.checkFailure(c, o, d, 'extraction_failed', [])).includes(id), id);
+});
+
+test('checkProgressDom: a waiting, stopped or failed document with no panel fails, busy or not; a finished one may have none', () => {
+  // the review page always draws its panel (app.js reviewView); refutation 2026-11-05: none passed whenever nothing was busy
+  for (const name of ['encounter-stopped.json', 'encounter-failed.json', 'encounter-action-needed.json', 'encounter-being-confirmed.json']) {
+    const enc = customerFixture(name);
+    assert.equal(enc.progress.busy, false, `${name}: the scenario`);
+    assert.deepEqual(failed(vb.checkProgressDom(enc, domOf('<html><body></body></html>'), [])), ['progress.dom.panel'], name);
+  }
+  assert.deepEqual(failed(vb.checkProgressDom(customerFixture('encounter-ready.json'), domOf('<html><body></body></html>'), [])), []);
+});
+
+test('checkProgressDom asks the time elapsed only of a busy queued or processing panel, as the page shows it', () => {
+  // refutation 2026-11-05: a paused document (decision (j)) and a date hold being re-checked are busy and show no time
+  const paused = customerFixture('encounter-processing.json');
+  paused.progress.phase = 'paused';
+  const held = customerFixture('encounter-action-needed.json');
+  held.progress.busy = true;
+  for (const enc of [paused, held]) {
+    const results = vb.checkProgressDom(enc, pageDom(enc), []);
+    assert.deepEqual(failed(results), [], enc.progress.phase);
+    assert.ok(!ids(results).some(id => id.startsWith('progress.dom.elapsed')), enc.progress.phase);
+  }
+  const processing = customerFixture('encounter-processing.json');
+  assert.deepEqual(failed(vb.checkProgressDom(processing, pageDom(processing, html => html.replace(/<p class="progress-time">[\s\S]*?<\/p>/, '')), [])), ['progress.dom.elapsed']);
+});
+
+test('checkCompactProgress holds the compact line to its own phase\'s title', () => {
+  // refutation 2026-11-05: any non-empty line passed
+  const ready = customerFixture('encounter-ready.json');
+  const partial = customerFixture('encounter-partial.json');
+  assert.deepEqual(failed(vb.checkProgressDom(partial, pageDom(partial), [])), []);
+  assert.deepEqual(failed(vb.checkProgressDom(ready, pageDom(ready, html => html.replace('<strong>Results ready</strong>', '<strong>Processing could not finish</strong>')), [])), ['progress.dom.compact']);
+  assert.deepEqual(failed(vb.checkProgressDom(partial, pageDom(partial, html => html.replace('<strong>Results ready, with a limitation</strong>', '<strong>Results ready</strong>')), [])), ['progress.dom.compact']);
+  const unknown = { ...clone(ready), progress: { ...clone(ready).progress, phase: 'archived' } };
+  assert.ok(failed(vb.checkProgressDom(unknown, pageDom(ready, html => html.replace('data-phase="completed"', 'data-phase="archived"')), [])).includes('progress.dom.compact'));
+});
+
+// The walk of a document that must fail, end to end on the fake site (the refutation's harness, 2026-11-05): a failed
+// encounter served as the operator and customer views serve one.
+function failedSite({ runs = 'none' } = {}) {
+  const site = fakeSite();
+  const f = customerFixture('encounter-failed.json');
+  f.id = site.id;
+  f.state = 'failed'; f.state_label = 'Could not finish'; f.codes = []; f.other_codes = []; f.details_needed = [];
+  f.progress.error = { text: 'We could not read the text of this document. Upload a clearer copy, or paste the text instead.', action: 'new_document' };
+  f.progress.message = f.progress.error.text;
+  f.reports = []; f.readiness = { draft: false, approved: false, blockers: [] };
+  site.state.customer = f;
+  site.state.operator.state = 'extraction_failed';
+  if (runs === 'none') site.state.operator.provider_runs = [];
+  return site;
+}
+
+test('the walk of a document that must fail passes a failed encounter that sent nothing, list contract and probes included', async () => {
+  const { record } = await walkSite(failedSite(), { plan: {}, doc: { expected_failure: 'extraction_failed' } });
+  assert.equal(record.error, null);
+  assert.deepEqual(record.assertions.filter(a => a.status === 'fail').map(a => `${a.id}: ${a.reason}`), []);
+  assert.equal(record.result, 'pass');
+  assert.equal(record.failure.provider_runs, 0);
+  for (const id of ['failure.state', 'failure.nothing_sent', 'failure.action', 'progress.dom.leave_note', 'customer.list_contract', 'scan.json']) {
+    assert.ok(record.assertions.some(a => a.id === id && a.status === 'pass'), id);
+  }
+});
+
+test('the walk of a document that must fail fails one that sent requests, one that did not fail, and refuses a foreign attached paste', async () => {
+  const sent = (await walkSite(failedSite({ runs: 'sample' }), { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.equal(sent.result, 'fail');
+  assert.ok(sent.assertions.some(a => a.id === 'failure.nothing_sent' && a.status === 'fail'));
+  const succeeded = (await walkSite(fakeSite(), { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.equal(succeeded.result, 'fail');
+  for (const id of ['failure.state', 'failure.customer']) assert.ok(succeeded.assertions.some(a => a.id === id && a.status === 'fail'), id);
+  const foreign = failedSite();
+  foreign.state.operator.revision.text = 'SYNTHETIC TEST DOCUMENT - a different document altogether\n';
+  const refused = (await walkSite(foreign, { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
+  assert.match(String(refused.error), /^refusing to act on encounter /);
+  assert.notEqual(refused.result, 'pass');
 });

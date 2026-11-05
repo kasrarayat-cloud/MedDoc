@@ -187,6 +187,13 @@ const SETTLED_PHASES = new Set(['failed', 'stopped']);
 const PANEL_PHASES = new Set(['queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused']);
 // The compact line says the server's message only where it adds to the title: a detail asked, a limitation.
 const COMPACT_MESSAGE_PHASES = new Set(['awaiting_detail', 'partial']);
+// The compact line's title for each phase that draws it (app.js PHASE_TITLES): a finished document read under another
+// phase's title, or a limitation read as plain "Results ready", is a page saying the wrong thing (refutation, 2026-11-05).
+const COMPACT_TITLES = { completed: 'Results ready', awaiting_detail: 'Results ready', partial: 'Results ready, with a limitation' };
+// The busy phases whose panel shows the time elapsed (app.js progressTime: an animated phase while busy). A paused
+// document's worker is silent (decision (j): never drawn as working) and a date hold being re-checked waits on the
+// member, so neither shows a running time (refutation, 2026-11-05: the walk once demanded one of every busy panel).
+const ELAPSED_PHASES = new Set(['queued', 'processing']);
 // The operator states a document fails in (progress.FAILED_STATES), each read by the customer as failed; the button the
 // failed notice offers for each served error action (app.js ERROR_ACTIONS: "Upload a new document", "Resume processing").
 const FAILED_STATES = new Set(['extraction_failed', 'processing_failed', 'provider_failed', 'provider_not_run']);
@@ -819,6 +826,10 @@ function planProblems(doc, notes = {}, options = {}) {
     if (Object.keys(plan).length) problems.push(`${id}: a document with expected_failure has no review_plan (it would never be carried out)`);
     if (doc.expected_no_em_questions !== undefined) problems.push(`${id}: a document with expected_failure has no questions to expect`);
     if (options.acceptanceReviewer) problems.push(`${id}: expected_failure is walked in agent mode only (an acceptance reviewer only approves)`);
+    // the walk of a failed document checks none of these, so a manifest carrying one would read as checked when it is not
+    const unwalked = ['expected_extraction', 'expected_context', 'expected_routing', 'must_not_code', 'expected_clarifications',
+      'incomplete_services', 'author_expected_cpt'].filter(key => doc[key] !== undefined);
+    if (unwalked.length) problems.push(`${id}: a document with expected_failure carries ${unwalked.join(', ')}, which its walk never checks`);
   }
   if (options.acceptanceReviewer) {
     if (!(typeof notes.approve === 'string' && ACCEPTANCE_NOTE_LABEL.test(notes.approve))) {
@@ -2039,8 +2050,11 @@ function checkProgressDom(cust, dom, animating = []) {
   const progress = cust?.progress || {};
   const panel = dom?.progress || null;
   if (!panel) {
-    return [check('progress.dom.panel', 'hard', !progress.busy, progress.busy ? 'the encounter is processing and the page shows no section.progress-panel'
-      : 'not processing; no progress panel drawn')];
+    // the review page always draws its panel (app.js reviewView); a waiting, stopped or failed document without one has
+    // lost its steps, its notice and its leave note (refutation, 2026-11-05: it once passed whenever nothing was busy)
+    const owed = progress.busy || PANEL_PHASES.has(progress.phase);
+    return [check('progress.dom.panel', 'hard', !owed, progress.busy ? 'the encounter is processing and the page shows no section.progress-panel'
+      : owed ? `the encounter is ${progress.phase} and the page shows no section.progress-panel` : 'results are ready; no progress panel drawn')];
   }
   if (!PANEL_PHASES.has(progress.phase)) return checkCompactProgress(progress, panel, dom, animating);
   const want = (progress.steps || []).map(step => [step.key, step.state]);
@@ -2061,7 +2075,7 @@ function checkProgressDom(cust, dom, animating = []) {
     check('progress.dom.message', 'hard', collapse(said).includes(served), `the panel ${inNotice ? 'notice' : 'head'} says ${JSON.stringify(said)}; served ${JSON.stringify(progress.message)}`),
   ];
   if (errorText) out.push(check('progress.dom.error', 'hard', collapse(panel.notice).includes(errorText), `the notice says ${JSON.stringify(panel.notice)}; served the error ${JSON.stringify(progress.error.text)}`));
-  if (progress.busy) out.push(check('progress.dom.elapsed', 'hard', panel.elapsed_present && /\d/.test(panel.elapsed), `elapsed ${panel.elapsed_present ? JSON.stringify(panel.elapsed) : 'not shown'}`));
+  if (progress.busy && ELAPSED_PHASES.has(progress.phase)) out.push(check('progress.dom.elapsed', 'hard', panel.elapsed_present && /\d/.test(panel.elapsed), `elapsed ${panel.elapsed_present ? JSON.stringify(panel.elapsed) : 'not shown'}`));
   if (progress.can_stop) out.push(check('progress.dom.stop', 'hard', panel.stop, `Stop ${panel.stop ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_resume) out.push(check('progress.dom.resume', 'hard', panel.resume, `Resume ${panel.resume ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_leave) out.push(check('progress.dom.leave_note', 'hard', Boolean(panel.leave), `leave note ${panel.leave ? JSON.stringify(panel.leave) : 'not shown'}`));
@@ -2078,10 +2092,12 @@ function checkProgressDom(cust, dom, animating = []) {
 // no step, no Stop or Resume, no percentage or ETA, no progress card, nothing animating.
 function checkCompactProgress(progress, panel, dom, animating = []) {
   const extra = [panel.steps.length ? `${panel.steps.length} step(s)` : '', panel.stop ? 'a Stop' : '', panel.resume ? 'a Resume' : ''].filter(Boolean);
+  const title = COMPACT_TITLES[progress.phase] || '';
   const out = [
     check('progress.dom.phase', 'hard', panel.phase === progress.phase, `the panel shows ${panel.phase}; the page was served ${progress.phase}`),
-    check('progress.dom.compact', 'hard', panel.compact && Boolean(panel.summary) && !extra.length, !panel.compact ? `${progress.phase} drawn as the whole panel, not the compact line`
-      : `${progress.phase}: one line ${JSON.stringify(panel.summary)}${extra.length ? `, with ${extra.join(' and ')}` : ''}`),
+    check('progress.dom.compact', 'hard', panel.compact && Boolean(title) && collapse(panel.summary).startsWith(title) && !extra.length,
+      !panel.compact ? `${progress.phase} drawn as the whole panel, not the compact line` : !title ? `no compact title is known for the phase ${progress.phase}`
+        : `${progress.phase}: one line ${JSON.stringify(panel.summary)} (its title "${title}")${extra.length ? `, with ${extra.join(' and ')}` : ''}`),
     check('progress.dom.no_percentage_or_eta', 'hard', !PERCENT_OR_ETA.test(panel.text) && panel.bars === 0,
       panel.bars ? `${panel.bars} progress bar element(s)` : PERCENT_OR_ETA.test(panel.text) ? `the line says ${JSON.stringify(panel.text.match(PERCENT_OR_ETA)[0])}` : 'no percentage, ETA or progress bar'),
     check('progress.dom.card_while_busy', 'hard', dom.progress_cards === 0, `${dom.progress_cards} .progress-card element(s)`),
@@ -2829,12 +2845,14 @@ function pageWatch() {
   // the field names a form body carries (never a value): Playwright serves no multipart body that holds a file, so this is
   // where the walk sees whether an upload carried its client key (the 2026-11-05 walk read postData() and saw none)
   const formKeys = body => (typeof FormData === 'function' && body instanceof FormData ? Array.from(body.keys()) : null);
+  // whether the form's client_key is a UUID, as api._client_key requires (an empty key is read as none): a boolean
+  const keyShaped = body => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(body.get('client_key') || ''));
   const original = window.fetch;
   if (typeof original === 'function') {
     window.fetch = function watchedFetch(input, init) {
       const entry = begin((init && init.method) || (input && input.method) || 'GET', typeof input === 'string' || input instanceof URL ? input : input && input.url);
       const keys = formKeys(init && init.body);
-      if (keys) entry.form_keys = keys;
+      if (keys) Object.assign(entry, { form_keys: keys, client_key_uuid: keyShaped(init.body) });
       return original.apply(this, arguments).then(response => {
         entry.status = response.status;
         entry.t_end = performance.now();
@@ -2852,7 +2870,7 @@ function pageWatch() {
     const asked = this.__cptVerify || {};
     const entry = begin(asked.method, asked.address);
     const keys = formKeys(body);
-    if (keys) entry.form_keys = keys;
+    if (keys) Object.assign(entry, { form_keys: keys, client_key_uuid: keyShaped(body) });
     this.addEventListener('loadend', () => {
       entry.status = this.status;
       entry.t_end = performance.now();
@@ -3138,7 +3156,7 @@ async function uploadDocument(page, ctx, item, timings) {
 // sent (pageWatch: a body holding a file is never served by Playwright's postData()), else the text body Playwright saw.
 function uploadCarriedClientKey(watch, sent = '') {
   const post = (watch?.requests || []).find(entry => entry && entry.method === 'POST' && entry.path === '/api/encounters');
-  if (post && Array.isArray(post.form_keys)) return post.form_keys.includes('client_key');
+  if (post && Array.isArray(post.form_keys)) return post.form_keys.includes('client_key') && post.client_key_uuid === true;
   return /name="client_key"/.test(String(sent || ''));
 }
 
@@ -3646,7 +3664,9 @@ const FAILURE_WALKED = Object.freeze({ walked: 'expected_failure' });
 function checkFailure(cust, op, dom, expected, animating = []) {
   const progress = cust?.progress || {};
   const error = isObject(progress.error) ? progress.error : null;
-  const sent = (Array.isArray(op?.provider_runs) ? op.provider_runs : []).filter(run => isObject(run) && run.sent);
+  // a document that fails on reading has no provider run of any state (the operator view's runs carry no `sent` key:
+  // serializers._provider_run_json; refutation, 2026-11-05: a filter on it passed five sent runs)
+  const sent = (Array.isArray(op?.provider_runs) ? op.provider_runs : []).filter(isObject);
   const button = error ? ERROR_ACTION_BUTTONS[error.action] || null : null;
   const notice = dom?.progress?.notice_action ?? null;
   const offered = button === 'resume' ? Boolean(dom?.progress?.resume) : notice === button;
@@ -3655,7 +3675,7 @@ function checkFailure(cust, op, dom, expected, animating = []) {
     check('failure.state', 'hard', op?.state === expected, `operator state ${op?.state ?? 'not served'} (expected ${expected})`),
     check('failure.customer', 'hard', cust?.state === 'failed' && progress.phase === 'failed' && !isBusy(cust), `customer state ${cust?.state}, phase ${progress.phase}, busy ${isBusy(cust)}`),
     check('failure.no_codes', 'hard', codes === 0, `${codes} code(s) served`),
-    check('failure.nothing_sent', 'hard', sent.length === 0, sent.length ? `${sent.length} provider request(s) sent: ${sent.map(describeRun).join(', ')}` : 'no provider request was sent'),
+    check('failure.nothing_sent', 'hard', sent.length === 0, sent.length ? `${sent.length} provider run(s) recorded: ${sent.map(describeRun).join(', ')}` : 'no provider run was recorded, so nothing was sent'),
     check('failure.error', 'hard', Boolean(error && typeof error.text === 'string' && error.text), error ? `served the error ${JSON.stringify(error.text)} (action ${error.action})` : 'no error served for a failed document'),
     check('failure.action', 'hard', offered, `the notice offers ${notice ? `"${notice}"` : 'no action'}; the error's action ${error?.action ?? 'none'} offers ${button ? `"${button}"` : 'none'}`),
     ...checkProgressDom(cust, dom, animating),
@@ -3666,13 +3686,14 @@ function checkFailure(cust, op, dom, expected, animating = []) {
 // customer contract and vocabulary, the original still served, both viewports measured and photographed, the final views
 // (nothing sent since), and the direct-URL probes. Its scans run after, as for every document.
 async function verifyFailure(page, ctx, { op, anonymous, id, doc, item, processed, opView, record, add, docDir, opts }) {
-  await page.waitForFunction(() => document.querySelector('section.progress-panel')?.getAttribute('data-phase') === 'failed', null, { timeout: 15000 }).catch(() => {});
+  // the page's own poll backs off to 15 s, so its first failed read can come later than the walk's
+  await page.waitForFunction(() => document.querySelector('section.progress-panel')?.getAttribute('data-phase') === 'failed', null, { timeout: UI_TIMEOUT_MS }).catch(() => {});
   const served = ctx.lastServed.get(id)?.json || processed;
   const dom = await readPage(page, ctx);
   const animating = await page.evaluate(readAnimations);
   record.failure = { expected: doc.expected_failure, operator_state: opView?.state ?? null, phase: served?.progress?.phase ?? null,
     action: isObject(served?.progress?.error) ? served.progress.error.action ?? null : null,
-    sent: (opView?.provider_runs || []).filter(run => isObject(run) && run.sent).length };
+    provider_runs: (opView?.provider_runs || []).filter(isObject).length };
   add(checkFailure(served, opView, dom, doc.expected_failure, animating));
   add(checkCustomerContract(served));
   add(checkCustomerVocabulary(served));
@@ -3693,6 +3714,8 @@ async function verifyFailure(page, ctx, { op, anonymous, id, doc, item, processe
   add(checkNoDuplicateSends(finalOp, 'final.no_duplicate_send'));
   record.authorization = await probeAuthorization(page, ctx, op, anonymous, id, [], []);
   add(checkAuthorization(record.authorization));
+  add(checkArtifactsHidden(record.authorization));
+  if (ctx.listContract.length) add(ctx.listContract);  // the document list, as every document's walk checks it
   record.summary = { operator: summarize(finalOp), customer: customerSummary(final) };
 }
 
@@ -3777,13 +3800,15 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
     saveSnapshot(record, docDir, opts.out, 'after_processing', opView, 'operator');
     trace = await fetchOperatorTrace(op, ctx, id);
     if (trace) saveSnapshot(record, docDir, opts.out, 'trace', trace, 'operator');
+    // an attached encounter is proved to be the manifest's document first, a failed one included (an uploaded file by
+    // its stored original; a failed paste has no text to prove it by, so it is refused: refutation, 2026-11-05)
+    const foreign = record.attached ? attachedProblems(opView, item) : [];
+    if (foreign.length) throw new Error(`refusing to act on encounter ${id}: ${foreign.join('; ')}`);
     if (doc.expected_failure !== undefined) {
       // manifest expected_failure: the failed state is walked, and nothing about codes - there are none to walk
       await verifyFailure(page, ctx, { op, anonymous, id, doc, item, processed, opView, record, add, docDir, opts });
       throw FAILURE_WALKED;
     }
-    const foreign = record.attached ? attachedProblems(opView, item) : [];
-    if (foreign.length) throw new Error(`refusing to act on encounter ${id}: ${foreign.join('; ')}`);
     const editPlan = contextEditPlan(doc);
     // the edit is made only on a precondition seen to hold; until then nothing is requested, so coding is judged after it
     const unmet = editPlan ? contextEditPreconditions(opView, doc.upload?.service_date || null, editPlan).filter(a => a.status === 'fail') : [];

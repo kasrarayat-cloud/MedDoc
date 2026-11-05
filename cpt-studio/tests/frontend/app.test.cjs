@@ -889,7 +889,8 @@ test('every full progress panel says whether the member can leave the page, a st
   // the 2026-11-05 acceptance walk on cpt.quillmd.com: the stopped panel told nobody they could leave (directive 5:
   // "Make it clear when the user can leave the page and return"); a failed one did not either
   const notes = {
-    'encounter-stopped.json': 'You can leave this page — the document stays in Documents, and nothing more runs until it is resumed.',
+    // never "nothing runs until it is resumed": a detail saved on a stopped document restarts it (jobs.change_context)
+    'encounter-stopped.json': 'You can leave this page — the document stays in Documents.',
     'encounter-failed.json': 'You can leave this page — the document stays in Documents.',
   };
   const drawn = [];
