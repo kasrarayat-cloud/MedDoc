@@ -1905,6 +1905,7 @@ function readCustomerDom(root) {
         document_date: one(row, '.detail-document-date') ? text(one(row, '.detail-document-date')) : null,
         entered_date: one(row, '.detail-entered-date') ? text(one(row, '.detail-entered-date')) : null,
         saved: one(row, '.detail-saved') ? text(one(row, '.detail-saved')) : null, text: text(row),
+        revoke: Boolean(one(row, 'button[data-action="revoke-detail"]')),  // a saved answer's "Change this answer"
       };
     }),
     save: Boolean(one(panel, 'button[data-action="save-details"]')),
@@ -2013,6 +2014,17 @@ function checkDetailsPanel(cust, dom) {
     if (!row) return;
     const where = `row ${index + 1} (${detail.fact})`;
     if (row.id !== detail.id || row.fact !== detail.fact) problems.push(`${where} is ${row.id}/${row.fact}`);
+    if (detail.saved) {
+      // a saved row shows its answer, and a way to change it (app.js savedAnswer: "Saved: ..." and "Change this answer"
+      // where the API names the answer; a date entered at upload keeps its date field), never the open row's offers:
+      // walk 2 (2026-11-05) held a saved row to an open row's answer buttons, and a correct page failed
+      const editable = cust?.permissions?.can_review === true && cust?.progress?.busy !== true;
+      if (row.saved === null) problems.push(`${where} does not show its saved answer`);
+      const named = typeof detail.saved.answer_id === 'string' && Boolean(detail.saved.answer_id);
+      if (editable && named && !row.revoke) problems.push(`${where} offers no way to change its saved answer`);
+      if (editable && !named && detail.control === 'date' && !row.date_input) problems.push(`${where} offers no date field to change the entered date`);
+      return;
+    }
     if (detail.control === 'date') {
       if (!row.date_input) problems.push(`${where} has no date field`);
       // the page may write the date in words: the document's date and the entered one are each shown, side by side
@@ -2031,8 +2043,7 @@ function checkDetailsPanel(cust, dom) {
       if (!row.choices.includes(allowed) && !row.radios.some(radio => radio.value === allowed)) problems.push(`${where} does not offer ${allowed}`);
     }
     for (const offered of row.choices) if (!(detail.allow || []).includes(offered)) problems.push(`${where} offers ${offered}, which the API does not allow`);
-    if (detail.saved && row.saved === null) problems.push(`${where} does not show its saved answer`);
-    if (!detail.saved && row.saved !== null) problems.push(`${where} shows a saved answer the API does not hold`);
+    if (row.saved !== null) problems.push(`${where} shows a saved answer the API does not hold`);
   });
   if (details.some(detail => !detail.saved) && !panel.save) problems.push('no Save (button[data-action="save-details"])');
   return [check('dom.details_panel', 'hard', problems.length === 0, problems.join('; ') || `${details.length} detail row(s) with the API's controls`)];

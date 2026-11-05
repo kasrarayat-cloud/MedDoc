@@ -2839,7 +2839,8 @@ test('checkDetailsSave: answers held as the member\'s context with attribution, 
     return cust;
   };
   const after = { cust: answered(), op };
-  const reloaded = { cust: answered(), op, dom: domOf(sample('customer-page-details.html').replace('<p class="detail-affects">Affects 45385</p>', '<p class="detail-saved">Saved: Not documented</p><p class="detail-affects">Affects 45385</p>')) };
+  // the reloaded page as the page itself draws a saved row (app.js detailsPanel), never a hand-made one (walk 2, 2026-11-05)
+  const reloaded = { cust: answered(), op, dom: domOf(`<html><body>${app.detailsPanel(answered(), pageUi(answered()))}</body></html>`) };
   const account = { label: SAMPLE_AGENT };
   assert.deepEqual(failed(vb.checkDetailsSave(answers, before, after, saveOk, reloaded, account)), []);
   const cases = [
@@ -3556,4 +3557,26 @@ test('the walk of a document that must fail fails one that sent requests, one th
   const refused = (await walkSite(foreign, { plan: {}, doc: { expected_failure: 'extraction_failed' } })).record;
   assert.match(String(refused.error), /^refusing to act on encounter /);
   assert.notEqual(refused.result, 'pass');
+});
+
+test('checkDetailsPanel holds a saved row to its saved answer and a way to change it, an open row to its offers, as the page draws each', () => {
+  // walk 2 on cpt.quillmd.com (2026-11-05): the saved extent row showed "Saved: Not documented" and "Change this answer",
+  // as app.js savedAnswer draws it, and the walk failed it for not offering the open row's answer buttons
+  const open = DETAILS();
+  const saved = DETAILS();
+  saved.details_needed = [saved.details_needed[0], { ...saved.details_needed[1],
+    saved: { value: 'not_documented', label: 'Not documented', by: SAMPLE_AGENT, at: '2026-11-05T04:12:00+00:00', answer_id: 'ans-1' } }];
+  const drawn = (enc, edit = html => html) => domOf(`<html><body>${edit(app.detailsPanel(enc, pageUi(enc)))}</body></html>`);
+  assert.deepEqual(failed(vb.checkDetailsPanel(open, drawn(open))), []);
+  assert.deepEqual(failed(vb.checkDetailsPanel(saved, drawn(saved))), []);
+  const savedRow = drawn(saved).details.rows[1];
+  assert.ok(savedRow.saved && savedRow.revoke && savedRow.choices.length === 0, 'the scenario: the page draws the saved row without answer buttons');
+  const reasons = (enc, edit) => vb.checkDetailsPanel(enc, drawn(enc, edit)).filter(r => r.status === 'fail').map(r => r.reason).join(' | ');
+  assert.match(reasons(saved, html => html.replace(/<p class="detail-saved">[\s\S]*?<\/p>/, '')), /does not show its saved answer/);
+  assert.match(reasons(saved, html => html.replace(/<button[^>]*data-action="revoke-detail"[^>]*>[^<]*<\/button>/, '')), /offers no way to change its saved answer/);
+  assert.match(reasons(open, html => html.replace(/<button[^>]*data-detail-choice="cannot_confirm"[^>]*>[^<]*<\/button>/, '')), /does not offer cannot_confirm/);
+  // a busy document draws no change control, and is not failed for it
+  const busy = clone(saved);
+  busy.progress.busy = true;
+  assert.ok(!/offers no way to change/.test(reasons(busy, html => html)));
 });

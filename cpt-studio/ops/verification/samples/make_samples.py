@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -381,9 +382,13 @@ def details_html(details: list) -> str:
             controls += (f'<p class="detail-document-date">Document: {esc(detail["document_value"] or "not stated")}</p>'
                          f'<p class="detail-entered-date">You entered: {esc(detail["entered_value"] or "nothing")}</p>'
                          f'<input type="date" data-detail-input value="{esc(detail["entered_value"] or "")}">')
-            if detail['document_value']:
+            # app.js dateControl: "Use document date" only where the row itself offers it (its choices), never because
+            # a document date exists; and a date row's radios are its documented DATES only (documentedDates)
+            if detail['document_value'] and any(choice['value'] == 'use_document' for choice in detail['choices']):
                 controls += '<button type="button" data-action="use-document-date">Use document date</button>'
-        for choice in detail['choices']:
+        radios = ([c for c in detail['choices'] if re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(c['value']))]
+                  if detail['control'] == 'date' else detail['choices'])
+        for choice in radios:
             controls += (f'<label><input type="radio" name="detail-{detail["id"]}" value="{esc(choice["value"])}"> '
                          f'{esc(choice["label"])}</label>')
         for allowed in detail['allow']:
@@ -462,8 +467,12 @@ def details_encounter() -> dict:
                            'document_quote': {'text': DATE_LINE, 'start': date_start, 'end': date_start + len(DATE_LINE)},
                            'entered_value': '2026-11-02', 'conflict': True, 'can_use_document_date': True}
     enc['details_needed'] = [
+        # the member's date beside the document's own, and "Use document date" offered: the serializer puts that offer in
+        # the row's own choices (answers._date_row, from can_use_document_date), which is what the page draws it from
+        # (app.js dateControl); a row without it is one the server never serves (the 2026-11-05 saved-row pin found it)
         {'id': 'detail-service-date', 'fact': 'service_date', 'family_label': 'Encounter', 'prompt': 'Which date of service applies?',
-         'control': 'date', 'choices': [], 'allow': [], 'document_value': '2026-11-03', 'entered_value': '2026-11-02',
+         'control': 'date', 'choices': [{'value': 'use_document', 'label': 'Use document date'}], 'allow': [],
+         'document_value': '2026-11-03', 'entered_value': '2026-11-02',
          'quote': {'text': DATE_LINE, 'start': date_start, 'end': date_start + len(DATE_LINE)}, 'affects': ['45380', '45385'],
          'saved': None, 'addendum_allowed': False},
         {'id': 'detail-extent', 'fact': 'extent', 'family_label': 'Colonoscopy',
