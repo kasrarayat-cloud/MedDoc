@@ -300,7 +300,11 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
                r'administered|gave|provided|supervised)\b'
                r'|\bunderwent\b|\bunderwent\s+successful\b')
 # A participle naming the act with no auxiliary ("polyps removed by cold snare", "biopsies taken").
-BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|excised|retrieved|placed|deployed|injected|ablated|treated|'
+# Refutation rounds 4 and 5 (L4B-2, L5-2): main's list exactly. The repair package's patch had added "excised", which
+# no not-done list of the readers or of routing reads ("Sigmoid polyp not excised with hot snare.", "was unable to be
+# excised", "not to be excised": READY where main holds them). It failed two refutation cycles and is dropped; the
+# patch's reading of "it was not excised by snare" as the patch's own denied snare goes with it (ACCURACY-RESIDUALS.md).
+BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
                       r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
                       r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ))\b')
 # What may open a clause before its negation word - spaces, dashes, bullets, brackets and list labels ("- ", "A1 ", "2) ")
@@ -326,10 +330,6 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
                + r")\b(?:\s+be)?"
                r"|\bnot\s+(?:performed|done|obtained|taken|removed|resected|treated|sampled|biopsied|placed|injected|"
                r"attempted|repeated|undertaken|carried\s+out|reached|completed|required|needed|indicated)\b"
-               # refutation round 4 (L4B-2): the repair package's patch made "excised" a bare act participle
-               # (BARE_PARTICIPLE); its bare denials are read with it ("Sigmoid polyp not excised with hot snare.",
-               # "never excised"), and no other participle's reading moves
-               r"|\b(?:not|never)\s+excised\b"
                r"|\b(?:was|were|is|are|has|have|had|did|does|could|would|ca)" + NEG_CONTRACTION + r"\b(?:\s+be)?")
 WITHOUT = _rx(r'\b(?:without|w/o)\b')
 # A negation's list ends where another clause opens after it - a subordinator or a temporal preposition ("No bleeding
@@ -478,11 +478,13 @@ MARKED_BARE_AFTER = _rx(r'\b(?:lesion|polyp|mass|tumou?r|nodule)\s+\Z')
 # (from "marked" to "not resected", from the predicate to the purpose), and four rounds found the sentence around the span
 # saying another time, place, provider, condition or doubt ("Prior to this procedure, ...", "At the referring facility,
 # ...", "If ...", "It is unknown whether ...", "... at the referring facility.", "Ink not yet injected ...", "Tattoo ink
-# needs to get injected ..."). Each rule now releases only inside one of the package's own WHOLE sentences, fail-closed:
+# needs to get injected ..."). Each rule now releases only inside one of the package's own WHOLE sentences, fail-closed
+# (the sentence is the engine's own, _sentences; round 5):
 # every word of the sentence is a slot of the template below, so any other word - whatever it says - leaves the sentence
-# as main reads it, held. A sentence runs from the last stop before it ([.!?] then a space, or a blank line) to the next;
-# a single line break is no stop, so a heading without a stop above it is part of the sentence (only the four headings
-# below are slots), and a line wrapped inside the sentence (88d9db32's "... and\nnot resected today.") is read whole.
+# as main reads it, held. The sentence is the engine's own (_sentences): it does not cut after an abbreviation, before a
+# lowercase word or a dash, or at a line wrap, so a heading line above the sentence without a stop is part of it (only
+# the four headings below are slots), and a line wrapped inside it (88d9db32's "... and\nnot resected today.") is read
+# whole.
 _PKG_SITE = (r'(?:cecum|cecal|caecum|caecal|ascending|transverse|descending|sigmoid|rectosigmoid|rectum|rectal|colon|'
              r'colonic|hepatic|splenic|flexure|ileocecal|valve|appendiceal|orifice|terminal|ileum|ileal|proximal|distal|'
              r'mid|right|left)')
@@ -514,28 +516,27 @@ PACKAGE_PURPOSE_SENTENCE = _rx(
     rf'{_PKG_FUTURE}(?:\s+of\s+(?:the\s+)?(?:{_PKG_SITE_WORD}\s+){{0,3}}{_PKG_NOUN})?{_PKG_END}'
     rf'|\s*{_PKG_HEADING}{_PKG_SUBJECT}\s+(?:was|were)\s+(?:(?:then|also|successfully)\s+)?tattooed(?:\s+{_PKG_PLACE})?\s+'
     rf'{_PKG_FUTURE}{_PKG_END}')
-PACKAGE_SENTENCE_STOP = re.compile(r'[.!?](?=\s|\Z)|\n[ \t]*\n')
-PACKAGE_SENTENCE_REACH = 400  # characters either side read for the sentence's stops; a longer sentence is no package one
+# Refutation round 5 (L5-1): the package sentence is the ENGINE's own sentence (_sentences), read once per text. A
+# stop of its own had cut a sentence the engine keeps whole - after "hosp.", "p.m.", "wk.", "Dr.", "...", ". --", a
+# form feed - so the template matched only the tail and the frame before it went unread. One sentence, one reader.
+PACKAGE_SENTENCE_REACH = 600  # a longer sentence is no package sentence (fail-closed, and the template's cost bound)
+
+
+@functools.lru_cache(maxsize=8)
+def _sentence_spans(text: str) -> tuple:
+    spans = tuple(_sentences(text))
+    return tuple(s for s, _ in spans), spans
 
 
 def _package_sentence(text: str, pos: int, template: re.Pattern) -> bool:
-    """Whether the sentence holding ``pos`` is, whole, one of the package's own sentences (``template``)."""
-    lo = max(0, pos - PACKAGE_SENTENCE_REACH)
-    start = None
-    for stop in PACKAGE_SENTENCE_STOP.finditer(text, lo, pos):
-        start = stop.end()
-    if start is None:
-        if lo:
-            return False
-        start = 0
-    hi = min(len(text), pos + PACKAGE_SENTENCE_REACH)
-    stop = PACKAGE_SENTENCE_STOP.search(text, pos, hi)
-    if stop is None:
-        if hi < len(text):
-            return False
-        end = len(text)
-    else:
-        end = stop.end()
+    """Whether the engine's sentence holding ``pos`` is, whole, one of the package's own sentences (``template``)."""
+    starts, spans = _sentence_spans(text)
+    i = bisect.bisect_right(starts, pos) - 1
+    if i < 0:
+        return False
+    start, end = spans[i]
+    if not start <= pos < end or end - start > PACKAGE_SENTENCE_REACH:
+        return False
     return bool(template.fullmatch(text, start, end))
 
 

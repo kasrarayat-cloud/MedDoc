@@ -26,11 +26,12 @@ class OtherKindDenialTests(SimpleTestCase):
     BODY = ('In the distal rectum, a discrete 5 mm erythematous mucosal patch, separate from the sigmoid polyp, was '
             'sampled with cold biopsy forceps for histology; it was not excised by snare.')
 
-    def test_the_biopsy_beside_the_denied_snare_is_held_as_main_holds_it(self):
-        # stage 3 pinned READY here; round 3 restored main's release, so the package's correct reading of the snare's
-        # denial ("not excised by snare") holds the biopsy code beside it (a hold, recorded as 88d9db32's cost)
+    def test_the_biopsy_beside_the_denied_snare_reads_as_main_reads_it(self):
+        # round 3 had pinned this held: the package's bare "excised" read the snare's denial as a not-done act, which
+        # main's release refuses. Round 5 dropped that participle (L4B-2, L5-2), so the passage reads as at main and
+        # the live revision: the biopsy done, READY (88d9db32's 45380, the round-3 cost, no longer arises)
         p = assess(self.BODY, '45380', 'cold biopsy forceps for histology; it was not excised by snare.')
-        self.assertEqual(p.status, 'needs_clarification', [c.detail for c in p.checks if c.id == 'service.status'])
+        self.assertEqual(p.status, 'ready', [c.detail for c in p.checks if c.id == 'service.status'])
 
     def test_the_denied_snare_still_holds_a_snare_code(self):
         # the not-done act is of the code's own kind: the release is refused, as before
@@ -54,7 +55,9 @@ class OtherKindDenialTests(SimpleTestCase):
         body = ('Biopsies were taken from the cecum with cold forceps. The examination was completed; the rectal patch '
                 'was not excised by snare.')
         p = assess(body, '45380', 'The examination was completed; the rectal patch was not excised by snare.')
-        self.assertNotEqual(p.status, 'ready')
+        # round 5: with the package's bare "excised" dropped this reads as at main, READY - a biopsy is documented in
+        # the same report, and the cited passage is weak support (recorded in ACCURACY-RESIDUALS.md, round 5)
+        self.assertEqual(p.status, 'ready')
 
     def test_a_passage_stating_the_codes_own_act_done_and_denied_stays_held(self):
         # the rule before the repair, kept: a not-done act of the code's own kind in the cited passage refuses the release
@@ -68,4 +71,5 @@ class OtherKindDenialTests(SimpleTestCase):
         # the code is held ("was not sampled with ..." never reaches it: the routing-era reader resolves that denial)
         body = 'Cold biopsy forceps were used in the cecum; the rectal patch was not excised with cold biopsy forceps.'
         p = assess(body, '45380', body)
-        self.assertNotEqual(p.status, 'ready')
+        # round 5: as at main, READY (forceps used in the cecum); the package's bare "excised" that held it is dropped
+        self.assertEqual(p.status, 'ready')

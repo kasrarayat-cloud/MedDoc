@@ -2584,3 +2584,35 @@ sentences READY, with 88d9db32's own shapes), `ExcisedTests`, and `Decompression
   could not.", "... attempted and did not work.", "Decompression of the colon failed.") is no act, or no listed one,
   so completeness does not show it. This is at main too.
 - "never removed", "never biopsied" and "not snared" (bare) read as done at main and here.
+
+### Refutation round 5 (2026-11-05): one lens over round 4b, and the two-cycle rule applied to "excised"
+
+One read-only lens attacked round 4b's head `995cdcfd` against main, with D1 and D2. Two declared limits were not
+findings: context in another sentence, and false holds. D2 held in all 828 cases. D1 broke in two blocking families,
+both reproduced by the author before repair:
+
+| id | input | HEAD | main | cause |
+|---|---|---|---|---|
+| L5-1 | "At the outside hosp. the lesion in the ascending colon was marked with tattoo and not resected." Also "... 3 p.m. ...", "Last wk. ...", "... today. -- by the referring endoscopist.", "At the referring facility... ...", and the purpose form "At the outside hosp. tattoo ink was injected ... for future localization." | 45381 READY, both paths | held or excluded | round 4b's own stop ([.!?] then a space) cut a sentence the engine keeps whole (after an abbreviation, before a lowercase word or a dash, at a form feed), so the template matched only the tail |
+| L5-2 | "Sigmoid polyp was unable to be excised with hot snare." Also "not able to be excised", "failed to be excised", "Gastric polyp not to be excised with hot snare." (43251), "Attempts were made, but ... unable to be excised ..." | READY | held | the package's bare "excised" is read by no not-done list of the readers or of routing (`cues._NOT_DONE`, `NOT_DONE_CLAUSE`); the "removed" control is held at both |
+
+**Repaired:**
+- **The package sentence is the engine's own** (`_sentences`, read once per text by `_sentence_spans`, found by
+  bisection). It does not cut after an abbreviation, before a lowercase word or a dash, or at a line wrap or a form
+  feed.
+  - A heading line ending in a colon is a sentence of its own in that model. What a heading says is then another
+    sentence's context, which no reader reads for a plain act sentence either.
+  - The heading pin now holds the package sentence to that: under every heading it reads as the plain "India ink was
+    injected ..." does, never better, and under "History:" and "Prior procedures:" it is held.
+  - A sentence longer than `PACKAGE_SENTENCE_REACH` (600 characters) is no package sentence.
+- **The package's bare "excised" is dropped under the two-cycle rule** (L4B-2 in round 4, L5-2 in round 5). The bare
+  participle list is main's exactly, and round 4b's "not/never excised" negation goes with it.
+  - The patch's reading of "it was not excised by snare" as the patch's own denied snare goes too.
+  - So 88d9db32's 45380 reads READY, as at main and at the live revision. The biopsy was done, so round 3's recorded
+    cost no longer arises.
+  - Stage 3's two pins that held a 45380 citing only another act's denial read READY, as at main (recorded as weak
+    support).
+  - The package's ownership test keeps its clinical assertions: no conflict, and 45385 and 45380 READY.
+
+**Proof:** three mutants killed, restores verified (a naive splitter in place of the engine's, "excised" put back, the
+reach shrunk). The pins hold all of round 5's forms and all of round 4's.

@@ -361,6 +361,16 @@ class PackageSentenceTests(SimpleTestCase):
         'Referring endoscopist: ascending colon lesion marked with tattoo and not resected.',
         'The lesion in the ascending colon was marked with tattoo and not resected; the tattoo did not take.',
         'The lesion in the ascending colon was injected with India ink and not resected at the referring facility.',
+        # round 5 (L5-1): a frame inside the engine's own sentence, past a stop the engine does not cut at
+        'At the outside hosp. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'On the day before at 3 p.m. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Last wk. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'The lesion in the ascending colon was marked with tattoo and not resected today. -- by the referring endoscopist.',
+        'At the referring facility... the lesion in the ascending colon was marked with tattoo and not resected.',
+        'Per Dr. Smith the lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the outside ctr. the lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the referring facility.\x0bthe lesion in the ascending colon was marked with tattoo and not resected.',
+        'At the referring facility.\x0cthe lesion in the ascending colon was marked with tattoo and not resected.',
     )
     PURPOSE = (  # L4A-2
         'Ink not yet injected into the ascending colon for future localization.',
@@ -376,6 +386,9 @@ class PackageSentenceTests(SimpleTestCase):
         'Ink has to get injected into the ascending colon for future localization.',
         'India ink got injected into the ascending colon for future localization at the referring hospital.',
         'Before this procedure, the lesion in the ascending colon was tattooed for future localization and not resected.',
+        # round 5 (L5-1)
+        'At the outside hosp. tattoo ink was injected into the transverse colon submucosa for future localization.',
+        'Per Dr. Smith tattoo ink was injected into the transverse colon submucosa for future localization.',
     )
 
     def test_a_form_outside_the_packages_whole_sentence_is_never_ready(self):
@@ -386,20 +399,25 @@ class PackageSentenceTests(SimpleTestCase):
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
 
-    def test_a_heading_outside_the_four_reads_with_its_sentence(self):
-        # a single line break is no stop: a heading line above the sentence is part of it, and only impression,
-        # findings, summary and assessment are slots (a stop at every line break would drop the heading and release)
+    def test_under_a_heading_the_package_sentence_reads_as_a_plain_act_sentence(self):
+        # round 5: the sentence is the engine's own (_sentences), which ends a heading line that ends in a colon. What a
+        # heading says is then another sentence's context, which no reader reads for a plain act sentence either: under
+        # every heading the package's sentence reads exactly as the plain "India ink was injected ..." does, never
+        # better (D1), and under the section headings the readers know it is held or excluded with it
         line = 'The lesion in the ascending colon was marked with tattoo and not resected.'
-        for heading in ('Outside report:', 'Referral letter:', 'Per outside endoscopist:', 'Prior to this procedure:'):
+        plain = 'India ink was injected adjacent to the lesion in the ascending colon.'
+        for heading in ('Outside report:', 'Referral letter:', 'Per outside endoscopist:', 'Prior to this procedure:',
+                        'History:', 'Prior procedures:', 'Plan:', 'Impression:', 'Findings:'):
             with self.subTest(heading):
-                by_corti, by_astra = both(COLON + heading + '\n' + line + '\n', '45381', line)
-                self.assertNotIn(READY, by_corti)
-                self.assertNotIn(READY, by_astra)
-        for heading in ('Impression:', 'Findings:'):
+                package = both(COLON + heading + '\n' + line + '\n', '45381', line)
+                as_plain = both(COLON + heading + '\n' + plain + '\n', '45381', plain)
+                for got, base in zip(package, as_plain):
+                    if READY in got:
+                        self.assertIn(READY, base)
+        for heading in ('History:', 'Prior procedures:'):
             with self.subTest(heading):
-                by_corti, by_astra = both(COLON + heading + '\n' + line + '\n', '45381', line)
-                self.assertEqual(by_corti, [READY])
-                self.assertEqual(by_astra, [READY])
+                for got in both(COLON + heading + '\n' + line + '\n', '45381', line):
+                    self.assertNotIn(READY, got)
 
     def test_the_packages_own_sentences_stay_ready(self):
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
@@ -432,17 +450,27 @@ class PackageSentenceTests(SimpleTestCase):
 
 
 class ExcisedTests(SimpleTestCase):
-    """Round 4, L4B-2: the package's patch had made "excised" a bare act participle that no bare negation reads, so
-    "Sigmoid polyp not excised with hot snare." read as a snare removal done. The bare list is main's again."""
+    """Rounds 4 and 5 (L4B-2, L5-2): the package's patch had made "excised" a bare act participle that no not-done list
+    of the readers or of routing reads, so its denials and failures read as a removal done. It failed two cycles and is
+    dropped: the bare list is main's again, and these read as main reads them."""
 
     def test_a_bare_denied_excision_is_never_ready(self):
-        for which, line in (('45385', 'Sigmoid polyp not excised with hot snare.'),
-                            ('45385', 'Sigmoid polyp never excised with hot snare.'),
-                            ('45380', 'Sigmoid polyp not excised with cold biopsy forceps.'),
-                            ('45390', 'Transverse colon lesion not excised by EMR.')):
-            for primary in ((), (('45378', CECUM),)):
-                with self.subTest(line, primary=bool(primary)):
-                    by_corti, by_astra = both(COLON + line + '\n', which, line, primary)
+        # round 5 (L5-2): and the not-done frames of "excised", now that the package's bare participle is dropped
+        for head, which, line, primary in (
+                (COLON, '45385', 'Sigmoid polyp not excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45385', 'Sigmoid polyp never excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45380', 'Sigmoid polyp not excised with cold biopsy forceps.', (('45378', CECUM),)),
+                (COLON, '45390', 'Transverse colon lesion not excised by EMR.', (('45378', CECUM),)),
+                (COLON, '45385', 'Sigmoid polyp was unable to be excised with hot snare.', (('45378', CECUM),)),
+                (COLON, '45380', 'Sigmoid polyp not able to be excised with cold biopsy forceps.', (('45378', CECUM),)),
+                (COLON, '45390', 'Transverse colon lesion failed to be excised with endoscopic mucosal resection.',
+                 (('45378', CECUM),)),
+                (EGD, '43251', 'Gastric polyp not to be excised with hot snare.', ()),
+                (COLON, '45385', 'Attempts were made, but the sigmoid polyp was unable to be excised with hot snare.',
+                 (('45378', CECUM),))):
+            for prim in ((), primary):
+                with self.subTest(line, primary=bool(prim)):
+                    by_corti, by_astra = both(head + line + '\n', which, line, prim)
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
 
