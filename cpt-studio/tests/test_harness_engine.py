@@ -229,50 +229,48 @@ class MergeTests(SimpleTestCase):
         self.assertEqual(astra['quote'], POLYP)
         self.assertEqual(len([p for p in both.proposals if p.code == '45385']), 1)
 
-    def test_a_code_no_proposal_carries_is_listed_never_a_proposal_of_its_own(self):
-        """Moved by refutation round 6 (R6-MEANING, the session's D14): such a code was "a proposal of its own" (sel:1,
-        ready) that the reconciliation counted, clearing the biopsy; it is now an alternative saying why, and the biopsy
-        stays unresolved exactly as with Corti alone."""
+    def test_a_code_no_proposal_carries_is_admitted_through_the_providers_own_path(self):
+        """HARNESS.md P-ADMIT (owner directive 2026-11-05). Moved by refutation round 6 (R6-MEANING, the session's D14)
+        to an alternative that left the biopsy unresolved; the owner's controlled replacement restores what it was
+        before D14 wherever the readers support it: the biopsy is documented as done and the participant's own passage
+        shows it, so its 45380 is read by the provider's path and is a proposal of its own (sel:1, ready) that the
+        reconciliation counts, and only a member's decision approves it."""
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
         self.assertEqual([(i['family'], i['act']) for i in alone.completeness['unresolved_items']],
                          [('gi.colonoscopy', 'biopsy')])
         result = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [code(COLON, '45380', BIOPSY)])])
         added = proposal(result, '45380')
-        self.assertEqual((added.key, added.bucket, added.status, added.reinstatable),
-                         ('altp:0', 'alternative', 'informational', False))
+        self.assertEqual((added.key, added.bucket, added.status, added.reinstatable), ('sel:1', 'selected', 'ready', False))
         self.assertEqual(added.support['origin'], 'participant')
         self.assertEqual(added.support['proposed_by'], ['astra'])
         self.assertEqual(added.support['phases'], {'astra': 'independent'})
         self.assertEqual([e.text for e in added.evidence], [BIOPSY])
-        # HARNESS.md 11.4: its origin, never "Selected by"; and CPT Studio's own reason it is not a proposal
-        self.assertEqual(added.exclusion_reason, f'Proposed by Astra (independent participant), but not added as a '
-                                                 f'proposal: {PARTICIPANT_NOT_ADDED}. Alternatives cannot be approved.')
-        self.assertTrue(added.rationale.startswith(f'Proposed by Astra (independent participant); not added as a '
-                                                   f'proposal: {PARTICIPANT_NOT_ADDED}.'), added.rationale)
+        # HARNESS.md 11.4: its origin, never "Selected by"
+        self.assertTrue(added.rationale.startswith('Proposed by Astra (independent participant); Corti did not '
+                                                   'propose this code. 1 exact evidence passage.'), added.rationale)
         self.assertNotIn('Selected by', added.rationale)
-        # it is no proposal: the reconciliation never counts it, so the biopsy stays unresolved
-        for key in ('unresolved_items', 'state', 'covered', 'included_by'):
-            self.assertEqual(result.completeness[key], alone.completeness[key], key)
+        self.assertEqual(added.exclusion_reason, '')
+        # a proposal like any other: the reconciliation counts it, so the biopsy is no longer unresolved
+        self.assertEqual(result.completeness['unresolved_items'], [])
+        self.assertEqual(result.completeness['state'], 'complete_pending_review')
         self.assertEqual(proposal(result, '45385').support['proposed_by'], ['corti'])
-        self.assertEqual(proposal(result, '45385').support['participants']['astra']['position'], 'not_proposed')
 
     def test_a_provider_code_with_no_exact_passage_carries_nothing(self):
         """Decidable as _second_review reads it: a provider selection excluded for scope or evidence (never
-        reinstatable) does not hide a participant's code; that code is listed beside it (it was judged as a proposal of
-        its own until refutation round 6's D14, R6-MEANING)."""
+        reinstatable) does not hide a participant's code. HARNESS.md P-ADMIT (2026-11-05): that code is judged as a
+        proposal of its own beside it, as it was before D14 (which listed it): sel:1, selected and ready."""
         off = EvidenceSpan(0, 0, len(BIOPSY), BIOPSY, True)  # not the text at those offsets
         alone = run(COLON, corti(('45385', span(COLON, SNARE)), ('45380', off)))
         self.assertEqual([(p.key, p.bucket, p.reinstatable) for p in alone.proposals if p.code == '45380'],
                          [('exc:0', 'excluded', False)])
         result = run(COLON, corti(('45385', span(COLON, SNARE)), ('45380', off)),
                      [read('astra', [code(COLON, '45380', BIOPSY)])])
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the participant's code beside it is listed, never
-        # a proposal (it was sel:1, selected and ready)
         self.assertEqual([(p.key, p.bucket, p.status, p.support['proposed_by']) for p in result.proposals
                           if p.code == '45380'],
-                         [('exc:0', 'excluded', 'excluded', ['corti']), ('altp:0', 'alternative', 'informational',
-                                                                         ['astra'])])
-        self.assertIn(PARTICIPANT_NOT_ADDED, proposal(result, '45380', 'alternative').exclusion_reason)
+                         [('sel:1', 'selected', 'ready', ['astra']), ('exc:0', 'excluded', 'excluded', ['corti'])])
+        self.assertTrue(proposal(result, '45380', 'selected').rationale.startswith(
+            'Proposed by Astra (independent participant); Corti also selected this code, with no exact passage; it is '
+            'listed apart, excluded.'))
         self.assertEqual(without_record(proposal(result, '45380', 'excluded')), proposal(alone, '45380'))
 
     def test_a_provider_candidate_is_no_proposal(self):
@@ -297,23 +295,36 @@ class MergeTests(SimpleTestCase):
         self.assertIn('stated units none; modifiers 59, XS; confidence none (3 other values not shown)', detail)
         self.assertNotIn(OWN_WORDS, canonical_json(result).decode('utf-8'))
 
-    def test_a_participant_code_is_never_judged_as_a_proposal(self):
-        """I2, moved by refutation round 6 (R6-MEANING, the session's D14): a participant's code was judged by the
-        proposal provider's own path, the same passage giving the same proposal whoever proposed it - READY on a quote
-        of a failed, denied, earlier or another procedure's act. Now no participant's code is judged as a proposal at
-        all: it is listed, and Corti's proposals are what the engine makes with no participant."""
+    def test_a_participant_code_is_judged_by_the_providers_own_path_and_admitted_only_where_its_passage_shows_the_act(self):
+        """I2 (HARNESS.md P-ADMIT, 2026-11-05): a participant's code is judged by the proposal provider's own path, the
+        same passage giving the same proposal whoever proposed it where it is admitted. Admission adds one condition
+        the provider's own selection does not meet: the participant's own passage must show the act it accounts for.
+        So the plan sentence and the cecal-intubation sentence quoted for 45380 are not admitted (the provider's own
+        selection of them is held, or ready on the documented biopsy with its support warned), and Corti's proposals
+        are then exactly what the engine makes with no participant. (D14 had listed all three; before D14 all three
+        were proposals.)"""
         for quote, text in ((BIOPSY, COLON), (PLAN, COLON_PLAN), (CECUM, COLON)):
             alone = run(text, corti(('45385', span(text, SNARE))))
+            by_provider = proposal(run(text, corti(('45385', span(text, SNARE)), ('45380', span(text, quote)))),
+                                   '45380')
             result = run(text, corti(('45385', span(text, SNARE))), [read('fable', [code(text, '45380', quote)])])
             by_participant = proposal(result, '45380')
-            self.assertEqual((by_participant.bucket, by_participant.status), ('alternative', 'informational'), quote)
-            self.assertIn(PARTICIPANT_NOT_ADDED, by_participant.exclusion_reason)
             self.assertEqual(by_participant.provider_display, '')  # a participant's own words are never shown
-            self.assertEqual([without_record(p) for p in result.proposals if p.code != '45380'], list(alone.proposals))
+            if quote == BIOPSY:
+                self.assertEqual(decision(by_participant), decision(by_provider), quote)
+                self.assertEqual(by_participant.support['origin'], 'participant')
+            else:
+                self.assertEqual((by_participant.bucket, by_participant.status), ('alternative', 'informational'), quote)
+                self.assertIn(engine.PARTICIPANT_NOT_SHOWN, by_participant.exclusion_reason)
+                self.assertEqual([without_record(p) for p in result.proposals if p.code != '45380'],
+                                 list(alone.proposals))
 
     def test_a_held_or_excluded_reading_is_never_overridden_by_a_participant(self):
         """I2: a participant's code is ready only where the readers make it so. "Repeat colonoscopy" quoted from a plan
-        section, for a family the document does not show done, is never ready."""
+        section, for a family the document does not show done, is never ready. Moved by D14 to an alternative with no
+        reading made; under HARNESS.md P-ADMIT (2026-11-05) it is read and admitted by none of its rules - no
+        colonoscopy is documented as done - so it stays an alternative a member can do nothing with."""
+        from tests.test_harness2_r6_meaning import not_added_reason
         text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nOffice visit (fictional)\n'
                 'Date of service: 2026-10-14\nPlace of service: Office\nAssessment: Iron deficiency anemia.\n'
                 'Plan: Colonoscopy with biopsies next month.\n')
@@ -321,10 +332,8 @@ class MergeTests(SimpleTestCase):
                                 read('fable', [code(text, '45380', 'Colonoscopy with biopsies next month.')])])
         item = proposal(result, '45380')
         self.assertNotEqual(item.status, 'ready')
-        # moved by refutation round 6 (R6-MEANING, the session's D14): no reading of it is made at all - it is listed,
-        # never a proposal a reviewer could reinstate (it was excluded, reinstatable)
         self.assertEqual((item.bucket, item.status, item.reinstatable), ('alternative', 'informational', False))
-        self.assertIn(PARTICIPANT_NOT_ADDED, item.exclusion_reason)
+        self.assertTrue(not_added_reason(item.exclusion_reason), item.exclusion_reason)
 
     def test_unverified_quotes_never_make_a_proposal(self):
         """I2 and I7: a code whose quotes were all not found verbatim, or whose spans are not exact slices of the
@@ -371,31 +380,26 @@ class AgreementNeverPromotesTests(SimpleTestCase):
     """I3."""
 
     def test_a_second_proposer_with_the_same_quotes_changes_nothing_but_the_record(self):
+        """I3 (HARNESS.md P-ADMIT, 2026-11-05: the code is admitted by one proposer or by two, as before D14, which
+        listed it): a second proposer with the same quotes, its own stated units and its own confidence change nothing
+        but the record and the rationale's first sentence, which names the proposers."""
         one = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [code(COLON, '45380', BIOPSY)])])
         two = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [code(COLON, '45380', BIOPSY)]),
                                                                  read('fable', [code(COLON, '45380', BIOPSY, units=2,
                                                                                      confidence='low')])])
         alone, agreed = proposal(one, '45380'), proposal(two, '45380')
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the code is an alternative now, by one proposer
-        # or two, and the same quotes change nothing but the record and the two sentences that name its proposers (its
-        # reason and its rationale's first sentence; it was a proposal, whose rationale alone named them)
-        self.assertEqual(decision(agreed)[:7] + decision(agreed)[8:], decision(alone)[:7] + decision(alone)[8:])
-        self.assertEqual((alone.bucket, agreed.bucket), ('alternative', 'alternative'))
+        self.assertEqual(decision(agreed), decision(alone))
+        self.assertEqual((alone.bucket, agreed.bucket), ('selected', 'selected'))
         self.assertEqual((alone.support['proposed_by'], agreed.support['proposed_by']), (['astra'], ['astra', 'fable']))
-        self.assertEqual(agreed.exclusion_reason.split(', but not added as a proposal: ', 1)[1],
-                         alone.exclusion_reason.split(', but not added as a proposal: ', 1)[1])
-        self.assertTrue(agreed.exclusion_reason.startswith('Proposed by Astra and Fable (independent participants), '
-                                                           'but not added as a proposal: '), agreed.exclusion_reason)
         self.assertEqual(agreed.rationale.split('; ', 1)[1], alone.rationale.split('; ', 1)[1])
-        self.assertTrue(agreed.rationale.startswith('Proposed by Astra and Fable (independent participants); not '
-                                                    'added as a proposal: '), agreed.rationale)
+        self.assertTrue(agreed.rationale.startswith('Proposed by Astra and Fable (independent participants); Corti did '
+                                                    'not propose this code.'), agreed.rationale)
         self.assertEqual(agreed.units, 1)  # a stated unit count is recorded, never used
         self.assertIn('stated units 2', agreed.support['participants']['fable']['detail'])
         self.assertEqual({k: v for k, v in agreed.support.items() if k not in RECORD},
                          {k: v for k, v in alone.support.items() if k not in RECORD})
-        # an alternative records no identity: no question of it is asked, so none can be confirmed for it
-        self.assertNotIn('identity', agreed.support)
-        self.assertNotIn('identity', alone.support)
+        # the identity a confirmation of its question would be bound to is the same whoever proposed it
+        self.assertEqual(agreed.support.get('identity'), alone.support.get('identity'))
 
     def test_agreement_on_a_code_the_provider_selected_changes_nothing_but_the_record(self):
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
@@ -430,33 +434,37 @@ class AgreementNeverPromotesTests(SimpleTestCase):
             agreed = proposal(run(COLON, codes, participants), '45378')
             self.assertEqual(decision(agreed), decision(alone), [p.provider for p in participants])
             self.assertEqual(agreed.support['proposed_by'], ['corti', *[p.provider for p in participants]])
-        # the proposal provider's answer failed: the participants' code, by one proposer and then by two - moved by
-        # refutation round 6 (R6-MEANING, the session's D14): it is listed, never a proposal, so it is never held or
-        # released either (it was the participants' own proposal, held on the base-inclusion question)
+        # the proposal provider's answer failed: the participants' own proposals (HARNESS.md P-ADMIT, 2026-11-05; D14 had
+        # listed them, and before D14 they were these proposals): 45378 is admitted beside the admitted 45385 and held
+        # on the base-inclusion question, by one proposer and by two, its decision unchanged
         own = read('astra', [code(COLON, '45385', SNARE), code(COLON, '45378', CECUM)])
         one = proposal(run(COLON, (), [own], provider_status='failed'), '45378')
-        self.assertEqual((one.bucket, one.status, one.clarifications), ('alternative', 'informational', ()))
+        self.assertEqual((one.bucket, one.status, [q.fact for q in one.clarifications]),
+                         ('selected', 'needs_clarification', ['base_included']))
         two = proposal(run(COLON, (), [own, fable], provider_status='failed'), '45378')
-        self.assertEqual(decision(two)[:7] + decision(two)[8:], decision(one)[:7] + decision(one)[8:])
+        self.assertEqual(decision(two), decision(one))
         self.assertEqual(two.support['proposed_by'], ['astra', 'fable'])
 
     def test_another_proposer_s_own_passage_can_hold_a_code_and_agreement_never_releases_it(self):
-        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9). Moved by refutation round 6
-        (R6-MEANING, the session's D14): a participant's code was read from every proposer's located quotes, so a
-        passage that hedged held it and the other proposer's passage alone made it ready; now none of them is read - the
-        code is listed, with every proposer's located quote as its passages, never ready and never held, whichever
-        proposer comes first."""
+        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9), under HARNESS.md P-ADMIT
+        (2026-11-05). Fable's passage alone shows the biopsy, so its 45380 is admitted and ready. Astra's hedging passage
+        alone leaves the act in doubt; and beside Fable's, read with it, it leaves the act not established as done, so the code is
+        not admitted at all (never ready, never a held code that could cover the biopsy) - whichever proposer comes
+        first: agreement never releases, and a doubt another proposer raises never makes the code more ready. (D14
+        listed it in all three; before D14 the pair held it.)"""
         codes = corti(('45385', span(COLON_HEDGE, SNARE)))
         fable, astra = (read('fable', [code(COLON_HEDGE, '45380', BIOPSY)]),
                         read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
-        for participants in ([fable], [astra], [astra, fable]):
-            item = proposal(run(COLON_HEDGE, codes, participants), '45380')
-            self.assertEqual((item.bucket, item.status, item.clarifications), ('alternative', 'informational', ()))
-            self.assertIn(PARTICIPANT_NOT_ADDED, item.exclusion_reason)
+        alone = proposal(run(COLON_HEDGE, codes, [fable]), '45380')
+        self.assertEqual((alone.bucket, alone.status), ('selected', 'ready'))
+        hedged = proposal(run(COLON_HEDGE, codes, [astra]), '45380')
+        self.assertEqual((hedged.bucket, hedged.status), ('alternative', 'informational'))
+        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, hedged.exclusion_reason)  # its own passage puts the act in doubt
         both = proposal(run(COLON_HEDGE, codes, [astra, fable]), '45380')
+        self.assertEqual((both.bucket, both.status, both.clarifications), ('alternative', 'informational', ()))
+        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, both.exclusion_reason)
         self.assertEqual([e.text for e in both.evidence], [BIOPSY, HEDGE])
         self.assertEqual(decision(proposal(run(COLON_HEDGE, codes, [fable, astra]), '45380')), decision(both))
-
 
 class ContradictionTests(SimpleTestCase):
     def test_not_performed_with_a_quote_is_a_warning_never_a_status(self):
@@ -502,18 +510,18 @@ class ContradictionTests(SimpleTestCase):
                          proposal(run(COLON, corti(('45385', span(COLON, SNARE)))), '45385').status)
 
     def test_a_participant_proposal_can_be_disputed_by_the_other(self):
+        """HARNESS.md P-ADMIT (2026-11-05): the code Astra proposed is admitted (the biopsy is documented and shown), and
+        Fable's advice not to code it is kept as a participants.disagree warning beside it, which decides nothing: the
+        status stays the readers' own (as before D14, which listed the code and so had nothing to warn about)."""
         result = run(COLON, corti(('45385', span(COLON, SNARE))), [
             read('astra', [code(COLON, '45380', BIOPSY)]),
             read('fable', advised=[not_coded(COLON, '45380', 'A separate 12 mm flat lesion')])])
         item = proposal(result, '45380')
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the code Astra proposed is listed, never a
-        # proposal, so there is nothing for the dispute to warn about (it was ready, with a participants.disagree
-        # warning); Fable's advice is kept in its position, with its quote
-        self.assertEqual((item.bucket, item.status, check(item, 'participants.disagree')),
-                         ('alternative', 'informational', None))
+        disagree = check(item, 'participants.disagree')
+        self.assertEqual((item.bucket, item.status, disagree.status), ('selected', 'ready', 'warn'))
+        self.assertIn('A separate 12 mm flat lesion', disagree.detail)
         fable = item.support['participants']['fable']
         self.assertEqual((fable['position'], fable['quote']), ('advised_not_to_code', 'A separate 12 mm flat lesion'))
-
 
 class MissingServiceTests(SimpleTestCase):
     def test_a_performed_service_only_a_participant_reads_makes_coding_incomplete(self):
@@ -634,23 +642,20 @@ class EncounterTests(SimpleTestCase):
 
     def test_the_providers_failure_blocks_only_itself(self):
         """I10: with no usable answer from the proposal provider the participants still read and are recorded, and the
-        provider's own check says what is true beside them. Moved by refutation round 6 (R6-MEANING, the session's D14):
-        their codes were judged as proposals of their own (sel:0, sel:1, ready) and the provider's check said "The
-        proposals listed come only from the independent participants"; now none is a proposal, so the provider's own
-        words - "there are no CPT proposals" - are true and stand, and the documented acts stay unresolved."""
+        provider's own check says what is true beside them. HARNESS.md P-ADMIT (2026-11-05) restores what D14 moved:
+        their first-reading codes are judged as proposals of their own (sel:0, sel:1, ready), so the provider's check
+        says "so it proposed no codes" and that the proposals listed come only from the independent participants,
+        never "there are no CPT proposals" beside them; with nothing a participant proposed, those words stand."""
         result = run(COLON, (), [read('astra', [code(COLON, '45385', SNARE), code(COLON, '45380', BIOPSY)])],
                      provider_status='failed')
-        self.assertEqual([(p.key, p.code, p.status) for p in result.proposals],
-                         [('altp:0', '45385', 'informational'), ('altp:1', '45380', 'informational')])
-        self.assertTrue(all(PARTICIPANT_NOT_ADDED in p.exclusion_reason for p in result.proposals))
+        self.assertEqual([(p.key, p.code, p.status, (p.support or {}).get('origin')) for p in result.proposals],
+                         [('sel:0', '45385', 'ready', 'participant'), ('sel:1', '45380', 'ready', 'participant')])
         status = encounter_check(result, 'provider.status')
         self.assertEqual(status.status, 'fail')
-        self.assertIn('there are no CPT proposals', status.detail)
-        self.assertNotIn('The proposals listed come only from the independent participants', status.detail)
-        self.assertEqual(encounter_check(result, 'services.unresolved').status, 'warn')
-        self.assertEqual([(i['family'], i['reason']) for i in result.completeness['unresolved_items']],
-                         [('gi.colonoscopy', 'no_proposal')])
-        self.assertIsNotNone(encounter_check(result, 'services.unproposed'))
+        self.assertNotIn('there are no CPT proposals', status.detail)
+        self.assertIn('so it proposed no codes. The proposals listed come only from the independent participants (Astra)',
+                      status.detail)
+        self.assertEqual(result.completeness['unresolved_items'], [])
         self.assertIn('the provider response was not available', result.completeness['reasons'])
         # with nothing a participant proposed, the provider's own words stand as well
         nothing = run(COLON, (), [read('astra')], provider_status='failed')
@@ -660,7 +665,8 @@ class EncounterTests(SimpleTestCase):
         """I2 with I10: under the provider's failure, with a member's date in conflict with the document, a
         participant's code is read on the date a provider's answer is read (the closing charge block's own date, GI
         round 3), so its decision is the one the provider's own path gives. Read with no date, the report's dated
-        colonoscopy line would read as not established on the date of service."""
+        colonoscopy line would read as not established on the date of service. HARNESS.md P-ADMIT (2026-11-05)
+        restores this pin as it stood before D14 (which listed the code and read it on no date)."""
         text = H208.replace('Assessment and plan\n', f'Colonoscopy on 2026-10-05: {CHARGED}.\nAssessment and plan\n', 1)
         self.assertIn(CHARGED, text)
         facts = gi_context.merge_user_values(gi_context.extract_context(text), {'service_date': '2026-10-06'})
@@ -671,28 +677,26 @@ class EncounterTests(SimpleTestCase):
             corti(('45385', span(text, CHARGED))))), provider_status='succeeded'), '45385')
         by_participant = proposal(assess(**kwargs, normalized=None, provider_status='failed',
                                          participants=(read('astra', [code(text, '45385', CHARGED)]),)), '45385')
-        # moved by refutation round 6 (R6-MEANING, the session's D14): a participant's code is not read on any date now
-        # - it is listed, never a proposal (it was decided as the provider's own path decides it); the provider's own
-        # code is still read on that date and passes
-        self.assertEqual((by_participant.bucket, by_participant.status), ('alternative', 'informational'))
-        self.assertIn(PARTICIPANT_NOT_ADDED, by_participant.exclusion_reason)
-        self.assertEqual(check(by_provider, 'service.status').status, 'pass')
+        self.assertEqual(decision(by_participant), decision(by_provider))
+        self.assertEqual(check(by_participant, 'service.status').status, 'pass')
 
     def test_reference_lookups_go_through_the_one_prefetched_lookup(self):
-        """The assess child has no database: every code it looks up is in the stage's prefetched lookup.
-        participant_codes() still names a participant's located code for that prefetch, which the reconciliation's
-        retrieval reads for the participant's alternative too (jobs._retrieval: every proposal's code the lookup holds).
-        Moved by refutation round 6 (R6-MEANING, the session's D14): the engine looks no participant's code up any more
-        - none is a proposal, and an alternative carries only its scope check - so a lookup without it raises nothing
-        (it raised LookupError, and with it the code's pfs.presence and mue.units checks passed)."""
+        """The assess child has no database: every code it looks up is in the stage's prefetched lookup, so the stage
+        prefetches participant_codes() beside the provider's codes (jobs: the participants' first-reading and
+        peer-review codes). HARNESS.md P-ADMIT (2026-11-05) restores this pin as it stood before D14: an admitted
+        participant code is looked up, so a lookup without it raises (a lookup the prefetch missed is an error, never a
+        quiet "not found"), and with it the code's pfs.presence and mue.units checks are made."""
         participants = [read('astra', [code(COLON, '45380', BIOPSY), code(COLON, '45378', 'not in the text')])]
         self.assertEqual(participant_codes(participants), ('45380',))
         narrow = PrefetchedReferenceLookup([PFS_INFO, MUE_INFO], FACTS, ['45385'])
-        result = run(COLON, corti(('45385', span(COLON, SNARE))), participants, reference=narrow)
-        item = proposal(result, '45380')
-        self.assertEqual(([c.id for c in item.checks], item.bucket), (['scope.cpt'], 'alternative'))
+        with self.assertRaises(LookupError):
+            run(COLON, corti(('45385', span(COLON, SNARE))), participants, reference=narrow)
         union = PrefetchedReferenceLookup([PFS_INFO, MUE_INFO], FACTS, ['45385', *participant_codes(participants)])
-        self.assertEqual(run(COLON, corti(('45385', span(COLON, SNARE))), participants, reference=union), result)
+        item = proposal(run(COLON, corti(('45385', span(COLON, SNARE))), participants, reference=union), '45380')
+        self.assertEqual(item.bucket, 'selected')
+        self.assertTrue({'pfs.presence', 'mue.units'} <= {c.id for c in item.checks}, [c.id for c in item.checks])
+        self.assertEqual(run(COLON, corti(('45385', span(COLON, SNARE))), participants, reference=union),
+                         run(COLON, corti(('45385', span(COLON, SNARE))), participants))
 
     def test_a_code_the_second_review_added_is_decidable(self):
         start, end = COLON.index('Procedure: Colonoscopy'), len(COLON)
@@ -717,10 +721,11 @@ class DeterminismTests(SimpleTestCase):
         again = run(COLON, corti(('45385', span(COLON, SNARE))), list(reversed(participants)))
         self.assertEqual(first, again)
         self.assertEqual(sha256_json(first), sha256_json(again))
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the participants' codes are alternatives, in the
-        # order they first appear (45380 and 45378 were sel:1 and sel:2)
+        # HARNESS.md P-ADMIT (2026-11-05): 45380 is admitted (sel:1); G0105 is out of scope and 45378 accounts for
+        # nothing the proposals leave open, so both stay alternatives in the order they first appear (D14 had listed
+        # all three; before it 45380 and 45378 were sel:1 and sel:2)
         self.assertEqual([(p.key, p.code) for p in first.proposals],
-                         [('sel:0', '45385'), ('altp:0', 'G0105'), ('altp:1', '45380'), ('altp:2', '45378')])
+                         [('sel:0', '45385'), ('sel:1', '45380'), ('altp:0', 'G0105'), ('altp:1', '45378')])
         self.assertEqual(len({p.key for p in first.proposals}), len(first.proposals))
 
 
@@ -860,21 +865,21 @@ class PeerReviewTests(SimpleTestCase):
             self.assertEqual(decision(item), decision(held), position)
 
     def test_an_additional_code_is_read_as_a_participant_code_and_recorded_as_after_peer_review(self):
+        """HARNESS.md P-ADMIT (2026-11-05): a code a first reading proposes is admitted (here, and it was so before
+        D14); the same code given only in a peer review's additional codes is never admitted - it was proposed after
+        its participant saw its peers' conclusions - and is recorded as proposed after peer review, never as
+        independent (before D14 both were proposals with one decision; D14 listed both)."""
         first = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
         later = run(COLON, corti(('45385', span(COLON, SNARE))),
                     [reviewed('fable', review=peer('fable', additional=[code(COLON, '45380', BIOPSY)]))])
         independent, added = proposal(first, '45380'), proposal(later, '45380')
-        # moved by refutation round 6 (R6-MEANING, the session's D14): in either phase the code is listed, never a
-        # proposal (it was a proposal of its own, decided by the same path); only the sentences naming its proposer and
-        # phase differ
-        self.assertEqual(decision(added)[:7] + decision(added)[8:],
-                         decision(independent)[:7] + decision(independent)[8:])
-        self.assertEqual((added.bucket, independent.bucket), ('alternative', 'alternative'))
+        self.assertEqual((independent.bucket, independent.status), ('selected', 'ready'))
+        self.assertEqual(independent.support['phases'], {'fable': 'independent'})
+        self.assertEqual(added.bucket, 'alternative')
         self.assertEqual((added.support['origin'], added.support['proposed_by'], added.support['phases']),
                          ('participant', ['fable'], {'fable': 'peer_review'}))
-        self.assertEqual(independent.support['phases'], {'fable': 'independent'})
         self.assertEqual(added.exclusion_reason, f'Proposed by Fable after peer review, but not added as a proposal: '
-                                                 f'{PARTICIPANT_NOT_ADDED}. Alternatives cannot be approved.')
+                                                 f'{engine.PARTICIPANT_PEER_ONLY}. Alternatives cannot be approved.')
         self.assertTrue(added.rationale.startswith('Proposed by Fable after peer review; not added as a proposal: '),
                         added.rationale)
         self.assertNotIn('independent', added.rationale)  # never described as independent
@@ -894,12 +899,11 @@ class PeerReviewTests(SimpleTestCase):
             reviewed('fable', review=peer('fable', additional=[code(COLON, '45380', BIOPSY)]))])
         item = proposal(result, '45380')
         self.assertEqual(item.support['phases'], {'astra': 'independent', 'fable': 'peer_review'})
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the alternative's sentences name each proposer's
-        # phase (the proposal's rationale went on "Corti did not propose this code.")
+        # HARNESS.md P-ADMIT (2026-11-05): admitted on Astra's first reading; its first sentence names each proposer's
+        # phase and goes on "Corti did not propose this code." (as before D14, which listed it)
+        self.assertEqual((item.bucket, item.status), ('selected', 'ready'))
         self.assertTrue(item.rationale.startswith('Proposed by Astra (independent participant) and Fable after peer '
-                                                  'review; not added as a proposal: '), item.rationale)
-        self.assertTrue(item.exclusion_reason.startswith('Proposed by Astra (independent participant) and Fable after '
-                                                         'peer review, but not added as a proposal: '))
+                                                  'review; Corti did not propose this code.'), item.rationale)
         # its own first reading's code, listed again in peer review, stays independent
         again = run(COLON, corti(('45385', span(COLON, SNARE))), [
             reviewed('astra', [code(COLON, '45380', BIOPSY)], peer('astra', additional=[code(COLON, '45380', BIOPSY)]))])
@@ -929,11 +933,10 @@ class PeerReviewTests(SimpleTestCase):
         self.assertIn(', listed in its independent reading with no quote found verbatim there, and proposed after peer '
                       'review', detail)
         self.assertNotIn('in its independent reading and again in peer review', detail)
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the code is listed, never a proposal (its
-        # rationale went on "Corti did not propose this code.")
+        # HARNESS.md P-ADMIT (2026-11-05): proposed only after peer review, so it is never admitted (D14 listed it too)
         self.assertEqual(item.bucket, 'alternative')
-        self.assertTrue(item.rationale.startswith('Proposed by Astra after peer review; not added as a proposal: '),
-                        item.rationale)
+        self.assertTrue(item.rationale.startswith('Proposed by Astra after peer review; not added as a proposal: '
+                                                  f'{engine.PARTICIPANT_PEER_ONLY}'), item.rationale)
         self.assertEqual(item.rationale, proposal(control, '45380').rationale)
         # Corti's own code, listed by Astra with a quote not found and then quoted in peer review: the same rule
         snare = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed(
@@ -944,8 +947,10 @@ class PeerReviewTests(SimpleTestCase):
         both = run(COLON, corti(('45385', span(COLON, SNARE))), [reviewed('astra', [unlocated], added),
                                                                   read('fable', [code(COLON, '45380', BIOPSY)])])
         self.assertEqual(proposal(both, '45380').support['phases'], {'astra': 'peer_review', 'fable': 'independent'})
+        # beside Fable's first reading the code is admitted on Fable's passage (HARNESS.md P-ADMIT, 2026-11-05)
+        self.assertEqual(proposal(both, '45380').bucket, 'selected')
         self.assertTrue(proposal(both, '45380').rationale.startswith(
-            'Proposed by Fable (independent participant) and Astra after peer review; not added as a proposal: '),
+            'Proposed by Fable (independent participant) and Astra after peer review; Corti did not propose this code.'),
             proposal(both, '45380').rationale)
 
     def test_an_additional_code_a_decidable_proposal_carries_only_adds_to_its_record(self):
@@ -977,16 +982,15 @@ class PeerReviewTests(SimpleTestCase):
         reading's code, so it never takes the key of one a first reading gave. That is all it guarantees: a new answer
         of the proposal provider selects other codes, so keys still move between assessments - which is why a
         confirmation is bound to its proposal's code and identity, never its key (refutation round 1, EV-1;
-        tests/test_harness_engine_confirmations.py BindingTests). Moved by refutation round 6 (R6-MEANING, the session's
-        D14): the participants' codes are listed, never selected, so these are the alternatives' keys (they were
-        sel:0..2)."""
+        tests/test_harness_engine_confirmations.py BindingTests). HARNESS.md P-ADMIT (2026-11-05): the first readings'
+        codes are admitted (sel:0, sel:1, as before D14), and the peer review's code is an alternative after them."""
         first = run(COLON, (), [read('astra', [code(COLON, '45385', SNARE)]), read('fable', [code(COLON, '45378', CECUM)])],
                     provider_status='failed')
         second = run(COLON, (), [reviewed('astra', [code(COLON, '45385', SNARE)], peer('astra', additional=[
             code(COLON, '45380', BIOPSY)])), reviewed('fable', [code(COLON, '45378', CECUM)])], provider_status='failed')
-        self.assertEqual([(p.key, p.code) for p in first.proposals], [('altp:0', '45385'), ('altp:1', '45378')])
+        self.assertEqual([(p.key, p.code) for p in first.proposals], [('sel:0', '45385'), ('sel:1', '45378')])
         self.assertEqual([(p.key, p.code) for p in second.proposals],
-                         [('altp:0', '45385'), ('altp:1', '45378'), ('altp:2', '45380')])
+                         [('sel:0', '45385'), ('sel:1', '45378'), ('altp:0', '45380')])
 
     def test_a_peer_review_that_did_not_run_is_said_and_blocks_only_itself(self):
         before = run(COLON, corti(('45385', span(COLON, SNARE))), [read('fable', [code(COLON, '45380', BIOPSY)])])
@@ -1023,7 +1027,8 @@ class PeerReviewTests(SimpleTestCase):
         again = run(COLON, corti(('45385', span(COLON, SNARE))), list(reversed(participants)))
         self.assertEqual(first, again)
         self.assertEqual(sha256_json(first), sha256_json(again))
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the participants' codes are alternatives, first
-        # readings' first (45380 and 45378 were sel:1 and sel:2)
+        # HARNESS.md P-ADMIT (2026-11-05): Astra's first-reading 45380 is admitted (sel:1); Fable's 45378 accounts for
+        # nothing left open and G0105, given only in peer review, is out of scope: alternatives, first readings' first
+        # (D14 had listed all three; before it 45380 and 45378 were sel:1 and sel:2)
         self.assertEqual([(p.key, p.code) for p in first.proposals],
-                         [('sel:0', '45385'), ('altp:0', '45380'), ('altp:1', '45378'), ('altp:2', 'G0105')])
+                         [('sel:0', '45385'), ('sel:1', '45380'), ('altp:0', '45378'), ('altp:1', 'G0105')])

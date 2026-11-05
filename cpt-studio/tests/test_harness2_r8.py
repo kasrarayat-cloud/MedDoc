@@ -169,10 +169,12 @@ class SecondReviewRetrievalTests(r6m.MeaningCase):
         self.assertEqual(traced(encounter_id), ['45378'])
 
     def test_retrieval_3_a_participant_s_copy_of_corti_s_code_excluded_for_evidence(self):
-        """retrieval-3 (a): Corti's 45378 has no exact passage and is excluded; Astra's 45378 is its own alternative,
-        which carried the excluded code's 12 facts and passages beside its own "No CMS reference check ran". Moved by
+        """retrieval-3 (a): Corti's 45378 has no exact passage and is excluded; Astra's 45378 stands apart from it,
+        and had carried the excluded code's 12 facts and passages beside its own "No CMS reference check ran". Moved by
         refutation round 9 (retrieval-1): a code excluded with no reinstatement is no code a reviewer can decide, so it
-        is not traced either, with Corti alone or with participants (its card kept 12 facts and passages)."""
+        is not traced either, with Corti alone or with participants (its card kept 12 facts and passages). HARNESS.md
+        P-ADMIT (2026-11-05): Astra's 45378 accounts for the colonoscopy left without a proposal and is admitted (D14 had
+        listed it), so it is a code a reviewer decides, and it alone is traced - never the excluded one's."""
         text = r6m.doc(r6m.COLON, r6m.SEEN)
         with r7.inexact(0, '45378'):
             encounter_id = self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45378', r6m.CECUM)]))
@@ -180,11 +182,10 @@ class SecondReviewRetrievalTests(r6m.MeaningCase):
             alone = self.corti_alone(text, [('45378', r6m.CECUM)])
         rows = {kind(p): p for p in r6m.proposals(detail)}
         self.assertEqual(sorted((key, p['bucket'], p['reinstatable']) for key, p in rows.items()),
-                         [('altp', 'alternative', False), ('exc', 'excluded', False)])
-        self.assertEqual(rows['altp']['retrieval'], [])
+                         [('exc', 'excluded', False), ('sel', 'selected', False)])
         (excluded,) = [p for p in r6m.proposals(alone) if kind(p) == 'exc']
         self.assertEqual((rows['exc']['retrieval'], excluded['retrieval']), ([], []))
-        self.assertEqual(traced(encounter_id), [])
+        self.assertEqual(traced(encounter_id), ['45378'])
 
 
 # --- wording-1, wording-2, wording-5: what a participant's quote of a service is said to be read as -----------------
@@ -399,18 +400,26 @@ class ParticipantsOnlyWordingTests(r6m.MeaningCase):
 
     def test_page_3_a_provider_response_refused_whole(self):
         """page-3: Corti's stored response selects 45385 and is refused whole; Astra's 45385 is the only code listed.
-        The panel says the provider check's own sentence first, and never that the provider did not give the code."""
+        The provider check says its own sentence, never that the provider did not give the code. HARNESS.md P-ADMIT
+        (2026-11-05): Astra's first-reading 45385 on the snare sentence is admitted (D14 had listed it), so the provider
+        check says the proposals come only from the independent participants, and the refused response blocks only
+        itself: a member decides the code, and coding completeness says the provider response was not available."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r7.SNARED)
         with refused_whole():
             encounter_id = self.scenario(text, [('45385', r7.SNARED)], astra=hp.reading(codes=[('45385', r7.SNARED)]))
         detail = self.detail(encounter_id)
         self.assertEqual([(p['code'], p['bucket'], (p.get('support') or {}).get('origin'))
-                          for p in r6m.proposals(detail)], [('45385', 'alternative', 'participant')])
-        self.assertEqual(detail['readiness']['blockers'], ['The provider response was not used'])
+                          for p in r6m.proposals(detail)], [('45385', 'selected', 'participant')])
+        # I10: the provider's refusal blocks only itself - a member decides the admitted code, and coding completeness
+        # still says the provider response was not available (the blocker below is raised only where no code can be
+        # decided at all)
+        self.assertEqual(detail['readiness']['blockers'], ['45385 has no decision'])
+        self.assertEqual(detail['assessment']['completeness']['state'], 'incomplete')
+        self.assertIn('the provider response was not available', detail['assessment']['completeness']['reasons'])
         (provider,) = [c for c in detail['assessment']['encounter_checks'] if c['id'] == 'provider.status']
         self.assertEqual(provider['status'], 'fail')
-        self.assertEqual(browser('app.emptySelectionCopy(data.assessment, data)', detail),
-                         f'{provider["detail"]} {PANEL}')
+        self.assertIn('so it proposed no codes. The proposals listed come only from the independent participants '
+                      '(Astra)', provider['detail'])
         lines = self.page_lines(detail)
         self.assertFalse(any('not the provider' in line for line in lines), lines)
         (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id, provider='corti')
@@ -464,14 +473,20 @@ class SummarySentenceTests(r6m.MeaningCase):
                           and 'astra' in (p.get('proposed_by') or []) and p['bucket'] != 'alternative'])
         summary = self.summary(detail)
         self.assertTrue(summary.endswith(f' {r6m.NEVER_DECIDE}'), summary)
-        self.assertIn('one its second review listed without adding', summary)
+        # the sentence of HARNESS.md P-ADMIT (2026-11-05): such a code is not added because it accounts for nothing the
+        # other proposals left unresolved (D14's sentence named "one its second review listed without adding")
+        self.assertIn('only where they read it as accounting for a documented service or act the other proposals left '
+                      'unresolved', summary)
 
     def test_a_code_the_second_review_added_carries_the_participant_s_code(self):
         """The sentence's first clause, the other kind: the second review's 45385 accounts for the snare removal the
-        primary proposals left unresolved, so it is added - and Astra's 45385 is recorded on it, never listed apart."""
+        primary proposals left unresolved, so it is added - and Astra's 45385 is recorded on it, never listed apart.
+        HARNESS.md P-ADMIT (2026-11-05): a first-reading 45385 would be admitted before any second review is asked
+        (there is then nothing left unresolved to ask about), so Astra gives it in peer review, which is never admitted:
+        the snare stays open for the second review."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r7.SNARED)
-        encounter_id = self.scenario(text, [('45378', r6m.CECUM)],
-                                     astra=hp.reading(codes=[('45378', r6m.CECUM), ('45385', r7.SNARED)]))
+        encounter_id = self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45378', r6m.CECUM)]),
+                                     astra_peer=hp.peer_answer(codes=[('45385', r7.SNARED)]))
         detail = self.ask_second(encounter_id, [('45385', r7.SNARED)])
         rows = [(p['code'], p['bucket'], (p.get('support') or {}).get('origin'), p.get('proposed_by'))
                 for p in r6m.proposals(detail) if p['code'] == '45385']

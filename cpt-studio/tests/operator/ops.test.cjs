@@ -1253,6 +1253,18 @@ test('the trace link is shown on every console page (each is an operator\'s), an
   for (const harness of [null, {}, { participants: 'all' }]) assert.equal(app.participantsCard({ ...ready, harness }), '', JSON.stringify(harness));
 });
 
+test('a proposal an independent participant\'s first reading made carries the operator badge; others never do', () => {
+  const ready = fixture(HARNESS_READY);
+  const first = ready.assessment.proposals.find(item => item.bucket === 'selected');
+  assert.ok(first, 'no selected proposal in the fixture');
+  const as = support => ({ ...ready, assessment: { ...ready.assessment, proposals: ready.assessment.proposals.map(item => (item === first ? { ...item, support: { ...(item.support || {}), ...support } } : item)) } });
+  const badge = '<span class="small-badge">Independent participant</span>';
+  assert.ok(codeCardOf(render(as({ origin: 'participant' })), first.code).includes(badge));
+  for (const origin of ['primary', 'second_review', undefined]) {
+    assert.equal(codeCardOf(render(as({ origin })), first.code).includes(badge), false, String(origin));
+  }
+});
+
 test('a code card keeps who proposed it, the CMS reference checks and the reviewer decision as three separate lines', () => {
   const ready = fixture(HARNESS_READY);
   const html = render(ready);

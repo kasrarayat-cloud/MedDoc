@@ -105,9 +105,10 @@ class CortiRelationTests(R2WordingCase):
     Corti was not among its proposers - also beside Corti's own excluded selection of the code, which the card's own
     rationale and the Excluded candidates list named. The API serves Corti's relation to the code (corti_relation) and
     the page words it as the engine's rationale does; "did not propose" is said only when Corti has no entry at all.
-    Moved by refutation round 6 (R6-MEANING, the session's D14): a participant's code is never a proposal now, so it has
-    no card and no rationale to word Corti's relation in: it is listed under Alternatives with CPT Studio's own reason,
-    which says nothing of Corti, beside Corti's own entry; the API still serves the relation."""
+    Moved by refutation round 6 (R6-MEANING, the session's D14) to alternatives with no card; restored by HARNESS.md
+    P-ADMIT (owner directive 2026-11-05) for a code a participant's first reading proposes and CPT Studio's readers
+    admit - it is a card again, worded as before D14 - while a code given only in peer review is still listed, with
+    P-ADMIT's reason, which says nothing of Corti; the API serves the relation either way."""
 
     def proposer_line(self, detail, proposal):
         return browser(f'statusLine(cardOf(page(), {json.dumps(proposal["id"])}), "Proposed by")', detail)
@@ -115,9 +116,10 @@ class CortiRelationTests(R2WordingCase):
     def assert_listed(self, detail, proposal):
         """``proposal`` is the participants' alternative: no card, nothing to decide, and a reason that says nothing
         of Corti; no card on the page says Corti did not propose a code."""
+        from tests.test_harness2_r6_meaning import not_added_reason
         self.assertEqual((proposal['bucket'], proposal['status'], proposal['allowed_actions']),
                          ('alternative', 'informational', []))
-        self.assertIn(engine.PARTICIPANT_NOT_ADDED, proposal['exclusion_reason'])
+        self.assertTrue(not_added_reason(proposal['exclusion_reason']), proposal['exclusion_reason'])
         self.assertNotIn('Corti', proposal['exclusion_reason'])
         page = browser('page()', detail)
         self.assertNotIn(f'id="card-{proposal["id"]}"', page)
@@ -132,16 +134,19 @@ class CortiRelationTests(R2WordingCase):
             encounter_id = self.create(TWO_EXTENTS)
             drain()
         detail = self.detail(encounter_id)
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the participants' 45385 is their alternative, not
-        # a selected card worded "Corti also selected this code, with no exact passage; ..."
-        [own] = self.proposals(detail, '45385', bucket='alternative')
+        # HARNESS.md P-ADMIT (2026-11-05): the participants' first-reading 45385 is admitted, a selected card worded
+        # "Corti also selected this code, with no exact passage; ..." as before D14 (which listed it)
+        [own] = self.proposals(detail, '45385', bucket='selected')
         [corti] = self.proposals(detail, '45385', bucket='excluded')
         self.assertEqual((self.origin(own), own['proposed_by'], corti['exclusion_reason']),
                          ('participant', ['astra', 'fable'], 'No exact source evidence'))
-        self.assert_listed(detail, own)
+        self.assertEqual(self.proposer_line(detail, own),
+                         'Astra (independent reading), Fable (independent reading); Corti also selected this code, '
+                         'with no exact passage; it is listed apart, excluded.')
         self.assertEqual((own['corti_relation'], corti['corti_relation']),
                          ('selected_without_exact_passage', 'proposer'))
-        # control: Fable's code after peer review, which Corti never named: listed too, its relation 'none'
+        # control: Fable's code given only after peer review, which Corti never named: never admitted, so listed, its
+        # relation 'none' (before D14 it was a card worded "Fable (after peer review); Corti did not propose this code.")
         [added] = self.proposals(detail, '45378')
         self.assertEqual(added['corti_relation'], 'none')
         self.assert_listed(detail, added)
@@ -158,11 +163,15 @@ class CortiRelationTests(R2WordingCase):
             encounter_id = self.create(TWO_EXTENTS)
             drain()
         detail = self.detail(encounter_id)
-        # moved by refutation round 6 (R6-MEANING, the session's D14): Astra's 45380 is listed beside Corti's candidate
-        # (it was a selected card worded "Corti listed this code as a candidate or an alternative, ...")
-        [own, listed] = sorted(self.proposals(detail, '45380', bucket='alternative'), key=self.origin)
+        # HARNESS.md P-ADMIT (2026-11-05): Astra's first-reading 45380 is admitted beside Corti's candidate, a selected
+        # card worded as before D14 (which listed it); the engine's record names no role a code was listed in, so the
+        # sentence is true of a candidate and of an alternative (refutation round 3, R3-TRUTH truth-5)
+        [own] = self.proposals(detail, '45380', bucket='selected')
+        [listed] = self.proposals(detail, '45380', bucket='alternative')
         self.assertEqual((self.origin(own), self.origin(listed)), ('participant', 'primary'))
-        self.assert_listed(detail, own)
+        self.assertEqual(self.proposer_line(detail, own), 'Astra (independent reading); Corti listed this code as a '
+                                                          'candidate or an alternative, not selected; see '
+                                                          'Alternatives.')
         self.assertEqual((own['corti_relation'], listed['corti_relation']), ('candidate', 'proposer'))
 
     def test_every_proposal_carries_the_relation_and_corti_s_own_are_corti_s(self):

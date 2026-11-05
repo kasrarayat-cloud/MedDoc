@@ -4,6 +4,10 @@ This file is the contract for the owner's directive of 2026-11-01 (recorded verb
 `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; acceptance checklist `CPT-HARNESS-CHECKLIST.md`). Code, tests and the
 adversarial pass are held to the INVARIANTS below; a change to one is a change to this file in the same commit.
 
+**Amended 2026-11-05 (owner directive of 2026-11-05).** D14 is replaced by the owner's controlled participant admission,
+section "GI core and harness repair (2026-11-05)" at the end of this file. Every earlier statement here that a
+participant's code is never a proposal describes the releases up to `b0dc3446c64c` and is kept as their record.
+
 ## 1. What the harness is
 
 **Three production participants examine every uploaded document.** None of them is an engineering agent.
@@ -155,7 +159,9 @@ The engine (`studio/validation/engine.py`) gains one input, `participants: tuple
   found such codes READY and approvable on their quotes alone where the quote states a failed, denied, earlier or
   another procedure's act (negation-1..3, ownership-1, -4, time-1), and recasting Corti's base code as included in them
   and clearing CPT Studio's own unresolved-act warning (time-2). Whether a participant's own code may again be a
-  proposal, and on what reader guarantee, is an owner question.
+  proposal, and on what reader guarantee, is an owner question. (Answered 2026-11-05 by the owner: an explicit first-reading proposal may
+  enter human review after the full source-validation path passes; the rule is section "GI core and harness repair
+  (2026-11-05)", P-ADMIT, which supersedes this bullet from that release on.)
 - **I3: agreement never promotes** (worded, after refutation round 1's EV-5, as the engine guarantees it). A second or
   third participant proposing a code with the same located quotes changes nothing but the record of who proposed it.
   ~~Its own other located quotes join the code's evidence and are read with it by the same local readers, exactly as
@@ -414,7 +420,8 @@ cut coding read is `unknown`, a cut token read sends no coding request (`not_sen
   (`ImportedReferenceParityTests`); the superscript pin of `RetrievalFailureTests` likewise (`fd0b37c42efd` at the head's
   labels, `b8bdc979057d` at the installed ones).
 - **I2 Participants never decide a status.** A participant's code is READY only through the same local-reader path as
-  Corti's, with located exact evidence.
+  Corti's, with located exact evidence. (2026-11-05, P-ADMIT: true again as worded - a first-reading proposal is read
+  by that path, from its proposers' exact spans only, and admitted only as the second review's selections are.)
 - **I3 Agreement never promotes.** Agreement never makes a code READY or approvable: a second or third proposer with
   the same located quotes changes nothing but the record of who proposed it; ~~another proposer's other located quotes
   join the code's evidence and are read with it by the same local readers, exactly as Corti's passages would be (I2),
@@ -1601,7 +1608,7 @@ removed with hot snare."). There are two paths, and the distinction decides the 
 
 | decision | findings | the rule | recorded in |
 |---|---|---|---|
-| D14 | negation-1, -2, -3, ownership-1, -4, time-1, time-2 (their harness path) | **in this release a participant's code is never a proposal.** A code no decidable proposal carries (neither Corti's nor the bounded second review's) is listed as an alternative, informational, with CPT Studio's own reason (`engine.PARTICIPANT_NOT_ADDED`: "a quote found verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a participant's code is never added as a proposal of its own"), after the scope, UNLOCATED and NO_EVIDENCE reasons, which still come first. So participants never make a code ready, never count as covering a documented act, never make another code included and never clear an unresolved item. They still read, reconcile and review each other; their positions and peer reviews are shown; and a service only a participant reads as performed still makes coding completeness incomplete. Corti's proposals are assessed exactly as with no participant configured. This is the D7 pattern ("keep ... disabled until verified"). **Owner question (class a):** should a participant's own code ever become a selectable proposal again, and on what reader guarantee? The recommendation is only after the shared-reader repair passes its own refutation, and re-enabled by the owner | section 5 and I2, I3 (amended in place, superseded wording kept), 11.4, 12.6, API.md |
+| D14 | negation-1, -2, -3, ownership-1, -4, time-1, time-2 (their harness path) | **in this release a participant's code is never a proposal.** A code no decidable proposal carries (neither Corti's nor the bounded second review's) is listed as an alternative, informational, with CPT Studio's own reason (`engine.PARTICIPANT_NOT_ADDED`: "a quote found verbatim in the document does not by itself show that the coded act was done at this encounter, and in this release a participant's code is never added as a proposal of its own"), after the scope, UNLOCATED and NO_EVIDENCE reasons, which still come first. So participants never make a code ready, never count as covering a documented act, never make another code included and never clear an unresolved item. They still read, reconcile and review each other; their positions and peer reviews are shown; and a service only a participant reads as performed still makes coding completeness incomplete. Corti's proposals are assessed exactly as with no participant configured. This is the D7 pattern ("keep ... disabled until verified"). **Owner question (class a):** should a participant's own code ever become a selectable proposal again, and on what reader guarantee? The recommendation is only after the shared-reader repair passes its own refutation, and re-enabled by the owner | section 5 and I2, I3 (amended in place, superseded wording kept), 11.4, 12.6, API.md; **replaced 2026-11-05 by the owner's P-ADMIT** (section "GI core and harness repair (2026-11-05)") |
 
 **Round 6's repairs** (four agents, disjoint functions, each from `de6418fc6` in its own worktree):
 - **R6-TRACE** (account-1..5, falsegreen-1, -3): the owner's trace headings are neutral ("Additional codes", "Codes it
@@ -2060,3 +2067,445 @@ participant's name, position, phase, model or reading (`studio/customer_api.py`)
 `/ops/api/`; its node tests are `tests/operator/ops.test.cjs`. The verification tooling that reads provider runs,
 request hashes or report sha256s (ops/verify_browser.cjs, ops/verify_downloads.py) reads them from `/ops/api/` with an
 operator session.
+
+## GI core and harness repair (2026-11-05): participant admission replaces D14
+
+The owner's directive of 2026-11-05 (verbatim, with the session's interpretation (a)-(k), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; checklist `CPT-HARNESS-CHECKLIST.md`, "Harness repair,
+2026-11-05"). Its changed requirement, in the owner's words: "I authorize implementing a controlled replacement for
+D14's blanket prohibition: an explicit proposal from Astra or Fable may enter the human-review workflow after the full
+source-validation path passes. Apply equivalent eligibility standards regardless of originating provider [...] A
+quotation existing, model confidence, or agreement between models is insufficient. Raw alternative lists must not be
+automatically promoted. No model may approve a code." This section is the contract, written before the code; what was
+built, measured and refuted is appended below it as it happens.
+
+### P-ADMIT: which participant code becomes a proposal
+
+- **Only an explicit, independent proposal.** An entry of the `codes` list of a participant's frozen first reading
+  (11.1), with at least one quote found verbatim and an exact span (I7). A code a participant only adds in peer review
+  (`additional_codes`) stays an alternative: it was proposed after the participant had seen its peers' conclusions.
+  Nothing in a raw list is ever read as a proposal: a first reading's `not_coded`, Corti's candidates and alternatives,
+  the bounded second review's listed codes, any alternative row.
+- **The same path as the proposal provider's.** The code is read by `_select` exactly as a Corti selection, from the
+  exact spans of its first-reading proposers only (each span once, in document order, whoever gave it: I3): scope,
+  exact evidence, the routed family, the documented service and act (`reconcile.match`), the P2 READ-HOLD holds
+  (`_second_opinion`, `_own_passage_may_stand`, `_passages_elsewhere`), the passages' support, the required facts, the
+  E/M rules, PFS, MUE and the endoscopic base. Its status, checks and questions are what that path gives any selection.
+- **The second review's admission rule.** It becomes a proposal only where that reading exists and does not exclude it,
+  the matched documented service or act is documented as done (performed or incomplete, or named only and held), and it
+  accounts for a documented service or act that the decidable proposals - Corti's selections and the second review's
+  additions - left unresolved (`reconcile.reconcile`'s `no_proposal` and `not_covered` items, read through the coverage
+  catalogue exactly as `_second_review` reads them). Otherwise it stays an alternative saying why, in the second review's
+  own words where they apply.
+- **CPT Studio never chooses between participants.** Where two different codes that would each be admitted account for
+  one same unresolved item, neither is added for it: both stay alternatives saying that independent participants
+  propose different codes for that act, and the item stays open. Agreement on the same code adds its proposers and their
+  passages, and nothing else.
+- **No model approves.** An admitted code is a selected proposal, `ready` or held by the readers; only a workspace
+  member's decision approves or rejects it, as for any proposal. The reconciliation counts it as covering the act it
+  accounts for, as it counts every selection, and the shared base rule reads it as any therapeutic code.
+- **Origin is kept, and protected.** The proposal records `support.origin = 'participant'`, its proposers and their
+  phases. The operator API and console show who proposed it and Corti's relation to the code (`_lead`); customer
+  surfaces (API, page, accessibility text, downloads) word it without any participant's or model's name.
+- **Unchanged.** I1: with no participant configured nothing here runs. I5 and I6: requests and responses as before.
+  I8: no new request is sent by admission; it reads what is retained. A participant's stated units, modifiers and
+  confidence are recorded in its position and never used.
+
+### The shared-reader repair (stage 3)
+
+- The repair package's accepted `repair.patch` (base `b0dc3446c64c`; `studio/gi/services.py`, `studio/gi/detect.py`,
+  `tests/test_advanced_gi_binding.py`): a denial of tissue removal coordinated after a marking ("marked with tattoo ...
+  and not resected") is a second predicate, never the marking's denial; the future purpose of a completed marking
+  ("for future localization") is its purpose, never its time, in both readers; an explicitly closed comparison aside
+  ("..., separate from the sigmoid polyp, ...") names another lesion, never a second site of the act; a mucosal patch or
+  abnormality is a lesion of its own, so a denied snare of it never inherits the preceding polyp. Its rejected
+  decompression experiment is not applied.
+- `engine._negation_resolved`: the routing-era reader's unresolved negation is released only where the passage is the
+  service's positive reading and overlaps no not-done act **of a kind the code accounts for**; before, any not-done act
+  it overlapped refused the release, so "... was sampled with cold biopsy forceps for histology; it was not excised by
+  snare." held 45380 once the patch read the denied snare. A not-done act of the code's own kind still refuses it.
+
+### As built (2026-11-05, before the refutation pass)
+
+- **P-ADMIT** is `engine._Harness.merge`, with `first_proposers`, `_first_evidence` and `_claimed`. The second review's
+  coverage rule and its not-added reasons are two shared helpers, `_open_items_covered` and `_not_added_why`, that
+  `_second_review` and the merge both call. The refactor alone was measured identical: H1 replay EQUAL, H4 battery 0
+  movements, and the second-review, parity and reconcile modules 59 tests OK.
+- **Competition is judged per act, refined from the contract above.** A code claims each act item it accounts for.
+  Where a whole service was left without a proposal, it claims the acts its own match reads, or the service itself for
+  a base code (`_claimed`). Claiming the whole-service item alone made an EGD's dilation code and its biopsy code
+  compete for "the EGD has no supported proposal", so neither was added. Two codes for one dilation still compete.
+- **A code the readers hold is admitted held,** as the second review's is, so its question reaches the reviewer; it is
+  never ready. Measured on the meaning-check classes through two agreeing participants: a failed snare, "No polyps
+  were removed." and a planned EMR each stay an alternative, because they account for nothing left open. "Last
+  colonoscopy: 9 mm polyp removed with hot snare." is admitted held with a question, which is what Corti's own
+  selection of that passage gets.
+- **Stage 6, an act no code of its family accounts for** (`catalogue.family_codes_act`, `reconcile.reconcile`). The
+  shared endoscopic act list gives the upper GI family a decompression act, and no upper GI code accounts for one; only
+  45393, 44408 and 45337 do. Such an act is now listed `unsupported`: "no code profile of this service accounts for
+  it". It is never bundled and never sent for a second review (no code that review could select accounts for it). It
+  keeps coding completeness open whether the decompression was routine, therapeutic or failed, since nothing here reads
+  which it was. That is not the rejected experiment's rule, which moved routine-looking decompression into the bundled
+  list and so out of completeness. Across the whole catalogue this is the only family and act pair with that gap.
+- **Stage 6, an act that is part of another documented act** (`reconcile.match`). An act `_bundled` reads as part of
+  another (the lift injection of a lesion resected by EMR or ESD, the biopsy of a lesion then removed, a prophylactic
+  clip) is never what a code accounts for while the service documents a separate act of the code's kinds. Where every
+  such act is part of another, the code is held (`act_included`, its question on `performed_status`) and never ready.
+  Before, 88d9db32's 45381 counted the ascending EMR's lift injection as its first act, so its modifier note put it on
+  the EMR's lesion. It now accounts for the separate tattoo only. It is not `base_included`, because the review overlay
+  re-derives every `base_included` hold from the diagnostic-base rule and drops one that rule does not give.
+- **The operator console** marks an admitted proposal "Independent participant". Customer code rows are built from
+  structured fields and fixed sentences only (`customer_api.code_rows`), so they carry no origin.
+- **88d9db32, re-assessed offline from its retained responses** (a throwaway copy of the live database; provider runs
+  107 before and after, sent 97 before and after). 43239, 45380 and 45381 (Corti's) and 43249, 45390 and 45385 (both
+  participants') are selected and ready. No question is open. The lift injections and the clip are listed as part of
+  the EMR. The decompression stays open as `unsupported`. Each of 45380, 45385 and 45390 carries the distinct-lesion
+  modifier consideration (59 or XS, if an NCCI edit pairs the codes; NCCI PTP is not connected).
+- **Recorded, not repaired:**
+  - The heading "Impression and disposition" is read as a plan section, so 43239, 43249, 45381 and 45390 each carry a
+    warn naming the Impression's "Symptomatic Schatzki ring, successfully dilated to 18 mm." as planned. It moves no
+    status and no customer sentence.
+  - A participant's not-coded entry about another occurrence of a code is attached as `participants.disagree`: Fable's
+    "45390 not performed" names the transverse lesion left in place and is attached to the ascending EMR, and its
+    "45385 not performed" names the historical polypectomy and is attached to today's snare. The warn quotes the
+    passage and decides nothing.
+  - The tattoo is read "at the colon", because "3 cm distal to this transverse-colon abnormality" names a hyphenated
+    site the anatomy reader does not parse. So 45381 is offered no distinct-site modifier review against 45390.
+
+### As built, continued: what the integration found and changed (2026-11-05, before the refutation pass)
+
+- **Exact evidence in its complete context.** A first-reading code is admitted only where at least one of its own
+  passages shows the act it accounts for, as the support reading reads it (`reconcile.support` 'pass').
+  - Found by the meaning-check battery (tests/test_harness2_r6_meaning.py) at integration: under "Procedure:
+    Colonoscopy with hot snare polypectomy", a participant's 45385 on "The polyp was left in place." was admitted
+    READY on the title's reading alone (`PARTICIPANT_NOT_SHOWN`).
+  - Corti's own selection of that passage is READY too. That is the installed negation-3 class (12.14), left as it is
+    (I1).
+  - A code whose own passages leave its act in doubt (support 'not_applicable') is not admitted either
+    (`PARTICIPANT_NOT_ESTABLISHED`). Admitted held, it would count as covering the act and could hold Corti's base
+    code as included in it (the meaning check's time-2).
+  - On every meaning-check input (negation-1..3, ownership-1, -4, time-1, -2, and each verifier's phrasings) the
+    participant's code is a not-admitted alternative. Corti's proposals, the clarifications and the reconciliation equal
+    the participants-disabled run in every case, as D14 pinned; only the reason is P-ADMIT's.
+- **Corti refused or failed (I10).** A first-reading proposal is checked for admission exactly as beside an answer.
+  The provider check then says "so it proposed no codes. The proposals listed come only from the independent
+  participants (...)". That is the pre-D14 sentence of `provider_status_beside_participants`, reachable again.
+  - The readiness blocker "The provider response was not used" stands only where no code can be decided, so a member
+    can decide an admitted code.
+  - A response refused whole is no available answer: coding completeness says "the provider response was not
+    available" even where admitted codes account for every act. Before, it read `complete_pending_review` (found by
+    tests/test_harness2_r8.py at integration).
+  - On the Corti-only path this one rule moves one parity case, `response-refused`, by its completeness reason alone
+    (declared below).
+- **Wording.** An admitted proposal's first sentence names every participant that proposed it, each in its phase, as
+  its record does. Its evidence is its first readings' spans alone.
+  - The peer-only reason reads "it was proposed only in peer review, after the participant had seen its peers'
+    conclusions, and only a code a participant's first reading proposes, before any peer conclusion is shown to it, is
+    checked for admission". It never calls the code independent.
+- **The customer page** lists a code under "other codes" only where the numbered list does not already suggest it.
+  Before, 88d9db32's 43239, 45380 and 45381 were listed both as ready and as "Listed as an alternative only; not
+  suggested for approval" (the second review's "a primary proposal already carries it" rows), and an admitted copy of
+  a code CPT Studio excluded for its evidence would have added more.
+- **A test-harness gap.** `tests/test_harness_pipeline.recording_engine` calls the real engine without the
+  participants, so no `HarnessCase` pipeline test ever exercised the participants' merge.
+  `tests/test_h2_customer_admission.py` runs the real engine through the pipeline and scans every customer response,
+  page payload and download, for every role, for a participant, model or provider name.
+- **Labels.** gi-routing@6 to @7, gi-services@3 to @4, cpt-studio-validation@6 to @7; gi-context@4 is unchanged. No
+  fingerprint reads a label (`engine._fingerprint`: each check's id and status only), so a label alone invalidates no
+  decision. With the labels put back to installed b0dc3446c64c's (`tests.test_gi4_state.HARNESS_REPAIR_INSTALLED_LABELS`)
+  this head makes the served release's pins exactly:
+  - every engine parity case but `response-refused`, which differs by its completeness reason alone
+    (`ServedLabelParityTests`);
+  - the imported-reference digests `a71679b8af53` and `ab443cf12017`;
+  - the superscript digest `fd0b37c42efd`.
+
+  At its own labels the head makes `04acca130770`, `b9687931fc58` and `66345791125e`.
+- **I1, measured against main 8645fd54 on the working tree:** H4 battery 0 movements, 0 undeclared, 0 new violations
+  (278 rows, 454 codes); H1 replay EQUAL. Neither instrument holds an input that reaches the stage-6 rules. They are
+  pinned by tests/test_h2_participant_admission.py.
+- **Moved pins, each saying so in place.** D14's pins are moved to P-ADMIT's behaviour, restoring the pre-D14
+  assertion wherever P-ADMIT agrees with it:
+  - tests/test_harness2_r6_meaning.py (D14's sentence replaced by P-ADMIT's reasons; two tests whose premise was D14
+    now pin admission);
+  - tests/test_harness_engine.py (MergeTests, AgreementNeverPromotesTests, ContradictionTests, DeterminismTests,
+    EncounterTests, PeerReviewTests);
+  - test_harness2_r2_evidence (CortiLeadTests, as before D14), r2_wording and r3_truth (the admitted cards, as before
+    D14; a peer-only code still listed);
+  - r4_shapes, r7, r8, r9.
+
+  The label and digest pins moved too: test_gi4_state, test_harness_engine_parity, test_harness2_r2_parity,
+  test_harness_pipeline, and the two version tests. No safety assertion was dropped.
+
+### Refutation round 1 (2026-11-05): six lenses over the finished diff, and what changed
+
+The mandatory refutation pass ran over the finished diff at `3907cd592`. Six lenses, each in its own read-only sandbox,
+were told to find counterexamples: time, false approval, negation, ownership, multiple lesions, and misleading
+completeness. They reported sixteen findings: twelve blocking, three major and one minor. Every finding but one was
+reproduced on the committed head before any repair. The exception is fa-2, whose behaviour P-ADMIT's own text already
+declares; only its claim is corrected (below).
+
+**The common shape, and why the repairs are in the shared readers.** Under D14, a reader gap was a conservative failure.
+A gap that left a false open act beside Corti's correct code gave an alternative and kept coding incomplete. P-ADMIT
+lets a participant fill such a gap READY, and Corti's own selection of the same passages was READY too: C2's
+equivalence held throughout. So every repair is in a reader both paths read (`studio/gi/services.py`,
+`studio/validation/reconcile.py`, `studio/gi/catalogue.py`, the engine's own-passage release), never a guard on the
+participant path alone. Several of the gaps were Corti-path residuals the owner's directive now asks to close:
+other-provider services, prophylactic clipping, failed or planned services, and EMR components.
+
+| finding | what read wrong | the rule repaired |
+|---|---|---|
+| time-1 | "Tattoo ink has yet to be injected ... for future localization" read as a completed marking | a bare participle governed by "be/is/are/am/to/being" states no completed marking (`_unstated_marking`) |
+| fa-1 | "Procedure: Colonoscopy with hot snare polypectomy" made the snare READY over "No polyps were removed.", "Hot snare polypectomy failed." and "will be removed ... at a later date" | a procedure line lists what its report documents. Where the report states a listed act planned, attempted, failed or hedged, or states a removal of a lesion not done, failed or planned with no technique named, and documents no such act done, the listing establishes nothing (`LISTED_WITHHELD_CUE`). An attempt or a failure keeps its act, in doubt, rather than dropping it for want of a predicate |
+| neg-1, neg-3 | "nothing was biopsied", "zero biopsies were taken", "the decision was made not to biopsy it", "from none of the polyps", "which yielded no tissue" read as done, and beside another act's denial released the routing-era hold | the closed class of negative quantifiers (`NEG_LEAD` and `NEG_OTHER` take "nothing" and the zero numeral); a negated infinitive (`NOT_TO_BEFORE`); a negative object (`NONE_AS_OBJECT`); an outcome of nothing obtained (`NO_YIELD_AFTER`) |
+| neg-2 | "The tattoo site ... was marked with a clip", 'was marked "tattoo"', "a polyp adjacent to the tattoo", "the existing tattoo" read as a tattoo placed | "marked" names a tattoo placed only as its instrument ("marked with tattoo": `MARKED_ONLY`, `MARKED_WITH`). A tattoo named as a place is no tattoo act: a noun adjunct ("tattoo site"), the object of a place preposition, or one already there (`TATTOO_AS_PLACE`). A coordinated "and not resected" is never set apart from the marking over a predicate of its own ("ink that was unavailable") |
+| own-1 | "removed with a hot snare at 25 cm from the anal verge" unbound the snare from its polyp | a distance names a landmark, never the act's site (`DISTANCE_FROM`) |
+| own-2 | ", separate from the cecal polyp and located in the sigmoid colon," dropped the polyp's own site, and "The 8 mm polyp" then fell back to the 7 mm one | the aside closes before a coordinated participle (`_COORDINATED_PARTICIPLE`); a sized anaphor refers back only to a lesion of its size (`_anaphor_size`) |
+| own-3 | a pathology addendum's "removed by cold snare polypectomy" (and a nursing or anesthesia entry's act) made a code READY | only the physician's documentation establishes the act a code accounts for (`reconcile.OWN_ROLES` in `match`); another role's act alone holds the code with a question naming that entry |
+| own-4 | the EMR's lift injection told in a sentence of its own released 45381 READY by its own passage | the own-passage release reads the passage's act as the reconciliation would and never releases one that is part of another documented act (`_passage_act_included`: held, `act_included`) |
+| multi-1 | "resected by EMR with a hot snare" admitted 45385 beside 45390 | a snare or hot-forceps removal of the lesion an EMR or ESD resects is that resection's technique (`resection_technique`) |
+| multi-2 | "biopsies were taken from a 10 mm sigmoid polyp, which was then removed" left the biopsy unbound | a lesion named with a site adjective and a creating lead is recorded (`LESION_SITED`) |
+| multi-3 | "Two hemostatic clips were placed prophylactically" read as control of bleeding | the adjective "hemostatic" names a device or a treatment, never that bleeding was controlled: a bleeding-control act it alone names is in doubt (`HEMOSTATIC_CUE`). Not a prophylaxis word list: round 4b's R4c read one and was refuted by G5, H1 and H4 |
+| multi-4 | an esophageal and a pyloric dilation code competed, and the reason said "participants" of one participant's two codes | claims are per act its own passages show (`_claimed`); the reason reads "independent readings propose ..." |
+| compl-1 | "Decompression of the stomach was attempted but failed." was skipped as not performed | an act no code of its family accounts for is listed whatever its outcome (`reconcile.reconcile`, uncertain acts too) |
+| compl-2 | a decompression in an ERCP, EUS or enteroscopy was dropped unlisted | every endoscopic family lists decompression (`catalogue`); none of those three codes it |
+| fa-2 (minor) | a second participant's agreement with a different quote moves the evidence and the fingerprint | declared behaviour (P-ADMIT adds its proposers and their passages); the effect is conservative, since an earlier approval is invalidated and never carried. C2's claim is corrected here: agreement never changes a decision, but it can change the evidence and so the fingerprint |
+
+**Over-reach of the repairs themselves, found by the suites before any commit.** Each of these was a movement from a
+pinned READY, now narrowed:
+- **Found by the targeted suites.**
+  - The first withholding rule counted any body act left uncertain, including one uncertain only because no
+    performance statement was read. That demoted svc-42's tube replacement and turned its service uncertain.
+  - `LESION_SITED` first also read a sized restatement with no lead. It created a second lesion for R8 R5 Z1's "2. 8 mm
+    sigmoid colon polyp removed".
+- **Found by the full suite (5,884 tests: 17 failures, all mine).**
+  - `LESION_SITED` recorded a lesion that was only observed. Under "Findings: A 6 mm sigmoid polyp was seen.", the
+    checked "Biopsy" box on a merged form line beside the snare's sentence was read as a biopsy of the polyp then
+    removed, and held. The same rule made a rectal EUS's "A 3 cm rectal mass was staged" relabel its biopsy, and turned
+    an impression's "one gastric polyp and one sigmoid polyp" into two new lesions. It now reads only a sized mention
+    with a creating lead whose own clause names an act, places it by its own site adjective, and binds a recorded
+    lesion of the same size at that site before making one.
+  - The withholding rule counted a form question's "?" as a hedge ("Was the FNA performed? No").
+  - It also counted a plan reading taken from a plan section or label: the "3. Upcoming procedures" item that engine
+    @4's time_plan ruling reads as performed under its procedure line.
+  - It also counted a future service ("repeat colonoscopy with snare polypectomy in 3 years").
+  - Only a statement against the listed act today counts now (`_against_listing`): an attempt or a failure of it; a
+    plan to do it at a lesion documented today; or a plan its own words state, in a clause that names no service.
+
+**Mutation proofs.** Twenty-eight mutants were run, one per rule and per narrowing condition. Each was asserted
+applied, run against the tests that should kill it, and restored from a copy with its sha256 compared; the working
+tree's diff digest is the same before and after every batch. Two survived at first, and each was a finding about the
+tests:
+- the comparison-aside assertion was vacuous: it ran after its loop and compared a string with itself;
+- every marking input was also decided by a neighbouring rule.
+
+Both tests were strengthened, the two mutants were re-run, and all twenty-eight are killed. Pins:
+`tests/test_h2_refutation_r1.py`, plus `tests/test_h2_marking_tense.py` for time-1.
+
+**Declared movements on the Corti-only path, measured after the code.**
+- The prophylactic hemostatic clip rows (`tests/fixtures/gi4/declarations/cux-r5-binding.json`,
+  `amendment_20261105_harness_repair`, a union with 0 lines removed):
+  - R8 R5 R2's combined row stays held, now as an act in doubt rather than a named-only act;
+  - the three colonoscopy-only residual rows move from READY to held and read no violation;
+  - ACCURACY-RESIDUALS' recorded residual for this shape is closed.
+- The H4 battery against main 8645fd54 moved six codes, with 0 new violations:
+  - R8 D3 N9, N15 and N17, the "snare header" rows: 45385 held → excluded, citing the body's own denial or plan, and
+    reinstatable;
+  - in the same rows, 45378 held → READY. It is no longer held as included in a polypectomy not done.
+
+  Both moves agree with the rows' truths. They are declared, measured after the code, in
+  `tests/fixtures/gi4/declarations/h2-repair-r1.json`.
+- The H1 replay differs from main by the three version labels alone.
+
+**Recorded limitations (not repaired here).**
+- "The lesion was marked with tattoo ink that was unavailable." with no coordinated denial still reads a tattoo placed,
+  on both paths. It is pre-existing at main: a relative-clause denial of the marker. The "and not resected" form the lens
+  reported is repaired.
+- "Bleeding was stopped with two clips." and "Active bleeding was controlled with two hemostatic clips." read no act in
+  the inventory: "stopped" and "controlled" are not act predicates, the same at main. Corti's 45382 stands on its own
+  passage (the own-passage release). A participant's fills no open item, so it stays an alternative. That is
+  conservative, and the predicate list was not widened for it.
+- "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa, ..." leaves the polyp without a site, because
+  the aside's object is the polyp's own neighbourhood. Its snare is never moved to another polyp, but its site is not
+  named.
+- Two of the multiple-lesions lens's cases wait on a coding ruling and are not decided here:
+  - ablation of an EMR's margins (APC);
+  - a hot-forceps partial removal finished with a cold snare on one polyp.
+- A plan at today's lesion inside a future service withholds a removal that only the procedure line lists, when the
+  body says only that the polyp was seen: "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1
+  year." holds 45385 (a false hold, on the safe side). "Any residual polyp" falls back to today's polyp, and telling a
+  deferral from a surveillance plan would be a word list.
+
+### Refutation round 2 (2026-11-05): three lenses over the repairs, and the two-cycle rule
+
+A narrow second round ran over round 1's repairs at `5b1dc0466`: the repair `e88afe58b` plus a commit that touches only
+the checklist. Three read-only lenses worked against comparison trees of main `8645fd54` and of round 1's head
+`3907cd592`:
+- an escape lens, for variants the repairs do not close;
+- an over-reach lens, for genuine services the repairs now lose;
+- a cost lens, for the cost of the new readings, coding completeness and the customer surfaces.
+
+They reported 27 reproduced findings:
+
+| lens | blocking | major | minor |
+|---|---|---|---|
+| escape | 9 | 2 | 0 |
+| over-reach | 1 | 10 | 0 |
+| cost | 1 | 3 | 1 |
+
+**What round 2 showed.** Round 1's phrase-level repairs failed in both directions:
+- near-synonyms escaped them: "zero (0) biopsies", "at the level of the tattoo", "25-cm from the anal verge";
+- widened forms denied genuine services: "from no fewer than six sites" read as a denial, "which produced no bleeding"
+  as nothing obtained, "the bleeding ulcer ... treated with two hemostatic clips" as a device name only.
+
+A third round of phrases would not converge.
+
+**What was decided, and what was not.** Admission stays at the directive's literal standard: equivalent eligibility, with
+a participant's code READY exactly where Corti's own selection of the same passages would be. One alternative was
+considered and rejected: admitting every participant code held for a member's confirmation.
+- A held performed-status code offers a member no confirming answer. `review._actions` offers Approve only on READY, and
+  the reviewer-confirmation path (4.6) is an open owner question.
+- So the recovered codes would have been unapprovable, which defeats the directive's purpose.
+
+Under the programme's two-cycle rule, every rule that did not converge in two cycles is dropped:
+- `LESION_SITED` (multi-2);
+- `NOT_TO_BEFORE`, `NONE_AS_OBJECT` and `NO_YIELD_AFTER` (neg-1's extensions);
+- the act-list decompression additions (compl-2): "a stent placed for biliary decompression" opened completeness;
+- the other-role filter in `reconcile.match` (own-3). The role reader takes an impression after "Pathology results:
+  pending." as the pathology entry, so the filter held Corti's correct code.
+
+Their inputs are pinned as the readers' recorded residuals (`RecordedResidualTests`). The pin checks the directive's
+equivalent standard: on none of them is a participant's code READY where Corti's selection of the same passages is not.
+
+**Kept, each narrowed to what it now requires:**
+- **The negation release (stage 3):** an own-kind act counts as done only where its own clause carries no negation marker
+  of the closed class (`OWN_CLAUSE_DENIAL`: no, not, none, nothing, neither, nor, never, without, zero, against, unable,
+  cannot, n't, a bare 0).
+- **The resection's technique:** both acts at one lesion with agreeing sites, or neither at a lesion, in one clause naming
+  one site at most (`_one_resection`).
+- **A lift injection:** the resection's only at an agreeing site (`_sites_agree`). The own-passage release's act carries
+  its passage's sites (cost-4: a steroid injection into a rectal stricture is no cecal EMR's lift).
+- **"Hemostatic":** a stated bleeding object keeps the act ("the bleeding ulcer", "the actively bleeding vessel", oozing;
+  `BLEEDING_PRESENT`). A control statement under a negation never switches the rule off (`NEGATED_BEFORE`).
+- **The withheld listing:**
+  - a hedge of the act's own clause counts, never a form question's mark;
+  - a removal statement with no technique is read both ways: a removal stated done keeps the listing;
+  - it is read once per clause, for at most `REMOVAL_READ_CAP` clauses;
+  - a report of one procedure is its own scope;
+  - a removal planned for another occurrence of a service says nothing about today's.
+- **Decompression:**
+  - the verb's own inflections are read;
+  - a failure frame ("unable to", "failed to", "could not") keeps the act in doubt;
+  - a failed attempt read as a denial is listed (`FAILED_ATTEMPT`), never a mere denial ("was not attempted") or a
+    counterfactual.
+- **"Marked":** the marker may stand anywhere in its own instrument phrase, which covers the repair package's own forms.
+- **A distance:** a number and a unit in a relation to a landmark.
+- **A sized anaphor:** sizes are compared as numbers ("0.8 cm" is "8 mm").
+- **A whole service:** admitted only on a code whose acts include the physician's own, which is the reconciliation's own
+  role rule.
+
+**None of these releases beyond what main read**, apart from the repair package's own marking forms. Every kept or new
+rule either holds, lists, or returns toward the installed reading.
+
+**Cost.** The adversarial shape that had made the assess stage time out (120 s against 0.9 s) now assesses in 1.04 s at
+50,000 characters and 4.83 s at 400,000. The removal-word shapes take 3.6 s at 400,000.
+
+**Mutation proofs.** Twenty-nine mutants were run: nineteen for round 2's rules, and ten re-proving round 1's rules whose
+code moved. Each was asserted applied and its restore verified by sha256, and the working tree's diff digest is the same
+before and after. Two survived at first, each because a neighbouring rule decided its input. A deciding input was
+added for each, and all twenty-nine are killed.
+
+**Measured on the round-2 tree.**
+- **H4 battery against main 8645fd54:** the same six declared movements as round 1 (R8 D3 N9, N15, N17), 0 undeclared,
+  0 new violations.
+- **H1 replay:** differs by the version labels alone.
+- **88d9db32, re-assessed offline from its retained responses on a throwaway copy of the live database:**
+  - Corti's 43239, 45380 and 45381 and the participants' 43249, 45390 and 45385 are ready;
+  - the decompression is listed as unsupported;
+  - provider runs 107 → 107 and sends 97 → 97;
+  - the tables move by studio_assessment +1, studio_proposal +26, studio_job +1, studio_routingrun +1 and
+    studio_auditevent +2, and by nothing else.
+- **The installer's state recomputation**, run offline on a fresh copy, changes no encounter
+  (`{"encounters": 55, "changed": {}}`).
+
+**Pins.** `tests/test_h2_refutation_r1.py` is rewritten to hold three things:
+- round 1's repairs as they now stand;
+- round 2's inputs, with their controls that must stay READY;
+- `RecordedResidualTests`.
+
+### Refutation round 3 (2026-11-05): a differential check over round 2's rules, and where the pass stops
+
+One read-only lens attacked only round 2's changed rules at `40e183346` (the round-2 repair `90856a7d8` plus a
+checklist-only commit). It tested two differential claims over 306 generated inputs, each on both paths and with and
+without a primary code, against main `8645fd54`:
+- **D1:** no code READY at the head that main does not read READY, apart from the repair package's own marking forms;
+- **D2:** a participant's code READY only where Corti's selection of the same passages is READY.
+
+**D2 held** in all 612 runs. **D1 failed** in three blocking families, each a releasing rule that went beyond main:
+- **LENS-1:** round 2's decompression verb forms made "Neostigmine was given to decompress the colon." and "We elected
+  to decompress the colon at a later date." READY as 45393 or 45337.
+- **LENS-2:** the package's coordinated "marked ... and not resected", as round 2 widened it, released forms where no
+  tattoo was placed: "marked with a photo of the tattoo", "marked with a clip since the tattoo ink ran out", "marked
+  with India ink at the referring facility".
+- **LENS-3:** the stage-3 negation release, as round 2 narrowed it, still believed the code's own act where the reader
+  misses a place or time: "it was biopsied at the referring facility ...; it was not snared".
+
+**Repaired, each toward main:**
+- **The negation release is main's rule, exactly.** The function body is byte-identical to main's apart from its
+  docstring. The stage-3 exception, narrowed twice, is dropped under the two-cycle rule.
+  - The cost is recorded: 88d9db32's own passage "... was sampled with cold biopsy forceps for histology; it was not
+    excised by snare." holds Corti's 45380 again.
+  - The package's correct reading of the snare's denial meets main's conservative release there.
+  - This release offers no reviewer confirmation, so the member's path is an addendum or a rejection.
+- **The decompression vocabulary is main's.** The verb's bare form is read only right after a failure or attempt frame
+  (`ATTEMPT_FRAME`: "unable to", "failed to", "could not", "cannot", "attempted to"), where its act is in doubt:
+  listed or held, never READY. That keeps round 2's directive-named class ("We were unable to decompress the stomach."
+  is listed).
+- **The package's coordinated-denial branch is read at the package's own shape only.**
+  - "marked with [a, an or the] [one of the marker's own descriptors] tattoo / India ink" (`MARKED_WITH`, fail-closed);
+  - nothing but the marker's head noun and its purpose before "and not resected" (`MARKED_TO_DENIAL`).
+
+  The package's binding tests pass. That includes 88d9db32's 45381 structure: an injected tattoo, then "marked with
+  submucosal tattoo for future localization and not resected today" reads no false conflict. Forms outside the shape
+  read as main reads them: held. That covers "marked with 3 mL of India ink", "marked distally with tattoo ink" and
+  "a hypothetical tattoo".
+
+**Measured after round 3's repairs.**
+- **The lens's whole corpus, re-run on the repaired tree against main (651 rows):** 0 D1 flags and 0 D2 flags.
+- **Mutation proofs:** five mutants, one per round-3 rule. All are killed, and the working tree's diff digest is the
+  same before and after.
+
+**Where the pass stops, and why.**
+- Round 3's repairs are reversions to main's own rules, or rules that only hold or list:
+  - the fail-closed modifier list;
+  - the purpose-only gap before the denial;
+  - the frame-bound verb.
+- None of them can make a code READY that main does not.
+- The lens's whole corpus confirms that, and the two claims are now properties the pins assert (D2 in
+  `RecordedResidualTests`).
+- Round 1's and round 2's remaining phrase-level rules are holding rules, or return toward main. Every releasing rule
+  either converged or was dropped under the two-cycle rule. A further round would attack holding rules, whose failure
+  mode is a hold on the safe side.
+- **The releasing rules kept beyond main are the repair package's own**, both asked for by the owner's package:
+  - its purpose rule ("for future localization" is a completed marking's purpose, never its time), narrowed in round 1
+    (time-1: a participle governed by be/is/are/am/to/being states no completed marking);
+  - its coordinated denial, at its exact shape.
+
+  P-ADMIT itself is the directive's authorized change, and D2 bounds it. Admitting codes for two different acts
+  releases nothing Corti's own selection of each would not.
+
+**Superseded in round 2's section above (kept, not rewritten):**
+- the negation release's `OWN_CLAUSE_DENIAL` (dropped: main's rule);
+- "'Marked': the marker may stand anywhere in its own instrument phrase" (now the package's exact shape);
+- "Decompression: the verb's own inflections are read" (now only in a failure or attempt frame).
+
+**Measured on the round-3 tree.**
+- **Full Linux suite:** 5,893 Django tests OK, ops 524, verification 43, node 131, 63 and 135 (run6, 14:04-14:18Z).
+- **H4 battery against main:** the same six declared movements (R8 D3 N9, N15, N17), 0 undeclared, 0 new violations.
+- **H1 replay:** differs by the version labels alone.
+- **88d9db32, re-assessed offline from its retained responses, nothing sent:**
+  - 45381, 43239 (Corti), 43249, 45390 and 45385 (Astra and Fable) are ready;
+  - Corti's 45380 is held with one performed-status question;
+  - the decompression is listed as unsupported, and the encounter reads needs_clarification;
+  - provider runs 107 → 107 and sends 97 → 97;
+  - the tables move by studio_assessment +1, studio_proposal +26, studio_clarification +1, studio_job +1,
+    studio_routingrun +1 and studio_auditevent +2, and by nothing else.

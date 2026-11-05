@@ -2565,15 +2565,31 @@ PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
 # names the two kinds of proposal merge records a participant's code on (``have``: a selection with an evaluation).
 # Refutation round 9 (wording-4): a selection in a provider response that was refused whole, never read, is no
 # selection merge sees, so the clause names a response CPT Studio used, and such a code is among the alternatives.
+# HARNESS.md P-ADMIT (owner directive 2026-11-05, replacing D14): the sentence names the rule engine._Harness.merge now
+# applies, clause by clause - a code a decidable proposal carries is recorded on it; a first-reading proposal is read by
+# the provider's own path and added only as the second review's selections are, and never where another participant's
+# different code accounts for the same act; everything else is listed. The sentence D14's releases gave is kept above it.
+PARTICIPANTS_NEVER_DECIDE_D14 = ("A participant never decides a status and agreement never promotes a code: a participant's "
+                                 'code that the proposal provider selected, in scope and with an exact passage, in a '
+                                 'response CPT Studio used, or that its bounded second review added as a proposal, is '
+                                 "recorded on that proposal, which CPT Studio's own readers judge on the provider's "
+                                 "passages alone; any other code a participant gives in a CPT or HCPCS code's shape, "
+                                 'including one the provider only listed, one its second review listed without adding and '
+                                 'one in a provider response CPT Studio did not use, is listed as an alternative and never '
+                                 "added as a proposal, and one in neither shape is counted and never listed; and a "
+                                 "participant's questions are notes that never block.")
 PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's "
                              'code that the proposal provider selected, in scope and with an exact passage, in a response '
                              'CPT Studio used, or that its bounded second review added as a proposal, is recorded on '
-                             "that proposal, which CPT Studio's own readers judge on the provider's passages alone; any "
-                             "other code a participant gives in a CPT or HCPCS code's shape, including one the provider "
-                             'only listed, one its second review listed without adding and one in a provider response '
-                             'CPT Studio did not use, is listed as an alternative and never added as a proposal, and one '
-                             "in neither shape is counted and never listed; and a participant's questions are notes that "
-                             'never block.')
+                             "that proposal, which CPT Studio's own readers judge on the provider's passages alone; a "
+                             "code a participant's independent first reading proposes, quoting the document verbatim, is "
+                             "read by those same readers from that reading's exact passages and added as a proposal of "
+                             'its own only where they read it as accounting for a documented service or act the other '
+                             'proposals left unresolved, and not where another participant proposes a different code for '
+                             'the same act; it is then held or ready by those readers alone, and only a reviewer approves '
+                             "it; any other code a participant gives in a CPT or HCPCS code's shape, including one it "
+                             'gives only in peer review, is listed as an alternative, and one in neither shape is counted '
+                             "and never listed; and a participant's questions are notes that never block.")
 
 
 def participants_summary_check(sentences: Sequence[str]) -> Check:

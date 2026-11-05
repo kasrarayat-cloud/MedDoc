@@ -278,18 +278,18 @@ class MissingServiceReadingPipelineTests(r6m.MeaningCase):
 
 class SummarySentenceTests(r6m.MeaningCase):
     def test_beside_a_provider_response_refused_whole(self):
-        """wording-4: Corti's stored response selects 45385, in scope and on an exact passage, and is refused whole;
-        Astra's 45385 is an alternative. The sentence names a response CPT Studio used, and lists such a code among
-        the alternatives."""
+        """wording-4: Corti's stored response selects 45385, in scope and on an exact passage, and is refused whole. The
+        sentence names a response CPT Studio used. HARNESS.md P-ADMIT (2026-11-05): Astra's first-reading 45385 on the
+        snare sentence is admitted (D14 had listed it among the alternatives, as its sentence then said)."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r7.SNARED)
         with r8.refused_whole():
             encounter_id = self.scenario(text, [('45385', r7.SNARED)], astra=hp.reading(codes=[('45385', r7.SNARED)]))
         detail = self.detail(encounter_id)
-        self.assertEqual([(kind(p), p['code']) for p in r6m.proposals(detail)], [('altp', '45385')])
+        self.assertEqual([(kind(p), p['code']) for p in r6m.proposals(detail)], [('sel', '45385')])
         summary = self.summary(detail)
         self.assertTrue(summary.endswith(f' {r6m.NEVER_DECIDE}'), summary)
         self.assertIn('in a response CPT Studio used', summary)
-        self.assertIn('one in a provider response CPT Studio did not use', summary)
+        self.assertNotIn('one in a provider response CPT Studio did not use', summary)
 
 
 # --- page-2, page-3: a highlight holding both kinds of passage for one code -------------------------------------

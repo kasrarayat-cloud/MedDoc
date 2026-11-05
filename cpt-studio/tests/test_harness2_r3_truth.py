@@ -386,9 +386,8 @@ class CortiListedTests(R2WordingCase):
     points to says "alternative to 45385" (refutation round 3, truth-5). The engine reads only that Corti listed the
     code without selecting it, so the engine's rationale, the API's relation and the page say that, in one sentence true
     of a candidate and of an alternative, and the Alternatives row says which. Moved by refutation round 6 (R6-MEANING,
-    the session's D14): Astra's 45380 is its alternative beside Corti's, never a selected card: the API still serves its
-    relation, which the page's status-line wording (codeStatusLines) words as before, and its own sentences give CPT
-    Studio's reason and say nothing of Corti."""
+    the session's D14) to Astra's alternative; restored as it stood before D14 by HARNESS.md P-ADMIT (owner directive
+    2026-11-05): Astra's first-reading 45380 on the biopsy passage is admitted, a selected card beside Corti's listing."""
 
     def listed(self, edit):
         self.corti.selections = [('45385', SNARE)]
@@ -396,19 +395,17 @@ class CortiListedTests(R2WordingCase):
             encounter_id = self.create(TWO_EXTENTS)
             drain()
         detail = self.detail(encounter_id)
-        [own, alternative] = sorted(self.proposals(detail, '45380', bucket='alternative'), key=self.origin)
+        [own] = self.proposals(detail, '45380', bucket='selected')
+        [alternative] = self.proposals(detail, '45380', bucket='alternative')
         self.assertEqual((self.origin(own), own['proposed_by'], self.origin(alternative)),
                          ('participant', ['astra'], 'primary'))
-        self.assertNotIn(f'id="card-{own["id"]}"', browser('page()', detail))
-        line = browser(f'visible(app.codeStatusLines(data.assessment.proposals.find(p => p.id === '
-                       f'{json.dumps(own["id"])}))).split("\\n")[0]', detail)
+        line = browser(f'statusLine(cardOf(page(), {json.dumps(own["id"])}), "Proposed by")', detail)
         self.assertEqual(own['corti_relation'], 'candidate')
-        self.assertEqual(line, f'Proposed by: Astra (independent reading); {LISTED}')
-        self.assertTrue(own['rationale'].startswith('Proposed by Astra (independent participant); not added as a '
-                                                    f'proposal: {engine.PARTICIPANT_NOT_ADDED}.'), own['rationale'])
+        self.assertEqual(line, f'Astra (independent reading); {LISTED}')
+        self.assertTrue(own['rationale'].startswith(f'Proposed by Astra (independent participant); {LISTED}'),
+                        own['rationale'])
         for said in (line, own['rationale']):
             self.assertNotIn('only as a candidate', said)
-        self.assertNotIn('Corti', own['exclusion_reason'] + own['rationale'])
         return alternative
 
     def test_an_alternative_nested_under_a_selected_code(self):
@@ -560,18 +557,16 @@ class SecondReviewRelationTests(OperatorReads, TestCase):
         client = Client()
         client.force_login(self.reviewer)
         detail = client.get(f'/ops/api/encounters/{self.encounter.pk}').json()
-        # moved by refutation round 6 (R6-MEANING, the session's D14): Astra's 45380 is its alternative (altp:0), never
-        # a selected card: the serializer still serves 'second_review', which the page's status-line wording words as
-        # before; its rationale gives CPT Studio's reason, where _Harness._lead had worded the second review
-        [own] = [p for p in detail['assessment']['proposals'] if p['code'] == '45380' and p['key'] == 'altp:0']
+        # HARNESS.md P-ADMIT (2026-11-05) restores this pin as it stood before D14 (which listed Astra's 45380): its
+        # first-reading 45380 is admitted, a selected card whose rationale and status line word the second review
+        [own] = [p for p in detail['assessment']['proposals'] if p['code'] == '45380' and p['bucket'] == 'selected']
         self.assertEqual((own['support']['origin'], own['proposed_by'], own['corti_relation']),
                          ('participant', ['astra'], 'second_review'))
         words = "Corti's second review also listed this code without adding it as a proposal; see Alternatives."
-        self.assertTrue(own['rationale'].startswith('Proposed by Astra (independent participant); not added as a '
-                                                    f'proposal: {engine.PARTICIPANT_NOT_ADDED}.'), own['rationale'])
-        line = browser(f'visible(app.codeStatusLines(data.assessment.proposals.find(p => p.id === '
-                       f'{json.dumps(own["id"])}))).split("\\n")[0]', detail)
-        self.assertEqual(line, f'Proposed by: Astra (independent reading); {words}')
+        self.assertTrue(own['rationale'].startswith(f'Proposed by Astra (independent participant); {words}'),
+                        own['rationale'])
+        line = browser(f'statusLine(cardOf(page(), {json.dumps(own["id"])}), "Proposed by")', detail)
+        self.assertEqual(line, f'Astra (independent reading); {words}')
         relations = {p['key']: p['corti_relation'] for p in detail['assessment']['proposals']}
         self.assertEqual((relations['sel:0'], relations['alt2:0']), ('proposer', 'proposer'))
 

@@ -25,6 +25,11 @@ from studio.validation.engine import assess
 DECLARATION = json.loads((Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cux-hold.json')
                          .read_text(encoding='utf-8'))
 DECLARED = {(name, code): (before, after) for name, code, before, after in DECLARATION['battery']}
+# The harness repair's battery declaration (2026-11-05, measured after its code: the procedure line's withheld listing,
+# refutation fa-1): it governs the rows it moves, and each movement starts from the state this file pinned.
+H2R = {(name, code): (before, after) for name, code, before, after in json.loads(
+    (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'h2-repair-r1.json')
+    .read_text(encoding='utf-8'))['battery']}
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
 _MODULES = []
@@ -104,10 +109,11 @@ class RegisterRowsTests(SimpleTestCase):
             result = row(name)
             for code in result['proposals']:
                 with self.subTest(name, code=code):
-                    if (name, code) in DECLARED:
-                        self.assertEqual(state(result, code), DECLARED[(name, code)][1])
-                    else:
-                        self.assertEqual(state(result, code), UNMOVED[(name, code)])
+                    pinned = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
+                    if (name, code) in H2R:
+                        self.assertEqual(H2R[(name, code)][0], pinned)  # it moves from where this file pinned it
+                        pinned = H2R[(name, code)][1]
+                    self.assertEqual(state(result, code), pinned)
                     self.assertEqual(result['proposals'][code]['violations'], [])
 
     def test_d1(self):

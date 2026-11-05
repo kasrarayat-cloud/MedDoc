@@ -1,0 +1,17 @@
+{
+ "package": "Harness repair 2026-11-05, refutation round 1 (HARNESS.md \"Refutation round 1 (2026-11-05)\"): the H4 battery's movements against main 8645fd54ff7664c3436e60c1585ba363d086c325.",
+ "measured_after_code": true,
+ "provenance": "Not declared before the code: measured by python -m ops.gi4.battery --base 8645fd54 --head <the repair's working tree> after the repairs, and each movement read against its row's provisional truth before it was written here. The rule that moves them is the procedure line's withheld listing (refutation fa-1): where a report says the listed snare polypectomy was not done or only considered, the listing no longer makes the snare a performed act.",
+ "battery": [
+  ["R8 D3 N15 no polyps removed, snare header", "45378", "selected/needs_clarification", "selected/ready"],
+  ["R8 D3 N15 no polyps removed, snare header", "45385", "selected/needs_clarification", "excluded/excluded"],
+  ["R8 D3 N17 polyp was not removed, snare header", "45378", "selected/needs_clarification", "selected/ready"],
+  ["R8 D3 N17 polyp was not removed, snare header", "45385", "selected/needs_clarification", "excluded/excluded"],
+  ["R8 D3 N9 considered but not performed", "45378", "selected/needs_clarification", "selected/ready"],
+  ["R8 D3 N9 considered but not performed", "45385", "selected/needs_clarification", "excluded/excluded"]
+ ],
+ "why": {
+  "45378": "truth done: the colonoscopy is READY, no longer held as included in a polypectomy the report says was not done",
+  "45385": "truth no_ready: the code cites the report's own denial or plan (\"No polyps were removed.\", \"The polyp was not removed.\", \"Snare removal was considered but not performed.\"), which now stands as the routing-era exclusion; reinstatable, and never READY"
+ }
+}

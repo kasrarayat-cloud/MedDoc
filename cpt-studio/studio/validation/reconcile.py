@@ -23,14 +23,21 @@ from studio.gi import catalogue
 from studio.gi import sections as gi_sections
 from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
-                                 ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService,
+                                 HYPOTHETICAL_CUE, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
+                                 DocumentedService,
                                  ServiceInventory, _sentences, act_regions, examined_regions, reflow)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
-INVENTORY_SOURCE = 'cpt-studio:gi-services@3'  # the inventory's label (services.INVENTORY_VERSION)
+INVENTORY_SOURCE = 'cpt-studio:gi-services@4'  # the inventory's label (services.INVENTORY_VERSION)
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
+OWN_ROLES = ('physician', 'unknown')  # whose documentation of the procedure the reconciliation counts
+# A denial that states a failed attempt, never a mere denial ("was not attempted"): refutation round 2, esc-7 and the
+# cost lens's control ("We were unable to ...", "could not be achieved", "was not successful")
+FAILED_ATTEMPT = re.compile(r"\b(?:unable|could\s+not|couldn['\u2019]t|cannot|can\s+not|fail(?:s|ed|ure|ing)?"
+                            r"|unsuccessful(?:ly)?|without\s+success|not\s+(?:be\s+|been\s+)?(?:successful|achieved"
+                            r"|completed))\b", re.I)
 # Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
 STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',
               'gi.anorectal': 'manometry'}
@@ -193,6 +200,22 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      question=f'The {what} ({quote(done[0].evidence[0], 120)}) is tied to the {name} only by a '
                               f'lesion\'s name. Was a {what} performed in the {name} on the date of service?')
     if done:
+        # Harness repair 2026-11-05 (stage 6): an act the reconciliation reads as part of another documented act
+        # (_bundled: the lift injection of a lesion the service resects by EMR or ESD, the biopsy of a lesion it then
+        # removes, a prophylactic clip, ...) is never what a code accounts for while the service documents an act of the
+        # code's kinds that is not; where every such act is part of another, the code is held with that reading, never
+        # ready - no separate act is documented for it, and an EMR's components are never charged apart from it.
+        own = tuple(a for a in done if _bundled(service, a) is None)
+        if not own:
+            listed = '; '.join(describe_act(service, a) for a in done[:4])
+            why = _bundled(service, done[0])
+            return Match('uncertain', service, done, 'act_included',
+                         f'The {name} is documented as {service.status} with {listed}, which is part of another '
+                         f'documented act: {why} No separate {what} is documented for this code.',
+                         question=f'The {what} documented ({quote(done[0].evidence[0], 120)}) is part of another '
+                                  f'procedure documented with it. Was a separate {what} performed on the date of '
+                                  'service?')
+        done = own
         listed = '; '.join(describe_act(service, a) for a in done[:4])
         return Match(positive, service, done, 'service',
                      f'The {name} is documented as {service.status} with {listed}.')
@@ -560,13 +583,38 @@ def _bundled(service: DocumentedService, act: Act) -> Optional[str]:
             a.lesion == act.lesion and a.kind in REMOVAL_KINDS and a.status == 'performed' for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['biopsy_of_removed_lesion']
     if act.kind == 'injection' and any(a.kind in ('emr', 'esd') and a.status == 'performed'
-                                       and (not act.lesion or a.lesion == act.lesion) for a in service.acts):
+                                       and (not act.lesion or a.lesion == act.lesion) and _sites_agree(act, a)
+                                       for a in service.acts):
         return dict(catalogue.COMMON_BUNDLED)['lift_injection']
+    if act.kind in ('snare', 'hot_biopsy') and any(
+            a.kind in ('emr', 'esd') and a.status == 'performed' and _one_resection(act, a) for a in service.acts):
+        # Harness repair 2026-11-05, refutation multi-1: "resected by EMR with a hot snare" reads an EMR and a snare at
+        # one lesion; the snare is the resection's own technique, never a second removal charged beside it. A snare at
+        # another lesion keeps its own code (and its distinct-lesion consideration).
+        return dict(catalogue.COMMON_BUNDLED)['resection_technique']
     if family is not None:
         for kind, why in family.bundled:
             if kind == act.kind:
                 return why
     return None
+
+
+def _sites_agree(one: Act, other: Act) -> bool:
+    """Whether two acts' own sites can be one place: either names none, or they share one (refutation round 2, cost-4:
+    a steroid injection into a rectal stricture is never a cecal EMR's lift)."""
+    return not one.anatomy or not other.anatomy or bool(set(one.anatomy) & set(other.anatomy))
+
+
+def _one_resection(removal: Act, resection: Act) -> bool:
+    """Whether ``removal`` (a snare or hot-forceps act) is the technique of ``resection`` (an EMR or ESD act): both at
+    one recorded lesion, the removal's own sites agreeing with the resection's; or, neither at a lesion, both read in
+    one clause naming one site at most. Refutation round 2, over-4: a snare of another lesion is never the EMR's - "The
+    sigmoid polyp was removed with a cold snare." after a lesion's EMR, "EMR ... in the ascending colon, and cold snare
+    polypectomy ... in the sigmoid colon"."""
+    if removal.lesion or resection.lesion:
+        return removal.lesion == resection.lesion and _sites_agree(removal, resection)
+    shared = any(_overlaps(e.start, e.end, f.start, f.end) for e in removal.evidence for f in resection.evidence)
+    return shared and len(set(removal.anatomy) | set(resection.anatomy)) <= 1
 
 
 def _needle_sampling(service: DocumentedService, act: Act) -> Optional[Act]:
@@ -672,7 +720,21 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
         covers = {kind for p in profiles if p is not None and p.family == service.family for kind in p.covers}
         seen_acts: set[tuple] = set()
         for act in service.acts:
-            if act.status != 'performed' or act.role not in ('physician', 'unknown'):
+            if ((act.status == 'uncertain' and not any(c.startswith(HYPOTHETICAL_CUE) for c in act.cues))
+                    or (act.status == 'negated' and any(FAILED_ATTEMPT.search(ev.text) for ev in act.evidence))) \
+                    and act.role in OWN_ROLES \
+                    and act.kind in entry.acts \
+                    and act.kind not in catalogue.UNSUPPORTED_ACTS and _bundled(service, act) is None \
+                    and not catalogue.family_codes_act(service.family, act.kind):
+                # Harness repair 2026-11-05, refutation compl-1: "Decompression of the stomach was attempted but
+                # failed." - an act no code of the family accounts for is listed whatever its outcome (the directive:
+                # never hide a therapeutic or failed decompression to clear completeness)
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}, '
+                                             'attempted or in doubt: no code profile of this service accounts for it',
+                                             act.evidence[:2], 'unsupported'))
+                continue
+            if act.status != 'performed' or act.role not in OWN_ROLES:
                 continue
             act = _needle_sampling(service, act) or act
             key = (act.kind, act.lesion or ','.join(act.anatomy))
@@ -700,6 +762,17 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                 bundled.append(Bundled(service.id, act.kind, describe_act(service, act), why))
                 continue
             if act.kind not in entry.acts:
+                continue
+            if not catalogue.family_codes_act(service.family, act.kind):
+                # Harness repair 2026-11-05 (stage 6): an act the family lists that no code of the family accounts for
+                # (catalogue.family_codes_act: a stomach decompression in an upper endoscopy) is listed for the
+                # reviewer as one no code of this service accounts for - routine, therapeutic or failed alike, for
+                # nothing here reads which it was - never bundled, never sent for a second review (SECOND_REVIEW_REASONS:
+                # no code it could select accounts for it), and never dropped: it keeps coding completeness open
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}: no code '
+                                             'profile of this service accounts for it', act.evidence[:2],
+                                             'unsupported'))
                 continue
             if act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'}):
                 continue

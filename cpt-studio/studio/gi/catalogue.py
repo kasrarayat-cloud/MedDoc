@@ -154,6 +154,10 @@ COMMON_BUNDLED = (
                                  'EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is '
                                  'not connected).'),
     ('lift_injection', 'A submucosal injection made to lift a lesion for its resection is part of the resection.'),
+    # Harness repair 2026-11-05, refutation multi-1: an endoscopic mucosal resection is a snare-based resection
+    ('resection_technique', 'A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal '
+                            'dissection removes is the technique of that resection, not a separate service (internal '
+                            'profile rule).'),
 )
 ENDOSCOPIC_QUESTIONS = (
     ('extent', 'How far was the instrument advanced (the landmark reached)?'),
@@ -346,6 +350,19 @@ UNSUPPORTED_ACTS = frozenset(('esd',))
 
 def code_profile(code: str):
     return CODES.get(code)
+
+
+def family_codes_act(family: str, kind: str) -> bool:
+    """Whether a code of ``family`` in this catalogue accounts for an act of ``kind`` (a tattoo and an injection are
+    one act for coding, as the reconciliation reads them). Harness repair 2026-11-05 (stage 6): the shared
+    ENDOSCOPIC_ACTS list gives every endoscopic family a decompression act, and only colonoscopy and sigmoidoscopy codes
+    account for one (45393, 44408, 45337); an upper endoscopy's decompression is therefore an act no code of its service
+    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported'). Refutation round 1's compl-2
+    (an ERCP's, EUS's or enteroscopy's decompression dropped unlisted, as those families list their own acts) is not
+    repaired here: listing it read an ERCP stent placed "for biliary decompression" as an act left open (round 2,
+    over-11), so it is recorded (ACCURACY-RESIDUALS)."""
+    covers = {k for profile in CODES.values() if profile.family == family for k in profile.covers}
+    return kind in covers or (kind in ('tattoo', 'injection') and bool(covers & {'tattoo', 'injection'}))
 
 
 # The documented act a code of a family this catalogue does not reconcile accounts for (gi.other is recognised and

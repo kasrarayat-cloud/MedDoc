@@ -11155,5 +11155,134 @@
   "reproduces_the_prototype": "services.py at the code commit is byte-identical (cmp) to verify-r4/proto-Z21b/cpt-studio/studio/gi/services.py, sha256 80f905a58468c284bbf044b4ce196ee8833e2409a56a343d3206f1c6defba525; every other file under cpt-studio/ that the reader runs is unchanged from 2ffe3593, so the lead's measurements in amendment_20261104_site_only_lift are of this code",
   "tests": "tests.test_cux_r5_binding: MergedCueTests.test_the_cue_survives_a_merge_unless_a_statement_names_its_own_site (replaces test_the_cue_survives_a_merge_only_when_every_statement_carries_it: a merged statement with a site lifts the mark, one with no site keeps it, an uncued first statement keeps its cues) and SiteOnlyLiftTests (X-R5C-1 and X-R5C-2 as in-document restatements: 45380 and 45382 held [performed_status] named_only, no violation); MergedCueTests and SiteOnlyLiftTests ran 4 tests OK on the test server (t.sh suffix r5d1)",
   "mutation_proof": "the narrowing reverted in place (lifted = cue on the first statement and none on the second, whatever its site), applied and read back True; MergedCueTests and SiteOnlyLiftTests: FAILED (failures=3), killed; services.py restored from a copy and its sha256 compared: 80f905a58468c284 equal (t.sh suffix r5d2)"
+ },
+ "amendment_20261105_harness_repair": {
+  "measured_after_code": true,
+  "source": "The harness repair of 2026-11-05 (owner directive: \"no separate charges for EMR components or prophylactic clipping\"), refutation finding multi-3, repaired in studio/gi/services.py (HEMOSTATIC_CUE). Not declared before its code: measured with the tests' own helpers after the code, and recorded here so the rows this declaration pins state what this head reads. Every other row, reading, act and cell of round 5b is unchanged.",
+  "rule": "The adjective \"hemostatic\" names a device or a treatment (\"Two hemostatic clips were placed prophylactically to close the resection defect.\"), never that bleeding was controlled: a bleeding-control act it alone names is read in doubt (uncertain), so 45382 is held with a question, never READY. Not a prophylaxis word list (round 4b's R4c, refuted by G5, H1 and H4): no purpose word is read.",
+  "readings": {
+   "R8 R5 R2 dash combined | 45382": {
+    "cell": "selected/needs_clarification",
+    "clarifications": [
+     "performed_status"
+    ],
+    "reason": "act_missing"
+   }
+  },
+  "named_only_cells_closed": [
+   "R8 R5 R2 dash combined | 45382"
+  ],
+  "residuals_closed": {
+   "R8 R5 residual R2 dash colonoscopy only": {
+    "45382": "selected/needs_clarification"
+   },
+   "R8 R5 residual R2 paren colonoscopy only": {
+    "45382": "selected/needs_clarification"
+   },
+   "R8 R5 residual R2 unlabelled colonoscopy only": {
+    "45382": "selected/needs_clarification"
+   }
+  },
+  "inventory_acts": {
+   "R8 R5 R2 dash combined": [
+    [
+     "gi.egd",
+     "biopsy",
+     "performed",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "uncertain",
+     "S2-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S2-L1",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 dash colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "uncertain",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 paren colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "uncertain",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "S1-L1",
+     false
+    ]
+   ],
+   "R8 R5 residual R2 unlabelled colonoscopy only": [
+    [
+     "gi.colonoscopy",
+     "snare",
+     "performed",
+     "S1-L1",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "bleeding_control",
+     "uncertain",
+     "",
+     false
+    ],
+    [
+     "gi.colonoscopy",
+     "clip",
+     "performed",
+     "",
+     false
+    ]
+   ]
+  }
  }
 }

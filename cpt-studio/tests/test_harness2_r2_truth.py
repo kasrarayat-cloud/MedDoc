@@ -148,8 +148,10 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
                                                     'passages': 0, 'sources': [], 'not_connected': NOT_CONNECTED})
         listed = self.encounter(encounter_id).current_assessment.proposals.all()
         self.assertTrue(listed)
-        self.assertEqual({(p.bucket, (p.support or {}).get('origin')) for p in listed},
-                         {('alternative', 'participant')})
+        # HARNESS.md P-ADMIT (2026-11-05): the participants' first-reading codes are admitted (I10), each held on the
+        # date the member must settle, so none is ready - and, untraced while no date applies, none is a code checked
+        self.assertEqual({(p.bucket, p.status, (p.support or {}).get('origin')) for p in listed},
+                         {('selected', 'needs_clarification', 'participant')})
 
 
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
@@ -310,11 +312,13 @@ class ConfirmationEffectTests(ColonCase):
         checks = {check['id']: check for check in detail['assessment']['encounter_checks']}
         self.assertEqual(checks['confirmations.ignored']['status'], 'warn')
         self.assertNotIn('confirmations.applied', checks)
-        # moved by refutation round 6 (R6-MEANING, the session's D14): with the member's date in conflict Corti's new
-        # request is not sent, and the participants' codes are listed, none a proposal (their 45385 was sel:0, held),
-        # so nothing reads the confirmation and nothing is ready
+        # with the member's date in conflict Corti's new request is not sent. Moved by refutation round 6 (D14) to
+        # alternatives; HARNESS.md P-ADMIT (2026-11-05): the participants' first-reading codes are admitted as beside an
+        # answer (I10; their 45385 was sel:0, held, before D14), each held on the date the member must settle - so
+        # nothing reads the confirmation and nothing is ready
         self.assertEqual(sorted((p.code, p.bucket, p.status) for p in final.proposals.all()),
-                         [('45380', 'alternative', 'informational'), ('45385', 'alternative', 'informational')])
+                         [('45380', 'selected', 'needs_clarification'), ('45385', 'selected', 'needs_clarification')])
+        self.assertEqual({(p.support or {}).get('origin') for p in final.proposals.all()}, {'participant'})
         self.assertFalse(models.Decision.objects.exists())  # I4: a confirmation is no decision
 
 

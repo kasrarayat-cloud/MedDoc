@@ -1182,3 +1182,68 @@ Measured by the lead before code:
 
 No member answer can confirm the binding itself. Whether a reviewer should be able to confirm "this act was part of
 this procedure" is an open product question, recorded for the owner.
+
+## Harness repair, refutation round 1 (2026-11-05): what closed, and what is left
+
+The refutation pass over the participant-admission diff is recorded in HARNESS.md, "Refutation round 1 (2026-11-05)".
+This section records only what it changed about the residuals above, and what it adds. Nothing above is rewritten.
+
+**Closed.**
+- The row "a prophylactic hemostatic clip read as control of bleeding in a colonoscopy-only note" (round 5, the R2
+  rows) is closed. The adjective "hemostatic" no longer states that bleeding was controlled: a bleeding-control act it
+  alone names reads in doubt, so 45382 is held with a question.
+  - It is not round 4b's refuted prophylaxis list (R4c): no purpose word is read.
+  - The three colonoscopy-only residual rows read no violation now, measured in
+    `cux-r5-binding.json` `amendment_20261105_harness_repair`.
+- The r1 missed-9 shape is closed: "Procedure: ... with hot snare polypectomy" beside a body that says no polyp was
+  removed, or that the removal failed or is planned. The listing no longer makes the act READY (HARNESS.md's withheld
+  listing).
+
+**Added (each pre-existing at main 8645fd54; none reads READY where the lens's input reads not done, except the
+first).**
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a relative-clause denial of the marker | "The lesion was marked with tattoo ink that was unavailable." | 45381 READY, both paths | a predicate on the marker's own noun; the coordinated form ("... and not resected") is repaired |
+| bleeding control told with a predicate the inventory does not read | "Bleeding was stopped with two clips."; "Active bleeding was controlled with two hemostatic clips." | Corti READY (own passage); a participant's an alternative | "stopped" and "controlled" are not act predicates; widening the list reaches far beyond bleeding |
+| a comparison whose object is the lesion's own neighbourhood | "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa, was removed with a hot snare." | the snare at no lesion, never another polyp's | telling a neighbourhood from another lesion would be a word list |
+| acts a coding ruling must place | an EMR's margins ablated by APC; a hot-forceps partial removal finished with a cold snare on one polyp | each code admitted READY beside the other | whether they are one service is a coding question, not a reading one |
+| a plan at today's lesion inside a future service, beside a removal only the procedure line lists | "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1 year." under "Procedure: Colonoscopy with hot snare polypectomy", the body saying only that the polyp was seen | 45385 held (the listing withheld) | a false hold, on the safe side: the plan is read at today's polyp ("any residual polyp" falls back to it), and telling a deferral ("will be removed at a later colonoscopy") from a surveillance plan would be a word list |
+
+## Harness repair, refutation round 2 (2026-11-05): the rules dropped under the two-cycle rule, and what they leave
+
+Round 2 reached round 1's phrase-level repairs from both sides: near-synonyms escaped them, and widened forms denied
+genuine services. Every rule that did not converge in two cycles was dropped, and its inputs are recorded here.
+`tests/test_h2_refutation_r1.py` `RecordedResidualTests` pins each one under the directive's equivalent standard: a
+participant's code is READY only where Corti's selection of the same passages is READY. So participant admission adds
+no false READY of its own, and what is left is the readers' own reading on Corti's path, the same as at main 8645fd54.
+HARNESS.md, "Refutation round 2 (2026-11-05)".
+
+**Superseded above.** Two rows of round 1's section no longer describe this release:
+- "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa": its snare is still never moved to another
+  polyp, now by sizes compared as numbers.
+- The plan at today's lesion inside a future service still withholds a listing (a hold, on the safe side). A kindless
+  removal planned for another occurrence of a service no longer does.
+
+| residual | example (a lens's own input) | reads, both paths | why left |
+|---|---|---|---|
+| a lesion named only by a site adjective is not recorded, so its biopsy is never part of its removal | "Cold forceps biopsies were taken from a 10 mm sigmoid polyp, which was then removed with a hot snare." | 45380 READY beside 45385 | `LESION_SITED` bound "the other polyp" to the snared one, recorded observed lesions that moved other acts' bindings, and missed "a 10 mm sigmoid sessile polyp", "an approximately 10 mm sigmoid polyp" and "a sigmoid polyp" |
+| an outcome of nothing obtained, with no other act's denial | "... it was sampled with cold biopsy forceps, which yielded no tissue." | 45380 READY | `NO_YIELD_AFTER` read "which produced no bleeding" and "producing no mucosal tear" as nothing obtained; beside another act's denial the release refuses it (`OWN_CLAUSE_DENIAL`) |
+| a negated infinitive or a negative object, with no other act's denial | "the decision was made not to biopsy it."; "biopsies were obtained from none of the polyps." | 45380 READY | `NOT_TO_BEFORE` read "taking care not to snare the adjacent fold", and `NONE_AS_OBJECT` read "from no fewer than six sites", as denials |
+| an EMR named only on the procedure line, or in another sentence than its snare | "Procedure: Colonoscopy with endoscopic mucosal resection" over "... resected with a hot snare after a saline lift."; "EMR of ... was performed. A hot snare was used." | 45385 READY beside 45390 | the snare is bound to no resection act at its lesion or in its clause; binding across sentences or to a listing would bundle other lesions' snares (round 2, over-4) |
+| a tattoo after a place word the reader does not list, or "tattoo mark/spot" | "A 5 mm polyp at the level of the tattoo was removed with a cold snare."; "The tattoo mark in the ascending colon was biopsied." | 45381 READY | the place prepositions are a closed list; "tattoo mark" can name the mark placed today |
+| a role heading the role reader does not know | "Histopathology report - 2026-10-16", "MAC record", "PACU note" over an act | the act reads as the physician's: READY | the role reader's headings; and a role part can swallow the next section ("Pathology results: pending." then "Impression: ..."), so the other-role rule stays out of `match` and applies only to whole-service admission |
+| a denial of a listed removal the readers leave unread | "The snare could not capture the polyp."; "Polyps removed: none."; "The polyp will be removed by EMR at a later date." under a snare listing | 45385 READY on the listing | no act of the listed kind and no removal statement is read |
+| two dilations told in one sentence | "The distal esophageal stricture was dilated with an 18 mm balloon, and a separate pyloric stricture was dilated with a 15 mm balloon." with 43249 and 43245 | both alternatives, the EGD uncoded (a hold) | both codes' passages show both acts, so they compete; CPT Studio never chooses between them |
+| a decompression in an ERCP, an EUS or an enteroscopy | "The distended stomach was decompressed for a gastric volvulus before withdrawal." in an ERCP | not listed, as at main | listing it read an ERCP stent placed "for biliary decompression" as an act left open |
+
+## Harness repair, refutation round 3 (2026-11-05): what the reversions toward main leave
+
+HARNESS.md, "Refutation round 3 (2026-11-05)". Round 3 reverted three releasing rules toward main. What they leave is
+main's own reading, plus one cost on the motivating encounter:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a code's own act beside another act's denial in one passage is held, as main holds it | 88d9db32: "... was sampled with cold biopsy forceps for histology; it was not excised by snare." | Corti's 45380 held (a performed-status question); the member's path is an addendum or a rejection, since this release offers no reviewer confirmation | setting the other act's denial apart believed acts done "at the referring facility", "elsewhere", "historically" or "unsuccessfully" through three rounds |
+| the package's coordinated marking outside its own shape | "marked with 3 mL of India ink and not resected"; "marked distally with tattoo ink and not resected"; "marked with submucosal tattoo for future localization and not resected" alone | 45381 held or excluded, as main reads it | the shape's widenings released forms where no tattoo was placed; a hold is the safe side |
+| a decompression's bare verb outside a failure or attempt frame | "The sigmoid volvulus was detorsed, decompressing the colon." | not read as an act, as at main | reading the bare verb made 45393 and 45337 READY on plans, drugs and tubes |
