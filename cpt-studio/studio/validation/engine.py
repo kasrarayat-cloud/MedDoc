@@ -33,7 +33,7 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
 from studio.validation import checks, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@7'
+ENGINE_VERSION = 'cpt-studio-validation@8'  # @8: harness repair 3 (P-ADMIT2)
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.
@@ -463,8 +463,9 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple]) -> set:
     spans = [(e.start, e.end) for e in candidate.evidence]
 
     def shown(acts):
-        own = [a for a in acts if any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)]
-        return own or list(acts)
+        # refutation round 1 of harness repair 3 (L4-2): only the acts its own passages show - never every act of the
+        # kind, so an Impression line or a doubted act's sentence claims no other dilation's code
+        return [a for a in acts if any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)]
 
     claimed = set()
     for service, family, act, label in items:
@@ -530,6 +531,13 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
     if bases:
         acts, _, _ = reconcile.reconcile(inventory, bases, procedure_day=procedure_day)
         items += [(u.service, u.family, u.act, u.label) for u in acts if u.reason == 'not_covered' and u.act]
+    # refutation round 1 of harness repair 3 (L4-1): an office visit documented as done is a documented service, beside
+    # a same-day procedure too. The reconciliation never pushes one there (it lists none), which is a rule about what
+    # it asks for, not about what a proposal may account for: the visit's own checks (separate_em) judge the proposal
+    listed = {item[0] for item in items}
+    items += [(service.id, service.family, '', reconcile.service_label(service)) for service in inventory.services
+              if service.family == 'gi.office_em' and service.status in ('performed', 'incomplete')
+              and service.id not in listed]
     return items
 
 
@@ -549,18 +557,29 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
         items = (_open_items_covered(selection, selection.code, documented, inventory)
                  if inventory is not None else [])
         claims_of[selection.code] = _claimed(selection, items) if items else set()
-    holders: dict[tuple, set] = {}
-    for code, claimed in claims_of.items():
-        for claim in claimed:
-            holders.setdefault(claim, set()).add(code)
     out: dict[str, tuple[str, ...]] = {}
     for code, claimed in claims_of.items():
-        rivals = {other for claim in claimed for other in holders[claim] if other != code}
+        # refutation round 1 of harness repair 3 (L4-3): an act restated without its site ("Impression: Schatzki ring,
+        # dilated with a balloon to 18 mm.") is one act with the site stated before it, so two codes for it compete
+        rivals = {other for other, theirs in claims_of.items() if other != code
+                  and any(_same_claim(mine, their) for mine in claimed for their in theirs)}
         if code not in admissible:
             rivals &= set(admissible)  # a decidable code competes only with the participants' codes
         if rivals:
             out[code] = tuple(sorted(rivals))
     return out
+
+
+def _same_claim(mine: tuple, theirs: tuple) -> bool:
+    """Whether two _claimed claims are one: equal, or two acts of one service and kind whose sites are one (either
+    contains the other), or either of which states none (refutation round 1 of harness repair 3, L4-3)."""
+    if mine == theirs:
+        return True
+    if not (mine[0] == theirs[0] == 'act' and mine[1] == theirs[1] and mine[2] == theirs[2]):
+        return False
+    a, b = mine[3].lower(), theirs[3].lower()
+    # one site contains the other ("esophagus", "distal esophagus"): one site read twice, never two sites
+    return not a or not b or a in b or b in a
 
 
 def _not_admitted_why(candidate: '_Selection', code: str, accounts: bool, documented: Sequence[tuple]) -> str:
@@ -3691,19 +3710,21 @@ class _Harness:
         documented-service reading is unavailable; otherwise it is read by the proposal provider's own path (_select:
         scope, exact evidence, the routed family, the documented service and act, the P2 READ-HOLD holds, the passages'
         support, required facts, PFS, MUE, the endoscopic base) from its first-reading proposers' spans alone, and is
-        admissible exactly where a code the bounded second review selected would be added (_second_review): not
-        excluded, and accounting for an item the decidable proposals left unresolved (_open_items_covered, over the
-        reconciliation of those proposals; ``procedure_day`` as the second review reads it). Otherwise it is an
-        alternative with the second review's own reason (_not_added_why). An admissible code is added unless another
-        admissible code accounts for one of its items (PARTICIPANT_COMPETING): CPT Studio never chooses between
-        participants. An added code is a selection like any other - its status, checks and questions are the readers',
+        admissible where it is not excluded, its own passages show the act it accounts for (support 'pass'), and it
+        accounts for a documented service or act the reading reads done as if nothing were proposed (P-ADMIT2, harness
+        repair 3: _documented_items - whatever any other proposer selected, omitted or listed). Otherwise it is an
+        alternative with CPT Studio's own reason (_not_admitted_why). Codes of different proposers for one documented
+        act each reach review, held by one question naming the others (_competition): CPT Studio never chooses between
+        them. An added code is a selection like any other - its status, checks and questions are the readers',
         it counts as covering what it accounts for, and only a member's decision approves it. ``corti_listed`` and
         ``corti_second_listed`` word its rationale's first sentence (_lead)."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
         # P-ADMIT2 (owner directive 2026-11-05, second message): every documented service and act the reading reads
         # done, as if nothing were proposed - never only what the other proposals left open, so no proposer's selection,
         # or its silence, decides whether a participant's code reaches review
-        documented = _documented_items(inventory, procedure_day) if inventory is not None else []
+        # refutation round 1 (L4-1): never the same-day office-visit suppression, which reads Corti's own procedure
+        # selections (merge_day): a separately documented visit is a documented service whatever Corti selected
+        documented = _documented_items(inventory, False) if inventory is not None else []
         order: list[str] = []
         why: dict[str, str] = {}
         admissible: dict[str, tuple] = {}  # code -> (its reading, the open items it accounts for, its first proposers)

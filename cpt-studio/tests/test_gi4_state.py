@@ -60,6 +60,13 @@ HARNESS_REPAIR_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@6',
                                    (gi_services, 'INVENTORY_VERSION'): 'gi-services@3',
                                    (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@3',
                                    (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@6'}
+# Harness repair 3 (owner directive 2026-11-05, second message): the four labels as installed e6d451f03d86 records them;
+# repair 3's readers read differently (F-SECTIONS, F-ACTS, F-TIME, F-NEG S and P-ADMIT2), so each moves once more. The
+# context does not: its facts are identical on every retained revision text and on the freeze's date channel.
+HARNESS_REPAIR_3_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
+                                     (gi_services, 'INVENTORY_VERSION'): 'gi-services@4',
+                                     (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@4',
+                                     (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@7'}
 # a rule (a) document (pd.json, CTS-6's PD-06): installed reads and sends 2026-10-19; the round-4 reader asks the date
 RULE_A = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
           'Date of service: 10/19/2026\nDate seen: 10/12/2026 in clinic; procedure today\nEndoscopist: Synthetic MD\n'
@@ -333,7 +340,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@7', 'gi-services@4', 'cpt-studio:gi-services@4', 'cpt-studio-validation@7'))
+                         ('gi-routing@8', 'gi-services@5', 'cpt-studio:gi-services@5', 'cpt-studio-validation@8'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -343,6 +350,9 @@ class RoundFourLabelTests(SimpleTestCase):
             self.assertNotEqual(getattr(module, name), installed, name)
         # the harness repair (2026-11-05): once more beside installed b0dc3446c64c
         for (module, name), installed in HARNESS_REPAIR_INSTALLED_LABELS.items():
+            self.assertNotEqual(getattr(module, name), installed, name)
+        # harness repair 3 (2026-11-05): once more beside installed e6d451f03d86
+        for (module, name), installed in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
 
     def labels_and_fingerprints(self):
@@ -372,8 +382,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@4')},
-                         {('gi-routing@7', 'gi-services@4', 'cpt-studio-validation@7')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@5')},
+                         {('gi-routing@8', 'gi-services@5', 'cpt-studio-validation@8')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

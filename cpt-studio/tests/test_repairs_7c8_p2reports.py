@@ -509,8 +509,11 @@ Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forc
 # The colonoscopy named only in the title: its performance is not established, so a support is not checked
 # (not_applicable) and its source passages are the documented service's, marked as not checked (refutation 7c8,
 # reports-4) - the verifier's second trigger.
-HELD_NOTE = MARKS_NOTE.replace('Date of service: 2026-10-14\nProcedure: Colonoscopy with cold snare polypectomy.',
-                               'Date of procedure: 2026-10-14\nColonoscopy with cold snare polypectomy.')
+# harness repair 3 (F-SECTIONS T): "Colonoscopy report (fictional)" is a report title now, which establishes the
+# colonoscopy; the held note keeps its service unestablished (support 'not_applicable') with no title at all
+HELD_NOTE = MARKS_NOTE.replace('Colonoscopy report (fictional)\n', '').replace(
+    'Date of service: 2026-10-14\nProcedure: Colonoscopy with cold snare polypectomy.',
+    'Date of procedure: 2026-10-14\nColonoscopy with cold snare polypectomy.')
 SNARE_SENTENCE = 'Sigmoid colon: a 6 mm sessile polyp was removed completely with a cold snare and retrieved.'
 CECUM_CLAUSE = 'The colonoscope was advanced to the cecum.'
 FLAT_BIOPSY = 'Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forceps for histology.'

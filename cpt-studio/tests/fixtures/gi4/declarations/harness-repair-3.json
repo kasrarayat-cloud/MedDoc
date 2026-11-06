@@ -14,10 +14,43 @@
       "45385",
       "selected/needs_clarification",
       "selected/ready"
+    ],
+    [
+      "R8 D9 index colonoscopy prose",
+      "45385",
+      "selected/needs_clarification",
+      "excluded/excluded"
     ]
   ],
   "why": {
     "R8 R5 X3 an EGD by another provider, the snare code": "Truth done (Polyp A removed with a cold snare today). \"EGD performed today by Dr. Other Endoscopist (fictional), reported separately.\" now reads its EGD as another provider's (F-TIME P, a named agent no physician line names), so the colonoscopy's snare is no longer held by a second family of this report.",
-    "R8 R5 Y4 a separately reported same-day EGD": "Truth done. \"EGD performed immediately before this procedure; see separate report.\" now reads the EGD as before this procedure (F-TIME B), never this report's service, so the snare is no longer held by it."
-  }
+    "R8 R5 Y4 a separately reported same-day EGD": "Truth done. \"EGD performed immediately before this procedure; see separate report.\" now reads the EGD as before this procedure (F-TIME B), never this report's service, so the snare is no longer held by it.",
+    "R8 D9 index colonoscopy prose": "Truth not_done. \"At the index colonoscopy, a 9 mm polyp was removed with a hot snare.\" is an earlier occasion's (F-TIME B: \"at the initial, original or index procedure\"), so Corti's 45385 citing it is excluded as historical where the base held it; the exclusion matches the row's truth."
+  },
+  "cues_added": [
+    "sections.ATTACHED_HEAD_LINES",
+    "sections.INLINE_PARAGRAPH_CHARS",
+    "sections.INLINE_PART_REACH",
+    "sections._ANOTHER_REPORT_LABEL",
+    "sections._ASIDE_DENY",
+    "sections._ASIDE_OK",
+    "sections._ELSEWHERE",
+    "sections._FIELD_LINE",
+    "sections._HISTORY_ADVERB",
+    "sections._INLINE_LABEL",
+    "sections._INLINE_SENTENCE_END",
+    "sections._NOT_A_REPORT_TITLE",
+    "sections._NOT_TODAYS_SECTION",
+    "sections._OTHER_OCCURRENCE_TEXT",
+    "sections._REPORT_HEAD_FIELD",
+    "sections._REPORT_TITLE",
+    "sections._SEPARATOR_LINE",
+    "sections._STICKY_SECTION",
+    "sections._TITLE_ASIDE"
+  ],
+  "movements": {
+    "MENTIONS-CHANGED": 1
+  },
+  "freeze": "python -m ops.gi4.freeze --base 406843018f08 --head <h3-dev>: (a) 19 patterns added to sections.py (the four of refutation round 1's L3-1 repair: an attached report's title only on positive evidence), none changed or removed (cues_added); the layout over 5,723 texts identical; (b) the date channel over 44,014 text and member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0; (c) 19,780 requests unchanged; (d) one mention count: svc-09's act mentions 4 -> 5, the indication's \"impacted meat bolus ... on 2025-06-11 at another hospital\" named by F-ACTS (read as historical); pins/freeze.json re-pinned for that one text only.",
+  "replay": "python -m ops.gi4.replay --fixtures --base 406843018f08 --head <h3-dev>: every regression encounter (h2-08, h2-10, h4-01..h4-06) reads identically - its date fact, the dates accepted, the date the walk sends and its request, the READY codes and every HARD, SOFT and INFO check; the only differences are the three reader labels this repair moves (engine cpt-studio-validation@7 -> @8, inventory gi-services@4 -> @5, routing gi-routing@7 -> @8). The context label stays gi-context@4: its facts are identical on the 58 retained revision texts and on the freeze's date channel."
 }

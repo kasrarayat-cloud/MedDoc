@@ -395,11 +395,18 @@ _ASIDE_DENY = re.compile(r'\b(?:not?|non|cancel\w*|abort\w*|stopped|plan\w*|sche
                          re.A | re.I)
 
 
+# Refutation round 1 of harness repair 3 (L5-3): a deny-list of asides never converges ("(Preop)", "(Duplicate)",
+# "(Entered in Error)", "(Geplant)" read as titles), so an aside is read as part of the title only when it is one of
+# these closed words: the report's own state, never a time, a place, a copy or a plan.
+_ASIDE_OK = re.compile(r'(?:fictional|synthetic|final|finali[sz]ed|amended|corrected|revised|signed|electronically signed|'
+                       r'updated|complete|completed|verified)', re.A | re.I)
+
+
 def _aside_title(line: str) -> Optional[str]:
     """The title before its aside when ``line`` is a procedure report's title with a short aside after it (see above),
     else None."""
     aside = _TITLE_ASIDE.search(line)
-    if aside is None or _ASIDE_DENY.search(aside.group('words')):
+    if aside is None or _ASIDE_DENY.search(aside.group('words')) or not _ASIDE_OK.fullmatch(aside.group('words')):
         return None
     bare = line[:aside.start()]
     if cues.PROCEDURE_TITLE.match(bare.strip()) and _service_named(bare) and not _TITLE_QUALIFIER.search(line):
@@ -1088,22 +1095,68 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
     return headings, inside, resumes, field_ends, field_labels
 
 
+_SEPARATOR_LINE = re.compile(r'[-=_*~.]{3,}')  # a rule line between a heading and what it holds
+# Refutation round 1 (L3-1: "Interval history:" with nothing after it, then today's own "Procedure Note" and its
+# narrative): a report title in a history section titles an attached report only on positive evidence - the section's
+# own label names another report or record ("Attached prior report:", "Outside report:", "Records received:"), or the
+# title carries a report head of its own on its next lines, before any narrative: a date, physician, patient or
+# facility field ("Date of service: 2025-03-01", "Endoscopist: Dr. B. Synthetic (fictional)"), as an attached report
+# does and today's own section title, whose head is the document's, does not.
+_ANOTHER_REPORT_LABEL = re.compile(r'\b(?:reports?|records?|attached|attachments?|enclosed|scanned|faxed|received)\b',
+                                   re.A | re.I)
+_REPORT_HEAD_FIELD = re.compile(
+    r'[ \t]*(?:date(?:\s+of\s+(?:service|procedure|exam(?:ination)?|birth))?|procedure\s+date|'
+    r'exam(?:ination)?\s+date|DOS|DOB|endoscopists?|physicians?|proceduralists?|'
+    r'performing\s+(?:physician|endoscopist|gastroenterologist)|attending(?:\s+physician)?|gastroenterologists?|'
+    r'colonoscopists?|surgeons?|operators?|providers?|performed\s+by|patient(?:\s+name)?|name|MRN|'
+    r'medical\s+record\s+(?:number|no\.?)|account(?:\s+(?:number|no\.?))?|facility|location|hospital|'
+    r'institution)[ \t]*:', re.A | re.I)
+_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][A-Za-z .()/#-]{0,40}:', re.A)  # a "Label: value" line of a report head
+ATTACHED_HEAD_LINES = 4  # non-empty lines after a title read for a report head of its own (bounded)
+
+
+def _titles_another_report(text: str, lines: list[tuple[int, int]], i: int, label: str) -> bool:
+    """Whether the report title on line ``i``, in a history section labelled ``label``, titles an attached report
+    (see _REPORT_HEAD_FIELD above): the label names another report or record, or the title's next lines carry a head
+    field of their own before any line that is not a field."""
+    if _ANOTHER_REPORT_LABEL.search(label or ''):
+        return True
+    seen = 0
+    for ls, le in lines[i + 1:]:
+        line = text[ls:le].strip()
+        if not line or _SEPARATOR_LINE.fullmatch(line):
+            continue
+        if _REPORT_HEAD_FIELD.match(line):
+            return True
+        seen += 1
+        if not _FIELD_LINE.match(line) or seen >= ATTACHED_HEAD_LINES:
+            return False  # narrative before any head field: today's own section title
+    return False
+
+
 def _attached_titles(text: str, lines: list[tuple[int, int]], headings: dict) -> None:
     """F-SECTIONS T (harness repair 3; the battery's R8 D10): a report title that is the first line under a history
     heading with nothing after its colon ("Attached prior report:" then "Upper endoscopy report (fictional)") titles the
     attached report. It stays in the history section and never opens a procedure section of today's report, so the
     attached report's own date of service never competes with this one's. A title with an aside read as its title
-    (_aside_title) and one without are read alike. In place."""
-    previous = None
+    (_aside_title) and one without are read alike. Refutation round 1 (L3-1, L3-11, L5-4): only a report title (never
+    a bare section label such as "Procedure"), wherever the history section it stands in runs ("Prior report:",
+    "Received by fax.", then the title), with a rule line passed over - and in a history section only on positive
+    evidence that the title is another report's (_titles_another_report). In place."""
+    in_force, in_force_label = None, ''  # the kind and label of the section the last heading opened
     for i, (ls, le) in enumerate(lines):
-        if not text[ls:le].strip():
-            continue
+        line = text[ls:le].strip()
+        if not line or _SEPARATOR_LINE.fullmatch(line):
+            continue  # a blank line, or a rule ("----------"), stands between the heading and the title it holds
         heading = headings.get(i)
-        if heading and heading[0] == 'procedure' and ':' not in heading[2].text and previous is not None:
-            above = headings.get(previous)
-            if above and above[0] == 'history' and not text[above[2].end:lines[previous][1]].strip():
-                headings[i] = None
-        previous = i
+        if heading and heading[0] == 'procedure' and ':' not in heading[2].text \
+                and ((in_force == 'history' and _titles_another_report(text, lines, i, in_force_label))
+                     or _NOT_TODAYS_SECTION.search(in_force_label)) \
+                and (cues.PROCEDURE_TITLE.match(line) or _aside_title(line) is not None):
+            headings[i] = None  # a report title inside a history or another report's section: the attached report's
+            continue
+        if heading:
+            in_force, in_force_label = heading[0], heading[1]
 
 
 # Harness repair 3 (HARNESS.md, "Harness repair 3", F-SECTIONS L): in a procedure report, a paragraph that opens with
@@ -1143,23 +1196,102 @@ def _inline_service(text: str, lines: list[tuple[int, int]], i: int) -> Optional
         return None
     if under_another_occurrence(text, ls):
         return None
+    # refutation round 1 (L5-1): every sentence of the labelled paragraph, never only its first, carries no date, no
+    # plan, history or cancellation cue and no other place or source; the paragraph ends at a blank line or the next
+    # labelled line
+    para_end = _paragraph_end(text, lines, i)
+    if _ITEM_DATE.search(text, ls, para_end) or any(p.search(text, ls, para_end) for _, p in cues.HISTORICAL_CLAUSE) \
+            or _ELSEWHERE.search(text, ls, para_end) or _HISTORY_ADVERB.search(text, ls, para_end):
+        return None  # a plan or a deferral of one act inside today's narrative ("dilation was deferred") is its own
     label = found.group('label').strip()
     h_start = ls + found.group(0).index(label)
     h_end = text.index(':', h_start + len(label)) + 1
     return 'procedure', normalize_label(label), Span(h_start, h_end, text[h_start:h_end])
 
 
+INLINE_PARAGRAPH_CHARS = 1500  # a labelled paragraph is read in its first part
+# a history adverb anywhere in the labelled paragraph ("Previously, the colonoscope was introduced ..."), and a section
+# above it that announces another occurrence's account ("the findings of the index colonoscopy follow"), or a section
+# that is an addendum, pathology, records or correspondence (refutation round 1, L5-1, L5-2)
+_HISTORY_ADVERB = re.compile(r'\b(?:previously|formerly|in\s+the\s+past|at\s+that\s+time|on\s+that\s+occasion)\b',
+                             re.A | re.I)
+_OTHER_OCCURRENCE_TEXT = re.compile(r'\b(?:index|prior|previous|last|earlier|outside|original|initial|referring)\s+'
+                                    r'(?:colonoscopy|egd|endoscopy|examination|procedure|study|report)\b', re.A | re.I)
+_STICKY_SECTION = re.compile(r'\b(?:addendum|pathology|records?|letter|correspondence|consult(?:ation)?|attached|'
+                             r'outside|referring)\b', re.A | re.I)
+_NOT_TODAYS_SECTION = re.compile(r'\b(?:addendum|pathology|records?|letter|correspondence|summary|consult(?:ation)?|'
+                                 r'outside|referring|attached|prior|previous|old)\b', re.A | re.I)
+# another place or source in a labelled paragraph (refutation round 1, L5-1): an outside, referring, transferring or
+# external one, elsewhere, another facility, a named hospital or clinic, or a source ("per", "according to")
+_ELSEWHERE = re.compile(r'\b(?:outside|referring|referral|transferring|sending|outlying|external|elsewhere|OSH|'
+                        r'another\s+(?:facility|hospital|institution|physician|endoscopist)|according\s+to|per\s+Dr\b|'
+                        r'reportedly|hospital|clinic|infirmary)\b', re.A | re.I)
+# a procedure report's own title in the head (refutation round 1, L5-2): an office, clinic, consult, visit, progress or
+# history note is no procedure report, whatever fields its head carries
+_REPORT_TITLE = re.compile(r'\b(?:procedure|endoscopy|endoscopic|colonoscopy|egd|gastroscopy|esophagogastroduodenoscopy|'
+                           r'sigmoidoscopy|operative)\s+(?:report|note)\b', re.A | re.I)
+_NOT_A_REPORT_TITLE = re.compile(r'\b(?:clinic|office|consult(?:ation)?|visit|progress|history\s+and\s+physical|H&P|'
+                                 r'follow-?up|discharge|referral|letter|summary)\b', re.A | re.I)
+
+
+def _paragraph_end(text: str, lines: list[tuple[int, int]], i: int) -> int:
+    """Where the paragraph that line ``i`` opens ends: the next blank line or labelled line, within
+    INLINE_PARAGRAPH_CHARS."""
+    end = lines[i][1]
+    for ls, le in lines[i + 1:]:
+        line = text[ls:le]
+        if not line.strip() or _INLINE_LABEL.match(text, ls, le) or le - lines[i][0] > INLINE_PARAGRAPH_CHARS:
+            break
+        end = le
+    return end
+
+
+def _procedure_report_titled(text: str) -> bool:
+    """Whether one of the document's first AROUND_PROCEDURE_TITLE_LINES non-empty lines is a procedure report's own
+    title ("Gastroenterology Procedure Report", "Endoscopy Procedure Note", "Colonoscopy Report") and none is the title
+    of an office, clinic, consult, visit or progress note (refutation round 1, L5-2)."""
+    seen = 0
+    titled = False
+    for line in text.split('\n'):
+        stripped = line.strip()
+        if not stripped or stripped.startswith('SYNTHETIC TEST DOCUMENT'):
+            continue
+        seen += 1
+        if seen > AROUND_PROCEDURE_TITLE_LINES:
+            break
+        if len(stripped) > AROUND_PROCEDURE_TITLE_CHARS or _TITLE_FIELD.search(stripped):
+            continue
+        if _NOT_A_REPORT_TITLE.search(stripped):
+            return False
+        if _REPORT_TITLE.search(stripped) or cues.PROCEDURE_TITLE.match(stripped):
+            titled = True
+    return titled
+
+
 def _inline_services(text: str, lines: list[tuple[int, int]], headings: dict, inside: set) -> None:
     """``headings`` with the procedure headings the services' own labelled parts open (F-SECTIONS L), in place."""
-    if not procedure_report_head(text) or around_procedure_title(text):
+    if not procedure_report_head(text) or around_procedure_title(text) or not _procedure_report_titled(text):
         return
-    current = None
+    current, label, opened, sticky = None, '', 0, False
     for i in range(len(lines)):
         if headings.get(i):
-            current = headings[i][0]
+            current, label, opened = headings[i][0], headings[i][1], lines[i][0]
+            # an addendum, records, correspondence or another report's heading stays in force over its own fields
+            # ("Pathology addendum", then "Clinical information: ..."): only a bare procedure heading ends it
+            bare = not text[headings[i][2].end:lines[i][1]].strip()
+            if _STICKY_SECTION.search(label):
+                sticky = True
+            elif bare and current == 'procedure':
+                sticky = False
             continue
-        if i in inside or current in ('history', 'plan'):
+        stripped = text[lines[i][0]:lines[i][1]].strip()
+        if stripped and len(stripped) <= 40 and not stripped.endswith(('.', ':')) and _STICKY_SECTION.search(stripped):
+            sticky = True  # a label line the layout reads as no heading ("Pathology addendum"), in force all the same
             continue
+        if i in inside or sticky or current in ('history', 'plan') or _ELSEWHERE.search(label) \
+                or _NOT_TODAYS_SECTION.search(label) or _OTHER_OCCURRENCE_TEXT.search(text, opened, lines[i][0]):
+            continue  # under a history, plan, addendum or records heading, one naming another place or source
+            # ("Reason for referral"), or a section that announces another occurrence's account above the label
         heading = _inline_service(text, lines, i)
         if heading is not None:
             headings[i], current = heading, heading[0]

@@ -236,7 +236,15 @@ def _participants_owed(revision, context):
     holds a member date conflict, while which nothing is sent - and so () when none is configured (I1)."""
     if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
         return ()
-    return tuple(name for name in participants.configured() if _participant_run(revision, name) is None)
+    return tuple(name for name in participants.configured()
+                 if _participant_run(revision, name) is None or _stopped_and_resumable(revision, name))
+
+
+def _stopped_and_resumable(revision, name) -> bool:
+    """Whether participant ``name``'s newest finished, sent first reading for ``revision`` is a loop a member's Stop
+    ended between exchanges (refutation round 1 of harness repair 3, L6-2): it is owed its turn, which continues it."""
+    return _resumable_stop(_newest_finished(revision.provider_runs.filter(
+        provider=name, purpose=models.ProviderRun.INDEPENDENT, sent=True)))
 
 
 # --- harness@2's peer review (HARNESS.md 11.1, 12.1) ------------------------------------------------------------------
@@ -617,14 +625,19 @@ def _stopped_attempt(encounter, provider, request, purpose):
     'stopped_after_turn' by _finish_loop. Any other newest run (a success the stage reuses, a failure never sent again,
     an unknown outcome, a later continuation of it) is no stopped attempt. Read after the unknown-outcome block and
     before _failed_before, which a stopped run would otherwise answer: its request did not fail, it was paused."""
+    # refutation round 1 of harness repair 3 (L6-1): the newest finished run that was SENT - a hold or another
+    # not-sent run recorded after the Stop (an unknown outcome elsewhere, a refusal) never hides the stopped one
     run = _newest_finished(models.ProviderRun.objects.filter(
         encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
-        request_sha256=request.canonical_sha256, purpose=purpose))
-    if run is None or run.state != models.ProviderRun.FAILED or not run.sent:
-        return None
-    if not isinstance((run.scope or {}).get('stopped_after_turn'), int):
-        return None
-    return run
+        request_sha256=request.canonical_sha256, purpose=purpose, sent=True))
+    return run if _resumable_stop(run) else None
+
+
+def _resumable_stop(run) -> bool:
+    """Whether ``run`` is a loop a member's Stop ended between exchanges (failed, sent, and marked 'stopped_after_turn'
+    by _finish_loop): one a Resume continues from its record (F-STOP)."""
+    return (run is not None and run.state == models.ProviderRun.FAILED and run.sent
+            and isinstance((run.scope or {}).get('stopped_after_turn'), int))
 
 
 def continued_runs(run) -> list:

@@ -926,17 +926,22 @@ class SourceHighlightTitleTests(MeaningCase):
 # Studio used (it was "... selected, in scope and with an exact passage, or that its bounded second review added ...")
 # The sentence of HARNESS.md P-ADMIT (2026-11-05), written out so that a change of its wording is a change of this pin;
 # D14's, which it replaces, said that every other code "is listed as an alternative and never added as a proposal".
+# Moved by harness repair 3 (P-ADMIT2, the owner's second message of 2026-11-05): the gap-filling clause ("only where
+# they read it as accounting for a documented service or act the other proposals left unresolved, and not where another
+# participant proposes a different code for the same act") is withdrawn - a code is read whatever any other proposer did
+# with it, and codes of different proposers for one act each reach review, held by one question naming the others.
 NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
                 'proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its '
                 "bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers "
                 "judge on the provider's passages alone; a code a participant's independent first reading proposes, "
-                "quoting the document verbatim, is read by those same readers from that reading's exact passages and "
-                'added as a proposal of its own only where they read it as accounting for a documented service or act the '
-                'other proposals left unresolved, and not where another participant proposes a different code for the '
-                'same act; it is then held or ready by those readers alone, and only a reviewer approves it; any other '
-                "code a participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is "
-                "listed as an alternative, and one in neither shape is counted and never listed; and a participant's "
-                'questions are notes that never block.')
+                "quoting the document verbatim, is read by those same readers from that reading's exact passages, "
+                'whatever any other proposer did with it, and added as a proposal of its own where they read it as '
+                'accounting for a documented service or act done on the date of service; codes of different proposers '
+                'for the same act each reach review, held by one question naming the others, and none is preferred; it '
+                'is then held or ready by those readers alone, and only a reviewer approves it; any other code a '
+                "participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is listed "
+                "as an alternative, and one in neither shape is counted and never listed; and a participant's questions "
+                'are notes that never block.')
 SAME_RULES = "by the same rules as the proposal provider's"
 
 

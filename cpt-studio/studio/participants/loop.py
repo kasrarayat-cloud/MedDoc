@@ -297,6 +297,9 @@ def _resumed(carried: tuple, body: dict, sha256: str, parse_turn, follow_up, mod
             return refused(f'exchange {index} recorded another request')
         if record.outcome != 'succeeded' or not isinstance(record.response_bytes, (bytes, bytearray)):
             return refused(f'exchange {index} did not succeed')
+        # refutation round 1 of harness repair 3 (L6-4): the answer's bytes re-hash to their recorded sha256
+        if hashlib.sha256(bytes(record.response_bytes)).hexdigest() != record.response_sha256:
+            return refused(f'the answer of exchange {index} no longer matches its record')
         turn = _turn(parse_turn, RawExchange(outcome='succeeded', sent=True,
                                              response_bytes=bytes(record.response_bytes)))
         if not turn.calls or _unanswerable(turn.calls):
@@ -304,6 +307,9 @@ def _resumed(carried: tuple, body: dict, sha256: str, parse_turn, follow_up, mod
         answered = tuple(record.tool_calls)
         if [call.call_id for call in turn.calls] != [call.call_id for call in answered]:
             return refused(f'the tool calls of exchange {index} were not all answered')
+        if [(str(call.name), _encoded(call.arguments)) for call in turn.calls] \
+                != [(call.tool, _encoded(call.arguments)) for call in answered]:
+            return refused(f'the tool calls of exchange {index} no longer match their record')
         outputs = []
         for call in answered:
             encoded = _encoded(call.result)

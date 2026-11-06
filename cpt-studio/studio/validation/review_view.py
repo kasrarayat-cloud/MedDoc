@@ -614,7 +614,10 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
         at = _find(items, COMPETING_CHECK) if active else None
         if at is not None:
             rivals = set((p.support or {}).get('competes') or ())
-            live = sorted({q.code for q in candidates if q.key != p.key and q.code in rivals})
+            # refutation round 1 of harness repair 3 (L4-5): a rival a member's answer to one of its own questions left
+            # unavailable is no longer in review; an answer to the competing question itself never counts
+            live = sorted({q.code for q in candidates if q.key != p.key and q.code in rivals
+                           and unavailable.get(q.key, ('', ''))[0] in ('', COMPETING_FACT)})
             if not live:
                 del items[at]
                 recomputed.append(COMPETING_CHECK)

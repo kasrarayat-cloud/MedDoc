@@ -454,6 +454,9 @@ def _exclusion_reason(proposal):
 
 
 QUESTION_WORDS = {
+    # refutation round 1 of harness repair 3 (L4-6): a competition hold says what settles it
+    'competing_codes': 'Another code is proposed for the same documented act: reject the one the documentation does '
+                       'not support, and this one is then ready for review.',
     'performed_status': 'The document does not establish that this was done on the date of service.',
     'extent': 'How far the examination reached is not documented.',
     'completion': 'Whether the examination was completed is not documented.',

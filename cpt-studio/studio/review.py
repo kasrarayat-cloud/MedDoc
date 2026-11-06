@@ -30,7 +30,7 @@ from . import audit, candidates, participants
 from .gi.context import charge_date_problem
 from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
-                     Proposal, ProviderRun, SourceRevision, ToolCall)
+                     Proposal, ProviderExchange, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
 
 log = logging.getLogger(__name__)
@@ -1899,9 +1899,12 @@ def run_tool_calls(run):
     reuses (jobs.loop_run, HARNESS.md 12.1) - in exchange turn and call order; [] for a run with none."""
     from .jobs import loop_run  # local import: jobs imports this module
 
+    from .jobs import loop_runs  # local import: jobs imports this module
+
     if run is None:
         return []
-    return list(ToolCall.objects.filter(exchange__run=loop_run(run)).select_related('exchange')
+    # refutation round 1 of harness repair 3 (L6-3): a continuation's loop is its whole chain (jobs.loop_runs)
+    return list(ToolCall.objects.filter(exchange__run__in=loop_runs(run)).select_related('exchange')
                 .order_by('exchange__turn', 'id'))
 
 
@@ -1935,9 +1938,10 @@ def _delivered_turns(run):
     ends once CPT Studio has answered an exchange's tool calls, sending nothing more (the next exchange not sent, a
     member's Stop, a follow-up it could not build, the deadline), keeps the calls it answered on that exchange's record
     (studio.participants.loop), and their results never reached the participant."""
-    from .jobs import loop_run  # local import: jobs imports this module
+    from .jobs import loop_runs  # local import: jobs imports this module
 
-    states = dict(loop_run(run).exchanges.values_list('turn', 'state'))
+    # the whole chain's exchanges (L6-3): a continuation numbers its turns after the ones it carries
+    states = dict(ProviderExchange.objects.filter(run__in=loop_runs(run)).values_list('turn', 'state'))
     return {turn for turn in states if states.get(turn + 1) not in (None, ProviderRun.NOT_SENT)}
 
 

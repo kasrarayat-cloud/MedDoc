@@ -144,7 +144,7 @@ CORE_REPAIR_PINNED = {
 # labels set back to installed b0dc3446c64c's every case equals CORE_REPAIR_PINNED above but response-refused, whose
 # completeness now says the provider response was not available (a response refused whole is no available answer);
 # every other digest moved by the labels alone (ServedLabelParityTests).
-PINNED = {
+HARNESS_REPAIR_PINNED = {
     'a-conflict-in-the-record': '53cabbcc2d96179ba11becd37e6c731420835c04563d57091d920bbfca5d9ede',
     'member-date-conflict-answered': '398562dc0d18c31a75d705e9cf38a5f905d3d1e7608639de26f48253faf6195c',
     'member-date-conflict-failed': '80f1ecf8b5d5b567338623edeb85d8d197875d694aef9a60f149a917cb628fe6',
@@ -156,6 +156,23 @@ PINNED = {
     'second-review': 'dc56ff838b19a3f09aca08af6e7f1b324dd6ab0606fff181b96e335af8163cb0',
     'two-codes-a-plan-code-and-hcpcs': '40540bd0a36ea88dc0f585d8fdb1b0d9c9e075250a7cc865b0030b2972c0281c',
     'visit-beside-a-procedure': 'b0e0feeca5683863ece0e638b9b9dddf9071ad4a8fc12627bc651102ffe01ad7',
+}
+
+# Harness repair 3 (2026-11-05, second message; cpt-studio-validation@8, gi-services@5, gi-routing@8) computes these.
+# With the three labels set back to installed e6d451f03d86's every case equals HARNESS_REPAIR_PINNED above, byte for
+# byte: on these Corti-only cases the repair moves the labels and nothing else (ServedLabelParity3Tests).
+PINNED = {
+    'a-conflict-in-the-record': '1ced964ed8d58c29bb808880287fbb409f52850c67242a99231ad1722675cd90',
+    'member-date-conflict-answered': 'b213b8002bfb5af16ac96a913b6a07c0f4ad4c784f6805518d04b151c366524a',
+    'member-date-conflict-failed': 'a06d4d8f47fc76b9e8d8b4f2ed9fdb6a4723a05d07881dccdc554ee13e1bf483',
+    'polypectomy-and-a-candidate': '9a85322e6979a14175ab2abd8c647c7d20ed1ad8abcc6e31a959573b8200eacf',
+    'provider-failed': '027b76059ae773d3b4da8b02d7508033973f88591357b0b4cc48f4285d4c04b6',
+    'provider-not-run': 'd9238ee827640b4862170d6fc8e5f9035b47e31d9247012a742070adbca1d8cf',
+    'provider-unknown': '6df0fe9c9e318ed257da09cc60cf9bc1618555c32a7bc2deadfb71d4cfc84ded',
+    'response-refused': '3dcc8a43a5499d7f8ee37678da699001c95906512048770b538cebc4fe8d9555',
+    'second-review': 'bcbb384aeaaec8387d1ec3a956d43784a04eee6937f385114d0dee773459be01',
+    'two-codes-a-plan-code-and-hcpcs': 'a63817cea859ec3c37f7bfe35e8841940196b5ff4be45c7a015a0b5868990a8c',
+    'visit-beside-a-procedure': 'dd5138e408497a1b0459595584188fede5c01e579de33fb6239f57ccd50a83d2',
 }
 
 
@@ -191,6 +208,25 @@ class ServedLabelParityTests(SimpleTestCase):
         self.assertIn('the provider response was not available', ours.completeness['reasons'])
         self.assertEqual(ours.completeness['state'], 'incomplete')
         self.assertEqual(ours.proposals, ())
+
+
+class ServedLabelParity3Tests(SimpleTestCase):
+    """Harness repair 3's I1 declaration (HARNESS.md "Harness repair 3"): with the three reader labels set back to
+    installed e6d451f03d86's, every Corti-only case is byte-identical to the harness repair's pin - P-ADMIT2, F-TIME,
+    F-NEG S and the layout repairs move nothing a Corti-only assessment of these cases records but its labels."""
+
+    def test_every_case_is_the_installed_engines_byte_for_byte(self):
+        import contextlib
+        from unittest import mock
+        from tests.test_gi4_state import HARNESS_REPAIR_3_INSTALLED_LABELS
+        with contextlib.ExitStack() as stack:
+            for (module, name), value in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
+                stack.enter_context(mock.patch.object(module, name, value))
+            for name, kwargs in cases().items():
+                self.assertEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_PINNED[name], name)
+        # and the labels moved every digest: no case is pinned twice by accident
+        for name, kwargs in cases().items():
+            self.assertNotEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_PINNED[name], name)
 
 
 class PinnedParityTests(SimpleTestCase):

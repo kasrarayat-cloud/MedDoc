@@ -323,7 +323,9 @@ class _Row:
 
     @property
     def addendum_allowed(self) -> bool:
-        return self.control == CONFIRM or self.addendum
+        # refutation round 1 of harness repair 3 (L4-6): a competition is settled by a reviewer's rejection of the code
+        # the documentation does not support, never by documentation added to the record
+        return (self.control == CONFIRM and self.fact != COMPETING_FACT) or self.addendum
 
     def public(self):
         answer = self.answer
@@ -646,7 +648,9 @@ def save_details(encounter, user, items) -> dict:
             offered = {choice['value'] for choice in row.choices}
             if value in (NOT_DOCUMENTED, CANNOT_CONFIRM):
                 if value not in row.allow:
-                    raise InvalidAnswer(CLINICAL if row.control == CONFIRM else NOT_OFFERED)
+                    # refutation round 1 of harness repair 3 (L4-6): the competing question offers no answer at all
+                    raise InvalidAnswer(CLINICAL if row.control == CONFIRM and row.fact != COMPETING_FACT
+                                        else NOT_OFFERED)
                 if row.answer is not None and row.answer.value == value:
                     unchanged += 1
                     continue

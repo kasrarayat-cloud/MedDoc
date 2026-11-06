@@ -48,7 +48,7 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@7'
+ROUTING_VERSION = 'gi-routing@8'  # @8: harness repair 3 (attached titles, inline labels, F-TIME R)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -177,15 +177,16 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
 
 def _purpose_future(text: str, lay, services, cue: Cue) -> bool:
     """Whether ``cue`` is the "future" of a purpose (cues.PURPOSE_FUTURE: "for future localization") in a sentence that
-    states an act done, with no service named inside the purpose: then it dates nothing (HARNESS.md, "Harness repair
-    3", F-TIME R - the same rule the documented-service reader applies)."""
+    states an act done, with no service or intervention named inside the purpose: then it dates nothing (HARNESS.md,
+    "Harness repair 3", F-TIME R - the same rule the documented-service reader applies). ``services``: the spans
+    (start, end) of the text's service and intervention mentions."""
     if cue.status != 'planned' or cue.name != 'upcoming' or cue.text.lower() != 'future':
         return False
     ss, se = lay.sentence_for(cue.start, cue.end)
-    for m in cues.PURPOSE_FUTURE.finditer(text, max(ss, cue.start - 40), min(se, cue.end + 60)):
+    for m in cues.PURPOSE_FUTURE.finditer(text, max(ss, cue.start - 40), se):
         if m.start() <= cue.start < m.end():
-            if any(s.start < m.end() and m.start() < s.end for s in services):
-                return False  # a service named inside the purpose: the purpose's time is its own
+            if any(a < m.end() and m.start() < b for a, b in services):
+                return False  # a service or an act named inside the purpose: the purpose's time is its own
             return cues.stated_done(text, ss, se)
     return False
 
@@ -7193,8 +7194,9 @@ def _p2_folded_analysis(an: Analysis) -> Optional['Analysis']:
             interventions = tuple(Intervention(label, families, m.start(), m.end())
                                   for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(folded))
             mentions = _service_mentions(folded)
+            named = [(m.start, m.end) for m in mentions] + [(i.start, i.end) for i in interventions]
             an.memo[key] = Analysis(folded, lay, mentions, _em_mentions(folded, lay),
-                                    _clause_cues(folded, lay, mentions), ctx.find_dates(folded), an.service_date,
+                                    _clause_cues(folded, lay, named), ctx.find_dates(folded), an.service_date,
                                     interventions)
     return an.memo[key]
 
@@ -8401,7 +8403,8 @@ def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis,
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
     mentions = _service_mentions(text)
-    an = Analysis(text, lay, mentions, _em_mentions(text, lay), _clause_cues(text, lay, mentions),
+    named = [(m.start, m.end) for m in mentions] + [(i.start, i.end) for i in interventions]
+    an = Analysis(text, lay, mentions, _em_mentions(text, lay), _clause_cues(text, lay, named),
                   ctx.find_dates(text), effective, interventions)
     return an, _route(an)
 

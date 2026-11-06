@@ -22,30 +22,34 @@ from tests.test_repairs_ec5_sends import Base, LIVE
 
 @override_settings(**LIVE)
 class FailedSecondReviewStateTests(Base):
-    def assert_states_the_assessment(self, encounter_id):
+    def assert_states_the_assessment(self, encounter_id, own):
         encounter = self.encounter(encounter_id)
         review.refresh_state(encounter)
         self.assertNotEqual(encounter.state, 'provider_not_run')
-        self.assertEqual(encounter.state, 'needs_clarification')  # the current assessment's own state
+        # the current assessment's own state, as it read before the second review was asked for (harness repair 3: the
+        # report's "(fictional)" title is its title now, so that state is whatever the reading gives, not a literal)
+        self.assertEqual(encounter.state, own)
         self.assertTrue(encounter.current_assessment.proposals.filter(bucket='selected', code='45385').exists())
 
     def test_a_second_review_refused_at_its_stage_never_reads_as_no_request(self):
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.encounter(encounter_id).state, 'needs_clarification')
+        own = self.encounter(encounter_id).state
+        self.assertNotEqual(own, 'provider_not_run')
         self.assertEqual(self.ask(encounter_id).status_code, 201)
         models.Membership.objects.filter(user=self.reviewer).update(active=False)  # the requester lost the role
         drain()
         models.Membership.objects.filter(user=self.reviewer).update(active=True)
         job = models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.REVIEW2)
         self.assertEqual(job.state, models.Job.FAILED)
-        self.assert_states_the_assessment(encounter_id)
+        self.assert_states_the_assessment(encounter_id, own)
 
     def test_a_second_review_the_installer_closed_never_reads_as_no_request(self):
         from tests.test_repairs_r1_m import install, run_app_script
         encounter_id = self.create()
         drain()
+        own = self.encounter(encounter_id).state
         swap = timezone.now()
         self.assertEqual(self.ask(encounter_id).status_code, 201)
         run_app_script(install.CLOSE_STAGES, {'since': swap.isoformat(), 'note': 'Closed by the installer: undone.'})
-        self.assert_states_the_assessment(encounter_id)
+        self.assert_states_the_assessment(encounter_id, own)
