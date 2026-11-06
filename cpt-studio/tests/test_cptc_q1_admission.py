@@ -112,7 +112,9 @@ class EqualEligibilityMatrixTests(SimpleTestCase):
         """Agreement adds nothing: a failed, denied, planned or earlier act is never READY, and its outcome is the same
         whether Corti selected the code too or only the participants proposed it."""
         base = colon('', procedure='Colonoscopy').rstrip('\n') + '\n'
-        for line, expected in (('Hot snare polypectomy of the 8 mm descending colon polyp failed.', EXCLUDED),
+        # refutation cycle 4 (closed 1, 2): a failed removal beside a lesion only observed is held (the observed-only
+        # exclusion abandoned) - never READY, the same whoever proposed it
+        for line, expected in (('Hot snare polypectomy of the 8 mm descending colon polyp failed.', HELD_STATUS),
                                ('No polyps were removed.', EXCLUDED),
                                ('The 12 mm sigmoid polyp will be removed with a snare at a later date.', EXCLUDED),
                                ('At the last colonoscopy a 9 mm polyp was removed with a hot snare.', HELD_STATUS)):
@@ -149,6 +151,10 @@ class CycleThreeRefuterTests(SimpleTestCase):
                 'Hot snare polypectomy is to be performed at a later date.')
 
     def test_an_act_the_document_states_not_done_is_excluded_with_its_passage(self):
+        # refutation cycle 4 (closed 1, 2): the observed-only exclusion is abandoned. A removal the planned act's own
+        # passage states still to come ("will be performed at a later date") is excluded as planned, as before; the same
+        # code cited by the procedure line, and a failed, abandoned or infinitive removal, beside a lesion only observed,
+        # is held with its question and holds the base code, as Corti's own selection does on the installed release
         for line in self.NOT_DONE:
             text = colon(line)
             for quote in (line, 'Colonoscopy with hot snare polypectomy'):
@@ -156,9 +162,14 @@ class CycleThreeRefuterTests(SimpleTestCase):
                     with self.subTest(line=line, quote=quote, who=who):
                         result = by_participant(text, '45385', quote, who=who)
                         item = proposal(result, '45385')
-                        self.assertEqual((item.bucket, item.status, item.reinstatable), ('excluded', 'excluded', True))
-                        self.assertIn(line, item.exclusion_reason)  # said with the passage that says so
-                        self.assertEqual(coded(result, '45378'), [READY])
+                        if 'will be performed' in line and quote == line:  # the planned act's own passage
+                            self.assertEqual((item.bucket, item.status, item.reinstatable),
+                                             ('excluded', 'excluded', True))
+                            self.assertIn(line, item.exclusion_reason)  # said with the passage that says so
+                            self.assertEqual(coded(result, '45378'), [READY])
+                        else:
+                            self.assertEqual(coded(result, '45385'), [HELD_STATUS])
+                            self.assertEqual(coded(result, '45378'), [BASE_HELD])
                         self.assertEqual(shape(item), shape(proposal(by_corti(text, '45385', quote), '45385')))
 
     def test_the_banding_refuter_in_an_upper_endoscopy(self):
@@ -209,8 +220,9 @@ class StatedNotDoneRuleTests(SimpleTestCase):
             text = colon(line, 'Colonoscopy')
             with self.subTest(line):
                 for result in (by_participant(text, '45385', line), by_corti(text, '45385', line)):
-                    self.assertEqual(coded(result, '45385'), [EXCLUDED])
-                    self.assertEqual(coded(result, '45378'), [READY])
+                    # refutation cycle 4: beside a lesion only observed, held (the observed-only exclusion abandoned)
+                    self.assertEqual(coded(result, '45385'), [HELD_STATUS])
+                    self.assertEqual(coded(result, '45378'), [BASE_HELD])
 
     def test_a_failed_dilation_in_an_upper_endoscopy(self):
         line = 'Balloon dilation of the distal esophageal stricture failed.'
@@ -234,8 +246,10 @@ class StatedNotDoneRuleTests(SimpleTestCase):
         base = reconcile.match('45378', inventory, 'gi.colonoscopy')
         snare = reconcile.match('45385', inventory, 'gi.colonoscopy')
         self.assertEqual(engine._stated_not_done('45378', base, (), text, DAY), ())  # it accounts for no act
-        self.assertTrue(engine._stated_not_done('45385', snare, (), text, DAY))
-        self.assertEqual(coded(by_corti(text, '45385', 'Hot snare polypectomy failed.'), '45378'), [READY])
+        # refutation cycle 4: the snare's failure beside a lesion only observed establishes nothing (the observed-only
+        # exclusion abandoned), so the base code stays held beside it
+        self.assertEqual(engine._stated_not_done('45385', snare, (), text, DAY), ())
+        self.assertEqual(coded(by_corti(text, '45385', 'Hot snare polypectomy failed.'), '45378'), [BASE_HELD])
 
 
 class StatedNotDoneRefuterTests(SimpleTestCase):
@@ -300,11 +314,11 @@ class StatedNotDoneRefuterTests(SimpleTestCase):
             with self.subTest(body):
                 result = by_participant(text, '43244', line, base='43235', base_quote=D2)
                 self.assertEqual([c[:2] for c in coded(result, '43244')], [HELD_STATUS[:2]])
-        # a blank line closes the paragraph, and a plan that says nothing of the act says nothing more
+        # refutation cycle 4: beside a lesion only observed, held whatever closes the paragraph
         text = colon('Hot snare polypectomy failed.\n\nPlan: repeat colonoscopy in one year.', 'Colonoscopy')
         result = by_participant(text, '45385', 'Hot snare polypectomy failed.')
-        self.assertEqual(coded(result, '45385'), [EXCLUDED])
-        self.assertEqual(coded(result, '45378'), [READY])
+        self.assertEqual(coded(result, '45385'), [HELD_STATUS])
+        self.assertEqual(coded(result, '45378'), [BASE_HELD])
         # held, the safe side: the paragraph goes on; a failure restated after a label ("Impression: ...") is a clause
         # the rule does not read through
         for body in ('Hot snare polypectomy failed.\nImpression: Sigmoid polyp, not removed.',
@@ -325,8 +339,9 @@ class StatedNotDoneRefuterTests(SimpleTestCase):
                              'Hot snare polypectomy of the second polyp failed.')):
             text = colon(body, 'Colonoscopy')
             with self.subTest(body):
+                # refutation cycle 4: the residual is closed - beside a lesion only observed the failure is held
                 item = proposal(by_participant(text, '45385', quote), '45385')
-                self.assertEqual((item.bucket, item.reinstatable), ('excluded', True))
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
 
 
 class EvidenceReconciliationTests(SimpleTestCase):
@@ -459,8 +474,9 @@ class TruthfulReasonTests(SimpleTestCase):
         for item in alternatives.values():
             self.assertFalse(item.reinstatable)
         failed = colon('Hot snare polypectomy failed.')
-        excluded = proposal(by_participant(failed, '45385', 'Hot snare polypectomy failed.'), '45385')
-        self.assertTrue(excluded.reinstatable)  # an admitted code excluded with its passage is reinstatable
+        held = proposal(by_participant(failed, '45385', 'Hot snare polypectomy failed.'), '45385')
+        # an admitted code is a proposal, never an alternative: held with its question (refutation cycle 4)
+        self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
 
 
 class OtherRoleHoldTests(SimpleTestCase):

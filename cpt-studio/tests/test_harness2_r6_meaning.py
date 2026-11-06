@@ -542,12 +542,14 @@ class D14EngineTests(SimpleTestCase):
         # HARNESS.md P-ADMIT (2026-11-05): Corti's failure blocks only itself (I10), so a first-reading proposal is
         # checked for admission as beside an answer. Fable's 45378 on today's completed examination is admitted.
         # Moved by the completion repair (builder Q1): Astra's 45385 on "Hot snare polypectomy failed." is admitted
-        # too and excluded with that passage, reinstatable, as Corti's own selection of it is - never READY
-        self.assertEqual([(p.code, p.bucket, p.status) for p in result.proposals],
-                         [('45378', 'selected', 'ready'), ('45385', 'excluded', 'excluded')])
-        self.assertEqual(result.proposals[0].support['origin'], 'participant')
-        self.assertTrue(result.proposals[1].reinstatable)
-        self.assertIn(FAILED, result.proposals[1].exclusion_reason)
+        # too and read as Corti's own selection of it is - never READY. Refutation cycle 4 (closed 1, 2): the
+        # observed-only exclusion is abandoned, so it is held with its question quoting the failure, and it holds
+        # Fable's 45378 as included in it, as Corti's selection of both does on the installed release
+        by_code = {p.code: p for p in result.proposals}
+        self.assertEqual({c: (p.bucket, p.status) for c, p in by_code.items()},
+                         {'45378': ('selected', 'needs_clarification'), '45385': ('selected', 'needs_clarification')})
+        self.assertEqual({p.support['origin'] for p in result.proposals}, {'participant'})
+        self.assertTrue(any(FAILED in spec.question + spec.reason for spec in by_code['45385'].clarifications))
         provider = next(c for c in result.encounter_checks if c.id == 'provider.status')
         # never "so there are no CPT proposals" beside a proposal (engine._Harness.provider_checks)
         self.assertNotIn('so there are no CPT proposals', provider.detail)
@@ -571,8 +573,9 @@ class D14EngineTests(SimpleTestCase):
         self.assertIn(engine.UNLOCATED, reasons['45380'])
         self.assertNotIn(D14_REASON, reasons['45380'])
         (failed,) = [p for p in result.proposals if p.code == '45385']
-        self.assertEqual((failed.bucket, failed.reinstatable), ('excluded', True))
-        self.assertIn(FAILED, failed.exclusion_reason)
+        # refutation cycle 4: held with its question quoting the failure (the observed-only exclusion abandoned)
+        self.assertEqual((failed.bucket, failed.status), ('selected', 'needs_clarification'))
+        self.assertTrue(any(FAILED in spec.question + spec.reason for spec in failed.clarifications))
         self.assertNotIn(D14_REASON, failed.exclusion_reason)
 
 
@@ -627,18 +630,21 @@ class D14PipelineTests(MeaningCase):
             fable_peer=hp.peer_answer(positions=[('45385', 'supports', FAILED)]))
         (item,) = [p for p in proposals(detail) if p['code'] == '45385']
         self.assertEqual((item['proposed_by'], item['support']['origin']), (['astra'], 'participant'))
-        self.assertEqual((item['bucket'], item['status'], item['reinstatable']), ('excluded', 'excluded', True))
-        self.assertIn(FAILED, item['exclusion_reason'])
+        # refutation cycle 4 (closed 1, 2): the observed-only exclusion is abandoned - 45385 is held with its question
+        # and holds 45378 as included in it, as Corti's own selection of both does on the installed release; never
+        # READY, never approvable as it stands
+        self.assertEqual((item['bucket'], item['status'], item['reinstatable']), ('selected', 'needs_clarification', False))
         (base,) = [p for p in proposals(detail) if p['code'] == '45378']
-        self.assertEqual((base['bucket'], base['status']), ('selected', 'ready'))
+        self.assertEqual((base['bucket'], base['status']), ('selected', 'needs_clarification'))
         # card-scoped (refutation round 7, falsegreen-3): no card shows 45385 as ready for review
         self.assertEqual(browser('cards(page()).map(visible).filter(card => card.split("\\n").includes("45385") '
                                  '&& card.includes("Ready for review")).length', detail), 0)
-        # the reports: never among the approved or undecided selections
+        # the reports: never approved; held, it is an undecided selection awaiting its detail (refutation cycle 4), as
+        # Corti's own held selection is
         rows = [r for r in csv_rows(self.download(encounter_id, 'draft', 'csv'))
                 if r['code'] == '45385' and r['item_list'] in ('approved', 'rejected', 'undecided', 'excluded',
                                                                 'alternative')]
-        self.assertEqual([r['item_list'] for r in rows], ['excluded'])
+        self.assertEqual([(r['item_list'], r['status']) for r in rows], [('undecided', 'needs_clarification')])
         # the owner's trace: its reconciliation row is never ready
         trace = self.trace(encounter_id)
         lines = [line for line in self.trace_lines(trace) if line.startswith('45385 ·')]

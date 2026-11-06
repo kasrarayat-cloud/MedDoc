@@ -221,14 +221,14 @@ class SummarySentenceTests(r6m.MeaningCase):
     def test_a_code_in_no_code_s_shape_is_counted_and_never_listed(self):
         """d14-3: 'W/LES(S)' is counted, never listed, beside a sentence that said every other code a participant
         gives is listed as an alternative. Moved by the completion repair (builder Q1, equal eligibility): Astra's
-        45385 on the failed polypectomy is admitted and excluded with that passage, as Corti's own selection of it is
-        (it was an alternative)."""
+        45385 on the failed polypectomy is admitted and read as Corti's own selection of it is (it was an
+        alternative); refutation cycle 4: held with its question (the observed-only exclusion abandoned)."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
         encounter_id = self.scenario(text, [('45378', r6m.CECUM)],
                                      astra=hp.reading(codes=[('45385', r6m.FAILED), ('W/LES(S)', r6m.CECUM)]))
         detail = self.detail(encounter_id)
         self.assertEqual([(p['code'], p['bucket']) for p in r6m.proposals(detail)],
-                         [('45378', 'selected'), ('45385', 'excluded')])
+                         [('45378', 'selected'), ('45385', 'selected')])
         self.assertIn('It returned 1 code that cannot be listed', self.summary(detail))
         self.assertIn('one in neither shape is counted and never listed', self.summary(detail))
         self.assert_closing(detail)
@@ -407,8 +407,10 @@ class AlternativeRationaleTests(r6m.MeaningCase):
         text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
         encounter_id = self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45385', r6m.FAILED)]))
         (item,) = [p for p in r6m.proposals(self.detail(encounter_id)) if p['code'] == '45385']
-        self.assertEqual((item['bucket'], item['reinstatable']), ('excluded', True))
-        self.assertIn(r6m.FAILED, item['exclusion_reason'])
+        # refutation cycle 4 (closed 1, 2): the observed-only exclusion is abandoned - held with its question, as
+        # Corti's own selection of the passage is on the installed release
+        self.assertEqual((item['bucket'], item['status'], item['reinstatable']),
+                         ('selected', 'needs_clarification', False))
         lead = 'Proposed by Astra (independent participant); Corti did not propose this code. '
         self.assertTrue(item['rationale'].startswith(lead), item['rationale'])
         # Corti selecting it too, on another request (a trailing blank line): an identical Corti request reuses the

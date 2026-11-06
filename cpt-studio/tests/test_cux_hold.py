@@ -45,6 +45,10 @@ C1R = {(name, code): (before, after) for name, code, before, after in json.loads
 Q1R = {(name, code): (before, after) for name, code, before, after in json.loads(
     (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cptc-q1-admission.json')
     .read_text(encoding='utf-8'))['battery']}
+# refutation cycle 4: the observed-only exclusion abandoned, the rows it had moved back to the installed reading
+C4R = {(name, code): (before, after) for name, code, before, after in json.loads(
+    (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'completion-refutation-c4-battery.json')
+    .read_text(encoding='utf-8'))['battery']}
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
 _MODULES = []
@@ -125,7 +129,7 @@ class RegisterRowsTests(SimpleTestCase):
             for code in result['proposals']:
                 with self.subTest(name, code=code):
                     pinned = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
-                    for later in (H2R, H3R, C1R, Q1R):  # each repair moves a row from where the pins before it left it
+                    for later in (H2R, H3R, C1R, Q1R, C4R):  # each repair moves a row from where the pins before it left it
                         if (name, code) in later:
                             self.assertEqual(later[(name, code)][0], pinned)
                             pinned = later[(name, code)][1]

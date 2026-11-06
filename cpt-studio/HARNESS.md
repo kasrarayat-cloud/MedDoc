@@ -3877,3 +3877,10 @@ release reads every act's clause-local time).
   base_included question releases it; a check the overlay cannot recompute is marked stale.
 - **The gates**: freeze holds; the battery 6 movements, none undeclared, no new violation (cycle 3's four removal
   exclusions no longer move); the replay differs from the base by its version labels alone.
+- **The full suite on `e273dc5a`** (frozen sandbox, 6,385 Django tests in three chunks): 14 tests (44 subtests) pinned the
+  abandoned observed-only exclusion - builder Q1's stated-not-done rule, harness 2's D14 N1 and its r7 rationale, the H4
+  battery rows R8 D1 N1 and R8 D9 "to be removed tomorrow" - each read, measured on the installed base, and re-pinned to
+  the held reading (`completion-refutation-c4-battery.json` chains the battery rows' move); ops 524, verification 43,
+  browser verifier 135, frontend 65 and operator 135 pass; check and makemigrations are clean. The install predictions on
+  it equal cycle 3's (retained 4/4/2/6 READY, nothing sent, RECOMPUTE_STATES unchanged, e888f9ce's two decisions
+  invalidated, the planted control caught), and the c1 set's offline reading still matches its manifest.
