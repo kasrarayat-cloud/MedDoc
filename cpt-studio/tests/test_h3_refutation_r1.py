@@ -60,101 +60,101 @@ R1_L1_1 = [
     # stage READY/READY, base EXCL/ALT
     ('L1-1a', COLON + 'India ink was injected distal to the lesion in the ascending colon for future localization '
                       'at the time of EMR.\n',
-     '45390', None, EXCL, ALT),
+     '45390', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT
     ('L1-1b', COLON + 'The lesion in the ascending colon was tattooed for future surgery or EMR.\n',
-     '45390', None, EXCL, ALT),
+     '45390', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT
     ('L1-1c', COLON + 'The lesion in the ascending colon was tattooed for future removal by snare polypectomy.\n',
-     '45385', None, EXCL, ALT),
+     '45385', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT
     ('L1-1d', EGD + 'The gastric antral lesion was biopsied for future treatment with APC.\n',
-     '43270', None, EXCL, ALT),
+     '43270', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT
     ('L1-1e', COLON + 'The lesion in the ascending colon was tattooed for future localization and biopsy.\n',
-     '45380', None, EXCL, ALT),
+     '45380', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT
     ('L1-1f', COLON + 'The lesion in the ascending colon was tattooed for future identification and endoscopic '
                       'mucosal resection.\n',
-     '45390', None, EXCL, ALT),
+     '45390', None, EXCL, EXCL),
     # stage EXCL/ALT, base EXCL/ALT
     ('L1-1-D1-control', COLON + 'The lesion in the ascending colon was tattooed for future EMR.\n',
-     '45390', None, EXCL, ALT),
+     '45390', None, EXCL, EXCL),
 ]
 R1_L1_2 = [
     # stage READY/READY, base EXCL/ALT
     ('L1-2a', EGD_PLAIN + 'Duodenal biopsies were obtained for future comparison at colonoscopy to the cecum.\n',
-     '45378', None, EXCL, ALT),
+     '45378', None, EXCL, EXCL),
     # stage EXCL/ALT, base EXCL/ALT
     ('L1-2-D1-control', EGD_PLAIN + 'Duodenal biopsies were obtained for future colonoscopy to the cecum.\n',
-     '45378', None, EXCL, ALT),
+     '45378', None, EXCL, EXCL),
 ]
 R1_L1_3 = [
     # stage READY/READY, base HELD/ALT
     ('L1-3a', COLON + 'A 6 mm polyp in the ascending colon was reached with the cold snare and not resected.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L1-3b', COLON + 'The polyp behind the fold in the ascending colon was reached with a cold snare and not '
                       'resected because of a non-lifting sign.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L1-3c', COLON + 'Ascending colon polyp reached with cold snare and not resected.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L1-3d', COLON + 'A 6 mm polyp in the ascending colon was reached with a cold snare and not removed.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L1-3e', COLON + 'The 3 mm polyp in the ascending colon was reached with hot forceps and not removed.\n',
-     '45384', None, HELD, ALT),
+     '45384', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L1-3f', EGD + 'The visible vessel in the gastric ulcer was reached with the bipolar probe and not treated.\n',
-     '43255', None, HELD, ALT),
+     '43255', None, HELD, HELD),
 ]
 R1_L1_4 = [
     # stage READY/ALT, base EXCL/ALT
     ('L1-4a', COLON + 'India ink tattoo was requested for future localization.\n',
-     '45381', None, EXCL, ALT),
+     '45381', None, EXCL, EXCL),
     # stage READY/ALT, base EXCL/ALT
     ('L1-4b', COLON + 'The patient was counseled about India ink tattoo for future localization.\n',
-     '45381', None, EXCL, ALT),
+     '45381', None, EXCL, EXCL),
     # stage READY/ALT, base EXCL/ALT
     ('L1-4c', COLON + 'Tattoo needed for future localization.\n',
-     '45381', None, EXCL, ALT),
+     '45381', None, EXCL, EXCL),
     # stage READY/READY, base EXCL/ALT, round 1 HELD/ALT. Completion repair (2026-11-06, U5; builder A): the purpose's
     # "future" no longer dates the completed marking, so the outside report's heading decides - held as another source,
     # exactly as its plain form below (it had been excluded as planned, the right outcome for the wrong reason)
     ('L1-4d', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed for future localization.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L1-4d-plain', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, HELD, HELD),
 ]
 R1_L2_1 = [
     # stage READY/READY, base HELD/ALT
     ('L2-1a', EGD2 + 'At OSH, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L2-1b', EGD2 + 'At the transferring hospital, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L2-1c', EGD2 + 'Per the patient, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L2-1d', EGD2 + 'Before arrival, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-1e', COLON + 'At OSH, a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-1f', COLON + 'At a community hospital, a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-1h', COLON + 'Per outside GI, a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('ctl-1', EGD2 + 'At the referring facility, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT, round 1 READY/READY. Completion repair (2026-11-06, U1; builder A): the control
     # is today's removal again - the meat bolus is the structural subject of its removal - the corpus's required READY
     ('ctl-1t', EGD2 + 'The meat bolus was removed with a retrieval net.\n',
@@ -163,131 +163,131 @@ R1_L2_1 = [
 R1_L2_2 = [
     # stage READY/READY, base READY/READY
     ('L2-2a', NOPOLYP + 'Outside records:\nA 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-2b', NOPOLYP + 'Records received from Synthetic Valley Hospital:\nA 6 mm polyp in the ascending colon was '
                         'removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L2-2c', EGD2 + 'Outside records:\nThe meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-2', NOPOLYP + 'Outside records: a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L2_3 = [
     # stage READY/READY, base READY/READY
     ('L2-3a', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. John Taylor MD.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-3b', DOC_REF + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. Taylor.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-3c', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare BY DR. TAYLOR.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-3a', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. John Taylor DO.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-3b', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. Taylor.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L2_4 = [
     # stage READY/READY, base READY/READY
     ('L2-4a', EGD + 'Before this exam, the stricture was dilated to 15 mm with a balloon.\n',
-     '43249', None, HELD, ALT),
+     '43249', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-4b', EGD + 'Before this EGD, the stricture was dilated to 15 mm with a balloon.\n',
-     '43249', None, HELD, ALT),
+     '43249', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-4c', COLON + 'Before this colonoscopy, a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-4d', EGD + 'The week before, the stricture was dilated to 15 mm with a balloon.\n',
-     '43249', None, HELD, ALT),
+     '43249', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-4e', COLON + 'Prior to this procedure today, a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-4', EGD + 'Before this procedure, the stricture was dilated to 15 mm with a balloon.\n',
-     '43249', None, HELD, ALT),
+     '43249', None, HELD, HELD),
 ]
 R1_L2_5 = [
     # stage READY/READY, base READY/READY
     ('L2-5a', COLON + 'In the event that a 6 mm polyp in the ascending colon was removed with a cold snare, '
                       'surgery would follow.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-5b', COLON + 'Should the 6 mm polyp in the ascending colon be removed with a cold snare, surgery would '
                       'follow.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-5c', COLON + 'Providing a 6 mm polyp in the ascending colon was removed with a cold snare, surgery would '
                       'follow.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-5d', COLON + 'There is no documentation that a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-5e', COLON + 'It cannot be confirmed that a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-5', COLON + 'If a 6 mm polyp in the ascending colon was removed with a cold snare, surgery would '
                       'follow.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L2_6 = [
     # stage READY/READY, base READY/READY
     ('L2-6a', COLON + 'The 25 mm ascending colon lesion was biopsied with cold forceps and is to be tattooed.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-6b', COLON + 'The ascending colon lesion was biopsied with cold forceps and needs to be tattooed.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-6c', COLON + 'Cold forceps biopsies were obtained and tattoo ink is to be injected distal to the lesion.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-6', COLON + 'Tattoo ink is to be injected distal to the lesion.\n',
-     '45381', None, HELD, ALT),
+     '45381', None, EXCL, EXCL),
 ]
 R1_L2_7 = [
     # stage READY/READY, base READY/READY
     ('L2-7a', COLON + 'The 15 mm sigmoid polyp was snared, but the polypectomy was aborted because of bleeding.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-7b', COLON + 'The 15 mm sigmoid polyp was snared with a hot snare; the polypectomy was then stopped '
                       'because of bleeding.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-7c', COLON + 'The 15 mm sigmoid polyp was snared, but the polypectomy was discontinued because of '
                       'bleeding.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-7d', COLON + 'A cold snare was placed around the 6 mm sigmoid polyp, but the polyp could not be '
                       'transected.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('ctl-7', COLON + 'The 15 mm sigmoid polyp was snared, but the polypectomy was unsuccessful because of '
                       'bleeding.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L2_8 = [
     # stage READY/READY, base READY/READY
     ('L2-8a', COLON + "Biopsies won't be obtained from the ascending colon because the patient is on apixaban.\n",
-     '45380', None, HELD, ALT),
+     '45380', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-8b', COLON + 'Polyp in the ascending colon never successfully snared.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L2-8c', COLON + 'Biopsies never actually obtained from the ascending colon.\n',
-     '45380', None, HELD, ALT),
+     '45380', None, HELD, HELD),
     # stage EXCL/ALT, base HELD/ALT
     ('ctl-8', COLON + 'Biopsies never obtained from the ascending colon.\n',
-     '45380', None, EXCL, ALT),
+     '45380', None, EXCL, EXCL),
 ]
 R1_L3_1 = [
     # stage EXCL/ALT, base READY/READY
@@ -318,19 +318,19 @@ R1_L3_1 = [
 R1_L3_2 = [
     # stage EXCL/ALT, base HELD/ALT
     ('L3-2#0', COLON + 'Sigmoid colon polyp removed with cold snare, not retrieved.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage EXCL/ALT, base HELD/ALT
     ('L3-2#1', COLON + 'A 6 mm polyp in the sigmoid colon was removed with a cold snare, not retrieved.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage EXCL/ALT, base HELD/ALT
     ('L3-2#2', COLON + 'A 6 mm polyp in the sigmoid colon was removed with a cold snare and the site not clipped.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage EXCL/ALT, base HELD/ALT
     ('L3-2#3', COLON + 'A 6 mm polyp in the sigmoid colon was removed with a cold snare and not tattooed.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage EXCL/ALT, base HELD/ALT
     ('L3-2#4', COLON + 'Ascending colon lesion biopsied with cold forceps, not tattooed.\n',
-     '45380', 'Ascending colon lesion biopsied with cold forceps', HELD, ALT),
+     '45380', 'Ascending colon lesion biopsied with cold forceps', HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('L3-2#6', EGD + 'Esophageal varices were banded with four bands and not clipped.\n',
      '43244', 'Esophageal varices were banded with four bands', READY, READY),
@@ -397,7 +397,7 @@ R1_L3_4 = [
     # stage EXCL/ALT, base HELD/ALT
     ('L3-4#9', COLON + 'A 15 mm polyp in the ascending colon was removed with a hot snare; the polypectomy base '
                        'was not clipped.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY
     ('L3-4#10', COLON + 'A 6 mm polyp in the sigmoid colon was removed with a cold snare, and the polypectomy site '
                         'did not bleed.\n',
@@ -615,7 +615,7 @@ R1_L5_1 = [
                                           'second portion of the duodenum. The examination was '
                                           'normal.\nImpression: Normal upper endoscopy.\nPlan: Follow up in '
                                           'clinic.\n',
-     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, ALT),
+     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-1:year-after-Dr-abbreviation', SYN + 'Upper Endoscopy Report\nDate of service: 2026-10-14\nEndoscopist: '
                                               'Synthetic Endoscopist, MD (fictional)\nSedation: Monitored '
@@ -626,7 +626,7 @@ R1_L5_1 = [
                                               'advanced to the second portion of the duodenum. The examination was '
                                               'normal.\nImpression: Normal upper endoscopy.\nPlan: Follow up in '
                                               'clinic.\n',
-     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, ALT),
+     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, HELD),
     # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
     ('L5-1:index-colonoscopy-named-by-indication',
      SYN + 'Upper Endoscopy Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -668,7 +668,7 @@ R1_L5_2 = [
            'removed. Iron deficiency anemia, improving.\nMedical decision making: Moderate; reviewed pathology and '
            'laboratory results, adjusted iron therapy.\nTotal time: 30 minutes on the date of the '
            'encounter.\nPlan: Surveillance colonoscopy in 5 years.\n',
-     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, ALT),
+     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, HELD),
     # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
     ('L5-2:office-visit-sedation-in-allergies',
      SYN + 'Gastroenterology office visit\nDate of service: 2026-10-14\nProvider: Synthetic Consultant, MD '
@@ -695,113 +695,113 @@ R1_L5_3 = [
                                         'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                         'the cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                         'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Preop)', SYN + 'Colonoscopy Report (Preop)\nDate of service: 2026-10-14\nEndoscopist: '
                                        'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                        'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                        'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Preoperative)', SYN + 'Colonoscopy Report (Preoperative)\nDate of service: '
                                               '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                               'colonoscope was advanced to the cecum and the examination was '
                                               'completed.\nA 9 mm polyp in the sigmoid colon was removed with a '
                                               'cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(order)', SYN + 'Colonoscopy Report (order)\nDate of service: 2026-10-14\nEndoscopist: '
                                        'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                        'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                        'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Orders)', SYN + 'Colonoscopy Report (Orders)\nDate of service: 2026-10-14\nEndoscopist: '
                                         'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                         'the cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                         'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(possible)', SYN + 'Colonoscopy Report (possible)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Possibly)', SYN + 'Colonoscopy Report (Possibly)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Probably)', SYN + 'Colonoscopy Report (Probably)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(copy)', SYN + 'Colonoscopy Report (copy)\nDate of service: 2026-10-14\nEndoscopist: '
                                       'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                       'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                       'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Photocopy)', SYN + 'Colonoscopy Report (Photocopy)\nDate of service: '
                                            '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                            'colonoscope was advanced to the cecum and the examination was '
                                            'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                            'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Duplicate)', SYN + 'Colonoscopy Report (Duplicate)\nDate of service: '
                                            '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                            'colonoscope was advanced to the cecum and the examination was '
                                            'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                            'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Another Facility)', SYN + 'Colonoscopy Report (Another Facility)\nDate of service: '
                                                   '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
                                                   '(fictional)\nThe colonoscope was advanced to the cecum and the '
                                                   'examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                                   'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(External)', SYN + 'Colonoscopy Report (External)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(not performed)', SYN + 'Colonoscopy Report (not performed)\nDate of service: '
                                                '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
                                                '(fictional)\nThe colonoscope was advanced to the cecum and the '
                                                'examination was completed.\nA 9 mm polyp in the sigmoid colon was '
                                                'removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Void)', SYN + 'Colonoscopy Report (Void)\nDate of service: 2026-10-14\nEndoscopist: '
                                       'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                       'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                       'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Entered in Error)', SYN + 'Colonoscopy Report (Entered in Error)\nDate of service: '
                                                   '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
                                                   '(fictional)\nThe colonoscope was advanced to the cecum and the '
                                                   'examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                                   'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(2019)', SYN + 'Colonoscopy Report (2019)\nDate of service: 2026-10-14\nEndoscopist: '
                                       'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                       'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                       'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
     ('L5-3:title-aside-(Two Years Ago)', SYN + 'Colonoscopy Report (Two Years Ago)\nDate of service: '
                                                '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -815,98 +815,98 @@ R1_L5_3 = [
                                                  '(fictional)\nThe colonoscope was advanced to the cecum and the '
                                                  'examination was completed.\nA 9 mm polyp in the sigmoid colon '
                                                  'was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Tomorrow)', SYN + 'Colonoscopy Report (Tomorrow)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage HELD/ALT, base HELD/ALT
     ('L5-3:title-aside-(draft)', SYN + 'Colonoscopy Report (draft)\nDate of service: 2026-10-14\nEndoscopist: '
                                        'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                        'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                        'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Unsigned)', SYN + 'Colonoscopy Report (Unsigned)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Addendum)', SYN + 'Colonoscopy Report (Addendum)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Consult)', SYN + 'Colonoscopy Report (Consult)\nDate of service: 2026-10-14\nEndoscopist: '
                                          'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                          'the cecum and the examination was completed.\nA 9 mm polyp in the '
                                          'sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Request)', SYN + 'Colonoscopy Report (Request)\nDate of service: 2026-10-14\nEndoscopist: '
                                          'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                          'the cecum and the examination was completed.\nA 9 mm polyp in the '
                                          'sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Awaiting)', SYN + 'Colonoscopy Report (Awaiting)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Geplant)', SYN + 'Colonoscopy Report (Geplant)\nDate of service: 2026-10-14\nEndoscopist: '
                                          'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                          'the cecum and the examination was completed.\nA 9 mm polyp in the '
                                          'sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Programada)', SYN + 'Colonoscopy Report (Programada)\nDate of service: '
                                             '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                             'colonoscope was advanced to the cecum and the examination was '
                                             'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                             'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Abgesagt)', SYN + 'Colonoscopy Report (Abgesagt)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Vorlage)', SYN + 'Colonoscopy Report (Vorlage)\nDate of service: 2026-10-14\nEndoscopist: '
                                          'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                          'the cecum and the examination was completed.\nA 9 mm polyp in the '
                                          'sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Borrador)', SYN + 'Colonoscopy Report (Borrador)\nDate of service: '
                                           '2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nThe '
                                           'colonoscope was advanced to the cecum and the examination was '
                                           'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                           'snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Copia)', SYN + 'Colonoscopy Report (Copia)\nDate of service: 2026-10-14\nEndoscopist: '
                                        'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                        'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                        'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-3:title-aside-(Previa)', SYN + 'Colonoscopy Report (Previa)\nDate of service: 2026-10-14\nEndoscopist: '
                                         'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to '
                                         'the cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                         'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L5_4 = [
     # stage READY/READY, base EXCL/ALT
@@ -916,7 +916,7 @@ R1_L5_4 = [
            'duodenum. The examination was normal.\nPrior report:\nReceived by fax.\nColonoscopy Report '
            '(Final)\nEndoscopist: Dr. B. Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the '
            'examination was completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, EXCL, ALT),
+     '45385', None, EXCL, EXCL),
     # stage READY/READY, base HELD/ALT
     ('L5-4:History: see the attached report. || Colonoscopy Report (Final)',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -924,7 +924,7 @@ R1_L5_4 = [
            'duodenum. The examination was normal.\nHistory: see the attached report.\nColonoscopy Report '
            '(Final)\nEndoscopist: Dr. B. Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the '
            'examination was completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-4:Previous procedures: colonoscopy, report below. || Colonoscopy Report (Final)',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -932,7 +932,7 @@ R1_L5_4 = [
            'duodenum. The examination was normal.\nPrevious procedures: colonoscopy, report below.\nColonoscopy '
            'Report (Final)\nEndoscopist: Dr. B. Synthetic (fictional)\nThe colonoscope was advanced to the cecum '
            'and the examination was completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage EXCL/ALT, base EXCL/ALT
     ('L5-4:Prior report: || Colonoscopy Report (Final)',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -940,7 +940,7 @@ R1_L5_4 = [
            'duodenum. The examination was normal.\nPrior report:\nColonoscopy Report (Final)\nEndoscopist: Dr. B. '
            'Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the examination was completed.\nA '
            '9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, EXCL, ALT),
+     '45385', None, EXCL, EXCL),
     # stage READY/READY, base HELD/ALT
     ('L5-4:Outside report: || Colonoscopy Report (Final)',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -948,7 +948,7 @@ R1_L5_4 = [
            'duodenum. The examination was normal.\nOutside report:\nColonoscopy Report (Final)\nEndoscopist: Dr. '
            'B. Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the examination was '
            'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
 ]
 R1_L5_5 = [
     # stage HELD/ALT, base HELD/ALT
@@ -956,55 +956,55 @@ R1_L5_5 = [
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA 50 mg '
            'bolus of propofol was given.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:A saline bolus was injected and the polyp was then removed with a hot snare.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA saline '
            'bolus was injected and the polyp was then removed with a hot snare.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:A fentanyl bolus was given and the clip was then removed.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA fentanyl '
            'bolus was given and the clip was then removed.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/ALT, base HELD/ALT
     ('L5-5:After a 50 mg propofol bolus, the bite block was removed.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nAfter a 50 '
            'mg propofol bolus, the bite block was removed.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:The bolus was cleared by peristalsis.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe bolus '
            'was cleared by peristalsis.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:The contrast bolus was cleared from the esophagus by peristalsis.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe '
            'contrast bolus was cleared from the esophagus by peristalsis.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:The water bolus was cleared promptly by normal peristalsis.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe water '
            'bolus was cleared promptly by normal peristalsis.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:A bolus of retained secretions was cleared with suction.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA bolus of '
            'retained secretions was cleared with suction.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-5:A bolus of contrast was removed from the field with suction.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA bolus of '
            'contrast was removed from the field with suction.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
 ]
 R1_L5_6 = [
     # stage READY/READY, base HELD/ALT
@@ -1012,31 +1012,31 @@ R1_L5_6 = [
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat '
            'bolus was passed into the stomach with gentle pressure.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-6:The steak bolus was advanced into the stomach.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak '
            'bolus was advanced into the stomach.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/READY, base HELD/ALT
     ('L5-6:The bolus was cleared into the stomach with gentle insufflation.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe bolus '
            'was cleared into the stomach with gentle insufflation.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/ALT, base HELD/ALT
     ('L5-6:The bolus was dislodged distally into the stomach with the tip of the scope.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe bolus '
            'was dislodged distally into the stomach with the tip of the scope.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage READY/ALT, base HELD/ALT
     ('L5-6:The meat impaction resolved spontaneously before arrival.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat '
            'impaction resolved spontaneously before arrival.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
 ]
 R1_L5_7 = [
     # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
@@ -1051,7 +1051,7 @@ R1_L5_7 = [
 R1_RESIDUAL = [
     # stage READY/ALT, base READY/ALT
     ('L1-4a-plain', COLON + 'India ink tattoo was requested.\n',
-     '45381', None, READY, ALT),
+     '45381', None, READY, READY),
     # stage READY/READY, base READY/READY, round 1 HELD/ALT
     ('L2-1g', COLON + 'At Synthetic Valley Hospital, a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
@@ -1062,19 +1062,19 @@ R1_RESIDUAL = [
      '45385', None, READY, READY),
     # stage HELD/ALT, base READY/READY
     ('L3-2#5', EGD + 'Two large esophageal varices were ligated with bands, the small ones not banded.\n',
-     '43244', 'Two large esophageal varices were ligated with bands', HELD, ALT),
+     '43244', 'Two large esophageal varices were ligated with bands', HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('L3-10#0', EGD + 'The food bolus impacted before presentation was removed with a Roth net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('L3-10#1', EGD + 'The food bolus, impacted since yesterday, was removed with a Roth net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('L3-10#2', EGD + 'The food bolus, lodged since yesterday evening, was removed with a Roth net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, HELD, HELD),
     # stage HELD/ALT, base READY/READY
     ('L3-10#3', COLON + "The 6 mm polyp noted on yesterday's CT colonography was removed with a cold snare.\n",
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/ALT
     ('L5-2:inside-a-pathology-addendum', SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: '
                                                'Synthetic Endoscopist, MD (fictional)\nSedation: Monitored '
@@ -1085,13 +1085,13 @@ R1_RESIDUAL = [
                                                'colonoscopy.\nColonoscopy: The colonoscope was advanced to the '
                                                'cecum.\nA 9 mm polyp in the sigmoid colon was removed with a cold '
                                                'snare.\nDiagnosis: Tubular adenoma.\n',
-     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', READY, ALT),
+     '45385', 'A 9 mm polyp in the sigmoid colon was removed with a cold snare.', HELD, HELD),
     # stage READY/READY, base HELD/ALT, round 1 READY/READY
     ('L5-3:title-aside-(Final)', SYN + 'Colonoscopy Report (Final)\nDate of service: 2026-10-14\nEndoscopist: '
                                        'Synthetic Endoscopist, MD (fictional)\nThe colonoscope was advanced to the '
                                        'cecum and the examination was completed.\nA 9 mm polyp in the sigmoid '
                                        'colon was removed with a cold snare.\n',
-     '45385', None, HELD, ALT),
+     '45385', None, HELD, HELD),
     # stage READY/READY, base READY/READY, round 1 EXCL/ALT
     ('L5-4:Prior report: / Received by fax. || Colonoscopy Report',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -1137,7 +1137,7 @@ R1_RESIDUAL = [
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe food '
            'bolus was pushed into the stomach.\n',
-     '43247', None, READY, ALT),
+     '43247', None, READY, READY),
     # stage READY/READY, base READY/READY, round 1 HELD/ALT
     ('L5-6:The food bolus was passed into the stomach with gentle pressure.',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
@@ -1426,19 +1426,23 @@ class AdmissionAndCompetitionTests(SimpleTestCase):
             '43239': ('selected', 'needs_clarification', held, 'primary', ['43202']),
             '43202': ('selected', 'needs_clarification', held, 'participant', ['43239'])})
 
-    def test_l4_4_recorded_residual_corti_s_own_passage_reading(self):
-        """L4-4, recorded (base same): Corti's selection of the same code with another passage decides that code's
-        reading, and Corti's own-passage release - which reads an act the documented-service reader does not - is not
-        open to a participant's code. Both stay visible: the first is held for review, the second leaves its service
-        unresolved beside the participant's alternative. Never a READY."""
+    def test_l4_4_one_evaluation_over_every_proposers_passages(self):
+        """L4-4 was a recorded residual (base same): Corti's selection of the same code with another passage decided
+        that code's reading, and Corti's own-passage release was not open to a participant's code. MOVED by the
+        completion repair (owner directive 2026-11-06, item 3; builder Q1's union and equal admission, the integration's
+        removal of the another-act hold): one code is read once over every proposer's passages, so Corti's passage
+        about the 2019 polypectomy (another act, recorded as unrelated) never holds 45385 that today's cold snare
+        polypectomy documents, and a participant's code reads as Corti's selection of the same passage, the own-passage
+        release included."""
         colon = (SYN + 'Colonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
                  '(fictional)\nProcedure\nThe colonoscope was advanced to the cecum.\n')
         good = 'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
         bad = 'At the last colonoscopy in 2019 a 12 mm polyp was removed with a hot snare.'
         text = colon + good + '\n' + bad + '\n'
         result = run(text, corti(('45385', span(text, bad))), [read('astra', [code(text, '45385', good)])])
-        self.assertEqual(self.outcome(result), {
-            '45385': ('selected', 'needs_clarification', ['performed_status'], 'primary', None)})
+        self.assertEqual(self.outcome(result), {'45385': ('selected', 'ready', [], 'primary', None)})
+        item = next(p for p in result.proposals if p.code == '45385')
+        self.assertEqual((item.support['supporting'], item.support['unrelated']), ([0], [1]))
         egd = (SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
                '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\n')
         d1 = 'The Schatzki ring in the distal esophagus was dilated to 18 mm.'
@@ -1446,9 +1450,8 @@ class AdmissionAndCompetitionTests(SimpleTestCase):
         self.assertEqual(self.outcome(run(text, corti(('43249', span(text, d1))), []))['43249'][:2],
                          ('selected', 'ready'))
         result = run(text, corti(), [read('astra', [code(text, '43249', d1)])])
-        self.assertEqual(self.outcome(result)['43249'][:2], ('alternative', 'informational'))
-        self.assertEqual([(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
-                         [('gi.egd', 'no_proposal')])
+        self.assertEqual(self.outcome(result)['43249'][:2], ('selected', 'ready'))
+        self.assertEqual(result.completeness['unresolved_items'], [])
 
 
 class CompetitionReleaseTests(SimpleTestCase):

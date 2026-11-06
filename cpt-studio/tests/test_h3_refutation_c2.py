@@ -61,14 +61,18 @@ class CycleTwoReadingTests(SimpleTestCase):
 
     def test_no_input_is_ready_where_the_base_is_not(self):
         """This diff opens no false READY over the base on either path: every READY pinned here is READY on the base
-        too (the base's own false READYs among them are recorded in HARNESS.md)."""
+        too (the base's own false READYs among them are recorded in HARNESS.md). Completion repair (owner directive
+        2026-11-06, item 3): a participant's explicit code is read as Corti's selection of the same passage, so its
+        base is the base's Corti path - a participant READY where the base read Corti's selection READY is that one
+        evaluation (C2-5-7a and its control: a documented injection, 43236), never a READY of this diff's own."""
         for case in CASES:
             base_corti, base_participant = case['read']['base'].split('/')
             with self.subTest(case['id']):
                 if case['corti'] == 'READY':
                     self.assertEqual(base_corti, 'READY')
                 if case['participant'] == 'READY':
-                    self.assertEqual(base_participant, 'READY')
+                    self.assertIn('READY', (base_participant, base_corti))
+                self.assertEqual(case['participant'], case['corti'])  # one evaluation, whoever proposed
 
     def test_the_fixture_is_the_whole_measured_set(self):
         self.assertEqual(len(CASES), 156)

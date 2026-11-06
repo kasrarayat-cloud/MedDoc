@@ -9,13 +9,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -26,13 +27,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -43,13 +45,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -60,13 +63,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -77,13 +81,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -94,13 +99,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -111,13 +117,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -128,13 +135,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -145,13 +153,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -162,13 +171,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -179,13 +189,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -196,13 +207,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -213,13 +225,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -230,13 +243,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -247,13 +261,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -264,13 +279,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -281,13 +297,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -298,13 +315,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -315,13 +333,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -332,13 +351,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -349,13 +369,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -366,13 +387,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -383,13 +405,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -400,13 +423,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -417,13 +441,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -433,14 +458,15 @@
    "quote": "Cold forceps biopsies of the ascending colon lesion were obtained, with EMR pending authorization.",
    "primary": [],
    "day": "2026-10-14",
-   "corti": "HELD",
-   "participant": "ALT",
+   "corti": "EXCL",
+   "participant": "EXCL",
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -451,13 +477,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -474,7 +501,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -485,13 +513,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -508,7 +537,8 @@
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -519,13 +549,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -536,13 +567,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -553,13 +585,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -570,13 +603,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -587,13 +621,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -610,7 +645,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -627,7 +663,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -644,7 +681,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -661,7 +699,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -678,7 +717,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -695,7 +735,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -712,7 +753,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -729,7 +771,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -746,7 +789,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -763,7 +807,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -780,7 +825,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -791,13 +837,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -808,13 +855,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -825,13 +873,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -842,13 +891,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -859,13 +909,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -876,13 +927,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -893,13 +945,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -910,13 +963,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -927,13 +981,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -944,13 +999,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -961,13 +1017,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -978,13 +1035,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -995,13 +1053,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -1012,13 +1071,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -1029,13 +1089,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "EXCL",
-   "participant": "ALT",
+   "participant": "EXCL",
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL"
    }
   },
   {
@@ -1046,13 +1107,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1069,7 +1131,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1086,7 +1149,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1103,7 +1167,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1120,7 +1185,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1137,7 +1203,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1154,7 +1221,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1171,7 +1239,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1188,7 +1257,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1205,7 +1275,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1222,7 +1293,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1239,7 +1311,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1256,7 +1329,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1273,7 +1347,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1290,7 +1365,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1307,7 +1383,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1324,7 +1401,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1341,7 +1419,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1358,7 +1437,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1375,7 +1455,8 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1392,7 +1473,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1409,7 +1491,8 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1426,7 +1509,8 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1443,7 +1527,8 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1460,7 +1545,8 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1477,7 +1563,8 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1494,7 +1581,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1505,13 +1593,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1522,13 +1611,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1539,13 +1629,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1556,13 +1647,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1573,13 +1665,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1590,13 +1683,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1607,13 +1701,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1624,13 +1719,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1641,13 +1737,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1658,13 +1755,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1675,13 +1773,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1692,13 +1791,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1709,13 +1809,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1726,13 +1827,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1743,13 +1845,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1760,13 +1863,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1777,13 +1881,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1794,13 +1899,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1811,13 +1917,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1834,7 +1941,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1851,7 +1959,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1868,7 +1977,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -1885,7 +1995,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1902,7 +2013,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1919,7 +2031,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1936,7 +2049,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1953,7 +2067,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1970,7 +2085,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -1987,7 +2103,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2004,7 +2121,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2021,7 +2139,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2038,7 +2157,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2055,7 +2175,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2072,7 +2193,8 @@
     "stage": "HELD/HELD",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/HELD"
+    "cycle 3": "HELD/HELD",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2089,7 +2211,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2106,7 +2229,8 @@
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2123,7 +2247,8 @@
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2140,7 +2265,8 @@
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2157,7 +2283,8 @@
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2174,7 +2301,8 @@
     "stage": "READY/READY",
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2191,7 +2319,8 @@
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2208,7 +2337,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2225,7 +2355,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2236,13 +2367,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2253,13 +2385,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2270,13 +2403,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2287,13 +2421,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2304,13 +2439,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2321,13 +2457,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2338,13 +2475,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2355,13 +2493,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2372,13 +2511,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2389,13 +2529,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2406,13 +2547,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "HELD",
-   "participant": "ALT",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD"
    }
   },
   {
@@ -2429,7 +2571,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2446,7 +2589,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2463,7 +2607,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2480,7 +2625,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2497,7 +2643,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2514,7 +2661,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2531,7 +2679,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2548,7 +2697,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2565,7 +2715,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2582,7 +2733,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2599,7 +2751,8 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2616,7 +2769,8 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2627,13 +2781,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "READY",
-   "participant": "ALT",
+   "participant": "READY",
    "read": {
     "base": "READY/ALT",
     "stage": "READY/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/ALT",
-    "cycle 3": "READY/ALT"
+    "cycle 3": "READY/ALT",
+    "completion (integration)": "READY/READY"
    }
   },
   {
@@ -2644,13 +2799,14 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": "READY",
-   "participant": "ALT",
+   "participant": "READY",
    "read": {
     "base": "READY/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "READY/ALT",
-    "cycle 3": "READY/ALT"
+    "cycle 3": "READY/ALT",
+    "completion (integration)": "READY/READY"
    }
   }
  ]

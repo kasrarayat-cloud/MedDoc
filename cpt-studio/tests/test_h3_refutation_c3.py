@@ -99,21 +99,26 @@ class CycleThreeCompetitionTests(SimpleTestCase):
 
 class CycleThreeAdmissionTests(SimpleTestCase):
     """C3-2's inputs: a participant's code for an act read in doubt itself (a listed act withheld by its failure or plan,
-    a consent's act, a question's act) is listed, and Corti's base code and the completeness read as with Corti alone -
-    the admission adds a participant's code held only for an act stated done inside a service documented in doubt."""
+    a consent's act, a question's act). Cycle 3 listed it and read Corti's base code as with Corti alone. The completion
+    repair (owner directive 2026-11-06, item 3: one evaluation whoever proposed; builder Q1) supersedes that narrowing:
+    the participant's code is a proposal read exactly as Corti's selection of the same passage reads it - excluded with
+    the passage where the act is stated not done, held where it is in doubt, never READY on these inputs - and its
+    cross-code effects (the base code, the completeness) are the same as Corti's selection's."""
 
-    def test_every_row_reads_as_pinned_and_as_corti_alone(self):
+    def test_every_row_reads_as_pinned_and_as_corti_selecting_it(self):
         for case in CASES['admission']:
             text = case['text']
             sel = (case['base'], span(text, case['base_quote']))
             alone = run(text, corti(sel))
             self.assertEqual([short(alone, case['base']), alone.completeness.get('state')], case['alone'])
-            for (who, quote, act_out, base_out, state), row in zip(
-                    ((w, q, None, None, None) for w, q, *_ in case['rows']), case['rows']):
+            for row in case['rows']:
+                who, quote = row[0], row[1]
                 with self.subTest(f"{case['id']} {who} {quote[:40]}"):
                     result = run(text, corti(sel), [read(who, [code(text, case['act'], quote)])])
                     got = [who, quote, short(result, case['act']), short(result, case['base']),
                            result.completeness.get('state')]
                     self.assertEqual(got, row, case['read'])
-                    self.assertEqual(got[2], ['ALT'])
-                    self.assertEqual((got[3], got[4]), (case['alone'][0], case['alone'][1]))
+                    theirs = run(text, corti(sel, (case['act'], span(text, quote))))
+                    self.assertEqual(got[2:], [short(theirs, case['act']), short(theirs, case['base']),
+                                               theirs.completeness.get('state')])
+                    self.assertNotIn('READY', got[2])
