@@ -31,7 +31,7 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
                           ProviderCode, QuestionAnswer, ReferenceLookup, ReferenceSourceInfo, RoutingResult,
                           ServiceMention, Span, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
-from studio.validation import checks, rationale, reconcile
+from studio.validation import checks, questions, rationale, reconcile
 
 ENGINE_VERSION = 'cpt-studio-validation@8'  # @8: harness repair 3 (P-ADMIT2)
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
@@ -155,7 +155,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
            provider_status: str, extraction_status: Optional[str] = None,
            extraction_messages: Sequence[str] = (), second: Optional[NormalizedResponse] = None,
            second_scope: Optional[dict] = None, participants: Sequence[ParticipantInput] = (),
-           confirmed: Sequence[ConfirmedFinding] = ()) -> AssessmentResult:
+           confirmed: Sequence[ConfirmedFinding] = (),
+           member_answers: Sequence[questions.MemberAnswerInput] = ()) -> AssessmentResult:
     """``participants``: one input per CONFIGURED independent participant (HARNESS.md 5). With none (an installation
     where Astra and Fable are disabled) nothing below reads them and the result is the one this engine made before them
     (I1). With any, _Harness merges their codes, from both phases (HARNESS.md 11.1): they never decide a status (I2) and
@@ -163,13 +164,20 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
 
     ``confirmed``: the reviewer-confirmed findings of this revision (HARNESS.md 11.3). Each answers exactly the open
     question it was made for, read against the assessment these same inputs make without any confirmation
-    (_Confirmations); none read, nothing below changes. Empty, the result is the one this engine made before them (I1)."""
+    (_Confirmations); none read, nothing below changes. Empty, the result is the one this engine made before them (I1).
+
+    ``member_answers``: the revision's standing member answers (completion repair 2026-11-06; _MemberAnswers). Each
+    answers exactly the question it was given to - its (code, family, fact) asked with its fingerprint
+    (studio.validation.questions) - in the assessment these same inputs make without any answer; one that answers no
+    such question is kept as an earlier answer and changes nothing. Empty, the result is the one this engine made before
+    them."""
     if provider_status not in PROVIDER_STATUSES:
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
         raise ValueError(f'Unknown extraction status {extraction_status!r}.')
     # read once, whatever iterable is given: an exhausted or empty iterator is no input (I1), never a dropped one
-    participants, confirmed = tuple(participants), tuple(confirmed)
+    participants, confirmed, member_answers = tuple(participants), tuple(confirmed), tuple(member_answers)
+    answering = _MemberAnswers(member_answers, text) if member_answers else None
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
@@ -253,6 +261,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     confirmation = _Confirmations(confirmed, text, pages) if confirmed else None
+    keyed = _keys(selections)  # the decidable proposals' keys, in selection order (_MemberAnswers maps them back)
     if confirmation is not None:
         # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any - a proposal's by
         # the proposal it was made for, never by its key - then read; the proposals keep the keys they have without them
@@ -263,6 +272,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if harness is not None:
         proposals = harness.recorded(proposals)
         provider = harness.provider_checks(provider, provider_status, response, proposals)
+    # The questions these inputs ask without any member answer: what each answer is bound against (_MemberAnswers), and
+    # what the documented services' own questions are read beside, so an answer never makes another question asked.
+    unanswered = proposals
+    if answering is not None:
+        answering.reading = _jsonable_inventory(inventory)  # the documented-service reading, as it is recorded
+        proposals = answering.apply(proposals, dict(zip(keyed, selections)),
+                                    None if problems else answering.reading,
+                                    checks.reference_source_entries(sources, date_state.value), sources,
+                                    date_state.value)
     active = [(s.code, s.family) for s in selections if not s.excluded]
     # The same-day E/M rule decides for the reconciliation too: on a (possible) procedure day - a routed procedure
     # family or another GI service done or possibly done today, or a selected procedural code (_Encounter) - an office
@@ -285,7 +303,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
                                                          _accounted_elsewhere(usable, included_by, routing)),
                                                 separate_em=documented_em))
-    service_questions = (_service_questions(usable, proposals, context,
+    service_questions = (_service_questions(usable, unanswered, context,
                                             confirmation.answered if confirmation is not None else ())
                          if usable else [])
     unsupported = _unsupported(routing, selections)
@@ -306,8 +324,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         encounter_checks += confirmation.encounter_checks()
     clarification = checks.service_date_clarification(date_state)
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
-    clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
+    clarifications += tuple(_member_conflict_questions(context, clarifications, unanswered))
+    if answering is not None:
+        answering.close_service(clarifications)  # a documented service's question a member answered: closed
     open_questions = len(clarifications) + sum(len(p.clarifications) for p in proposals)
+    if answering is not None:
+        open_questions -= answering.closed  # the questions a member answered are kept, answered, and are not open
     read = {s.evaluation.match.service.id for s in selections
             if s.evaluation is not None and getattr(s.evaluation, 'match', None) is not None}
     unestablished = sum(1 for svc in (usable or inventory).services if svc.status == 'uncertain' and svc.id not in read)
@@ -337,6 +359,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         'inventory_problems': list(problems)})
     if confirmation is not None:
         complete['confirmations'] = confirmation.record()
+    if answering is not None:
+        complete['member_answers'] = answering.record()
     return AssessmentResult(
         profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
         encounter_checks=tuple(encounter_checks), clarifications=clarifications,
@@ -4763,3 +4787,205 @@ class _Confirmations:
                                        for sp in a.spans]} for a in self.applied],
                 'ignored': [{'id': c.confirmation_id if isinstance(c.confirmation_id, str) else '', 'why': why}
                             for c, why in self.ignored]}
+
+
+# --- member answers, read as an input (completion repair 2026-11-06: U10, U11; contract C5) -------------------------
+
+MEMBER_ANSWER_CHECK = 'member.answer'
+MEMBER_ANSWER_SOURCE = 'cpt-studio:member-answer@1'
+ANSWERED_SUPPORT = questions.ANSWERED_SUPPORT  # support[...] of a code a member's answer excluded: {fact, value, answers}
+MEMBER_ANSWER_LABELS = {questions.NOT_DOCUMENTED: 'Not documented', questions.CANNOT_CONFIRM: 'Cannot confirm'}
+_ENDOSCOPIC_CHECK = 'pfs.endoscopic_base'  # checks.endoscopic_check's id
+NOT_APPLIED = 'not_applied'  # an answer bound to a question asked that excluded nothing (recorded, never dropped)
+
+
+answered_away = questions.answered_away  # the one reading of support['answered'] (questions.py)
+
+
+def answered_fingerprint(fingerprint: str, found: Sequence[Check], status: str) -> str:
+    """The fingerprint of a proposal whose checks or status a member's answer moved: the one it has without the answer,
+    with what moved - so a decision made on one carries only onto the same reading (review._carry_decisions), and a
+    decision made without the answer never carries onto it."""
+    return sha256_json({'unanswered': fingerprint, 'checks': sorted([check.id, check.status] for check in found),
+                        'status': status})
+
+
+def _shape(found: Sequence[Check], status: str) -> tuple:
+    return sorted([check.id, check.status] for check in found), status
+
+
+class _MemberAnswers:
+    """The revision's standing member answers, read as an input (``assess(member_answers=...)``).
+
+    Each answer is bound to the question it was given to - its (code, family, fact) asked, in the assessment these same
+    inputs make WITHOUT any answer, with the fingerprint it carries (studio.validation.questions.bind) - and is read
+    there only. An answer that answers no question asked now, or a question asked differently, or that was recorded
+    before answers carried a fingerprint, is kept as an earlier answer (completeness['member_answers']['earlier'], with
+    why) and changes nothing.
+
+    Read, an answer ("Not documented" or "Cannot confirm") excludes the code whose question it answers - and nothing
+    else - by the review overlay's one rule (studio.validation.review_view: the first open question of the code a
+    member answered as unavailable): the code is excluded by the member's answer (a 'member.answer' check, its reason
+    naming the answer, support['answered']), its answered questions are kept, answered, and its other questions are
+    not asked of an excluded code. Its cross-code effects are the overlay's: it still holds every code its presence
+    held - a diagnostic base beside it keeps its base_included question, an E/M beside a procedure its separate-visit
+    question (session decision (e) of 2026-11-03; refutation round 2, L7-01) - a competition it was a rival in is
+    released or narrowed (refutation round 1 of harness repair 3, L4-5), and the CMS endoscopic-family check of every
+    other code is read again without it. A documented service's question a member answered is closed and changes
+    nothing else. No answer confirms a clinical fact, and none approves (decision D7)."""
+
+    def __init__(self, given: Sequence[questions.MemberAnswerInput], text: str):
+        self.text = text
+        answers = []
+        for answer in given:
+            if not isinstance(answer, questions.MemberAnswerInput):
+                raise ValueError(f'A member answer must be a MemberAnswerInput, not {type(answer).__name__}.')
+            if not all(isinstance(getattr(answer, name), str)
+                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id')):
+                raise ValueError('A member answer names its code, family, fact, value, question and id as text.')
+            answers.append(answer)
+        self.answers = sorted(answers, key=lambda a: (a.answer_id, a.code, a.family, a.fact, a.value, a.question))
+        self.reading: dict = {}  # the documented-service reading's JSON form, as Assessment.services records it
+        self.asked: dict = {}  # member key -> fingerprint of every question these inputs ask without any answer
+        self.applied: list = []  # (answer, scope, proposal key or '')
+        self.closed = 0  # the questions an applied answer answers: kept, answered, never open
+
+    def _proposal_questions(self, proposals) -> dict:
+        pairs = []
+        acts = questions.acts_of(self.reading)
+        for p in proposals:
+            shown = questions.passages(p.evidence, p.support, self.text, acts)
+            for spec in p.clarifications:
+                family = spec.family or p.family
+                pairs.append((questions.member_key(p.code, family, spec.fact),
+                              questions.instance(spec.scope, family, spec.fact, p.code, spec.question, spec.reason,
+                                                 shown)))
+        return questions.group(pairs)
+
+    def apply(self, proposals: Sequence[ProposalAssessment], by_key: Mapping[str, '_Selection'], services,
+              reference_sources, sources, day: Optional[date]) -> tuple[ProposalAssessment, ...]:
+        """``proposals`` as the bound answers leave them. ``by_key``: each decidable proposal's selection by its key;
+        ``services``: the documented-service reading's JSON form (None when it was inconsistent, as the review overlay
+        reads it); ``sources`` and ``day``: what the CMS endoscopic-family check reads (engine._proposal's)."""
+        from studio.validation import review_view  # local import: review_view imports this module
+
+        asked = self._proposal_questions(proposals)
+        self.asked.update(asked)
+        bound, _ = questions.bind([a for a in self.answers if a.code], asked)
+        answer_of: dict = {}
+        for answer in bound:
+            answer_of.setdefault(questions.member_key(answer.code, answer.family, answer.fact), answer)
+        if not answer_of:
+            return tuple(proposals)
+        views = review_view.review_view(
+            [review_view.stored_from(p) for p in proposals], {}, services=services, retrieval=(),
+            reference_sources=reference_sources, service_date=day,
+            answers=[{'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value}
+                     for a in answer_of.values()])
+        away = {p.key for p in proposals if getattr(views.get(p.key), 'reason', '') == review_view.DETAIL_UNAVAILABLE}
+        if not away:
+            return tuple(proposals)
+        # the CMS endoscopic-family check of every other code reads the codes still in review (the overlay's EFFECTIVE
+        # set): engine._encounter's active rows without the codes a member's answer excluded
+        rows = endoscopic_rows((s.code, s.evaluation.reference.pfs) for key, s in by_key.items()
+                               if key not in away and not s.excluded and s.evaluation is not None)
+        out = []
+        for p in proposals:
+            view = views.get(p.key)
+            if p.key in away:
+                out.append(self._excluded(p, view, answer_of))
+                continue
+            found, specs, status = list(p.checks), list(p.clarifications), p.status
+            if view is not None and COMPETING_CHECK in view.recomputed:
+                # L4-5: a rival a member's answer to one of its own questions excluded is no longer in review
+                new = next((c for c in view.checks if c.get('id') == COMPETING_CHECK), None)
+                found = [Check(**{name: str(new.get(name) or '') for name in ('id', 'label', 'status', 'detail',
+                                                                             'source')})
+                         if c.id == COMPETING_CHECK else c for c in found if c.id != COMPETING_CHECK or new is not None]
+                worded = next((q for q in view.questions if q.get('fact') == COMPETING_FACT), None)
+                specs = [spec for spec in specs if spec.fact != COMPETING_FACT or worded is not None]
+                specs = [replace(spec, question=str(worded['question']), reason=str(worded['reason']))
+                         if spec.fact == COMPETING_FACT and worded is not None else spec for spec in specs]
+                status = view.status
+            selection = by_key.get(p.key)
+            if selection is not None and selection.evaluation is not None:
+                found = [checks.endoscopic_check(p.code, selection.evaluation.reference, rows, sources, day)
+                         if c.id == _ENDOSCOPIC_CHECK and c.status != 'not_verified' else c for c in found]
+            if (tuple(found), tuple(specs), status) == (tuple(p.checks), tuple(p.clarifications), p.status):
+                out.append(p)
+                continue
+            moved = _shape(found, status) != _shape(p.checks, p.status)
+            out.append(replace(p, checks=tuple(found), clarifications=tuple(specs), status=status,
+                               fingerprint=answered_fingerprint(p.fingerprint, found, status) if moved
+                               else p.fingerprint))
+        return tuple(out)
+
+    def _excluded(self, p: ProposalAssessment, view, answer_of: Mapping) -> ProposalAssessment:
+        """``p`` excluded by the member's answer that left the detail its view names unavailable: its answered questions
+        kept (answered), the 'member.answer' check and reason naming the answer, support['answered'] recording it."""
+        keys = [questions.member_key(p.code, spec.family or p.family, spec.fact) for spec in p.clarifications]
+        mine = [spec for spec, key in zip(p.clarifications, keys) if key in answer_of]
+        answered = list(dict.fromkeys(key for key in keys if key in answer_of))
+        deciding = answer_of.get(questions.member_key(p.code, p.family, getattr(view, 'answered', '') or '')) \
+            or answer_of[answered[0]]
+        subject = deciding.fact.split(':', 1)[1] if deciding.fact.startswith('conflict:') else ''
+        what = questions.missing(deciding.fact, reconcile.act_label(subject) if subject else '')
+        reason = (f'The member answered "{MEMBER_ANSWER_LABELS[deciding.value]}" to {what}; this code is excluded by '
+                  'that answer until it is withdrawn.')
+        found = tuple(p.checks) + (Check(MEMBER_ANSWER_CHECK, 'Member answer', 'fail', reason, MEMBER_ANSWER_SOURCE),)
+        ids = sorted({answer_of[key].answer_id for key in answered})
+        for key in answered:
+            self.applied.append((answer_of[key], 'proposal', p.key))
+        self.closed += len(mine)
+        support = {**(p.support or {}),
+                   ANSWERED_SUPPORT: {'fact': deciding.fact, 'value': deciding.value, 'answers': ids}}
+        return replace(p, bucket='excluded', status='excluded', exclusion_reason=reason, reinstatable=False,
+                       checks=found, clarifications=tuple(mine), support=support,
+                       fingerprint=answered_fingerprint(p.fingerprint, found, 'excluded'))
+
+    def close_service(self, specs: Sequence[ClarificationSpec]) -> None:
+        """Bind the answers given for a documented service's question (no code) to the service questions ``specs`` ask,
+        and close each one answered: it is kept, answered, and changes nothing else."""
+        pairs = [(questions.member_key('', spec.family, spec.fact),
+                  questions.instance(spec.scope, spec.family, spec.fact, '', spec.question, spec.reason,
+                                     questions.service_passages(self.reading, spec.family, spec.fact, self.text)))
+                 for spec in specs if spec.scope == 'service' and not spec.proposal_key]
+        asked = questions.group(pairs)
+        self.asked.update(asked)
+        bound, _ = questions.bind([a for a in self.answers if not a.code], asked)
+        counts = Counter(key for key, _ in pairs)
+        done = set()
+        for answer in bound:
+            key = questions.member_key('', answer.family, answer.fact)
+            if key in done:
+                continue
+            done.add(key)
+            self.applied.append((answer, 'service', ''))
+            self.closed += counts[key]
+
+    def closes(self, scope: str, key: str, family: str, fact: str, code: str = '') -> str:
+        """The id of the applied answer that answers this question ('' for none): a proposal's by its key, a documented
+        service's by its family and fact. What persisting the assessment closes the stored question with."""
+        for answer, where, proposal_key in self.applied:
+            if where == scope and (proposal_key == key if scope == 'proposal' else True) \
+                    and questions.member_key(answer.code, answer.family, answer.fact) == (code, family, fact):
+                return answer.answer_id
+        return ''
+
+    def record(self) -> dict:
+        """completeness['member_answers']: each answer read, with the question it answered and where; each answer not
+        read, with why (questions.bind's reasons; NOT_APPLIED for one bound that excluded nothing)."""
+        applied: dict = {}
+        for answer, scope, key in self.applied:
+            entry = applied.setdefault(answer.answer_id, {
+                'answer': answer.answer_id, 'scope': scope, 'code': answer.code, 'family': answer.family,
+                'fact': answer.fact, 'value': answer.value, 'question': answer.question, 'proposals': []})
+            if key and key not in entry['proposals']:
+                entry['proposals'].append(key)
+        rest = [answer for answer in self.answers if answer.answer_id not in applied]
+        bound, earlier = questions.bind(rest, self.asked)
+        why = {id(answer): reason for answer, reason in earlier}
+        listed = [{'answer': a.answer_id, 'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value,
+                   'why': why.get(id(a), NOT_APPLIED)}
+                  for a in rest if a.value in questions.UNAVAILABLE]
+        return {'form': questions.FORM, 'applied': list(applied.values()), 'earlier': listed}

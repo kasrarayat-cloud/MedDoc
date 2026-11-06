@@ -190,9 +190,10 @@ class DetailRowsTests(DetailsCase):
         self.assertEqual(len({r['id'] for r in rows}), 5)
         self.assertEqual(rows[2]['id'], answers.detail_id('extent', COLON, ''))
         self.assertEqual(rows[3]['id'], answers.detail_id('base_included', COLON, '45385'))
+        # completion repair (2026-11-06, U10): the fact named, what CPT Studio could not confirm, and the passages
         self.assertEqual(set(rows[0]), {'id', 'fact', 'family_label', 'prompt', 'control', 'choices', 'allow',
                                         'document_value', 'entered_value', 'quote', 'affects', 'saved',
-                                        'addendum_allowed'})
+                                        'addendum_allowed', 'missing', 'statement', 'passages'})
 
     def test_the_control_follows_the_fact(self):
         self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent', 'conflict:biopsy', 'billing_context'),

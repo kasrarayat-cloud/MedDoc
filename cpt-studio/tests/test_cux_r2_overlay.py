@@ -439,7 +439,8 @@ class ReinstatedCodeApiTests(ApiCase):
         self.assertEqual((row['control'], row['allow'], row['saved'], row['addendum_allowed']),
                          ('confirm', ['not_documented', 'cannot_confirm'], None, True))
         self.assertEqual(code['detail_ids'], [row['id']])
-        self.assertIn('How far the examination reached is not documented.', code['why']['qualifications'])
+        # completion repair (2026-11-06, U9): CPT Studio's reading, never a statement that the document leaves it out
+        self.assertIn('CPT Studio could not confirm how far the examination reached.', code['why']['qualifications'])
         self.ready_means_approvable(doc)
         self.assertEqual(self.approve(s, '45378').status_code, 409)
         # the operator view reads the same status (the walk maps it to the customer's)

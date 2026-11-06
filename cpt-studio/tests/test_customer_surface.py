@@ -131,9 +131,10 @@ def denied_values():
 
 # --- the committed customer contract (CORE-UX-DESIGN.md 7): every key listed, nothing else ------------------------
 
+# completion repair (2026-11-06, U11): 'earlier_answers' - the standing answers no question asked now takes
 TOP_KEYS = {'id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date',
-            'progress', 'checks', 'codes', 'other_codes', 'not_separately_coded', 'details_needed', 'unresolved',
-            'recheck', 'limitations', 'readiness', 'reports', 'activity'}
+            'progress', 'checks', 'codes', 'other_codes', 'not_separately_coded', 'details_needed', 'earlier_answers',
+            'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'}
 RECHECK_KEYS = {'available', 'can_request'}  # session decision (n), 2026-11-04
 DOCUMENT_KEYS = {'kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading',
                  'original_url'}
@@ -155,8 +156,13 @@ QUOTE_KEYS = {'text', 'start', 'end', 'page', 'exact'}
 DECISION_KEYS = {'action', 'by', 'by_kind', 'at', 'note', 'modifiers'}
 OTHER_CODE_KEYS = {'code', 'reason'}
 NOT_CODED_KEYS = {'label', 'reason'}
+# completion repair (2026-11-06, U10): each question names the fact CPT Studio could not confirm, says so, and shows the
+# passages it concerns
 DETAIL_KEYS = {'id', 'fact', 'family_label', 'prompt', 'control', 'choices', 'allow', 'document_value',
-               'entered_value', 'quote', 'affects', 'saved', 'addendum_allowed'}
+               'entered_value', 'quote', 'affects', 'saved', 'addendum_allowed', 'missing', 'statement', 'passages'}
+PASSAGE_KEYS = {'text', 'start', 'end', 'page'}
+EARLIER_KEYS = {'answer_id', 'fact', 'family_label', 'prompt', 'affects', 'value', 'label', 'by', 'at', 'why',
+                'why_text'}
 CHOICE_KEYS = {'value', 'label'}
 SAVED_KEYS = {'value', 'label', 'by', 'at', 'answer_id'}
 READINESS_KEYS = {'draft', 'approved', 'blockers'}
@@ -236,6 +242,11 @@ def assert_contract(case, doc):
             case.assertEqual(set(choice), CHOICE_KEYS)
         if item['saved'] is not None:
             case.assertEqual(set(item['saved']), SAVED_KEYS)
+        for passage in item['passages']:
+            case.assertEqual(set(passage), PASSAGE_KEYS)
+            case.assertEqual(doc['document']['text'][passage['start']:passage['end']], passage['text'])
+    for item in doc['earlier_answers']:
+        case.assertEqual(set(item), EARLIER_KEYS)
     case.assertTrue(all(isinstance(item, str) for item in doc['unresolved'] + doc['limitations']))
     case.assertEqual(set(doc['recheck']), RECHECK_KEYS)
     case.assertTrue(all(type(value) is bool for value in doc['recheck'].values()))

@@ -1,8 +1,8 @@
 {
  "id": "c5000000-0000-4000-8000-000000000001",
  "title": "Synthetic office follow-up 5",
- "created_at": "2026-11-01T09:02:00Z",
- "updated_at": "2026-11-01T09:02:16Z",
+ "created_at": "2026-11-01T09:02:01Z",
+ "updated_at": "2026-11-01T09:02:17Z",
  "state": "reviewed",
  "state_label": "Reviewed",
  "permissions": {
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:02:03Z",
-    "finished_at": "2026-11-01T09:02:05Z"
+    "started_at": "2026-11-01T09:02:04Z",
+    "finished_at": "2026-11-01T09:02:06Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:02:06Z",
-    "finished_at": "2026-11-01T09:02:07Z"
+    "started_at": "2026-11-01T09:02:07Z",
+    "finished_at": "2026-11-01T09:02:08Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-01T09:02:08Z",
-    "finished_at": "2026-11-01T09:02:10Z"
+    "started_at": "2026-11-01T09:02:09Z",
+    "finished_at": "2026-11-01T09:02:11Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:02:11Z",
-    "finished_at": "2026-11-01T09:02:13Z"
+    "started_at": "2026-11-01T09:02:12Z",
+    "finished_at": "2026-11-01T09:02:14Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:02:02Z",
-  "finished_at": "2026-11-01T09:02:13Z",
-  "server_time": "2026-11-01T09:02:21Z",
+  "started_at": "2026-11-01T09:02:03Z",
+  "finished_at": "2026-11-01T09:02:14Z",
+  "server_time": "2026-11-01T09:02:22Z",
   "slow": false,
   "message": "Your results are ready.",
   "can_stop": false,
@@ -136,7 +136,7 @@
     "action": "approve",
     "by": "Reviewer",
     "by_kind": "human",
-    "at": "2026-11-01T09:02:14Z",
+    "at": "2026-11-01T09:02:15Z",
     "note": "",
     "modifiers": []
    }
@@ -145,6 +145,7 @@
  "other_codes": [],
  "not_separately_coded": [],
  "details_needed": [],
+ "earlier_answers": [],
  "unresolved": [],
  "recheck": {
   "available": false,
@@ -167,7 +168,7 @@
    "kind": "draft",
    "fmt": "csv",
    "filename": "CPT-Studio-draft-r1-20261101T090000.csv",
-   "generated_at": "2026-11-01T09:02:19Z",
+   "generated_at": "2026-11-01T09:02:20Z",
    "generated_by": "Reviewer",
    "download_url": "/api/reports/c5000000-0000-4000-8000-000000000003/download",
    "current": true
@@ -177,7 +178,7 @@
    "kind": "approved",
    "fmt": "txt",
    "filename": "CPT-Studio-approved-r1-20261101T090000.txt",
-   "generated_at": "2026-11-01T09:02:17Z",
+   "generated_at": "2026-11-01T09:02:18Z",
    "generated_by": "Reviewer",
    "download_url": "/api/reports/c5000000-0000-4000-8000-000000000004/download",
    "current": true
@@ -189,49 +190,49 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:02:01Z"
+   "at": "2026-11-01T09:02:02Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:04Z"
+   "at": "2026-11-01T09:02:05Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:09Z"
+   "at": "2026-11-01T09:02:10Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:12Z"
+   "at": "2026-11-01T09:02:13Z"
   },
   {
    "event": "decision_recorded",
    "summary": "Review decision recorded",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:02:15Z"
+   "at": "2026-11-01T09:02:16Z"
   },
   {
    "event": "report_created",
    "summary": "Export created",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:02:18Z"
+   "at": "2026-11-01T09:02:19Z"
   },
   {
    "event": "report_created",
    "summary": "Export created",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:02:20Z"
+   "at": "2026-11-01T09:02:21Z"
   }
  ]
 }

@@ -408,15 +408,42 @@ class OneQuestionPerServiceFactTests(DetailsCase):
     def test_a_code_the_answer_does_not_yet_cover_keeps_the_row_open_and_one_save_covers_it(self):
         assessment = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
                                  asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
-        earlier = models.MemberAnswer.objects.create(  # an answer saved while only 45385 asked it
+        # an answer saved while only 45385 asked it - bound to 45385's question as it was asked (completion repair
+        # 2026-11-06, U11), which the assessment asks the same way now
+        earlier = models.MemberAnswer.objects.create(
             encounter=self.s.encounter, revision=self.s.revision, assessment=assessment, fact='extent', family=COLON,
-            code='45385', value='not_documented', answered_by=self.s.reviewer)
+            code='45385', value='not_documented', answered_by=self.s.reviewer,
+            question=review.asked_fingerprints(assessment)[('45385', COLON, 'extent')])
         (row,) = self.extent_rows()
         self.assertIsNone(row['saved'])  # 45380 has no answer: asked, never answered for it silently
         response = self.post([self.answer(row, 'not_documented')])
         self.assertEqual((response.status_code, len(response.json()['answer_ids'])), (201, 1))
         self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=earlier).exists())  # kept as it was
         self.assertEqual(sorted(item['code'] for item in answers.saved_answers(assessment)), ['45380', '45385'])
+
+    def test_an_answer_saved_in_the_earlier_form_is_kept_listed_and_never_applied(self):
+        """Completion repair (2026-11-06, U11): an answer recorded before answers carried their question's fingerprint
+        was given to the earlier form of the question, which showed no passage. It answers no question asked now: kept
+        as it was, listed as an earlier answer, never applied - and the row asks both codes again."""
+        assessment = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
+                                 asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
+        legacy = models.MemberAnswer.objects.create(
+            encounter=self.s.encounter, revision=self.s.revision, assessment=assessment, fact='extent', family=COLON,
+            code='45385', value='not_documented', answered_by=self.s.reviewer)
+        self.assertEqual(legacy.question, '')
+        views = review.effective_view(assessment)
+        self.assertEqual({views[key].reason for key in ('sel:0', 'sel:1')}, {''})  # never applied
+        (row,) = self.extent_rows()
+        self.assertIsNone(row['saved'])
+        (listed,) = answers.earlier_answers(self.s.encounter, assessment)
+        self.assertEqual((listed['answer_id'], listed['why'], listed['affects'], listed['value']),
+                         (str(legacy.pk), 'earlier_form', ['45385'], 'not_documented'))
+        response = self.post([self.answer(row, 'not_documented')])
+        self.assertEqual((response.status_code, len(response.json()['answer_ids'])), (201, 2))
+        self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=legacy).exists())  # kept as it was
+        self.assertEqual({views.reason for views in review.effective_view(assessment).values()}, {'detail_unavailable'})
+        self.assertEqual([item['answer_id'] for item in answers.earlier_answers(self.s.encounter, assessment)],
+                         [str(legacy.pk)])
 
     def test_a_question_about_one_code_stays_that_codes_own(self):
         self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'base_included', 'performed_status'),

@@ -1,8 +1,8 @@
 {
  "id": "c1000000-0000-4000-8000-000000000001",
  "title": "Synthetic office follow-up 1",
- "created_at": "2026-11-01T09:03:06Z",
- "updated_at": "2026-11-01T09:03:13Z",
+ "created_at": "2026-11-01T09:03:07Z",
+ "updated_at": "2026-11-01T09:03:14Z",
  "state": "processing",
  "state_label": "Processing",
  "permissions": {
@@ -51,21 +51,21 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:03:09Z",
-    "finished_at": "2026-11-01T09:03:11Z"
+    "started_at": "2026-11-01T09:03:10Z",
+    "finished_at": "2026-11-01T09:03:12Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:03:12Z",
-    "finished_at": "2026-11-01T09:03:14Z"
+    "started_at": "2026-11-01T09:03:13Z",
+    "finished_at": "2026-11-01T09:03:15Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "active",
-    "started_at": "2026-11-01T09:03:15Z",
+    "started_at": "2026-11-01T09:03:16Z",
     "finished_at": null
    },
    {
@@ -77,9 +77,9 @@
    }
   ],
   "active_detail": "Document review",
-  "started_at": "2026-11-01T09:03:08Z",
+  "started_at": "2026-11-01T09:03:09Z",
   "finished_at": null,
-  "server_time": "2026-11-01T09:03:16Z",
+  "server_time": "2026-11-01T09:03:17Z",
   "slow": false,
   "message": "Working on your document. This page updates by itself.",
   "can_stop": true,
@@ -108,6 +108,7 @@
  "other_codes": [],
  "not_separately_coded": [],
  "details_needed": [],
+ "earlier_answers": [],
  "unresolved": [],
  "recheck": {
   "available": false,
@@ -133,14 +134,14 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:03:07Z"
+   "at": "2026-11-01T09:03:08Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:03:10Z"
+   "at": "2026-11-01T09:03:11Z"
   }
  ]
 }

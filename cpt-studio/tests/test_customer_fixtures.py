@@ -216,6 +216,9 @@ class CustomerFixtureTests(SurfaceCase):
             f'/api/encounters/{awaiting}/details', content_type='application/json',
             data=json.dumps({'answers': [{'id': basis['id'], 'fact': 'em_basis', 'value': 'not_documented'}]}))
         self.assertEqual(saved.status_code, 201, saved.content)
+        # completion repair (2026-11-06, U11): the answer queues the recompute of the assessment (nothing sent), which
+        # runs before the page is read, so the page shows the result it recomputed
+        drain()
         out['encounter-awaiting-detail.json'] = self.read(awaiting)
         # partial: an independent check failed, the results stand
         self.adapters['astra'] = FakeParticipant('astra', codes=self.astra_codes, outcome='failed')
