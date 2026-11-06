@@ -41,6 +41,7 @@ from typing import Optional, Sequence
 from studio.gi import clauses as _clauses
 from studio.gi import context as gi_context
 from studio.gi import cues as _cues
+from studio.gi import purpose as _purpose
 from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
@@ -280,6 +281,21 @@ BLEEDING_CONTROL = dict(ACTS)['bleeding_control']
 LISTED_CUE = 'performed: listed on the procedure line'
 LISTED_WITHHELD_CUE = ('uncertain: the report states the act its procedure line lists as not done, failed, planned or '
                        'in doubt')
+# F5 (completion repair, builder A): the withheld listing whose only statement in the report is a doubt (a hedge or an
+# open question): read by the reconciliation (an unresolved act, completeness open) and the base rule (held beside it)
+LISTED_DOUBTED_CUE = 'uncertain: the report states the act its procedure line lists only in doubt'
+
+
+def listed_in_doubt(act) -> bool:
+    """Whether an act is its procedure line's listing that the report states only in doubt (LISTED_DOUBTED_CUE)."""
+    return act.status == 'uncertain' and LISTED_DOUBTED_CUE in act.cues
+
+
+def listed_contradicted(act) -> bool:
+    """Whether an act is its procedure line's listed removal that the report contradicts, every lesion it records being
+    stated not removed today (LISTED_CONTRADICTED_CUE). Hold-only: the engine holds the base code beside it and never
+    excludes a code through it (engine.base_included, engine._listing_contradicted)."""
+    return act.status == 'uncertain' and LISTED_CONTRADICTED_CUE in act.cues
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
                         'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
@@ -626,6 +642,17 @@ def _fragment_is_anothers(text: str, frag, pos: int, end: int, ce: int) -> bool:
     return bool(mentioned) and not (mentioned & set(kinds))
 
 
+def _outcome_in_doubt(cues) -> bool:
+    """Whether an uncertain act's own clause states its OUTCOME otherwise than done (the reading's first cue, the one
+    that decided it): an attempt or a failure ("was attempted", "was unsuccessful", "failed to snare it"), a hedge
+    ("possibly", "it is unclear whether"), a condition or an open question ("if", "whether": "It is unknown whether ...
+    was performed"), an infinitive ("is to be injected") or a later clause's failure of the same act. Another
+    facility's or provider's act, a time of something else's, or plain silence (no performance statement) are no
+    statement of the act's outcome."""
+    return _attempt_or_failure(cues) or _hedged(cues) \
+        or (bool(cues) and cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
+
+
 def _against_listing(text: str, act: Act) -> bool:
     """Whether a body act of a listed kind states that act otherwise today (refutation fa-1, as narrowed by the full
     suite): an attempt or a failure of it; or a plan to do it at a lesion documented today ("The polyp will be removed
@@ -635,8 +662,7 @@ def _against_listing(text: str, act: Act) -> bool:
     if act.status == 'uncertain':
         # F-TIME (harness repair 3): a condition or an open question, an infinitive, or a later failure of the same act
         # doubts today's act as a hedge does; another facility's or provider's act says nothing about today's listing
-        return _attempt_or_failure(act.cues) or _hedged(act.cues) \
-            or (bool(act.cues) and act.cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
+        return _outcome_in_doubt(act.cues)
     if act.status != 'planned':
         return False
     if act.lesion:
@@ -2550,14 +2576,24 @@ SOURCE_REQUEST_AFTER = _rx(r"(?:\s+[\w-]+){0,2}?\s*['\u2019]?s?\s+(?:request|req
 
 
 def _other_source(said: str):
-    """The first OTHER_SOURCE match in ``said`` that names the act's own place or source (F-TIME P), or None."""
-    for m in OTHER_SOURCE.finditer(said):
-        if SOURCE_NOT_THE_ACTS.search(said, max(0, m.start() - 40), m.start()) or SOURCE_REQUEST_AFTER.match(said, m.end()):
-            continue
-        if SOURCE_REVIEWED.search(said, max(0, m.start() - 40), min(len(said), m.end() + 60)):
-            continue  # "outside results and an outside note were reviewed": reviewing records is today's work
-        return m
+    """The first OTHER_SOURCE match in ``said`` that names the act's own place or source (F-TIME P), or None. A referral
+    document (REFERRAL_DOCUMENT) is one too: the referring provider's account (completion repair, F1)."""
+    for pattern in (OTHER_SOURCE, REFERRAL_DOCUMENT):
+        for m in pattern.finditer(said):
+            if SOURCE_NOT_THE_ACTS.search(said, max(0, m.start() - 40), m.start()) \
+                    or SOURCE_REQUEST_AFTER.match(said, m.end()):
+                continue
+            if SOURCE_REVIEWED.search(said, max(0, m.start() - 40), min(len(said), m.end() + 60)):
+                continue  # "outside results and an outside note were reviewed": reviewing records is today's work
+            return m
     return None
+
+
+# Completion repair (2026-11-06, F1; builder A): a referral letter, note or record is the referring provider's account
+# of what was done ("Referral letter:" over a marked lesion; "According to the referring physician's referral letter,
+# the stricture was dilated ...": C3-4-4) - another source, held as OTHER_SOURCE holds an outside report. Hold-only.
+REFERRAL_DOCUMENT = _rx(r'\breferral[ \t]+(?:letters?|notes?|records?|reports?|documentation|correspondence|summary|'
+                        r'summaries|forms?)\b')
 # P, a named agent: "by Dr. Synthetic Surgeon" in the act's clause, where no physician line of the report names that
 # person by the surname ("Endoscopist: Synthetic Endoscopist, MD"): who did it is not established as this report's
 # physician. The report's own physician named as the agent ("by Dr. Smith" under "Endoscopist: John Smith, MD") is not.
@@ -2713,6 +2749,87 @@ def in_condition(text: str, cs: int, pos: int, end: int) -> bool:
                  and not CONDITION_IDIOM.match(text, opener.start())
                  and not _condition_closed(text[opener.end():end]))
                 or (INVERTED_CONDITION.match(text, cs, pos) and not re.search(r'[,;:()]', text[cs:pos])))
+
+
+OCCASION_INDICATION_CUE = ('uncertain: stated under an indication that names another occasion of the service, after '
+                           "today's procedure section: not established as today's")
+
+
+@functools.lru_cache(maxsize=16)
+def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tuple[int, int, frozenset], ...]:
+    """F1 (completion repair, builder A): the bodies - from the end of the heading line to the section's end - of the
+    layout's indication sections in a report whose procedure narrative has a procedure, findings or technique section of
+    its own (before or after the indication), and whose own heading line names another occasion of a service: a service
+    name with a history word, another facility or source, or a date before the service date; each with the families its
+    line names (_in_an_occasion_indication). One pass over the layout's sections, cached per text."""
+    lay = _sections.layout(text)
+    dates = gi_context.find_dates(text)
+    date_starts = [d.start for d in dates]
+    out = []
+    # today's procedure narrative under its own heading, before or after the indication: then the indication's body is
+    # not that narrative (a report whose narrative has no procedure heading at all - the labelled paragraphs inside an
+    # Indications section, U2 - is never read here)
+    procedural = [s.kind in ('procedure', 'findings', 'technique') for s in lay.sections]
+    later = [False] * (len(procedural) + 1)
+    for i in range(len(procedural) - 1, -1, -1):
+        later[i] = later[i + 1] or procedural[i]
+    earlier = False
+    for i, s in enumerate(lay.sections):
+        if procedural[i]:
+            earlier = True
+            continue
+        if s.kind != 'indication' or not (earlier or later[i + 1]) or s.heading is None:
+            continue
+        line_end = text.find('\n', s.start, s.end)
+        if line_end < 0:
+            continue
+        line = text[s.start:line_end]
+        named = frozenset(family for family, _, pattern in SERVICES if pattern.search(line))
+        if not named:
+            continue
+        dated = any(service_date is not None and gi_context.compare_to_service(d, service_date) < 0
+                    for d in dates[bisect.bisect_left(date_starts, s.start):bisect.bisect_left(date_starts, line_end)])
+        if dated or HISTORY_WORDS.search(line) or _other_source(line) is not None:
+            out.append((line_end, s.end, named))
+    return tuple(out)
+
+
+def _in_an_occasion_indication(text: str, pos: int, service_date: Optional[date], family: str = '') -> bool:
+    """Whether ``pos`` lies in an occasion indication's body (_occasion_indications), read in a report part of
+    ``family``. The occasion is that of a service its line names: a report part of another family is not about it, so
+    it is not read here (full-suite repair, svc-37: "The capsule reached the cecum within the recording period" in the
+    capsule study's own report, which the layout runs into an indication naming an earlier upper endoscopy and
+    colonoscopy, is today's capsule study's). A part of no family is read here."""
+    spans = _occasion_indications(text, service_date)
+    i = bisect.bisect_right([a for a, _, _ in spans], pos) - 1
+    return i >= 0 and spans[i][0] <= pos < spans[i][1] and (not family or family in spans[i][2])
+
+
+def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, end: int) -> bool:
+    """Whether the purpose phrase whose time word starts at ``word_start`` (studio.gi.purpose) is no time of the act
+    mentioned at [pos, end) in its clause [cs, ce): the mention lies before the phrase's opener, and the clause's main
+    predicate before the opener states an act done (purpose.main_predicate_done) and is said of the mention - the
+    mention is its participle ("was tattooed"), its subject's head ("India ink was injected") or its instrument ("was
+    marked with submucosal tattoo"). Never a word inside the subject's complement ("The vial of tattoo ink was marked
+    with the specimen label for future identification": the vial was marked, test_advanced_gi_binding). A mention
+    inside or after the opener keeps the purpose's time; any other doubt keeps the base reading."""
+    phrase = _purpose.phrase_at(text, word_start, ce)
+    if phrase is None or end > phrase[0]:
+        return False
+    predicate = _purpose.main_predicate_done(text, cs, phrase[0])
+    if predicate is None:
+        return False
+    start, participle_start, participle_end = predicate
+    if pos < participle_end and participle_start < end:
+        return True
+    if _purpose.instrument_of(text, participle_end, pos):
+        return True
+    subject = _removal_subject(text, cs, start)
+    if subject is None:
+        return False
+    # the mention lies inside the subject noun phrase, from its first modifier to its head ("Tattoo ink", "India ink",
+    # "sterile carbon-based tattoo ink") - never after its head, in a complement ("The vial of tattoo ink")
+    return _np_phrase_start(text, cs, subject[0]) <= pos and end <= subject[1] or pos <= subject[0] < end
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -2880,6 +2997,16 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         frame_today = _today_reading(frame)[0]
         today = _today_reading(own_said)[0]
     act_said = bool(ACT_VERB.search(said))
+    # F1 (completion repair, builder A): a section's own time (history, plan, indication) is cancelled only by a today
+    # word of the act's own predicate - never by one an independent or coordinated predicate after the mention carries
+    # ("The transverse colon lesion was marked with tattoo and not resected today." under "Indication:": the "today" is
+    # the resection's, H2|PKG-L6-1; studio.gi.purpose.STOP is where such a predicate begins)
+    section_today = today
+    if today:
+        later = _purpose.STOP.search(text, end, ce)
+        if later is not None:
+            lo = _bounded_clause(text, joined, pos, end)[0] if joined else cs
+            section_today = _today_reading(text[lo:later.start()])[0]
     other_time = ''
     for d in _dates_in(dates, tcs, ce):
         owner = _date_owner(text, d, tcs, pos, ce)
@@ -2921,8 +3048,12 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # The fronted frame is read for its history, today and source words only: a plan word in it ("To mark the site for
     # future surveillance, the colon wall ... was tattooed") is a purpose's or another occasion's, never the clause's
     # time, as the base never read the frame at all (the full suite after refutation cycle 2: svc-21's tattoo)
+    # U5 (completion repair, builder A): a purpose phrase's time word is the purpose's, never the time of the act the
+    # clause's main predicate states done ("was marked with submucosal tattoo for future localization"); an act named
+    # inside the phrase keeps it ("... for future localization at the time of EMR"): studio.gi.purpose, one reading
     plan = next((m for m in PLAN_WORDS.finditer(twhole) if tcs + m.start() not in elsewhere and tcs + m.start() >= cs
-                 and not any(a <= m.start() < b for a, b in manner)), None)
+                 and not any(a <= m.start() < b for a, b in manner)
+                 and not _purpose_releases(text, tcs + m.start(), cs, ce, pos, end)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
     skipped = next((tcs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(twhole)
@@ -2932,9 +3063,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
     # still planned ("1. Dysphagia, likely peptic stricture - upper endoscopy with dilation at the hospital"), never a
     # doubt about a service done today.
-    if part.kind == 'history' and not today:
+    if part.kind == 'history' and not section_today:
         return Reading('historical', ('historical: in a history section',))
-    if part.kind == 'plan' and not today:
+    if part.kind == 'plan' and not section_today:
         return Reading('planned', ('planned: in a plan section',))
     # F-TIME P: the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1,
     # L1-4) - read after a history or plan section has dated the act, as a hedge is (the full suite after round 1: a
@@ -2952,11 +3083,19 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # would be labelled by site.")
     if in_condition(text, cs, pos, end):
         return Reading('uncertain', (CONDITION_CUE,))  # F-TIME C
-    if part.kind == 'indication' and not today:
+    if part.kind == 'indication' and not section_today:
         # An indication says why the patient came: a performance stated there and not said to be today's is not
         # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
         # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
         return Reading('uncertain', (INDICATION_READING,))
+    if part.kind == 'report' and not section_today and _in_an_occasion_indication(text, pos, service_date,
+                                                                                 part.family):
+        # F1 (completion repair, builder A): routing's layout and this reader disagree on the section - the layout
+        # runs an indication over the line, this reader gives the line to today's report - and the indication's own line
+        # names another occasion of a service ("Indication: Referred after an outside colonoscopy on 2026-09-01." then
+        # "The transverse colon lesion was marked with tattoo and not resected."): the act may be that occasion's, so it
+        # is not established as today's (held; H2|PKG-L6-0 and its siblings)
+        return Reading('uncertain', (OCCASION_INDICATION_CUE,))
     # A form field on its own line ("Biopsy taken: No", "Tattoo placed: None"): once its time is today's (no date,
     # history or plan word, section, hedge or indication said otherwise), its answer - never a participle in its label
     # - states the item.
@@ -3799,7 +3938,28 @@ def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, in
                 continue
             taken.append((m.start(), m.end()))
             found.append((name, region, m.start(), m.end()))
+    for name, region, s, e in list(found):
+        # Completion repair (2026-11-06, U13; builder A): a coordinated modifier shares the site's head ("from the right
+        # and left colon", "the proximal and distal esophagus"): the modifier before the coordinator names a site of
+        # its own when "<modifier> <head>" is itself a site of this vocabulary. Read structurally - the head is the
+        # site's own words after its first, and the vocabulary itself decides the site - never a list of modifiers.
+        shared = _COORDINATED_MODIFIER.search(text, max(start, s - COORDINATION_REACH), s)
+        head = text[s:e].split(None, 1)
+        if shared is None or len(head) < 2:
+            continue
+        a, b = shared.span('modifier')
+        if any(x < b and a < y for x, y in taken):
+            continue
+        written = text[a:b] + ' ' + head[1]
+        site = next(((n, r) for n, r, pattern in ANATOMY if pattern.fullmatch(written)), None)
+        if site is not None and site[0] != name:
+            taken.append((a, b))
+            found.append((site[0], site[1], a, b))
     return sorted(found, key=lambda x: x[2])
+
+
+COORDINATION_REACH = 40  # characters before a site read for a coordinated modifier that shares its head
+_COORDINATED_MODIFIER = _rx(r'\b(?P<modifier>[A-Za-z]{3,})[ \t]*(?:,[ \t]*)?[ \t]+(?:and|or|&)[ \t]+$')
 
 
 # A comparison's object names a different lesion, not a second target of the clause's act. Do not remove that source
@@ -3832,6 +3992,511 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
             if distance is None or d < distance:
                 best, distance = name, d
     return best
+
+
+# --- completion repair (2026-11-06, U1; builder A): a bolus's documented antecedent, and its removal -----------------
+# The foreign-body act's own vocabulary (ACTS: "foreign body", "food bolus", "food impaction") is read exactly as
+# before - a push named that way included (owner question Q1, never decided here). Beside it, a bolus named another way
+# - by its food ("the meat bolus", "a steak impaction", "the impacted meat"), as a definite anaphor ("the bolus", "the
+# impaction", "the coin", "the object") - is the foreign-body act only where BOTH hold:
+#  (1) the noun phrase, or its documented antecedent, is a food or a foreign body (_bolus_index: the nearest preceding
+#      mention of the same head in the same report part, with its modifiers; a medication, saline, contrast, fluid or
+#      secretions bolus is never one: no food word, so no act - an unknown modifier keeps the base reading);
+#  (2) it, or a partitive of it ("fragments of the bolus"), is the subject (passive) or the object (active) of a removal
+#      predicate - removed, retrieved, extracted, or "removal of" - found structurally (_removal_subject), never by
+#      distance: a subordinate clause's, a relative clause's or a prepositional object's bolus is not the removal's
+#      ("Because the meat bolus passed spontaneously the scope was removed", "The Roth net that missed the bolus was
+#      removed", "The overtube placed over the bolus was removed": F-ACTS' refuters, cycles 3 and 4).
+# "cleared" and "dislodged" do not name a removal here: "cleared into the stomach", "dislodged distally" and "cleared
+# by peristalsis" are a push or a passage, and the verb alone does not tell them apart (Q1); they keep the base reading.
+# Every act found this way is then read by read_clause like any other (negation, time, place, source, hedge, section).
+# And an act of the kind naming no site of its own takes its antecedent's site (the bolus found "in the distal
+# esophagus", "at 35 cm from the incisors"), so it binds to that site's family where two are present.
+BOLUS_HEAD = _rx(r'\b(?:bolus(?:es)?|boli|impactions?|foreign[ \t-]+bod(?:y|ies)|coins?|objects?)\b'
+                 r'|(?<=\bimpacted )(?:food|meat|steak|chicken|beef|pork|bread)\b')
+# the food words that make a bolus or an impaction a food one (a closed class: an unknown word is no food, so no act)
+FOOD_WORDS = frozenset(('food', 'meat', 'steak', 'chicken', 'beef', 'pork', 'bread', 'vegetable', 'vegetables', 'fish',
+                        'turkey', 'ham'))
+FOREIGN_OBJECT_WORDS = frozenset(('foreign', 'swallowed', 'ingested'))  # what makes "an object" a foreign one
+PARTITIVE_HEADS = frozenset(('fragment', 'fragments', 'piece', 'pieces', 'portion', 'portions', 'part', 'parts',
+                             'remnant', 'remnants', 'remainder', 'rest', 'bits', 'chunk', 'chunks', 'attempt',
+                             'attempts'))
+_SUBJECT_TOKEN = re.compile(r"[A-Za-z][\w'’-]*|\d+(?:\.\d+)?|[(),;:\[\]]")
+_DETERMINERS = frozenset(('the', 'a', 'an', 'this', 'that', 'these', 'those', 'its', 'their', 'his', 'her', 'our',
+                          'your', 'some', 'any', 'each', 'every', 'another', 'both', 'all', 'no', 'neither', 'one',
+                          'two', 'three', 'several', 'multiple', 'zero'))
+_DEFINITE = frozenset(('the', 'this', 'that', 'these', 'those', 'its', 'their', 'his', 'her', 'our'))
+_NEGATIVE_DET = frozenset(('no', 'neither', 'nor', 'zero', 'without'))
+_PREPOSITIONS = frozenset(('of', 'in', 'at', 'from', 'with', 'on', 'over', 'under', 'into', 'onto', 'through',
+                           'throughout', 'by', 'for', 'to', 'toward', 'towards', 'near', 'beside', 'around', 'across',
+                           'behind', 'within', 'inside', 'along', 'against', 'above', 'below', 'beyond', 'past', 'via',
+                           'during', 'using', 'per', 'among', 'between', 'upon', 'about', 'without', 'like'))
+_RELATIVES = frozenset(('that', 'which', 'who', 'whom', 'whose', 'where'))
+_AUXILIARIES = frozenset(('was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would',
+                          'could', 'can', 'cannot', 'should', 'may', 'might', 'must', 'did', 'does', 'do', 'shall'))
+_CLAUSE_WORDS = frozenset(('and', 'or', 'but', 'nor', 'yet', 'so', 'then', 'thus', 'hence', 'however', 'therefore',
+                           'whereupon', 'because', 'since', 'after', 'before', 'when', 'whenever', 'while', 'once',
+                           'until', 'although', 'though', 'if', 'unless', 'whether', 'as', 'not', 'never', 'we', 'i',
+                           'he', 'she', 'they', 'it', 'there', 'also', 'to'))
+_FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
+REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted)\b')
+REMOVAL_NOMINAL = _rx(r'\b(?:removal|retrieval|extraction)[ \t]+of[ \t]+')
+REMOVAL_COMPOUND = _rx(r'[ \t]+(?:removal|retrieval|extraction)\b')
+# the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
+_VERB_GROUP = _rx(r"(?:\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|"
+                  r"must|did|does|do|shall|to|not|never|then|also|[a-z]+ly|\w+n['’]t)[ \t\n]+)+$")
+_GROUP_AUXILIARY = _rx(r"\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|"
+                       r"might|must|did|does|do|shall|\w+n['’]t)\b")
+_COORDINATED_PARTICIPLE_BEFORE = _rx(r'(?:,[ \t]*)?\b(?:and|then)[ \t]+(?:then[ \t]+|subsequently[ \t]+)?$')
+_ACTIVE_SUBJECT_BEFORE = _rx(r'\b(?:we|I|he|she|they)[ \t]+(?:(?:then|subsequently|successfully|[a-z]+ly)[ \t]+)?$')
+INCISOR_DISTANCE = _rx(r'\b\d+(?:\.\d+)?[ \t]*(?:cm|centimet(?:er|re)s?)[ \t\n]+from[ \t\n]+the[ \t\n]+'
+                       r'(?:central[ \t]+)?(?:incisors|teeth)\b')
+
+
+def _content_word(word: str) -> bool:
+    return word[:1].isalnum() and word.lower() not in _FUNCTION_WORDS
+
+
+def _np_start(toks: Sequence[tuple[int, int, str]], i: int) -> Optional[int]:
+    """The index of the first token of the noun phrase whose head is toks[i], read leftward over modifiers that are no
+    function word, up to and including a determiner (at most six words); None when toks[i] heads no noun phrase or the
+    phrase is ambiguous (a present participle among its modifiers: "overtube protecting meat bolus" may be a reduced
+    relative, so it is read as no subject at all - the safe side)."""
+    if i < 0 or not _content_word(toks[i][2]) or toks[i][2].lower() in _DETERMINERS:
+        return None
+    j = i
+    while j - 1 >= 0 and i - j < 6:
+        word = toks[j - 1][2]
+        low = word.lower()
+        if low in _DETERMINERS:
+            j -= 1
+            break
+        if not _content_word(word):
+            break
+        j -= 1
+    if any(toks[k][2].lower().endswith('ing') for k in range(j, i)):
+        return None
+    return j
+
+
+def _np_phrase_start(text: str, lo: int, head_start: int) -> int:
+    """Where the noun phrase whose head starts at ``head_start`` begins: its modifiers read leftward as _np_start reads
+    them (a determiner included), within [lo, head_start)."""
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, max(lo, head_start - 120), head_start)]
+    start = head_start
+    for k in range(len(toks) - 1, max(-1, len(toks) - 8), -1):
+        word = toks[k][2]
+        if word.lower() in _DETERMINERS:
+            return toks[k][0]
+        if not _content_word(word):
+            break
+        start = toks[k][0]
+    return start
+
+
+def _np_determiner(text: str, lo: int, head_start: int) -> str:
+    """The determiner of the noun phrase whose head starts at ``head_start`` (lower-cased), or '' when it has none:
+    its modifiers read leftward as _np_start reads them, within [lo, head_start)."""
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, max(lo, head_start - 120), head_start)]
+    for k in range(len(toks) - 1, max(-1, len(toks) - 8), -1):
+        low = toks[k][2].lower()
+        if low in _DETERMINERS:
+            return low
+        if not _content_word(toks[k][2]):
+            return ''
+    return ''
+
+
+def _participle_word(word: str) -> bool:
+    """A verb form that takes the phrase after it as its object or complement ("placed", "protecting", "missed",
+    "found"): read only where it stands between a noun phrase and what it governs (never a noun phrase's own modifier)."""
+    low = word.lower()
+    return len(low) > 3 and (low.endswith(('ed', 'ing', 'en')) or low in ('found', 'seen', 'held', 'left', 'put', 'set',
+                                                                          'caught', 'stuck', 'lodged'))
+
+
+def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
+    """The head of the noun phrase that is the subject of the predicate starting at ``predicate_start`` (its first
+    auxiliary, or the participle itself for a reduced passive "Meat bolus removed ..."), read structurally within the
+    clause starting at ``clause_start`` (CLAUSE_REACH characters at most): (start, end, head), where [start, end) is the
+    RESOLVED head as written and ``head`` the grammatical head, lower-cased - the same unless a partitive or an attempt
+    resolves to its complement ("Fragments of the bolus were removed": the span of "bolus", head 'fragments'). None when
+    no subject can be read. The contract of builder R2's clauses.subject_head; the integrator unifies the two.
+    - the nearest preceding noun phrase of the clause;
+    - never a prepositional object: an "of/in/at/over/into ..." phrase is climbed to the phrase it modifies, and a
+      participle it complements is passed over ("The overtube placed over the bolus" is the overtube);
+    - never a verb's object inside a relative clause or a participial modifier ("The Roth net that missed the bolus",
+      "The overtube protecting the meat bolus", "The scope that had pushed the bolus into the stomach");
+    - never inside a comma aside or a parenthesis ("The bolus, which was large, was ...");
+    - a relative pronoun right before the predicate ("..., which was removed") is its antecedent's subject;
+    - a partitive or an attempt resolves to its complement.
+    Pure and bounded: one tokenisation of at most CLAUSE_REACH characters."""
+    lo = max(clause_start, predicate_start - CLAUSE_REACH)
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, lo, predicate_start)]
+    i = len(toks) - 1
+    while i >= 0 and toks[i][2].lower() in ('then', 'also', 'subsequently', 'successfully'):
+        i -= 1  # "the bolus then was removed"
+    if i >= 0 and toks[i][2].lower() in ('which', 'that', 'who'):
+        i -= 1  # "..., which was removed": the relative's antecedent
+        if i >= 0 and toks[i][2] == ',':
+            i -= 1
+    for _ in range(8):  # each step climbs one attachment; eight is far beyond any phrase this reads
+        if i < 0:
+            return None
+        word = toks[i][2]
+        if word == ')':
+            depth, k = 0, i
+            while k >= 0:
+                depth += toks[k][2] == ')'
+                depth -= toks[k][2] == '('
+                if depth == 0:
+                    break
+                k -= 1
+            i = k - 1
+            continue
+        if word == ',':
+            # a comma aside that closes before the predicate: its opening comma, and what opens it - a relative, a
+            # participle or an adverb - says it is an aside; anything else (a list, a fronted phrase) is not read
+            k = i - 1
+            while k >= 0 and toks[k][2] not in (',', ';', ':', '(', ')'):
+                k -= 1
+            if k < 0 or toks[k][2] != ',' or k + 1 >= i:
+                return None
+            opener = toks[k + 1][2].lower()
+            if not (opener in _RELATIVES or _participle_word(opener) or opener.endswith('ly')):
+                return None
+            i = k - 1
+            continue
+        start = _np_start(toks, i)
+        if start is None:
+            return None
+        before = toks[start - 1][2].lower() if start > 0 else ''
+        if before in _PREPOSITIONS:
+            # a prepositional object: the phrase it modifies is before the preposition; a partitive's or an attempt's
+            # complement is its subject's referent
+            k = start - 2
+            if before == 'of' and k >= 0:
+                head_start = _np_start(toks, k)
+                if head_start is not None and toks[k][2].lower() in PARTITIVE_HEADS:
+                    return toks[i][0], toks[i][1], toks[k][2].lower()
+            if k >= 0 and _participle_word(toks[k][2]) and _np_start(toks, k - 1) is not None:
+                k -= 1  # "placed over the bolus": the participle the phrase complements, after its own noun
+            i = k
+            continue
+        if before and _participle_word(before):
+            # a verb form right before the phrase may take it as its object. That is read only where the structure marks
+            # the verb as a modifier of an earlier noun phrase - a relative pronoun before it ("The Roth net that
+            # (had) missed the bolus"), or a reduced relative: an -ing form, or "having"/"being", right after a noun
+            # ("The overtube protecting the meat bolus", "The scope having pushed the bolus") - and then the subject is
+            # that earlier phrase. Anywhere else the phrase may as well be a new clause's subject after an intransitive
+            # verb ("Once the steak impaction cleared the overtube was removed"): no subject is read (the safe side).
+            k = start - 2
+            while k >= 0 and toks[k][2].lower() in _AUXILIARIES | {'having', 'being'}:
+                k -= 1
+            chained = k < start - 2 and toks[k + 1][2].lower() in ('having', 'being')
+            if k >= 0 and toks[k][2].lower() in _RELATIVES:
+                i = k - 1
+                continue
+            if (before.endswith('ing') or chained) and k >= 0 and _np_start(toks, k) is not None:
+                i = k
+                continue
+            return None
+        head = toks[i][2].lower()
+        if head in PARTITIVE_HEADS and i - 1 >= start and _content_word(toks[i - 1][2]) \
+                and toks[i - 1][2].lower() not in _DETERMINERS:
+            return toks[i - 1][0], toks[i - 1][1], head  # "the bolus fragments": the compound's own referent
+        return toks[i][0], toks[i][1], head
+    return None
+
+
+def _removal_object(text: str, after: int, limit: int) -> Optional[tuple[int, int, str]]:
+    """The head of the noun phrase an active removal verb, or "removal of", takes as its object, starting at ``after``
+    (within ``limit``): (start, end, head) as _removal_subject gives it - a partitive resolves to its complement
+    ("removed fragments of the bolus"). None when a preposition, a mark or a clause word comes first (no object)."""
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, after, min(limit, after + 160))]
+    i = 0
+    if i < len(toks) and toks[i][2].lower() in _DETERMINERS:
+        i += 1
+    head = None
+    while i < len(toks) and _content_word(toks[i][2]) and toks[i][2].lower() not in _DETERMINERS:
+        head = i
+        if toks[i][2].lower().endswith('ing'):
+            return None  # a participle: no plain object noun phrase
+        i += 1
+        if head - 0 > 6:
+            return None
+    if head is None:
+        return None
+    word = toks[head][2].lower()
+    if word in PARTITIVE_HEADS and i < len(toks) and toks[i][2].lower() == 'of':
+        inner = _removal_object(text, toks[i][1], limit)
+        return (inner[0], inner[1], word) if inner is not None else None
+    return toks[head][0], toks[head][1], word
+
+
+def _predicate_subject(text: str, cs: int, verb_start: int, verb_end: int, limit: int,
+                       active: bool = True) -> Optional[tuple[int, int, str]]:
+    """What the participle at [verb_start, verb_end) is said of, in its clause starting at ``cs``: the subject of its
+    auxiliary ("the bolus was removed", "could not be removed"); the first conjunct's subject for a participle
+    coordinated with an auxiliary's own participle phrase ("was grasped with the Roth net and removed"); with
+    ``active``, an active verb's object after a personal pronoun ("we removed the bolus"); else the subject of a reduced
+    passive ("Meat bolus removed with a Roth net."). The form _removal_subject and _removal_object give."""
+    group = _VERB_GROUP.search(text, max(cs, verb_start - 60), verb_start)
+    if group is not None and _GROUP_AUXILIARY.search(group.group(0)):
+        return _removal_subject(text, cs, group.start())
+    coordinated = _COORDINATED_PARTICIPLE_BEFORE.search(text, max(cs, verb_start - 30), verb_start)
+    if coordinated is not None:
+        # the coordinated participle shares the first conjunct's auxiliary and subject, when that conjunct is the
+        # auxiliary's own participle phrase (no other auxiliary and no mark between them)
+        aux = None
+        for aux in _GROUP_AUXILIARY.finditer(text, cs, coordinated.start()):
+            pass
+        if aux is None:
+            return None
+        between = text[aux.end():coordinated.start()]
+        if not re.match(r'[ \t\n]+(?:(?:then|also|[a-z]+ly)[ \t\n]+)?[a-z]+(?:ed|en)\b', between) \
+                or _GROUP_AUXILIARY.search(between) or re.search(r'[,;:]', between):
+            return None
+        group = _VERB_GROUP.search(text, max(cs, aux.start() - 40), aux.end() + 1)
+        return _removal_subject(text, cs, group.start() if group is not None else aux.start())
+    if active and _ACTIVE_SUBJECT_BEFORE.search(text, max(cs, verb_start - 30), verb_start):
+        return _removal_object(text, verb_end, limit)
+    return _removal_subject(text, cs, verb_start)
+
+
+@dataclass(frozen=True)
+class _BolusMention:
+    """A bolus-class noun phrase (BOLUS_HEAD): its head span, its head class, whether it (or its antecedent) is a food or
+    a foreign body, whether it denies one ("No food impaction"), and the site it, or its antecedent, is stated at."""
+    start: int
+    end: int
+    head: str  # 'bolus' (a bolus, an impaction, impacted food), 'foreign body', 'coin' or 'object'
+    foreign: bool
+    negated: bool
+    sites: tuple
+
+
+def _bolus_class(word: str) -> str:
+    low = ' '.join(word.lower().replace('-', ' ').split())
+    if low.startswith('foreign'):
+        return 'foreign body'
+    if low.startswith('coin'):
+        return 'coin'
+    if low.startswith('object'):
+        return 'object'
+    return 'bolus'
+
+
+def _bolus_sites(text: str, clause: tuple[int, int], sentence: tuple[int, int], cache: Optional[dict] = None) -> tuple:
+    """The sites a bolus is stated at: its clause's anatomy, or a distance from the incisors (an esophageal site), else
+    its sentence's. ``cache`` (a dict, one per text): each span is read once, however many bolus phrases it holds."""
+    for span in (clause, sentence):
+        if cache is not None and span in cache:
+            found = cache[span]
+        else:
+            lo, hi = span
+            found = _anatomy_in(text, lo, hi)
+            found += [('esophagus', 'esophagus', m.start(), m.end()) for m in INCISOR_DISTANCE.finditer(text, lo, hi)
+                      if not any(a < m.end() and m.start() < b for _, _, a, b in found)]
+            found = tuple(sorted(found, key=lambda x: x[2]))
+            if cache is not None:
+                cache[span] = found
+        if found:
+            return found
+    return ()
+
+
+def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_starts: Sequence[int], clauses_of,
+                 plist: Sequence['_Part'], starts: Sequence[int]) -> tuple[list, list]:
+    """Every bolus-class noun phrase of the text, in order, with its food or foreign-body reading resolved against its
+    documented antecedent (rule (1) above): a phrase with its own food word ("meat bolus", "a bolus of steak"), an
+    "impacted" bolus, a foreign body, a coin, or a foreign, swallowed or ingested object is one; a definite or bare
+    phrase with no modifier of its own ("the bolus", "the impaction", "Bolus removal") is what the nearest preceding
+    phrase of its head class in the same report part is, and is stated where that one is when it names no site of its
+    own; any other phrase ("a saline bolus", "a 50 mg bolus of propofol", "a bolus of retained contrast") is none. A
+    denial ("No food impaction was seen") is no antecedent. One pass: (mentions, their head starts)."""
+    out: list[_BolusMention] = []
+    last: dict[tuple[int, str], _BolusMention] = {}  # (part start, head class) -> the last phrase of that class there
+    site_cache: dict = {}  # each clause and sentence read for its sites once (_bolus_sites)
+    for m in BOLUS_HEAD.finditer(text):
+        s, e = m.span()
+        si = bisect.bisect_right(sentence_starts, s) - 1
+        if si < 0 or s >= sentences[si][1]:
+            continue
+        ss, se = sentences[si]
+        read_end = min(se, ss + SENTENCE_READ_CHARS)
+        if s >= read_end:
+            continue  # beyond the part of the sentence pass 3 reads
+        toks = [(t.start(), t.end(), t.group(0)) for t in _SUBJECT_TOKEN.finditer(text, max(ss, s - 120), s)]
+        mods: list[str] = []
+        det = ''
+        k = len(toks) - 1
+        while k >= 0 and len(mods) < 6:
+            low = toks[k][2].lower()
+            if low in _DETERMINERS:
+                det = low
+                break
+            if not _content_word(toks[k][2]):
+                break
+            mods.append(low)
+            k -= 1
+        # the word that leads the phrase: before its determiner, or the function word that ended its modifiers
+        lead = (toks[k - 1][2].lower() if k >= 1 else '') if det else (toks[k][2].lower() if k >= 0 else '')
+        comp_words: list[str] = []
+        comp = re.match(r'[ \t\n]+of[ \t\n]+', text[e:e + 8])
+        if comp:
+            for t in _SUBJECT_TOKEN.finditer(text, e + comp.end(), min(len(text), e + 80)):
+                if not _content_word(t.group(0)) or len(comp_words) >= 3:
+                    break
+                comp_words.append(t.group(0).lower())
+        words = set(mods) | set(comp_words)
+        head = _bolus_class(m.group(0))
+        low_head = m.group(0).lower()
+        negated = det in _NEGATIVE_DET or lead in _NEGATIVE_DET
+        part = _part_at(plist, starts, s)
+        clause = _clause_for(clauses_of(ss, read_end), s)
+        own_sites = _bolus_sites(text, tuple(clause), (ss, read_end), site_cache)
+        # a definite phrase refers to its antecedent - the nearest preceding phrase of its head class in its part - and
+        # is stated where that one is when it names no site of its own ("An impacted meat bolus was found in the
+        # distal esophagus ... the food bolus was removed"); what it is comes from its own modifiers when it has any,
+        # and only a bare one ("the bolus", "the impaction", "Bolus removal") takes that from the antecedent too
+        bare = not mods and not comp_words and (det in _DEFINITE or not det)
+        definite = det in _DEFINITE or bare
+        antecedent = last.get((part.start, head)) if definite else None
+        if negated:
+            foreign = False
+        elif head == 'foreign body' or head == 'coin':
+            foreign = True
+        elif head == 'object':
+            foreign = bool(words & FOREIGN_OBJECT_WORDS) or (bare and antecedent is not None and antecedent.foreign)
+        elif not low_head.startswith(('bolus', 'boli', 'impaction')):
+            foreign = True  # "the impacted meat": its own food is its head
+        elif words & FOOD_WORDS or (low_head.startswith(('bolus', 'boli')) and 'impacted' in mods):
+            foreign = True
+        else:
+            foreign = bare and antecedent is not None and antecedent.foreign
+        sites = own_sites or (antecedent.sites if antecedent is not None and not negated else ())
+        mention = _BolusMention(s, e, head, foreign, negated, sites)
+        out.append(mention)
+        if not negated:
+            last[(part.start, head)] = mention
+    return out, [b.start for b in out]
+
+
+def _bolus_at(index: Sequence[_BolusMention], index_starts: Sequence[int], start: int, end: int) -> Optional[_BolusMention]:
+    """The bolus-class phrase whose head lies in [start, end), if any: one bisection."""
+    i = bisect.bisect_left(index_starts, start)
+    if i < len(index) and index[i].start < end:
+        return index[i]
+    # a head that starts before ``start`` but covers it ("foreign body" read from its second word)
+    if i > 0 and index[i - 1].end > start:
+        return index[i - 1]
+    return None
+
+
+def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMention], index_starts: Sequence[int],
+                    taken: Sequence[tuple[str, int, int]]) -> list[tuple[str, int, int]]:
+    """The foreign-body act mentions a sentence [ss, se) adds by rule (2) above: for each removal predicate, its subject
+    (passive: "the bolus was removed", "was grasped ... and removed", "Meat bolus removed ...") or its object (active:
+    "we removed the bolus"; "removal of the bolus"; "bolus removal"), resolved structurally, where that is a bolus-class
+    phrase that is a food or a foreign body (_bolus_index) - as ('foreign_body', head start, head end), never a phrase
+    an ACTS mention already reads. Bounded: the sentence's removal predicates, each read in its own clause."""
+    if not index:
+        return []
+    out: list[tuple[str, int, int]] = []
+
+    def add(found):
+        if found is None:
+            return
+        mention = _bolus_at(index, index_starts, found[0], found[1])
+        if mention is None or not mention.foreign or mention.negated:
+            return
+        span = (mention.start, mention.end)
+        if any(a < span[1] and span[0] < b for _, a, b in list(taken) + out):
+            return
+        out.append(('foreign_body', span[0], span[1]))
+
+    for m in REMOVAL_PREDICATE.finditer(text, ss, se):
+        cs, _ = _clause_for(cls, m.start())
+        add(_predicate_subject(text, cs, m.start(), m.end(), se))
+    for m in REMOVAL_NOMINAL.finditer(text, ss, se):
+        add(_removal_object(text, m.end(), se))
+    for mention in index[bisect.bisect_left(index_starts, ss):bisect.bisect_left(index_starts, se)]:
+        if REMOVAL_COMPOUND.match(text, mention.end) and mention.foreign and not mention.negated:
+            add((mention.start, mention.end, mention.head))  # "Bolus removal was performed"
+    return sorted(out, key=lambda x: x[1])
+
+
+# --- completion repair (2026-11-06, U6 and U13; builder A): a lesion's stated disposition --------------------------
+# "The polyp was left in place.", "... could not be removed", "was not resected", "will be removed at a later date": a
+# predicate whose subject (_predicate_subject) is a lesion mention bound to a recorded lesion of today's report sets
+# that lesion's disposition - untreated, or scheduled for a removal still to come - read through read_clause like any
+# act, so a history, another source, a hedge or another time states none ("Previously, the polyp was left in place").
+# A negative quantifier ("No polyps were removed") names no recorded lesion: it sets none. And a procedure line that
+# lists a removal (snare, EMR, ESD, hot biopsy) its report documents nowhere as done, where EVERY lesion recorded for
+# that service is stated not removed today, is contradicted: the listing establishes nothing (held, never READY).
+LEFT_IN_PLACE = _rx(r'\bleft[ \t\n]+(?:in[ \t\n]+(?:place|situ)|untreated|alone)\b')
+LESION_REMOVAL = _rx(r'\b(?:removed|resected|excised)\b')
+REMOVAL_KINDS = frozenset(('snare', 'emr', 'esd', 'hot_biopsy'))
+NOT_REMOVED = frozenset(('untreated', 'scheduled'))
+LISTED_CONTRADICTED_CUE = ('uncertain: the report states every lesion of the service that the procedure line lists the '
+                           'removal for not removed today')
+# Full-suite repair (builder A, 2026-11-06): a disposition is read from its plain form only. The auxiliary group before
+# the predicate, exactly (lower-cased, whitespace-normalised), per disposition; and what may follow the predicate in its
+# sentence: nothing, "today", or a reason. Both are closed classes whose failure mode is the safe side - any other form
+# states no disposition and leaves the listing as the base reads it: "was initially not removed ..., but was removed
+# after irrigation", "was not removed until the end of the procedure", "At the prior colonoscopy the polyp was not
+# removed" (a phrase before the subject), "was left in place briefly ..., then snared" each sets none.
+DISPOSITION_GROUPS = {
+    'left': frozenset(('was', 'were', 'is', 'are', 'has been', 'have been')),
+    'untreated': frozenset(('was not', 'were not', 'could not be', 'cannot be', 'can not be', 'has not been',
+                            'have not been', 'was never', 'were never')),
+    'scheduled': frozenset(('will be', 'is to be', 'are to be')),
+}
+DISPOSITION_TAIL = _rx(r'[ \t]*(?:today[ \t]*)?(?:[.;!]|$|,?[ \t]*(?:because|due[ \t]+to|given|owing[ \t]+to|as|since|'
+                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to)\b)')
+
+
+def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: tuple[int, int, str], se: int,
+                       disposition: str) -> bool:
+    """Whether the predicate ``m`` states ``disposition`` in its plain form: its subject's noun phrase opens its clause
+    and its head stands right before the auxiliary group, that group is exactly one of DISPOSITION_GROUPS[disposition],
+    and (but for a removal still to come, whose own reading dates it) only DISPOSITION_TAIL follows it."""
+    group = _VERB_GROUP.search(text, max(clause[0], m.start() - 60), m.start())
+    if group is None or ' '.join(group.group(0).lower().split()) not in DISPOSITION_GROUPS[disposition]:
+        return False
+    if text[found[1]:group.start()].strip() or text[clause[0]:_np_phrase_start(text, clause[0], found[0])].strip():
+        return False
+    return disposition == 'scheduled' or DISPOSITION_TAIL.match(text, m.end(), se) is not None
+
+
+def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service_date, dates,
+                         part) -> list[tuple['Lesion', str]]:
+    """The (lesion, disposition) pairs a sentence [ss, se) states (see above), each in its plain form only
+    (_plain_disposition). ``lesion_at(position)`` gives the recorded lesion whose mention's noun covers a position, or
+    None. Bounded: the sentence's predicates of the two forms, each read once in its own clause."""
+    out: list[tuple[Lesion, str]] = []
+    for pattern, form in ((LEFT_IN_PLACE, 'left'), (LESION_REMOVAL, 'removal')):
+        for m in pattern.finditer(text, ss, se):
+            clause = _clause_for(cls, m.start())
+            found = _predicate_subject(text, clause[0], m.start(), m.end(), se, active=False)
+            lesion = lesion_at(found[0]) if found is not None else None
+            if lesion is None or _np_determiner(text, clause[0], found[0]) in _NEGATIVE_DET:
+                continue
+            reading = read_clause(text, clause, m.start(), m.end(), service_date=service_date, dates=dates, part=part,
+                                  in_today_report=part.kind == 'report')
+            if form == 'left' and reading.status == 'performed':
+                disposition, plain = 'untreated', _plain_disposition(text, clause, m, found, se, 'left')
+            elif form == 'removal' and reading.status in ('negated', 'cancelled'):
+                disposition, plain = 'untreated', _plain_disposition(text, clause, m, found, se, 'untreated')
+            elif form == 'removal' and reading.status == 'planned' and reading.cues \
+                    and not reading.cues[0].startswith(SECTION_PLAN_CUES):
+                disposition, plain = 'scheduled', _plain_disposition(text, clause, m, found, se, 'scheduled')
+            else:
+                continue
+            if plain:
+                out.append((lesion, disposition))
+    return out
 
 
 def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -> list[tuple[str, int, int]]:
@@ -4936,6 +5601,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
         # Pass 3: lesions and acts.
+        # Completion repair (2026-11-06, U1): every bolus-class noun phrase with its antecedent's reading, once
+        sentence_starts = [s for s, _ in sentences]
+        bolus_index, bolus_starts = _bolus_index(text, sentences, sentence_starts, clauses_of, plist, starts)
+        dispositions: dict[str, str] = {}  # U6/U13: a recorded lesion's stated disposition (_stated_dispositions)
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
         indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
@@ -4985,6 +5654,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             doubtful_at = {ms for _, ms, _ in doubtful}
             if doubtful:
                 mentions = sorted(mentions + doubtful, key=lambda x: x[1])
+            # U1: a food or foreign body named otherwise than ACTS names it, the subject or object of a removal
+            # predicate (_bolus_removals) - only in a sentence that names a bolus-class phrase at all
+            at = bisect.bisect_left(bolus_starts, ss)
+            if at < len(bolus_starts) and bolus_starts[at] < read_end:
+                removals = _bolus_removals(text, ss, read_end, clauses_of(ss, read_end), bolus_index, bolus_starts,
+                                           mentions)
+                if removals:
+                    mentions = sorted(mentions + removals, key=lambda x: x[1])
             comparisons = _comparison_objects(text, ss, read_end)
             lesion_matches = [m for m in LESION.finditer(text, ss, read_end)
                               if not any(a <= m.start() < b for a, b in comparisons)]
@@ -5012,6 +5689,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # rectal mass the lesion reader does not record left "The lesion was tattooed" at the transverse polyp
             # before it, and the rectal tattoo denial was read as another subject)
             own_lesions: set[str] = set()
+            bound_nouns: list[tuple[int, int, Lesion]] = []  # U6/U13: each lesion mention's noun and its lesion record
             anaphoric_host = False  # L1e-r3: the sentence refers back to a lesion beyond its note's reach
             for lm in lesion_matches:
                 lead = (lm.group('lead') or '').strip().lower()
@@ -5092,6 +5770,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                     evidence=(_span(text, ss, read_end),))
                     d.lesions.append(lesion)
                     sentence_lesions.append(lesion)
+                    bound_nouns.append((lm.start('noun'), lm.end('noun'), lesion))
                     own_lesions.add(lesion.id)
                     if part.noted:
                         note_last[part.start] = (beyond, lesion, lm.start())  # L1e-r3
@@ -5108,6 +5787,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     # (a second lesion its own definition's sentence goes on to describe is no lesion the label heads)
                 elif existing is not None:
                     sentence_lesions.append(existing)
+                    bound_nouns.append((lm.start('noun'), lm.end('noun'), existing))
                     if size or anat or (_noun_key(lm.group('noun')) == _noun_key(existing.noun)
                                         and last_named.get(existing.id, -1) > unrecorded.get(fam, -1)):
                         own_lesions.add(existing.id)
@@ -5132,6 +5812,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     if fam and fam in last_lesion and (said is None or known is None or abs(said - known) < 0.05):
                         # "The 8 mm polyp, ..." never refers back to the 7 mm polyp before it (refutation own-2)
                         sentence_lesions.append(last_lesion[fam])
+            if bound_nouns and (LEFT_IN_PLACE.search(text, ss, read_end) or LESION_REMOVAL.search(text, ss, read_end)):
+                # U6/U13: what the sentence states about a recorded lesion's removal ("The polyp was left in place.")
+                def lesion_at(pos, nouns=tuple(bound_nouns)):
+                    return next((lesion for a, b, lesion in nouns if a <= pos < b), None)
+                for lesion, disposition in _stated_dispositions(text, ss, read_end, cls, lesion_at,
+                                                                service_date=service_date, dates=dates, part=part):
+                    dispositions.setdefault(lesion.id, disposition)
             # an act's lesion is at one known place only when every lesion its sentence names is at the same places
             # (_lesion_for picks one of several by position)
             one_place = len({placements.lesions.get(lesion.id) for lesion in sentence_lesions}) == 1
@@ -5144,6 +5831,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue  # "a polyp adjacent to the tattoo", "the existing tattoo": a place, no tattoo placed
                 own_anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]]
                 anat = own_anat or anatomy_all
+                if kind == 'foreign_body' and not own_anat:
+                    # U1: a foreign body or bolus naming no site of its own is where it, or its documented antecedent,
+                    # is stated to be ("An impacted meat bolus was found in the distal esophagus ... the bolus was
+                    # removed"; "at 35 cm from the incisors") - before any other clause's site of the sentence
+                    stated = _bolus_at(bolus_index, bolus_starts, ms, me)
+                    if stated is not None and stated.sites:
+                        anat = list(stated.sites)
                 region = anat[0][1] if anat else ''
                 # rule 1: a lesion label (or one lesion's specimen) named in the act's own clause binds the act to that
                 # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,
@@ -5263,8 +5957,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 if reading.status == 'uncertain' and not has_act_verb and not _on_procedure_line(text, ms, part):
                     continue
+                # Completion repair (2026-11-06, U6; builder A): placement never overwrites outcome. The procedure line
+                # places the act and stands in for a performance statement its clause lacks; it never overrides an
+                # outcome that same clause states - attempted, failed, unsuccessful, hedged, conditional or unknown
+                # ("Procedure: Colonoscopy. ... Hot snare polypectomy ... was attempted, but the polypectomy was
+                # unsuccessful": D|RT-f1, D|RT-f3, D|ARCH-D3a had read that failed attempt as performed, a false READY).
+                # The act keeps its own reading (in doubt: held, never READY on its placement).
                 if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
-                        and _on_procedure_line(text, ms, part):
+                        and not _outcome_in_doubt(reading.cues) and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS \
                         and fam in performed_families \
@@ -5405,6 +6105,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # dropped: such a sentence leaves the listing as main reads it.
         for d in drafts.values():
             body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}
+            # U6 (completion repair, builder A): every lesion recorded for the service stated not removed today
+            contradicted = bool(d.lesions) and all(dispositions.get(lesion.id) in NOT_REMOVED for lesion in d.lesions)
             for i, a in enumerate(d.acts):
                 if a.status != 'performed' or LISTED_CUE not in a.cues or a.kind in body_done:
                     continue
@@ -5412,13 +6114,22 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # uncertain for want of a performance statement (svc-42), a form question ("Was the FNA performed?"),
                 # a plan section or label reading of a performed item (engine @4's time_plan ruling), or a future
                 # service ("repeat colonoscopy with snare polypectomy in 3 years")
-                stated = any(b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)
-                             for b in d.acts)
+                stated = [b for b in d.acts if b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)]
                 if stated:
-                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,))
+                    # F5 (completion repair, builder A): where the report states the listed act only in doubt - a hedge
+                    # or an open question ("It is unknown whether hot snare polypectomy was performed."), never an
+                    # attempt, a failure or a plan - whether the coded act was done is open (listed_in_doubt)
+                    doubted = all(b.status == 'uncertain' and not _attempt_or_failure(b.cues) and (_hedged(b.cues) or (
+                        bool(b.cues) and b.cues[0].startswith(CONDITION_CUE))) for b in stated)
+                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,)
+                                        + ((LISTED_DOUBTED_CUE,) if doubted else ()))
+                elif contradicted and a.kind in REMOVAL_KINDS:
+                    # "Procedure: Colonoscopy with hot snare polypectomy ... The polyp was left in place.": the listed
+                    # removal of the only lesion the report records, which the report says was not removed today
+                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_CONTRADICTED_CUE,))
     except _Capped as exc:
         problems.append(str(exc))
-    services = [_finish(d, text, routing, context_facts, encounter_intents) for d in drafts.values()]
+    services = [_finish(d, text, routing, context_facts, encounter_intents, dispositions) for d in drafts.values()]
     services = _included([s for s in services if s is not None])
     em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1, em_absent)
     if em is not None:
@@ -5953,7 +6664,8 @@ def _bound_lesion(text: str, clause: tuple[int, int], own_anat: Sequence, index:
     return lesion
 
 
-def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_intents) -> Optional[DocumentedService]:
+def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_intents,
+            dispositions=None) -> Optional[DocumentedService]:
     statuses = d.statuses
     positive = [s for s in statuses if s[0] == 'performed']
     negative = [s for s in statuses if s[0] in ('negated', 'cancelled')]
@@ -6080,7 +6792,7 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
     if d.family in ('gi.ercp', 'gi.eus', 'gi.office_em', 'gi.motility', 'gi.reflux', 'gi.anorectal', 'gi.capsule',
                     'gi.feeding_tube'):
         intent = '' if intent in ('screening', 'surveillance') else intent
-    lesions = tuple(_disposition(lesion, d.acts) for lesion in d.lesions)
+    lesions = tuple(_disposition(lesion, d.acts, (dispositions or {}).get(lesion.id, '')) for lesion in d.lesions)
     evidence = tuple(_dedupe_spans(([d.report_title] if d.report_title else []) + [s[2] for s in positive]))[:6]
     completion_evidence = tuple(_dedupe_spans(completion_spans))[:4]
     # rule 4: a combined report title (and its mention's clause) documents each service it names, and is the scope of
@@ -6102,7 +6814,9 @@ def _setting(context_facts) -> str:
     return fact.value if fact is not None and getattr(fact, 'value', None) else ''
 
 
-def _disposition(lesion: Lesion, acts: Sequence[Act]) -> Lesion:
+def _disposition(lesion: Lesion, acts: Sequence[Act], stated: str = '') -> Lesion:
+    """What was done to a lesion: its acts' reading, and else what the report states about it (``stated``:
+    _stated_dispositions - "The polyp was left in place." is untreated; a removal still to come, scheduled)."""
     mine = [a for a in acts if a.lesion == lesion.id]
     done = {a.kind for a in mine if a.status == 'performed'}
     if done & {'snare', 'emr', 'esd', 'hot_biopsy'} or any('completely removed' in ev.text.lower() for a in mine
@@ -6110,6 +6824,8 @@ def _disposition(lesion: Lesion, acts: Sequence[Act]) -> Lesion:
         disposition = 'removed'
     elif 'biopsy' in done:
         disposition = 'sampled'
+    elif stated:
+        disposition = stated
     elif any(a.status == 'planned' for a in mine):
         disposition = 'scheduled'
     elif any(a.status == 'negated' for a in mine):

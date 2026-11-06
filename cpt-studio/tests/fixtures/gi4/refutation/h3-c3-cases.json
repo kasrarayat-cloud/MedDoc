@@ -103,7 +103,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion U2 (studio.gi.structure)": "READY/READY: the labelled COLONOSCOPY part under the report's own Procedure line is a report part of the colonoscopy, so the site-less removal binds to it (corpus C3|C3-1:c31-1:F1a, required READY)"
+    "completion U2 (studio.gi.structure)": "READY/READY: the labelled COLONOSCOPY part under the report's own Procedure line is a report part of the colonoscopy, so the site-less removal binds to it (corpus C3|C3-1:c31-1:F1a, required READY)",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -308,17 +309,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -725,17 +727,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -746,17 +749,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -767,17 +771,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -788,17 +793,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY"
    }
   },
   {
@@ -1061,17 +1067,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "HELD/ALT"
    }
   },
   {
@@ -1082,17 +1089,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "HELD/ALT"
    }
   },
   {
@@ -4726,9 +4734,9 @@
    ],
    "alone": [
     [
-     "READY"
+     "HELD"
     ],
-    "complete_pending_review"
+    "incomplete"
    ],
    "rows": [
     [
@@ -4738,9 +4746,9 @@
       "ALT"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
@@ -4749,9 +4757,9 @@
       "ALT"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
@@ -4760,9 +4768,9 @@
       "ALT"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
@@ -4771,9 +4779,9 @@
       "ALT"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5006,7 +5014,8 @@
       ],
       "complete_pending_review"
      ]
-    ]
+    ],
+    "completion A": "HELD incomplete"
    }
   },
   {

@@ -120,9 +120,11 @@ R1_L1_4 = [
     # stage READY/ALT, base EXCL/ALT
     ('L1-4c', COLON + 'Tattoo needed for future localization.\n',
      '45381', None, EXCL, ALT),
-    # stage READY/READY, base EXCL/ALT, round 1 HELD/ALT
+    # stage READY/READY, base EXCL/ALT, round 1 HELD/ALT. Completion repair (2026-11-06, U5; builder A): the purpose's
+    # "future" no longer dates the completed marking, so the outside report's heading decides - held as another source,
+    # exactly as its plain form below (it had been excluded as planned, the right outcome for the wrong reason)
     ('L1-4d', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed for future localization.\n',
-     '45381', None, EXCL, ALT),
+     '45381', None, HELD, ALT),
     # stage READY/READY, base READY/READY
     ('L1-4d-plain', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed.\n',
      '45381', None, HELD, ALT),
@@ -153,9 +155,10 @@ R1_L2_1 = [
     # stage HELD/ALT, base HELD/ALT
     ('ctl-1', EGD2 + 'At the referring facility, the meat bolus was removed with a retrieval net.\n',
      '43247', None, HELD, ALT),
-    # stage READY/READY, base HELD/ALT, round 1 READY/READY
+    # stage READY/READY, base HELD/ALT, round 1 READY/READY. Completion repair (2026-11-06, U1; builder A): the control
+    # is today's removal again - the meat bolus is the structural subject of its removal - the corpus's required READY
     ('ctl-1t', EGD2 + 'The meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, ALT),
+     '43247', None, READY, READY),
 ]
 R1_L2_2 = [
     # stage READY/READY, base READY/READY

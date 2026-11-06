@@ -26,7 +26,7 @@ from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
                                  HYPOTHETICAL_CUE, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
                                  DocumentedService,
-                                 ServiceInventory, _sentences, act_regions, examined_regions, reflow)
+                                 ServiceInventory, _sentences, act_regions, examined_regions, listed_in_doubt, reflow)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
@@ -565,7 +565,7 @@ class Unresolved:
     act: str  # '' when the whole service has no proposal
     label: str
     evidence: tuple[Span, ...]
-    reason: str  # no_proposal | not_covered | unsupported | coverage_unknown
+    reason: str  # no_proposal | not_covered | unsupported | coverage_unknown | in_doubt (F5: a listing stated in doubt)
 
 
 @dataclass(frozen=True)
@@ -757,6 +757,19 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              f'{describe_act(service, act)} in the {service_label(service)}, '
                                              'attempted or in doubt: no code profile of this service accounts for it',
                                              act.evidence[:2], 'unsupported'))
+                continue
+            if listed_in_doubt(act) and act.role in OWN_ROLES and act.kind in entry.acts \
+                    and act.kind not in covers and not (act.kind in ('tattoo', 'injection')
+                                                        and covers & {'tattoo', 'injection'}):
+                # Completion repair (2026-11-06, F5; builder A): an act the procedure line lists and the report states
+                # only in doubt ("It is unknown whether hot snare polypectomy was performed."): whether a coded act was
+                # done is open, so coding completeness stays open while no selected code accounts for it - never
+                # complete on the doubt. Its own reason: no paid second review is asked for it (jobs.SECOND_REVIEW_REASONS)
+                # and no participant's code is admitted on it (engine's documented items read no_proposal/not_covered)
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}: listed on '
+                                             'the procedure line, and the report states it only in doubt',
+                                             act.evidence[:2], 'in_doubt'))
                 continue
             if act.status != 'performed' or act.role not in OWN_ROLES:
                 continue
