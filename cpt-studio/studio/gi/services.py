@@ -625,6 +625,17 @@ def _fragment_is_anothers(text: str, frag, pos: int, end: int, ce: int) -> bool:
     return bool(mentioned) and not (mentioned & set(kinds))
 
 
+def _outcome_in_doubt(cues) -> bool:
+    """Whether an uncertain act's own clause states its OUTCOME otherwise than done (the reading's first cue, the one
+    that decided it): an attempt or a failure ("was attempted", "was unsuccessful", "failed to snare it"), a hedge
+    ("possibly", "it is unclear whether"), a condition or an open question ("if", "whether": "It is unknown whether ...
+    was performed"), an infinitive ("is to be injected") or a later clause's failure of the same act. Another
+    facility's or provider's act, a time of something else's, or plain silence (no performance statement) are no
+    statement of the act's outcome."""
+    return _attempt_or_failure(cues) or _hedged(cues) \
+        or (bool(cues) and cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
+
+
 def _against_listing(text: str, act: Act) -> bool:
     """Whether a body act of a listed kind states that act otherwise today (refutation fa-1, as narrowed by the full
     suite): an attempt or a failure of it; or a plan to do it at a lesion documented today ("The polyp will be removed
@@ -634,8 +645,7 @@ def _against_listing(text: str, act: Act) -> bool:
     if act.status == 'uncertain':
         # F-TIME (harness repair 3): a condition or an open question, an infinitive, or a later failure of the same act
         # doubts today's act as a hedge does; another facility's or provider's act says nothing about today's listing
-        return _attempt_or_failure(act.cues) or _hedged(act.cues) \
-            or (bool(act.cues) and act.cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
+        return _outcome_in_doubt(act.cues)
     if act.status != 'planned':
         return False
     if act.lesion:
@@ -3719,7 +3729,28 @@ def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, in
                 continue
             taken.append((m.start(), m.end()))
             found.append((name, region, m.start(), m.end()))
+    for name, region, s, e in list(found):
+        # Completion repair (2026-11-06, U13; builder A): a coordinated modifier shares the site's head ("from the right
+        # and left colon", "the proximal and distal esophagus"): the modifier before the coordinator names a site of
+        # its own when "<modifier> <head>" is itself a site of this vocabulary. Read structurally - the head is the
+        # site's own words after its first, and the vocabulary itself decides the site - never a list of modifiers.
+        shared = _COORDINATED_MODIFIER.search(text, max(start, s - COORDINATION_REACH), s)
+        head = text[s:e].split(None, 1)
+        if shared is None or len(head) < 2:
+            continue
+        a, b = shared.span('modifier')
+        if any(x < b and a < y for x, y in taken):
+            continue
+        written = text[a:b] + ' ' + head[1]
+        site = next(((n, r) for n, r, pattern in ANATOMY if pattern.fullmatch(written)), None)
+        if site is not None and site[0] != name:
+            taken.append((a, b))
+            found.append((site[0], site[1], a, b))
     return sorted(found, key=lambda x: x[2])
+
+
+COORDINATION_REACH = 40  # characters before a site read for a coordinated modifier that shares its head
+_COORDINATED_MODIFIER = _rx(r'\b(?P<modifier>[A-Za-z]{3,})[ \t]*(?:,[ \t]*)?[ \t]+(?:and|or|&)[ \t]+$')
 
 
 # A comparison's object names a different lesion, not a second target of the clause's act. Do not remove that source
@@ -5178,8 +5209,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 if reading.status == 'uncertain' and not has_act_verb and not _on_procedure_line(text, ms, part):
                     continue
+                # Completion repair (2026-11-06, U6; builder A): placement never overwrites outcome. The procedure line
+                # places the act and stands in for a performance statement its clause lacks; it never overrides an
+                # outcome that same clause states - attempted, failed, unsuccessful, hedged, conditional or unknown
+                # ("Procedure: Colonoscopy. ... Hot snare polypectomy ... was attempted, but the polypectomy was
+                # unsuccessful": D|RT-f1, D|RT-f3, D|ARCH-D3a had read that failed attempt as performed, a false READY).
+                # The act keeps its own reading (in doubt: held, never READY on its placement).
                 if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
-                        and _on_procedure_line(text, ms, part):
+                        and not _outcome_in_doubt(reading.cues) and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS \
                         and fam in performed_families \
