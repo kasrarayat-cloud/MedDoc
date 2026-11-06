@@ -264,9 +264,28 @@ HISTORICAL_CLAUSE = (
                             r'|\breview\s+of\s+(?:the\s+)?(?:outside|prior|previous|old)\s+(?:reports?|records?)\b')),
 )
 
+# --- one failure vocabulary (refutation cycle 2, outcome O6) ---------------------------------------------------------
+# The words that say an act was stopped, cut short or kept from being done. Routing's subject-tested failure cues read
+# them to tell a sub-act's own failure from the examination's (ABORTED; INCOMPLETE_CLAUSE 'terminated', 'stopped' and
+# 'precluded'; detect._SUBJECT_TESTED), and the documented-service reader reads the same words as that act's own
+# failure (FAILED_ACT after its mention, FAILED_ACT_BEFORE as its attribute; services.ATTEMPT_OR_FAILURE_CUES names the
+# readings they make). Every one of those patterns is built from these names, each reader keeping its own anchoring, so
+# a failure routing gives to a sub-act is never an act the services reader reads done, and the two cannot drift apart
+# again: cycle 1 had added "aborted", "terminated" and "discontinued" to the services reader by hand, and "halted",
+# "stopped because" and "precluded", which routing read as a polypectomy's own failure, still let the procedure line
+# make the listed polypectomy done ("The polypectomy was halted because of bleeding.": 45385 READY).
+ACT_ABORTED = 'aborted'
+ACT_STOPPED = ('terminated', 'discontinued', 'halted')  # routing's 'terminated' cue (undenied)
+ACT_STOPPED_HOW = ('at', 'short', 'due', 'because', 'before')  # routing's 'stopped' cue: "stopped" and one of these
+ACT_PRECLUDED = 'precluded'
+ACT_FAILED = ('failed', 'unsuccessful', 'abandoned')  # the services reader's own failure words
+# Every failure word of an act, one per reading the services reader makes of it ("uncertain: halted"); "stopped" is
+# read only with one of ACT_STOPPED_HOW after it.
+ACT_FAILURE_WORDS = ACT_FAILED + (ACT_ABORTED,) + ACT_STOPPED + (ACT_PRECLUDED, 'stopped')
+
 # --- cancellation: the service was called off before it happened ---------------
 
-ABORTED = rx(r'\baborted\b')
+ABORTED = rx(r'\b' + ACT_ABORTED + r'\b')
 CANCELLED_CLAUSE = (
     ('cancelled', rx(r'\bcancel(?:l?ed|lation|s)?\b')),
     ('aborted', ABORTED),
@@ -461,9 +480,10 @@ INCOMPLETE_CLAUSE = (
                         r'|\bfailed\s+to\s+(?:reach|advance|pass|intubate|enter|traverse)\b|\bwithout\s+reaching\b')),
     ('prevented', rx(r'\bprevent(?:ed|s|ing)\s+(?:\w+\s+){0,2}?(?:passage|advancement|intubation|entry|traversal|'
                      r'examination|evaluation|insertion)\b|\bimpassable\b|\bnon-?traversable\b')),
-    ('terminated', _Undenied(r'\b(?:terminated|discontinued|halted)\b')),
-    ('stopped', rx(r'\bstopped\s+(?:at|short|due|because|before)\b')),
-    ('precluded', rx(r'\bprecluded\b')),
+    # the one failure vocabulary (ACT_*, above): the services reader's FAILED_ACT reads these same words
+    ('terminated', _Undenied(r'\b(?:' + '|'.join(ACT_STOPPED) + r')\b')),
+    ('stopped', rx(r'\bstopped\s+(?:' + '|'.join(ACT_STOPPED_HOW) + r')\b')),
+    ('precluded', rx(r'\b' + ACT_PRECLUDED + r'\b')),
     ('failed cannulation', rx(r'\b(?:failed|unsuccessful)\s+(?:attempts?\s+at\s+)?(?:deep\s+|selective\s+|biliary\s+|'
                               r'bile\s+duct\s+|pancreatic\s+)?cannulation\b|\bcannulation\s+(?:\w+\s+){0,5}?'
                               r'(?:was\s+|were\s+)?(?:unsuccessful|not\s+achieved|not\s+possible|failed)\b'
@@ -1235,11 +1255,15 @@ UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|
 # A failure word of the act's own predicate (services.read_clause, R8 D2): after the mention in its clause ("Cold forceps
 # biopsy of the antrum failed.") or right before it as its attribute ("an unsuccessful polypectomy"). It reads the act
 # uncertain - held, as "attempted" already is - never performed and never denied.
-# Refutation cycle 1 (acts F1): "aborted", "terminated" and "discontinued" fail an act too ("The polypectomy was
-# aborted."), so the services reader holds the act whose failure routing reads as a sub-act's (R2) - one failure
-# vocabulary for both readers.
-FAILED_ACT = rx(r'\b(?:failed|unsuccessful(?:ly)?|abandoned|aborted|terminated|discontinued)\b')
-FAILED_ACT_BEFORE = rx(r'\b(?P<w>failed|unsuccessful|abandoned|aborted|terminated|discontinued)[ \t]+(?:[\w-]+[ \t]+){0,3}$')
+# Refutation cycle 1 (acts F1) added "aborted", "terminated" and "discontinued" here by hand. Refutation cycle 2 (outcome
+# O6): both patterns are built from the one failure vocabulary (ACT_*, above), so every word routing's subject-tested
+# cues give a sub-act as its own failure fails that act here too ("The polypectomy was halted because of bleeding.",
+# "... was stopped because of bleeding.", "... was precluded by its position."). "stopped" is read only with one of
+# the words routing reads after it, and the match is that one word, as the reading names it ("uncertain: stopped").
+_ACT_FAILURE_PARTICIPLES = '|'.join(ACT_FAILED + (ACT_ABORTED,) + ACT_STOPPED + (ACT_PRECLUDED,))
+FAILED_ACT = rx(r'\b(?:' + _ACT_FAILURE_PARTICIPLES + r'|unsuccessfully|stopped(?=\s+(?:' + '|'.join(ACT_STOPPED_HOW)
+                + r')\b))\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + _ACT_FAILURE_PARTICIPLES + r')[ \t]+(?:[\w-]+[ \t]+){0,3}$')
 # Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
 # mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
 # removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose
