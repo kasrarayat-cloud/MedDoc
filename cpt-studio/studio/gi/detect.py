@@ -4164,7 +4164,9 @@ def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None
     for d in marks.dates[bisect.bisect_left(marks.date_starts, lo):]:
         if d.start >= hi:
             break
-        if _gi4_other_day(d, today) and not (excuse is not None and excuse(d)):  # another day's date in the block
+        if excuse is not None and excuse(d):
+            continue  # completion repair (R2): a date the caller's excuse names as not the passage's
+        if _gi4_other_day(d, today):  # another day's date in the passage's block
             return False
     k = bisect.bisect_left(marks.signoffs, lo)
     if k < len(marks.signoffs) and marks.signoffs[k] < hi:  # a sign-off line in the passage's block
@@ -5888,8 +5890,8 @@ def _bare_negation_hold(an: Analysis, family_readings: list, evidenced: bool) ->
 # prevented complete examination"), never what failed; nor are the 'failed cannulation' entry's own forms, which name
 # the cannulation themselves - only its bare "(was|were) unsuccessful".
 _SUBJECT_TESTED_NAMES = frozenset(name for name, _ in cues.INCOMPLETE_CLAUSE if name != 'prevented') | {'aborted'}
-_SUBJECT_TESTED = {id(pattern): name for name, pattern in cues.INCOMPLETE_CLAUSE if name in _SUBJECT_TESTED_NAMES}
-_SUBJECT_TESTED[id(cues.ABORTED)] = 'aborted'
+_SUBJECT_TESTED = {**{id(pattern): name for name, pattern in cues.INCOMPLETE_CLAUSE if name in _SUBJECT_TESTED_NAMES},
+                   id(cues.ABORTED): 'aborted'}
 _BARE_UNSUCCESSFUL = re.compile(r'(?:was|were)\s+unsuccessful\b', re.A | re.I)
 _DEFINITE = re.compile(r'(?:the|this|that)\s', re.A | re.I)
 

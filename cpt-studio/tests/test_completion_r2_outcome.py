@@ -275,6 +275,48 @@ class SubActFailureRoutingTests(SimpleTestCase):
         self.assertEqual(proposal(text, '45385', failure).status, 'ready')
 
 
+class OtherFamiliesAndLayoutsTests(SimpleTestCase):
+    """The same rule in other GI families and layouts: a sub-act's failure leaves the examination's own reading; the
+    examination's own failure stays incomplete; a subject the grammar cannot read keeps the base reading."""
+    HEAD = 'Date of service: 2026-10-14\nEndoscopist: Test Endoscopist, MD\n'
+
+    def test_a_sub_acts_failure_in_other_families(self):
+        for family, text, extent in (
+                ('gi.ercp', 'ERCP Report\n' + self.HEAD + 'Procedure: ERCP. The duodenoscope was advanced to the second '
+                 'portion of the duodenum. Deep biliary cannulation was achieved. Stone extraction with a balloon was '
+                 'unsuccessful.\n', None),
+                ('gi.eus', 'EUS Report\n' + self.HEAD + 'Procedure: EUS. The echoendoscope was advanced to the duodenum. '
+                 'Fine-needle aspiration of the mass was unsuccessful.\n', None),
+                ('gi.flex_sig', 'Flexible Sigmoidoscopy Report\n' + self.HEAD + 'Procedure: Flexible sigmoidoscopy. The '
+                 'sigmoidoscope was advanced to the splenic flexure. Polypectomy of a 9 mm polyp was attempted, but the '
+                 'polypectomy was unsuccessful.\n', 'splenic flexure'),
+                ('gi.egd', 'EGD Report\n' + self.HEAD + 'Procedure: EGD. The gastroscope was advanced to the second '
+                 'portion of the duodenum. Band ligation of the varices was unsuccessful.\n', 'second part of duodenum'),
+                ('gi.colonoscopy', 'Colonoscopy Report\n' + self.HEAD + 'Procedure: Colonoscopy.\nThe colonoscope was '
+                 'advanced to the cecum. In the sigmoid colon a 14 mm polyp was seen, and hot snare polypectomy was '
+                 'attempted. The snare could not be closed around the stalk and the polypectomy was unsuccessful.\n',
+                 'cecum')):
+            with self.subTest(family):
+                self.assertEqual(finding(text, family).status, 'performed')
+                self.assertEqual(facts(text, family).get('extent'), extent)
+
+    def test_the_examinations_own_failure_in_other_families(self):
+        for family, text in (
+                ('gi.ercp', 'ERCP Report\n' + self.HEAD + 'Procedure: ERCP. The duodenoscope was advanced to the second '
+                 'portion of the duodenum. Biliary cannulation was unsuccessful.\n'),
+                ('gi.colonoscopy', 'Colonoscopy Report\n' + self.HEAD + 'Procedure: Colonoscopy. The colonoscope was '
+                 'advanced to the sigmoid colon. The scope could not be advanced beyond the sigmoid because of '
+                 'angulation.\n')):
+            with self.subTest(family):
+                self.assertEqual(finding(text, family).status, 'incomplete')
+
+    def test_a_table_cells_subject_is_not_read(self):
+        # the subject sits across a cell boundary: not read, so the base reading (incomplete) stands - the safe side
+        text = ('Colonoscopy Report\n' + self.HEAD + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.'
+                '\nPolypectomy | attempted | was unsuccessful\n')
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
+
+
 class ExaminationFailureRoutingTests(SimpleTestCase):
     """The examination's own failure keeps the family incomplete, its warning and its 52/53 consideration."""
 
