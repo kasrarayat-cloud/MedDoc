@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106` at `89fe6328f38d` (the five builders integrated, with the integration's own rules; not installed) |
-| current stage | 6 and 7: items 2 to 5 IMPLEMENTED and VERIFIED OFFLINE on the integrated tree, item 6 PASS (VERIFIED OFFLINE); refutation over the integrated diff next (stage 1 PASS at `b452c6c4`) |
-| next action | the refutation workflow: seven lenses (structure, outcome, acts, admission, answers, cost, consistency), each in a write-disabled lens sandbox at the head, told to refute the integrated diff `b452c6c4..` with concrete inputs; every finding verified by the owner session before it is believed; repairs under the two-cycle rule. CI on the draft PR alongside. Then the install and the walk of the sealed sets c1 and c2 |
+| candidate | branch `fix/cpt-studio-completion-20261106` at `61f732156` (the five builders integrated, the integration's own rules, and refutation cycle 1's repairs; not installed) |
+| current stage | 7: refutation cycle 1 over the integrated diff found 44 counterexamples (six lenses; the cost lens is pending), all reproduced and repaired fail-closed (`34b8d0c9e`, `95392c99f`); items 2 to 5 stay IN PROGRESS until cycle 2; item 6 re-measured PASS on the repaired tree (stage 1 PASS at `b452c6c4`) |
+| next action | the full suite on `61f732156`; then refutation cycle 2 (five lenses aimed at the cycle-1 repairs, briefs in `/home/claude/cpt-studio-completion-20261106/refute/briefs-c2/`), under the two-cycle rule: a mechanism refuted again is dropped to the base reading, never patched a third time. Then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -874,4 +874,20 @@ the progress log below.
     prefixes: c2a.txt `358e42f28f26a4e1` (PDF), c2b.txt `811efefbb15f9518` (PDF), c2c.txt `2c884ef1a2d1462b` (Word),
     expectations-c2.json `7174de3cdfb579c5`. Its author returned only these hashes; no one has read it. The session
     wrote set c1 itself and knows its content, so c2 is the independent acceptance evidence and c1 is walked beside it.
+  - No provider request has been sent in this repair.
+- **2026-11-06T16:15Z Completion repair: refutation cycle 1 over the integrated diff, and its repairs.**
+  - Workflow `wf_5ea89702-382`: seven lenses in write-disabled sandboxes at `179fdff9`; six returned 44 findings
+    (structure 8, admission 8, outcome 8, acts 8, answers 7, consistency 5; the cost lens had not returned). The owner
+    session reproduced every finding on the head and the base (`verify/refute1/`): 17 NEW false READYs among them.
+  - Repaired fail-closed in `34b8d0c9e` and `95392c99f` (HARNESS.md "Refutation of the integrated diff, cycle 1"; pinned
+    in `tests/test_completion_refutation_c1.py`, a mutant of one repair failing its pin). The first acts repair moved
+    seven purpose-marking corpus entries to FALSE HOLD; routing's own purpose rule was kept and narrowed instead.
+  - The install prediction (a read-only dump restored on the test server, the installer's own one-shots, nothing sent)
+    measured the stored-answer rule of the repair turning three reviewed encounters back to needing details at the state
+    recompute alone; the rule now binds an earlier-form answer by its own question's words, and on the cycle-1 commit the
+    state recompute after migration 0013 changes no encounter and the rollback read changes none.
+  - Measured: corpus invariant 0 new false READYs; freeze gate holds; H4 battery 10 declared movements unchanged; H1
+    replay the labels alone; the four retained cases as required; the walk tool's new hard checks (expected codes, the
+    member's answer, a conflict question) and the manifest builders for c1 and the blind c2 (the latter written from the
+    schema the c2 author was given; c2 still unread).
   - No provider request has been sent in this repair.
