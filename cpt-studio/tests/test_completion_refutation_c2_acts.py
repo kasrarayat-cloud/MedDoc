@@ -310,12 +310,15 @@ class SameActLaterFailureTests(SimpleTestCase):
         """Cycle 2, acts A5 controls: a failure at a site of its own, of an act calling itself another, or before."""
         quote = 'Cold forceps biopsies were obtained from the gastric antrum'
         for body in (quote + '.\nA biopsy of the duodenal bulb was aborted due to bleeding.\n',
-                     quote + '.\nA second biopsy was aborted due to bleeding.\n',
                      'A biopsy attempt failed due to bleeding.\nCold forceps biopsies were then obtained from the gastric '
                      'antrum.\n'):
             with self.subTest(body):
                 q = quote if quote in body else 'Cold forceps biopsies were then obtained from the gastric antrum'
                 self.assertEqual(ready(upper(body), [('43239', q)]), {'43239'})
+        # refutation cycle 4 (outcome 1-5): "aborted" is no services-reader word and no sub-act's failure outside the
+        # closed attempt form, so routing holds the family on it - the installed release's hold
+        body = quote + '.\nA second biopsy was aborted due to bleeding.\n'
+        self.assertEqual(outcome(upper(body), [('43239', quote)]), {'43239': ('selected', 'needs_clarification')})
 
 
 class PresupposingHeadTests(SimpleTestCase):

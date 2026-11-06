@@ -300,15 +300,18 @@ class NotPerformedNeedsDocumentationTests(SimpleTestCase):
                 got = outcome(result, '45385', '45378')
                 self.assertEqual((got['45385'][:2], got['45378'][:2]), (HELD, HELD))
 
-    def test_a_lesion_only_observed_still_excludes(self):
-        """Integration of cycle 2 (the closed observation form): a failed or planned removal beside a lesion the report
-        only observes - "was seen", "was found" after a field label - excludes 45385 and 45378 is READY, as the installed
-        release read it (the ADM C3-2-1 corpus entries); "was seen and removed" or a decimal size is no observation form
-        and holds."""
+    def test_a_lesion_only_observed_holds(self):
+        """Integration of cycle 2 had a closed observation form: a failed or planned removal beside a lesion the report
+        only observes excluded 45385 and released 45378 READY. Refutation cycle 4 (closed 1 and 2) abandoned it under the
+        two-cycle rule - a removal stated in words no list holds ("the stalk was transected with the same loop and the
+        head was recovered") or inside the failure's own passage was excluded as not performed - so a lesion only
+        observed keeps the installed release's hold on both codes, whoever proposed the removal code (the ADM C3-2-1
+        corpus entries, FALSE HOLD)."""
         for body, expected, base in (
-                ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.', EXCLUDED, READY),
+                ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.', HELD, HELD),
                 ('Findings: A 9 mm pedunculated polyp was found in the sigmoid colon.\nHot snare polypectomy was '
-                 'unsuccessful.', EXCLUDED, READY),
+                 'unsuccessful.', HELD, HELD),
+                # a removal still to come is the reader's own NOT_REMOVED disposition of the lesion: still excluded
                 ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy will be performed at a '
                  'later date.', EXCLUDED, READY),
                 ('A 25 mm sessile polyp in the ascending colon was seen and removed piecemeal.\n' + self.FAIL, HELD, HELD),

@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106` at `acadc296c` (+ its pins and this record): the five builders, refutation cycles 1 and 2, and refutation cycle 3's repair integrated; not installed |
-| current stage | 7: refutation cycle 3 (32 findings over cycle 2's approach) answered under the two-cycle rule - the releases no required reading rests on abandoned (pronoun, nominal removal, shared subject, rule 6b, cycle 2's stop words and units rule), the required ones recognized whole (the marking statement, the bolus antecedent's sentence, the lone reach statement, the removal exclusion), sub-act failures given by one reader and consumed by the other, a released label read as its heading twin's name; measured offline: every cycle-3 input as the installed base (the intended releases apart), corpus 0 new false READY (FALSE READY 35, FALSE HOLD 54), parity against the base's own twin readings (180 pairs, five recorded exceptions), the four retained cases as required; items 2 to 5 stay IN PROGRESS until refutation cycle 4 |
-| next action | the full suite and the gates on this commit; refutation cycle 4 over cycle 3's repair (its findings only narrow or drop, never widen); then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
+| candidate | branch `fix/cpt-studio-completion-20261106`: the five builders and refutation cycles 1 to 4 integrated (cycle 4's repair and pins in this commit); not installed |
+| current stage | 7: refutation cycle 4 (23 findings over cycle 3's repair) answered - every refuted mechanism returned to the installed reading (the services reader's failure words; a sub-act's failure only in the closed attempt form; the observed-only exclusion abandoned) or its gap closed toward its twin (the instrument rule's named section; the labelled binding and its own sentence; a consumed failure kept as the family's mention; answers the overlay reads); then a differential scan in place of a fifth open cycle: 1,862 lens inputs of cycles 1-4, no READY that is neither a twin's nor cycle 3's measured release; corpus 0 new false READY (FALSE READY 35, FALSE HOLD 59); retained 4/4/2/6 READY, byte-identical to cycle 3; gates hold |
+| next action | the full suite in a frozen sandbox on this commit; the push (two-view), CI, the merge, the install declaration and the install; the walk of c1 and the blind c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -924,3 +924,15 @@ the progress log below.
     fails on pypdf 6.21.2, as on main since #1449 (L1).
   - Install predictions on `844fe54c` over a fresh read-only dump: the retained cases 4/4/2/6 READY, nothing sent,
     RECOMPUTE_STATES unchanged.
+- 2026-11-06 23:45Z - refutation cycle 4 over cycle 3's repair (`52a5f774`): five lenses (structure 4, closed 8, outcome 5,
+  answers 3, cost 3 findings), every one reproduced on three trees before any change (`verify/refute5/`).
+  - Repair under the two-cycle rule: the services reader's failure words are the installed three; a sub-act's failure only
+    in the closed attempt form (bounded: 350 KB in 1.5 s); the observed-only removal exclusion abandoned; the instrument
+    rule's named section read at the name's place; the labelled binding stops at a scope sentence outside its tract and
+    its own sentence reads as the twin's; a consumed failure stays the family's mention (performed by its section); the
+    engine reads only fingerprinted answers to decision-independent questions, other codes' fingerprints kept.
+  - Differential scan (1,862 inputs from every lens of cycles 1-4, three trees): no open release; every READY added over
+    52a5f774 is READY on the base. Parity residuals recorded (purpose, reach, bolus; ACCURACY-RESIDUALS cycle 4).
+  - Corpus re-pinned beside `completion-refutation-c4-corpus.json` (5 moved, ADM C3-2-1, to FALSE HOLD); retained 4/4/2/6
+    READY byte-identical to 52a5f774; freeze holds, battery 6 declared movements, replay labels alone; the completion and
+    h3 refutation suites (401 tests) pass.

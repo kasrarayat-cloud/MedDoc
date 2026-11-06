@@ -20,7 +20,7 @@ from django.test import SimpleTestCase
 from django.utils import timezone
 
 from studio import customer_api, jobs, models, reports, review, serializers
-from studio.validation import questions
+from studio.validation import engine, questions
 from tests.test_cux_r2_details import PipelineCase
 from tests.test_cux_r2_overlay import ApiCase, persist_input
 from tests.test_cux_review import decide
@@ -114,12 +114,13 @@ class EarlierFormKeyBindingTests(SimpleTestCase):
         self.assertEqual(questions.bind([answer(value='performed')], {key: 'a' * 64}), ([], []))
         self.assertFalse(hasattr(questions, 'EARLIER_FORM'))  # no reason says a question is asked "in other words"
 
-    def test_the_engine_reads_an_earlier_form_answer_by_its_key_in_either_family(self):
-        """Cycle 2, answers W2 in the engine (engine._MemberAnswers, the input every re-assessment reads): an
-        earlier-form answer excludes the code whose question it answers, whatever CPT Studio's question and reason now
-        say - a colonoscopy's performed_status and extent, an upper endoscopy's performed_status and extent. Controls: a
-        fingerprinted answer to a question asked differently is listed as such and changes nothing; an earlier-form
-        answer to a key no longer asked changes nothing."""
+    def test_the_engine_leaves_an_earlier_form_answer_to_the_overlay_in_either_family(self):
+        """Cycle 2, answers W2 had the engine read an earlier-form answer by its key. Refutation cycle 4 (answers 1-3):
+        the review overlay reads it, at read time, by its key, as the installed release did (questions.bind, above) -
+        the engine leaves every code and fingerprint as it was and records the answer as the overlay's, so no other
+        code's stored checks depend on which form an answer took. Controls: a fingerprinted answer to a question asked
+        differently is listed as such and changes nothing; an earlier-form answer to a key no longer asked changes
+        nothing."""
         for text, value, quote, fact in ((HEDGED, '45385', HEDGED_SNARE, 'performed_status'),
                                          (UNREACHED, '45385', UNREACHED_SNARE, 'extent'),
                                          (UPPER_HEDGED, '43251', UPPER_SNARE, 'performed_status'),
@@ -132,11 +133,11 @@ class EarlierFormKeyBindingTests(SimpleTestCase):
                 family = asked.family
                 earlier_form = questions.MemberAnswerInput(value, family, fact, 'not_documented', '', 'a1')
                 after = run(text, codes, member_answers=(earlier_form,))
-                (excluded,) = [p for p in after.proposals if p.code == value]
-                self.assertEqual((excluded.bucket, excluded.status), ('excluded', 'excluded'))
-                self.assertEqual(excluded.support['answered']['answers'], ['a1'])
+                self.assertEqual([(p.bucket, p.fingerprint) for p in after.proposals],
+                                 [(p.bucket, p.fingerprint) for p in before.proposals])
                 record = after.completeness['member_answers']
-                self.assertEqual(([e['answer'] for e in record['applied']], record['earlier']), (['a1'], []))
+                self.assertEqual((record['applied'], [(e['answer'], e['why']) for e in record['earlier']]),
+                                 ([], [('a1', engine.OVERLAY_READ)]))
                 other = questions.MemberAnswerInput(value, family, fact, 'not_documented', 'e' * 64, 'x1')
                 unasked = questions.MemberAnswerInput(value, family, 'units', 'not_documented', '', 'x2')
                 kept = run(text, codes, member_answers=(other, unasked))
@@ -400,7 +401,11 @@ class EarlierFormThroughReassessmentTests(ArchiveMixin, PipelineCase):
         doc = self.doc(encounter_id)
         self.assertEqual(rows_of(doc)[value]['status'], 'excluded')
         self.assertEqual(rows_of(doc)[value]['sub_label'], customer_api.UNAVAILABLE_SUB_LABEL)
-        self.assertIn(str(answer.pk), [entry['answer'] for entry in assessment.completeness['member_answers']['applied']])
+        # refutation cycle 4 (answers 1-3): read by the review overlay, by its key, at read time - the engine records it
+        # as the overlay's and applies nothing itself
+        self.assertIn((str(answer.pk), engine.OVERLAY_READ),
+                      [(e['answer'], e['why']) for e in assessment.completeness['member_answers']['earlier']])
+        self.assertNotIn(str(answer.pk), [e['answer'] for e in assessment.completeness['member_answers']['applied']])
         self.assertEqual(doc['earlier_answers'], [])
         self.assertNotIn(f'{value} needs a detail.', doc['readiness']['blockers'])
         self.assertNotIn(OTHER_WORDS, json.dumps(doc))
@@ -421,9 +426,9 @@ class EarlierFormThroughReassessmentTests(ArchiveMixin, PipelineCase):
         drain()
         self.assertEqual(len(self.provider.sent), sent)
         after = self.assert_still_applied(encounter_id, answer, '45385', before)
-        (closed,) = after.clarifications.filter(proposal__code='45385', fact='performed_status')
-        self.assertEqual((closed.state, closed.answer_id), (models.Clarification.ANSWERED, answer.pk))
-        self.assertNotEqual(closed.reason, INSTALLED_REASON)  # the words moved; the binding did not depend on them
+        (stored,) = after.clarifications.filter(proposal__code='45385', fact='performed_status')
+        self.assertIsNone(stored.answer_id)  # the overlay answers it at read time (refutation cycle 4)
+        self.assertNotEqual(stored.reason, INSTALLED_REASON)  # the words moved; the binding did not depend on them
 
     def test_an_earlier_form_answer_stays_applied_after_the_member_answers_another_question(self):
         """Cycle 2, answers W2 (b): the same earlier-form answer, then the member answers 45378's base_included ("Cannot
@@ -550,24 +555,22 @@ class MarkerHazardTimingTests(ArchiveMixin, PipelineCase):
         self.assert_held(encounter_id, since)
         self.assert_held(encounter_id, timezone.now())  # a marker no standing answer explains: always this revision's
 
-    def test_a_marker_made_in_the_window_from_an_answer_given_before_it_holds_the_old_worker(self):
-        """Cycle 2, answers W3 (its second shape, which W2's binding makes common): an earlier-form answer given before
-        the switch (as the installed release recorded it), then this revision's reassess phase re-makes the assessment
-        with it - a marker made since the switch. The undo holds the old worker for it. Control: with the switch after
-        both, the record was there before, and is named only."""
+    def test_an_earlier_form_answer_given_before_the_switch_makes_no_marker(self):
+        """Cycle 2, answers W3 (its second shape, which W2's binding made common): an earlier-form answer given before
+        the switch, then this revision's reassess phase re-made the assessment with it - a marker made since the switch,
+        for which the undo held the old worker. Refutation cycle 4 (answers 1-3): the review overlay reads an
+        earlier-form answer, as the installed release read it, so the reassess phase applies nothing - no marker is made,
+        the old worker reads the record exactly as this one does, and the undo has nothing written to hold for."""
         encounter_id = self.upload(HEDGED)
         encounter = self.encounter(encounter_id)
         legacy_answer(encounter, encounter.current_assessment, '45385', COLON, 'performed_status', self.reviewer)
         since = timezone.now()
         jobs.reassess_retained(self.encounter(encounter_id), 'c2-w3-synthetic', user=self.reviewer)
         drain()
-        marker = self.encounter(encounter_id).current_assessment
-        self.assertTrue(questions.answered_away(marker.proposals.get(code='45385')))
-        self.assertGreaterEqual(marker.created_at, since)
-        self.assert_held(encounter_id, since)
-        later = timezone.now()
-        hazards, written, (split_since, before, unplaced), hold, notes = undo_reading(later)
-        self.assertEqual((hazards, written), ({encounter_id: ['member_answer']}, {}))
-        self.assertEqual((split_since, before, unplaced), ({}, {encounter_id: ['member_answer']}, {}))
-        self.assertFalse(hold)
-        self.assertTrue([note for note in notes if 'beside the old pair' in note], notes)
+        remade = self.encounter(encounter_id).current_assessment
+        self.assertFalse(questions.answered_away(remade.proposals.get(code='45385')))
+        self.assertGreaterEqual(remade.created_at, since)
+        self.assertEqual(rows_of(self.doc(encounter_id))['45385']['status'], 'excluded')  # the overlay reads it
+        hazards, written, (split_since, before, unplaced), hold, notes = undo_reading(since)
+        self.assertEqual((written, split_since), ({}, {}), (hazards, notes))
+        self.assertFalse(hold, notes)

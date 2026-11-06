@@ -1540,6 +1540,14 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
         named = [m for m in an.services_in(max(s, ts - 120), min(e, max(te, ts + 1) + 120))
                  if _overlaps(m.start, m.end, ts, max(te, ts + 1))]
         for m in named:
+            label = _released_label_at(an, m.start, m.end)
+            if label is not None and not an.services_in(label[1], e) \
+                    and (_denies(an, label[1], e, True) or _calls_off(an, label[1], e)):
+                # refutation cycle 4 (structure 4): a released label's own sentence after it is what its heading twin
+                # reads as the sentence after the name, bare ("Colonoscopy: The colonoscope was introduced ..., and then
+                # the examination was not performed because ..."): read as that sentence is
+                an.memo[key] = f"{SILENT_SECTION_PREFIX} the text after it ('{an.text[label[1]:e].strip()}') qualifies it"
+                break
             end = _group_end(an, m, e)
             word = _continuation(an, end, e, _clause_end(an, m.start, e),
                                  procedure=an.lay.section_at(m.start).kind == 'procedure', target=(ts, te))
@@ -3406,12 +3414,17 @@ def _P2_listed_under_a_denial(an: Analysis, start: int, reading: Reading) -> Rea
 def _in_a_released_label(an: Analysis, start: int, end: int) -> bool:
     """Whether [start, end) lies inside the label of a labelled procedure paragraph the structure reader released
     (studio.gi.structure.released: the label as written, its colon included). Read once per document, then bisected."""
+    return _released_label_at(an, start, end) is not None
+
+
+def _released_label_at(an: Analysis, start: int, end: int) -> Optional[tuple[int, int]]:
+    """The span of the released label [start, end) lies inside (_in_a_released_label), or None."""
     key = ('released-labels',)
     if key not in an.memo:
         an.memo[key] = sorted((p.label.start, p.label.end) for p in gi_structure.released(an.text))
     labels = an.memo[key]
     i = bisect.bisect_right(labels, (start, len(an.text) + 1)) - 1
-    return i >= 0 and labels[i][0] <= start and end <= labels[i][1]
+    return labels[i] if i >= 0 and labels[i][0] <= start and end <= labels[i][1] else None
 
 
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
@@ -5948,6 +5961,7 @@ def _bare_negation_hold(an: Analysis, family_readings: list, evidenced: bool) ->
 # prevented complete examination"), never what failed; nor are the 'failed cannulation' entry's own forms, which name
 # the cannulation themselves - only its bare "(was|were) unsuccessful".
 _SUBJECT_TESTED_NAMES = frozenset(name for name, _ in cues.INCOMPLETE_CLAUSE if name != 'prevented') | {'aborted'}
+SUB_ACT_FAILED_IN_IT = "performed: a sub-act attempted in it failed, the sub-act's own failure"  # refutation cycle 4
 _SUBJECT_TESTED = {**{id(pattern): name for name, pattern in cues.INCOMPLETE_CLAUSE if name in _SUBJECT_TESTED_NAMES},
                    id(cues.ABORTED): 'aborted'}
 _BARE_UNSUCCESSFUL = re.compile(r'(?:was|were)\s+unsuccessful\b', re.A | re.I)
@@ -5998,7 +6012,51 @@ def _a_sub_acts_failure_at(an: Analysis, clause_start: int, pos: int, name: str,
         return False
     if gi_clauses.failure_of(an.text, _failure_subject(an, clause_start, pos)) != gi_clauses.SUB_ACT:
         return False
-    return _consumed_by_the_services_reader(an, clause_start, clause_end, pos, said)
+    form = _attempted_then_failed(an, pos)
+    if form is None:
+        return False
+    return _consumed_by_the_services_reader(an, clause_start, min(clause_end, form[1]), pos, said)
+
+
+# Refutation cycle 4 (outcome 1-4, cost 1 and 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): a failure is a
+# sub-act's own only in one closed form, read whole inside its sentence - an attempt that introduces its own object
+# ("Hot snare polypectomy of a 14 mm pedunculated polyp in the sigmoid colon was attempted", "Balloon dilation of a
+# distal esophageal stricture was attempted"), then ", but the <its head> was unsuccessful" or "... failed", at most a
+# reason ("because of ...", "due to ..."), and the clause's or sentence's end. That is every shape the requirement was
+# built from (U3: e888f9ce, RT-a1, RT-a2, RT-d1, RT-d2, ARCH-D2a). Anything else - "aborted", a coordinated subject
+# ("Hot snare polypectomy and the cold forceps biopsy were unsuccessful"), a failure stated with the examination's ("...
+# was aborted ..., as was the remainder of the examination"), a later failure of an act already stated done ("The cold
+# snare polypectomy of this polyp was aborted") - keeps the installed release's reading: the examination's failure.
+# Cycle 3 had consumed any failure word the services reader also read off the subject, which handed the same act's
+# later failure, the first conjunct's and the examination's own to a sub-act. Bounded: one pass per sentence of at
+# most ATTEMPTED_THEN_FAILED_SENTENCE characters, each match at most a few hundred.
+ATTEMPTED_THEN_FAILED_SENTENCE = 2000
+_NO_COORDINATOR = r'(?:(?!\b(?:and|or|but|as|with)\b)[^,;:.()\n])'
+_ATTEMPTED_THEN_FAILED = re.compile(
+    r'(?P<attempt>' + _NO_COORDINATOR + r'{1,120}?\bof[ \t\n]+an?[ \t\n]+' + _NO_COORDINATOR + r'{1,120}?)'
+    r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+(?P<head>[a-z]+)[ \t\n]+'
+    r'(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed)'
+    r'(?:[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+' + _NO_COORDINATOR + r'{1,80}?)?'
+    r'(?=[ \t]*(?:[;.\n]|$))', re.A | re.I)
+
+
+def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
+    """The span of the closed attempt-then-failure form (_ATTEMPTED_THEN_FAILED) whose failure predicate holds ``pos``,
+    its failure's head named in its attempt ("the polypectomy" after "Hot snare polypectomy of a ..."), or None. One
+    pass per sentence, memoised."""
+    s, e = an.lay.sentence_for(pos, pos + 1)
+    key = ('attempted-then-failed', s, e)
+    if key not in an.memo:
+        forms = []
+        if e - s <= ATTEMPTED_THEN_FAILED_SENTENCE:
+            for m in _ATTEMPTED_THEN_FAILED.finditer(an.text, s, e):
+                if re.search(r'\b' + re.escape(m.group('head')) + r'\b', m.group('attempt'), re.A | re.I):
+                    forms.append((m.start('failed'), m.end('failed'), m.start(), m.end()))
+        an.memo[key] = forms
+    for fs, fe, ms, me in an.memo[key]:
+        if fs <= pos < fe:
+            return ms, me
+    return None
 
 
 def _consumed_by_the_services_reader(an: Analysis, clause_start: int, clause_end: int, pos: int, said: str) -> bool:
@@ -6155,7 +6213,11 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
         if family is None or an.lay.section_at(s).kind in ('plan', 'history', 'indication'):
             continue
         for cs, ce in _clauses_in(an, s, e):
-            if an.services_in(cs, ce) or cues.MEDICATION.search(text, cs, ce):
+            # refutation cycle 4 (structure 4): a released label is its heading twin's name, on a line of its own there -
+            # it makes the clause it opens no clause that names a service ("Colonoscopy: ... and the examination was
+            # incomplete because of poor preparation." reads the reference its twin's first sentence reads)
+            if any(not _in_a_released_label(an, m.start, m.end) for m in an.services_in(cs, ce)) \
+                    or cues.MEDICATION.search(text, cs, ce):
                 continue
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
@@ -6190,7 +6252,14 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                         continue  # "The terminal ileum was not intubated" after the cecum was reached
                     if status in ('incomplete', None) and _a_sub_acts_failure_at(
                             an, cs, m.start(), _SUBJECT_TESTED.get(id(pattern), ''), m.group(0)):
-                        continue  # completion repair (R2): "the polypectomy was unsuccessful" is the polypectomy's own
+                        # completion repair (R2): "the polypectomy was unsuccessful" is the polypectomy's own. Refutation
+                        # cycle 4 (cost 2): it still says the examination took place - the installed release read it
+                        # 'incomplete', performed but cut short - so it stays the family's mention, performed by its
+                        # section as an instrument course is (never an explicit cue: a contradiction elsewhere still
+                        # holds, and an incompleteness elsewhere still pushes its own cue)
+                        found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = Reading(
+                            'performed', (f'{SUB_ACT_FAILED_IN_IT}: {m.group(0)}',), 'section')
+                        continue
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
                     negated = _negated_status(an, m.start())
                     if negated is not None:
@@ -9000,16 +9069,34 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
 
 
 _FINITE_VERB = re.compile(r'\b(?:was|were|is|are|been|had|has|have)\b', re.A | re.I)
+# Where a heading's name ends: the first mark of a clause or an aside, or the line's end (refutation cycle 4)
+_NAME_END = re.compile(r'[.;,:()\[\]\n]|[ \t][-\u2013\u2014][ \t]')
 
 
 def _heading_line_names_a_service(an: Analysis, section) -> bool:
-    """Whether ``section``'s heading line - from the section's start to the line's end - names a service as a heading
-    names it: a service name with no finite verb on the line ("Procedure: Upper endoscopy", "UPPER ENDOSCOPY:"). A
-    narrative sentence on the heading's line that mentions a service in passing ("Procedure: The colonoscope was advanced
-    to the cecum. This was done on the same day as her upper endoscopy.") names no family (refutation cycle 3)."""
-    line_end = an.text.find('\n', section.start, section.end)
-    line_end = section.end if line_end < 0 else line_end
-    return bool(an.services_in(section.start, line_end)) and not _FINITE_VERB.search(an.text, section.start, line_end)
+    """Whether ``section`` names a service as a heading names it: the words in its name's place - after its label, up to
+    the first mark of a clause or an aside or the line's end, or, where nothing follows the label on its line, the first
+    such words of the next line that holds any - are a service name with no finite verb ("Procedure: Upper endoscopy",
+    "UPPER ENDOSCOPY:", "Procedure:" over "Upper endoscopy", "Procedure: Upper endoscopy. The gastroscope was ...",
+    "Procedure: EGD; the patient was sedated ..."). A narrative clause in that place that mentions a service in passing
+    ("Procedure: The colonoscope was advanced to the cecum. This was done on the same day as her upper endoscopy.")
+    names no family (refutation cycle 3). Refutation cycle 4 (structure 1 and 3): cycle 3 read the heading's whole first
+    line, so a name on the line under a bare "Procedure:", or a name followed on its own line by the narrative (any
+    "was"), left the section to the instrument rule."""
+    text = an.text
+    heading = section.heading
+    if heading is not None and an.services_in(heading.start, heading.end) \
+            and not _FINITE_VERB.search(text, heading.start, heading.end):
+        return True  # the label is the name ("UPPER ENDOSCOPY:")
+    start = heading.end if heading is not None else section.start
+    while start < section.end and text[start] in ' \t':
+        start += 1
+    if start < section.end and text[start] == '\n':  # nothing after the label: the name is the next line that holds words
+        while start < section.end and text[start] in ' \t\n':
+            start += 1
+    found = _NAME_END.search(text, start, section.end)
+    end = found.start() if found is not None else section.end
+    return bool(an.services_in(start, end)) and not _FINITE_VERB.search(text, start, end)
 
 
 def _another_familys_date(an: Analysis, d, family: str) -> bool:

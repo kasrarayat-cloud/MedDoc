@@ -103,13 +103,15 @@ class EarlierFormAnswerApprovalTests(_Case):
         self.assertEqual(codes['45385'], 'approved')
         self.assertEqual(codes['45378'], 'excluded')
 
-    def test_this_releases_own_answer_still_changes_the_checks_it_moves(self):
-        # the pinned fingerprint rule (test_completion_answers): an answer given on this release after the approval
+    def test_this_releases_own_answer_keeps_the_other_codes_decision(self):
+        # refutation cycle 4 (answers 1-3): an answer to the base code's base_included question - a question a review
+        # decision opens and closes - is the review overlay's, and a check another code's answer moves keeps that code's
+        # fingerprint, so the approval of 45385 carries, as the installed release carried every decision across an answer
         encounter_id = self.upload(REPORT)
         self.assertEqual(self.decide(encounter_id, '45385', 'approve').status_code, 201)
         (row,) = asked(self.doc(encounter_id), 'base_included')
         self.assertEqual(self.save(encounter_id, row, 'cannot_confirm').status_code, 201)
-        self.assertEqual(self.invalidated(encounter_id), [('45385', 'approve')])
+        self.assertEqual(self.invalidated(encounter_id), [])
 
 
 class ServiceAnswerUndoTests(_Case):

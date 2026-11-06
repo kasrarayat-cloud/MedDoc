@@ -1,0 +1,6328 @@
+{
+ "about": "Refutation of the integrated completion diff, cycle 4 (2026-11-06; HARNESS.md \"Refutation of the integrated diff, cycle 4\"): the five lenses' engine-level inputs, their stated variants and their parity twins (labels starting \"TW \"), each read on the installed base b452c6c4 (base), the cycle-2 head 844fe54c (cycle2), the cycle-3 head 52a5f774 (cycle3) and this repair (head): per code its bucket label and the flags among service.incomplete and routing.family. Synthetic documents only.",
+ "cases": [
+  {
+   "label": "o1 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndication: Surveillance after adenomas.\nProcedure: Colonoscopy with biopsy\nDescription of procedure: After informed consent, the colonoscope was introduced through the anus and advanced to the cecum. The bowel preparation was poor, with solid stool throughout. The examination was abandoned before biopsies were obtained because of the poor preparation.\nImpression: Inadequate bowel preparation.\nPlan: Repeat colonoscopy with a two-day preparation.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndication: Surveillance after adenomas.\nProcedure: Colonoscopy with biopsy\nDescription of procedure: After informed consent, the colonoscope was introduced through the anus and advanced to the cecum. The bowel preparation was poor, with solid stool throughout. The examination was abandoned before biopsies were obtained because of the poor preparation.\nImpression: Inadequate bowel preparation.\nPlan: Repeat colonoscopy with a two-day preparation.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 body quote",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndication: Surveillance after adenomas.\nProcedure: Colonoscopy with biopsy\nDescription of procedure: After informed consent, the colonoscope was introduced through the anus and advanced to the cecum. The bowel preparation was poor, with solid stool throughout. The examination was abandoned before biopsies were obtained because of the poor preparation.\nImpression: Inadequate bowel preparation.\nPlan: Repeat colonoscopy with a two-day preparation.\n",
+   "picks": [
+    [
+     "45380",
+     "The examination was abandoned before biopsies were obtained because of the poor preparation."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 band",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with band ligation\nThe gastroscope was advanced to the second portion of the duodenum.\nLarge esophageal varices with red wale signs were seen in the distal esophagus. The procedure was abandoned before band ligation because of hemodynamic instability.\n",
+   "picks": [
+    [
+     "43244",
+     "Upper endoscopy with band ligation"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43244": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43244": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43244": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43244": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 prior polypectomy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nThe procedure was abandoned prior to polypectomy because of oxygen desaturation.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 failed during",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nThe hot snare failed during polypectomy of the 12 mm transverse colon polyp.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 failed prior biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe examination failed prior to biopsy because of a fixed, looping sigmoid colon.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 egd prior biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe examination was abandoned prior to biopsy because of retained food.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43239": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43239": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43239": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 CONTROL after",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe examination was aborted after the biopsies were obtained because of poor preparation.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o1 CONTROL following",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe examination was aborted following the biopsies because of poor preparation.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o1 until",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe examination was abandoned until biopsies could be obtained safely.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 when",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe examination was abandoned when biopsies were attempted because of bleeding.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o1 while",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nThe procedure was aborted while polypectomy was under way because of desaturation.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nPolypectomy of the 6 mm sigmoid polyp was performed. The cold snare polypectomy of this polyp was aborted because of bleeding.\n",
+   "picks": [
+    [
+     "45385",
+     "Polypectomy of the 6 mm sigmoid polyp was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nPolypectomy of the 6 mm sigmoid polyp was performed. The cold snare polypectomy of this polyp was aborted because of bleeding.\n",
+   "picks": [
+    [
+     "45385",
+     "Polypectomy of the 6 mm sigmoid polyp was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 ercp",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved.\nStone extraction was performed. Balloon extraction of the stone was aborted because of desaturation, and the stone was left in the duct.\n",
+   "picks": [
+    [
+     "43264",
+     "Stone extraction was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43264": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43264": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 ercp noleft",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved.\nStone extraction was performed. Balloon extraction of the stone was aborted because of desaturation.\n",
+   "picks": [
+    [
+     "43264",
+     "Stone extraction was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43264": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43264": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 ercp noleft jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved.\nStone extraction was performed. Balloon extraction of the stone was aborted because of desaturation.\n",
+   "picks": [
+    [
+     "43264",
+     "Stone extraction was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43264": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43264": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43264": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 unsuccessful left",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nPolypectomy of the 6 mm sigmoid polyp was performed. Cold snare polypectomy of the 6 mm sigmoid polyp was unsuccessful, and the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Polypectomy of the 6 mm sigmoid polyp was performed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o2 ercp stones unsuccessful",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved.\nStones were extracted from the common bile duct. Balloon extraction of the stones was unsuccessful, and the stones remained in the duct.\n",
+   "picks": [
+    [
+     "43264",
+     "Stones were extracted from the common bile duct"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43264": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43264": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43264": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43264": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nHot snare polypectomy and the cold forceps biopsy were unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nHot snare polypectomy and the cold forceps biopsy were unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nThe polypectomy and the biopsy were aborted because of desaturation.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy\nThe colonoscope was advanced to the cecum.\nThe biopsy and the hot snare polypectomy were unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with balloon dilation\nThe gastroscope was advanced to the second portion of the duodenum.\nBalloon dilation and the biopsies were unsuccessful because of retained food.\n",
+   "picks": [
+    [
+     "43249",
+     "Upper endoscopy with balloon dilation"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43249": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 e",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with band ligation\nThe gastroscope was advanced to the second portion of the duodenum.\nBand ligation and the biopsies were aborted because of hemodynamic instability.\n",
+   "picks": [
+    [
+     "43244",
+     "Upper endoscopy with band ligation"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43244": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43244": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43244": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43244": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 f",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nBiopsy of the antrum and the injection were unsuccessful because of bleeding.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43239": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43239": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43239": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o3 CONTROL no article",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum.\nHot snare polypectomy and biopsy were unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o4 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy and hot snare polypectomy\nThe colonoscope was advanced to the cecum. Cold forceps biopsies of the transverse colon were obtained.\nPolypectomy of the 8 mm sigmoid polyp was aborted because of desaturation, as was the remainder of the examination.\n",
+   "picks": [
+    [
+     "45380",
+     "Cold forceps biopsies of the transverse colon were obtained"
+    ],
+    [
+     "45385",
+     "hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o4 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy and hot snare polypectomy\nThe colonoscope was advanced to the cecum. Cold forceps biopsies of the transverse colon were obtained.\nHot snare polypectomy was aborted along with the rest of the procedure because of desaturation.\n",
+   "picks": [
+    [
+     "45380",
+     "Cold forceps biopsies of the transverse colon were obtained"
+    ],
+    [
+     "45385",
+     "hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o4 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy and hot snare polypectomy\nThe colonoscope was advanced to the cecum. Cold forceps biopsies of the transverse colon were obtained.\nThe polypectomy was terminated together with the procedure because of hypoxia.\n",
+   "picks": [
+    [
+     "45380",
+     "Cold forceps biopsies of the transverse colon were obtained"
+    ],
+    [
+     "45385",
+     "hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o4 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsy and hot snare polypectomy\nThe colonoscope was advanced to the cecum. Cold forceps biopsies of the transverse colon were obtained.\nPolypectomy was aborted because of desaturation, and so was the colonoscopy.\n",
+   "picks": [
+    [
+     "45380",
+     "Cold forceps biopsies of the transverse colon were obtained"
+    ],
+    [
+     "45385",
+     "hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "o5 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nCold forceps biopsies of the sigmoid colon, with aspirin discontinued for five days, were obtained.\n",
+   "picks": [
+    [
+     "45380",
+     "Cold forceps biopsies of the sigmoid colon"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o5 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nHot snare polypectomy of the 12 mm sigmoid polyp, aborted at the prior colonoscopy, was completed today.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of the 12 mm sigmoid polyp"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o5 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nCold snare polypectomy of the 6 mm sigmoid polyp, with clopidogrel discontinued for seven days, was performed.\n",
+   "picks": [
+    [
+     "45385",
+     "Cold snare polypectomy of the 6 mm sigmoid polyp"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "o5 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nBand ligation of the esophageal varices, terminated at the prior session because of bleeding, was completed today with six bands.\n",
+   "picks": [
+    [
+     "43244",
+     "Band ligation of the esophageal varices"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43244": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43244": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43244": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43244": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "k1 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n\nAfter repositioning, the stalk was transected with the same loop and the head was recovered.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k1 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n\nAfter repositioning, the stalk was transected with the same loop and the head was recovered.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k1 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n\nOn the second attempt the polyp was captured and transected en bloc.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k1 b emr",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 25 mm flat lesion in the rectum was seen.\nEndoscopic mucosal resection failed.\n\nAfter a second saline lift, the lesion was captured and transected en bloc.\n",
+   "picks": [
+    [
+     "45390",
+     "Endoscopic mucosal resection failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45390": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45390": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45390": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45390": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k1 d astra",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n\nAfter repositioning, the stalk was transected with the same loop and the head was recovered.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k2 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy (polyp removed and retrieved on the second attempt) initially failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy (polyp removed and retrieved on the second attempt) initially failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k2 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy, which removed the polyp en bloc on the second pass, initially failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy, which removed the polyp en bloc on the second pass, initially failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k2 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy, with the polyp resected and retrieved on the second pass, initially failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy, with the polyp resected and retrieved on the second pass, initially failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k2 c listing",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy, second attempt successful\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k CONTROL left in place",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed, and the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k CONTROL not removed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen. It was not removed.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy failed."
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "EXCL",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k3 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. At her outside colonoscopy on 2026-09-02, a 30 mm flat lesion was found in the ascending colon; India ink was injected adjacent to the lesion for future localization. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k3 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. At her outside colonoscopy on 2026-09-02, a 30 mm flat lesion was found in the ascending colon; India ink was injected adjacent to the lesion. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k3 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. In 2025 a 30 mm flat lesion was found in the ascending colon; India ink was injected adjacent to the lesion for future localization. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k3 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. In 2025 a 30 mm flat lesion was found in the ascending colon; India ink was injected adjacent to the lesion. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k3 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. Prior colonoscopy 2026-09-02: 30 mm flat lesion in the ascending colon; India ink was injected adjacent to the lesion for future localization. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k3 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. Prior colonoscopy 2026-09-02: 30 mm flat lesion in the ascending colon; India ink was injected adjacent to the lesion. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k3 c egd",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum and the examination was completed. At her outside endoscopy on 2026-09-02 a 20 mm flat lesion was found in the gastric antrum; India ink was injected adjacent to the lesion for future localization. Today the tattoo was identified in the gastric antrum. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "43236",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": [
+     "READY",
+     []
+    ],
+    "43236": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k3 c egd",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum and the examination was completed. At her outside endoscopy on 2026-09-02 a 20 mm flat lesion was found in the gastric antrum; India ink was injected adjacent to the lesion. Today the tattoo was identified in the gastric antrum. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "43236",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43236": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; the tattoo was placed at her previous colonoscopy. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; the tattoo was placed at her previous colonoscopy. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; this was done by the referring surgeon last week. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; this was done by the referring surgeon last week. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; this was not actually done. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; this was not actually done. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; whether this was actually done is unclear from the record. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; whether this was actually done is unclear from the record. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; this is planned for the next session. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; this is planned for the next session. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 e",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; this sentence was entered in error. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 e",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; this sentence was entered in error. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k4 g",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; the injection was then aborted because of bleeding. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "TW k4 g",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; the injection was then aborted because of bleeding. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "k4 CONTROL referral",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion for future localization; she will be referred for endoscopic mucosal resection. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k4 CONTROL referral",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion was found in the ascending colon. India ink was injected adjacent to the lesion; she will be referred for endoscopic mucosal resection. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k7 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion in the ascending colon was found at her colonoscopy in 2025. The lesion was tattooed with India ink for future localization. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "The lesion was tattooed with India ink for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k7 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion in the ascending colon was found at her colonoscopy in 2025. The lesion was tattooed with India ink. Today the tattoo was identified in the ascending colon. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "The lesion was tattooed with India ink"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k7 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion in the ascending colon had been found at an outside colonoscopy on 2026-09-02. India ink was injected adjacent to the lesion for future localization. Today the tattoo was identified. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k7 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed. A 30 mm flat lesion in the ascending colon had been found at an outside colonoscopy on 2026-09-02. India ink was injected adjacent to the lesion. Today the tattoo was identified. The lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k7 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nOutside colonoscopy 2026-09-02 -\nIndia ink was injected adjacent to the lesion for future localization.\nThe lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k7 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nOutside colonoscopy 2026-09-02 -\nIndia ink was injected adjacent to the lesion.\nThe lesion was not resected today because of its size; she will be referred to surgery.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink was injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k7 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nIf surgery is chosen:\nIndia ink injected adjacent to the lesion for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink injected adjacent to the lesion for future localization"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     []
+    ],
+    "45381": [
+     "EXCL",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k7 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nIf surgery is chosen:\nIndia ink injected adjacent to the lesion.\n",
+   "picks": [
+    [
+     "45381",
+     "India ink injected adjacent to the lesion"
+    ],
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45381": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the furthest point reached was the hepatic flexure.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k5 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the furthest point reached was the hepatic flexure.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nAddendum: the examination extended to the mid transverse colon only.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k5 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nAddendum: the examination extended to the mid transverse colon only.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the statement about the extent above was entered in error.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k5 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the statement about the extent above was entered in error.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nAddendum: the second sentence of this description belongs to another patient and should be disregarded.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k5 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nAddendum: the second sentence of this description belongs to another patient and should be disregarded.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nNote: the extent line above is template text and was not verified.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k5 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nNote: the extent line above is template text and was not verified.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 CONTROL no reach",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k5 CONTROL plain reach",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k8 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare. Only the rectum, sigmoid and descending colon were examined.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k8 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare. Only the rectum, sigmoid and descending colon were examined.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k8 related",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. Cecal intubation was achieved. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the colonoscope was withdrawn from the mid transverse colon; the right colon was not examined.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "TW k8 related",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nIndications: Surveillance.\nDescription of procedure: The colonoscope was introduced through the anus. The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nCorrection: the colonoscope was withdrawn from the mid transverse colon; the right colon was not examined.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "k6 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal; no food or foreign body was seen. For comparison, at her EGD on 2026-09-02 the findings were as follows. An impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k6 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal; no food or foreign body was seen. For comparison, at her EGD on 2026-09-02 the findings were as follows. An impacted meat bolus was found at 32 cm and was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k6 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal; no food or foreign body was seen. The following is copied from her outside EGD report of 2026-09-02. An impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k6 a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal; no food or foreign body was seen. The following is copied from her outside EGD report of 2026-09-02. An impacted meat bolus was found at 32 cm and was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k6 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nSummary of her outside\nEGD: An impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k6 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nSummary of her outside\nEGD: An impacted meat bolus was found at 32 cm and was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k6 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nAn impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\nNote: these two sentences describe her index endoscopy at the outside hospital; today the esophagus was clear.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "TW k6 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nAn impacted meat bolus was found at 32 cm and was removed with a Roth net.\nNote: these two sentences describe her index endoscopy at the outside hospital; today the esophagus was clear.\n",
+   "picks": [
+    [
+     "43247",
+     "was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "k6 CONTROL plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nAn impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ],
+    [
+     "43235",
+     "The gastroscope was advanced to the second portion of the duodenum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": [
+     "HELD",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43247": [
+     "READY",
+     []
+    ],
+    "43235": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s1 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure:\nUpper endoscopy\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure:\nUpper endoscopy\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nPROCEDURE:\nEGD\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure performed:\nUpper endoscopy\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure:\n\nUpper endoscopy.\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 CONTROL one line",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s1 TWIN both",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy and colonoscopy\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s3 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy. The gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s3 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy; the patient was sedated with propofol.\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s3 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy (it was well tolerated)\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s3 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Upper endoscopy - consent was obtained.\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s3 CONTROL O4",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia; surveillance colonoscopy for prior adenomas.\nProcedure: Colonoscopy. This was done on the same day as her upper endoscopy.\nThe gastroscope was advanced under direct visualization to the second portion of the duodenum. The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed with a cold snare.\nImpression: Polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ],
+    [
+     "45385",
+     "A 6 mm sessile polyp was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nUpper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The upper tract was otherwise normal.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum. The colon was normal. The colonoscope was withdrawn. The upper scope was then passed and a 6 mm sessile polyp was removed with a cold snare.\nImpression: Normal upper endoscopy. One polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "a 6 mm sessile polyp was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 main TWIN",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nProcedure: Upper endoscopy\nThe gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The upper tract was otherwise normal.\nProcedure: Colonoscopy\nThe colonoscope was introduced through the anus and advanced to the cecum. The colon was normal. The colonoscope was withdrawn. The upper scope was then passed and a 6 mm sessile polyp was removed with a cold snare.\nImpression: Normal upper endoscopy. One polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "a 6 mm sessile polyp was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nUpper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The upper tract was otherwise normal.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum. The colon was normal. The colonoscope was withdrawn. The OGD was then performed and cold forceps biopsies were obtained.\nImpression: Normal.\n",
+   "picks": [
+    [
+     "45380",
+     "cold forceps biopsies were obtained."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45380": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45380": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nUpper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The esophagus, stomach and duodenum were normal. The gastroscope was withdrawn. Next, the PCF-H190 was introduced and a 6 mm sessile polyp was removed with a cold snare.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum. The colon was otherwise normal.\nImpression: One polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "a 6 mm sessile polyp was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 c pediatric",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nUpper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The esophagus, stomach and duodenum were normal. The gastroscope was withdrawn. Next, the pediatric scope was introduced and a 6 mm sessile polyp was removed with a cold snare.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum. The colon was otherwise normal.\nImpression: One polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "a 6 mm sessile polyp was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s2 d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and surveillance after adenomas.\nProcedures: Upper endoscopy and colonoscopy\nUpper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the second portion of the duodenum. The gastroscope was withdrawn. The pediatric scope was then introduced and a 6 mm sessile polyp was removed with a cold snare.\nImpression: One polyp removed.\n",
+   "picks": [
+    [
+     "43251",
+     "a 6 mm sessile polyp was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43251": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle2": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43251": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43251": [
+     "HELD",
+     []
+    ]
+   }
+  },
+  {
+   "label": "s4 main",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum, and then the examination was not performed because the preparation was poor. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 main jobs",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum, and then the examination was not performed because the preparation was poor. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 main TWIN",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nProcedure: Colonoscopy\nThe colonoscope was introduced through the anus and advanced to the cecum, and then the examination was not performed because the preparation was poor. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 egd",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia.\nUpper endoscopy: The gastroscope was advanced into the esophagus and to the second portion of the duodenum, and then the examination was not performed because the preparation was poor. Cold forceps biopsies were obtained from the distal esophagus.\n",
+   "picks": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the distal esophagus."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "43239": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "43239": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43239": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum and then the procedure was not performed because of poor preparation. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum and then the procedure was not undertaken because the preparation was poor. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 status",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nColonoscopy: The colonoscope was introduced through the anus and advanced to the cecum and the examination was incomplete because of poor preparation. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ],
+    [
+     "45378",
+     "The colonoscope was introduced through the anus and advanced to the cecum"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     []
+    ],
+    "45378": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "label": "s4 status TWIN",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology Procedure Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Surveillance after adenomas.\nProcedure: Colonoscopy\nThe colonoscope was introduced through the anus and advanced to the cecum and the examination was incomplete because of poor preparation. A 6 mm polyp in the sigmoid colon was removed with a cold snare.\nImpression: Sigmoid polyp removed.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the sigmoid colon was removed with a cold snare."
+    ],
+    [
+     "45378",
+     "The colonoscope was introduced through the anus and advanced to the cecum"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle2": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   }
+  }
+ ]
+}

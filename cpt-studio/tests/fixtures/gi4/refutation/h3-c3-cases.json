@@ -3463,45 +3463,45 @@
      "astra",
      "Hot snare polypectomy failed.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy failed.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -3850,45 +3850,45 @@
      "astra",
      "Hot snare polypectomy was unsuccessful.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy was unsuccessful.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -4237,45 +4237,45 @@
      "astra",
      "Hot snare polypectomy was abandoned.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy was abandoned.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5022,12 +5022,12 @@
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
@@ -5044,12 +5044,12 @@
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5398,45 +5398,45 @@
      "astra",
      "Hot snare polypectomy is to be performed at a later date.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy is to be performed at a later date.",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "EXCL"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {

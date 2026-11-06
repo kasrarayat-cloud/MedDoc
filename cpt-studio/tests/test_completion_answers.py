@@ -195,7 +195,9 @@ class EngineAnswerTests(SimpleTestCase):
         # its CMS endoscopic-family check reads the codes still in review: 45385, whose endoscopic base 45378 is, is not
         self.assertEqual((check(by_code(before)['45378'], 'pfs.endoscopic_base').status,
                           check(diagnostic, 'pfs.endoscopic_base').status), ('warn', 'pass'))
-        self.assertNotEqual(diagnostic.fingerprint, by_code(before)['45378'].fingerprint)  # its checks moved
+        # refutation cycle 4 (answers 1): a check another code's answer moves keeps the fingerprint - the review overlay
+        # shows it so already - so a decision on the diagnostic carries; the answered code's own moves
+        self.assertEqual(diagnostic.fingerprint, by_code(before)['45378'].fingerprint)
         self.assertNotEqual(snare.fingerprint, by_code(before)['45385'].fingerprint)
         record = after.completeness['member_answers']
         self.assertEqual([(e['answer'], e['code'], e['fact'], e['proposals']) for e in record['applied']],
@@ -215,11 +217,15 @@ class EngineAnswerTests(SimpleTestCase):
         self.assertEqual([(e['answer'], e['why']) for e in after.completeness['member_answers']['earlier']],
                          [('x1', questions.ASKED_DIFFERENTLY), ('x3', questions.NO_LONGER_ASKED)])
         # refutation cycle 2 (answers W2, W4): an answer stored before the binding (no fingerprint) binds by its key, as
-        # the installed release bound it - here the 45385 extent question, which it answers
+        # the installed release bound it. Refutation cycle 4 (answers 1-3): the review overlay reads it, at read time over
+        # the current decisions, as the installed release read it - this reader leaves every code as it was and records
+        # the answer as the overlay's
         legacy = questions.MemberAnswerInput('45385', COLON, 'extent', 'not_documented', '', 'x2')
         applied = run(UNREACHED, codes, member_answers=[legacy])
-        self.assertEqual(next(p for p in applied.proposals if p.code == '45385').bucket, 'excluded')
-        self.assertEqual(applied.completeness['member_answers']['earlier'], [])
+        self.assertEqual([p.fingerprint for p in applied.proposals], [p.fingerprint for p in before.proposals])
+        self.assertEqual(next(p for p in applied.proposals if p.code == '45385').bucket, 'selected')
+        self.assertEqual([(e['answer'], e['why']) for e in applied.completeness['member_answers']['earlier']],
+                         [('x2', engine.OVERLAY_READ)])
         # a reason reworded by the engine is a question asked differently: the answer to the old wording is not read
         reworded = dataclasses.replace(before, proposals=tuple(replace_reason(p) for p in before.proposals))
         self.assertNotEqual(asked(reworded, UNREACHED)[('45385', COLON, 'extent')], real.question)
@@ -253,7 +259,8 @@ class EngineAnswerTests(SimpleTestCase):
         self.assertEqual((snare.status, check(snare, 'pfs.endoscopic_base').status), ('needs_clarification', 'pass'))
         self.assertIn('No other selected code shares an endoscopic base relationship with 45385',
                       check(snare, 'pfs.endoscopic_base').detail)
-        self.assertNotEqual(snare.fingerprint, by_code(before)['45385'].fingerprint)  # its checks moved
+        # refutation cycle 4 (answers 1): its checks moved through another code's answer - its fingerprint does not
+        self.assertEqual(snare.fingerprint, by_code(before)['45385'].fingerprint)
 
     def test_a_rival_answered_away_releases_the_competition_and_an_answer_to_the_hold_itself_never_does(self):
         text = CompetitionReleaseTests.EGD + CompetitionReleaseTests.DILATION + '\n'
@@ -467,8 +474,9 @@ class AnswerRecomputeChainTests(ArchiveMixin, PipelineCase):
                           reports.customer_snapshot(self.encounter(encounter_id), reports.DRAFT)['items']}
         self.assertEqual(customer_draft, {'45380': 'approved', '45385': 'excluded'})
 
-        # withdrawn: recomputed again, the code back in review; the approval made beside the answered reading does not
-        # carry onto the reading that pairs 45380 with 45385 again (the existing fingerprint rule)
+        # withdrawn: recomputed again, the code back in review. Refutation cycle 4 (answers 1): 45380's checks moved only
+        # through another code's answer, so its fingerprint did not, and its approval carries - as the installed release
+        # carried every decision across an answer (the overlay showing 45385 back in review beside it)
         revoked = self.client.post(f'/api/encounters/{encounter_id}/details/{answer.pk}/revoke')
         self.assertEqual(revoked.status_code, 201, revoked.content)
         drain()
@@ -476,9 +484,8 @@ class AnswerRecomputeChainTests(ArchiveMixin, PipelineCase):
         self.assertEqual(third.proposals.get(code='45385').status, 'needs_clarification')
         self.assertEqual(check_status(third, '45380', 'pfs.endoscopic_base'), 'info')
         self.assertIn('question', serializers.queue_reasons(self.encounter(encounter_id)))
-        self.assertFalse(models.Decision.objects.filter(assessment=third).exists())
-        self.assertTrue(models.DecisionInvalidation.objects.filter(
-            decision__assessment=second, reason__contains='45380').exists())
+        self.assertEqual([third.proposals.get(pk=pk).code for pk in review.current_decisions(third)], ['45380'])
+        self.assertFalse(models.DecisionInvalidation.objects.filter(decision__encounter_id=encounter_id).exists())
         self.assertEqual(len(self.provider.sent), sent)
 
     def test_an_approval_carries_where_the_answer_moves_none_of_its_checks(self):

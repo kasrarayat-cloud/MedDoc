@@ -22468,7 +22468,7 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: false hold (Corti's base code held beside astra's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside astra's code on \"Hot snare polypectomy failed.\"); false hold (Corti's base code held beside fable's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside fable's code on \"Hot snare polypectomy failed.\")",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "alone": [
       [
@@ -22481,45 +22481,45 @@
        "astra",
        "Hot snare polypectomy failed.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "astra",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Hot snare polypectomy failed.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ]
      ]
     }
@@ -22565,7 +22565,7 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: false hold (Corti's base code held beside astra's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside astra's code on \"Hot snare polypectomy was unsuccessful.\"); false hold (Corti's base code held beside fable's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside fable's code on \"Hot snare polypectomy was unsuccessful.\")",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "alone": [
       [
@@ -22578,45 +22578,45 @@
        "astra",
        "Hot snare polypectomy was unsuccessful.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "astra",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Hot snare polypectomy was unsuccessful.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ]
      ]
     }
@@ -22662,7 +22662,7 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: false hold (Corti's base code held beside astra's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside astra's code on \"Hot snare polypectomy was abandoned.\"); false hold (Corti's base code held beside fable's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside fable's code on \"Hot snare polypectomy was abandoned.\")",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "alone": [
       [
@@ -22675,45 +22675,45 @@
        "astra",
        "Hot snare polypectomy was abandoned.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "astra",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Hot snare polypectomy was abandoned.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ]
      ]
     }
@@ -22856,7 +22856,7 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: false hold (Corti's base code held beside astra's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside fable's code on \"Colonoscopy with hot snare polypectomy\")",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "alone": [
       [
@@ -22880,12 +22880,12 @@
        "astra",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
@@ -22902,12 +22902,12 @@
        "fable",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ]
      ]
     }
@@ -22953,7 +22953,7 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: false hold (Corti's base code held beside astra's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside astra's code on \"Hot snare polypectomy is to be performed\"); false hold (Corti's base code held beside fable's code on \"Colonoscopy with hot snare polypectomy\"); false hold (Corti's base code held beside fable's code on \"Hot snare polypectomy is to be performed\")",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "alone": [
       [
@@ -22966,45 +22966,45 @@
        "astra",
        "Hot snare polypectomy is to be performed at a later date.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "astra",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Hot snare polypectomy is to be performed at a later date.",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ],
       [
        "fable",
        "Colonoscopy with hot snare polypectomy",
        [
-        "EXCL"
+        "HELD"
        ],
        [
-        "READY"
+        "HELD"
        ],
-       "complete_pending_review"
+       "incomplete"
       ]
      ]
     }

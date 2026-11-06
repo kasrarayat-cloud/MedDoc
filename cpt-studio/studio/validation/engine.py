@@ -729,33 +729,10 @@ def _mention_readings(text: str, flow: str, ev, kind: str, day: Optional[date], 
     return out or None
 
 
-# A sentence that only observes a lesion (_stated_not_done, integration of refutation cycle 2): an optional field label,
-# the lesion's noun phrase, "was|were" [also] and an observation participle, then at most one locative phrase and the
-# sentence's end - nothing else. Closed: any other predicate ("and removed", "was taken out", "was snared") is no match.
-_OBSERVED_ONLY = re.compile(
-    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?:there[ \t\n]++(?:was|were)[ \t\n]++)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++'
-    r'(?:was|were)[ \t\n]++(?:also[ \t\n]++)?(?:found|seen|noted|identified|visualized|visualised|observed|detected|present)'
-    r'(?:[ \t\n]++(?:in|at|within|on|near|along)[ \t\n]++(?P<loc>[^.;:,\n]{1,80}?))?[ \t]*+\.?[ \t\n]*+', re.I)
+# The words of a removal or sampling (_removal_said_elsewhere). Refutation cycle 4: the observed-only sentence form
+# (_OBSERVED_ONLY, _observed_only) that cycle 2's integration read beside them is abandoned (see _stated_not_done).
 _REMOVAL_IN_NP = re.compile(r'\b(?:remov\w*|resect\w*|excis\w*|snar\w*|polypectom\w*|retriev\w*|extract\w*|'
                             r'taken|cleared|biops\w*|ablat\w*|cauteri\w*)\b', re.I)
-# refutation cycle 3 (admission C3-1): a locative is a place, never a clause - "in the sigmoid colon and was removed"
-_CLAUSE_IN_LOCATIVE = re.compile(r'\b(?:and|but|or|then|was|were|is|are|be|been|being|had|has|have|which|that|who|'
-                                 r'after|before|when|while|because|though|although|if)\b', re.I)
-
-
-def _observed_only(lesion, text: str) -> bool:
-    """Whether every sentence the documented-service reader records ``lesion`` in is an observation of it alone
-    (_OBSERVED_ONLY), naming no removal or sampling anywhere in it and holding no clause in its place phrase: the
-    report says nothing was done to it there."""
-    if not lesion.evidence:
-        return False
-    for ev in lesion.evidence:
-        sentence = text[ev.start:ev.end]
-        m = _OBSERVED_ONLY.fullmatch(sentence)
-        if m is None or _REMOVAL_IN_NP.search(sentence) \
-                or (m.group('loc') is not None and _CLAUSE_IN_LOCATIVE.search(m.group('loc'))):
-            return False
-    return True
 
 
 def _removal_said_elsewhere(text: str, acts) -> bool:
@@ -832,9 +809,16 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     # beside it still excludes the code, as the installed release read it; any other predicate about the lesion
     # ("Piecemeal resection of ... was completed.", "... was taken out piecemeal ...", "was seen and removed") keeps the
     # hold. Closed: an unrecognised sentence can only cost a hold.
+    # Refutation cycle 4 (closed 1 and 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): that observed-only
+    # arm is abandoned under the two-cycle rule. It was refuted in cycles 3 and 4 the same way - a removal the report
+    # states in words no list holds ("the stalk was transected with the same loop and the head was recovered"), or
+    # inside the failure's own passage ("Hot snare polypectomy (polyp removed and retrieved on the second attempt)
+    # initially failed."), excluded a supported code as not performed and released its base code READY - and no retained
+    # or acceptance case needs it. Only the reader's own NOT_REMOVED dispositions establish "not removed" again; a lesion
+    # only observed keeps the installed release's hold on both codes.
     if kinds & gi_services.REMOVAL_KINDS and (not service.lesions or any(
-            lesion.disposition not in gi_services.NOT_REMOVED and not _observed_only(lesion, text)
-            for lesion in service.lesions) or _removal_said_elsewhere(text, acts)):
+            lesion.disposition not in gi_services.NOT_REMOVED for lesion in service.lesions)
+            or _removal_said_elsewhere(text, acts)):
         return ()  # refutation cycle 3: and no removal is said anywhere but in the code's own acts' passages
     # the reader's own reflowed view, its sentences and its act mentions: one index per document, date and pages
     # (_reader_index) - never a rescan of the text per code
@@ -5223,21 +5207,22 @@ ANSWERED_SUPPORT = questions.ANSWERED_SUPPORT  # support[...] of a code a member
 MEMBER_ANSWER_LABELS = {questions.NOT_DOCUMENTED: 'Not documented', questions.CANNOT_CONFIRM: 'Cannot confirm'}
 _ENDOSCOPIC_CHECK = 'pfs.endoscopic_base'  # checks.endoscopic_check's id
 NOT_APPLIED = 'not_applied'  # an answer bound to a question asked that excluded nothing (recorded, never dropped)
+# refutation cycle 4 (answers 1-3): an answer this reader leaves to the review overlay, which reads it at read time over the
+# current decisions as the installed release read every answer - one recorded before the binding (no fingerprint), or one
+# to a question a review decision can open or close (_MemberAnswers.engine_reads)
+OVERLAY_READ = 'read_by_the_review_overlay'
 
 
 answered_away = questions.answered_away  # the one reading of support['answered'] (questions.py)
 
 
 def answered_fingerprint(fingerprint: str, found: Sequence[Check], status: str) -> str:
-    """The fingerprint of a proposal whose checks or status a member's answer moved: the one it has without the answer,
-    with what moved - so a decision made on one carries only onto the same reading (review._carry_decisions), and a
-    decision made without the answer never carries onto it."""
+    """The fingerprint of a proposal a member's answer excluded: the one it has without the answer, with what moved - so
+    a decision made on one carries only onto the same reading (review._carry_decisions), and a decision made without the
+    answer never carries onto it. (Refutation cycle 4: another code an answer only reaches through a cross-code check
+    keeps its own fingerprint, _MemberAnswers.apply.)"""
     return sha256_json({'unanswered': fingerprint, 'checks': sorted([check.id, check.status] for check in found),
                         'status': status})
-
-
-def _shape(found: Sequence[Check], status: str) -> tuple:
-    return sorted([check.id, check.status] for check in found), status
 
 
 class _MemberAnswers:
@@ -5299,7 +5284,16 @@ class _MemberAnswers:
 
         asked = self._proposal_questions(proposals)
         self.asked.update(asked)
-        bound, _ = questions.bind([a for a in self.answers if a.code], asked)
+        # Refutation cycle 4 (answers 1-3; HARNESS.md "Refutation of the integrated diff, cycle 4"): this reads only an
+        # answer that carries its question's fingerprint, to a question no review decision can open or close - every
+        # other answer is the review overlay's, read at read time over the current decisions exactly as the installed
+        # release read every answer (review.answer_states binds it there; review_view applies it). An answer recorded
+        # before the binding (no fingerprint) read here had made the stored checks and fingerprint of every OTHER code
+        # depend on which branch a later, unrelated answer took (cycle 3's early return), invalidating approvals that
+        # nothing shown had moved; and an answer to a decision-dependent question (a base code's base_included, a
+        # visit's separate_em, a competition) stayed applied after a rejection had closed that question, leaving a
+        # supported code excluded with no action.
+        bound, _ = questions.bind([a for a in self.answers if self.engine_reads(a)], asked)
         answer_of: dict = {}
         for answer in bound:
             answer_of.setdefault(questions.member_key(answer.code, answer.family, answer.fact), answer)
@@ -5313,12 +5307,6 @@ class _MemberAnswers:
         away = {p.key for p in proposals if getattr(views.get(p.key), 'reason', '') == review_view.DETAIL_UNAVAILABLE}
         if not away:
             return tuple(proposals)
-        if all(not answer.question for answer in answer_of.values()):
-            # refutation cycle 3 (answers C3-1): only answers recorded before the binding - each excludes its own code,
-            # as the installed release's read-time overlay did, and leaves every other code's checks, and so its
-            # fingerprint and any decision on it, as they were: a re-assessment by this release (the install's reassess
-            # phase, a later recompute) never reopens an approved record through such an answer
-            return tuple(self._excluded(p, views.get(p.key), answer_of) if p.key in away else p for p in proposals)
         # the CMS endoscopic-family check of every other code reads the codes still in review (the overlay's EFFECTIVE
         # set): engine._encounter's active rows without the codes a member's answer excluded
         rows = endoscopic_rows((s.code, s.evaluation.reference.pfs) for key, s in by_key.items()
@@ -5348,11 +5336,21 @@ class _MemberAnswers:
             if (tuple(found), tuple(specs), status) == (tuple(p.checks), tuple(p.clarifications), p.status):
                 out.append(p)
                 continue
-            moved = _shape(found, status) != _shape(p.checks, p.status)
-            out.append(replace(p, checks=tuple(found), clarifications=tuple(specs), status=status,
-                               fingerprint=answered_fingerprint(p.fingerprint, found, status) if moved
-                               else p.fingerprint))
+            # refutation cycle 4 (answers 1): another code's checks read again without an answered code keep that
+            # code's fingerprint - the review overlay already showed it so (it recomputes them over the codes still in
+            # review, or marks them stale), so a decision made on it is carried, as the installed release carried every
+            # decision across an answer; a moved fingerprint had invalidated approvals and rejections nothing shown had
+            # moved ("Re-assessed: the checks for 45378 changed.") when an answer passed from the overlay to this reader
+            out.append(replace(p, checks=tuple(found), clarifications=tuple(specs), status=status))
         return tuple(out)
+
+    @staticmethod
+    def engine_reads(answer) -> bool:
+        """Whether this reader reads ``answer`` (refutation cycle 4): a code's answer carrying its question's fingerprint,
+        to a question no review decision can open or close; every other answer is the review overlay's (OVERLAY_READ)."""
+        from studio.validation import review_view  # local import: review_view imports this module
+        return bool(answer.code and answer.question) \
+            and answer.fact not in (review_view.BASE_FACT, review_view.SEPARATE_EM_FACT, COMPETING_FACT)
 
     def _excluded(self, p: ProposalAssessment, view, answer_of: Mapping) -> ProposalAssessment:
         """``p`` excluded by the member's answer that left the detail its view names unavailable: its answered questions
@@ -5424,6 +5422,6 @@ class _MemberAnswers:
         bound, earlier = questions.bind(rest, self.asked)
         why = {id(answer): reason for answer, reason in earlier}
         listed = [{'answer': a.answer_id, 'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value,
-                   'why': why.get(id(a), NOT_APPLIED)}
+                   'why': why.get(id(a)) or (NOT_APPLIED if not a.code or self.engine_reads(a) else OVERLAY_READ)}
                   for a in rest if a.value in questions.UNAVAILABLE]
         return {'form': questions.FORM, 'applied': list(applied.values()), 'earlier': listed}

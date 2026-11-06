@@ -3826,3 +3826,54 @@ statement 1. The pronoun rule, the nominal removal, the shared subject, rule 6b 
   was done on the same day as her upper endoscopy." is not (cycle 2's O4, as its named twin);
 - the marking statement admits a reduced passive after a lesion ("Separate transverse-colon lesion marked with
   submucosal tattoo ...", 88d9db32's impression line), a hyphenated site, and "a tattoo mark".
+
+### Refutation of the integrated diff, cycle 4 (2026-11-06): five lenses over cycle 3's repair, then a differential check
+
+**The pass.** Workflow `wf_3ad094a1-5d9`: five lenses (structure, closed forms, outcome, answers, cost), each in a sealed,
+write-disabled sandbox at `52a5f774`, measured against that head, the cycle-2 head `844fe54c` and the installed base. They
+returned 23 findings (structure 4, closed 8, outcome 5, answers 3, cost 3). The owner session reproduced every one before
+changing anything (`verify/refute5/`: 130 inputs, variants and parity twins on three trees; the answers lens's twelve
+Django scenarios; the cost lens's generators).
+
+**What the findings showed.** Cycle 3's narrowings still released what the installed base holds, each through a mechanism
+that already had refuted cycles behind it: routing's sub-act consumption (a later failure of an act already stated done,
+a coordinated subject, the examination's failure stated with the sub-act's, and a quadratic clause scan - a 63 KB paste
+ran past the 60 s limits); the time-order exclusion added to the attribute failure ("abandoned before biopsies were
+obtained" read done); the observed-only removal exclusion (a removal stated in words no list holds, or inside the
+failure's own passage, excluded as not performed); the instrument rule's named-section test (a name on the line under a
+bare "Procedure:", or a narrative on the name's own line); the labelled paragraph's binding (a scope switch named with no
+instrument word) and its own first sentence (a denial the heading twin reads); and the answers' early return (stored
+fingerprints depending on an answer's form). The rest - the purpose release's dated or retracted clauses, the reach
+statement's later correction or limitation, the bolus anaphor's dated antecedent - were measured against their twins:
+each reads as the installed reader reads the same statement without the released construct (or, for the bolus, as this
+release reads every act's clause-local time).
+
+**The repair** (the two-cycle rule; every change narrows toward the installed base or restores parity):
+
+| approach | mechanisms |
+|---|---|
+| back to the installed reading | the services reader's failure words and attribute are the installed three again, read across any three words (`cues.FAILED_ACT`, `FAILED_ACT_BEFORE`; outcome 1, 5): routing holds the family on "aborted" as installed, so cycle 1's words, which held plainly done acts on a medication's or another session's aside, are not needed; routing gives a failure to a sub-act only in one closed form read whole in its sentence - "X of a/an ... was attempted, but the X was unsuccessful/failed [because of / due to ...]" then the clause's end (`detect._attempted_then_failed`), every U3 shape the requirement was built from - and the services reader is consulted only over that bounded span (outcome 2-4, cost 1: 350 KB in 1.5 s); the observed-only arm of the removal exclusion is abandoned (closed 1, 2) - only the reader's own NOT_REMOVED dispositions establish "not removed" |
+| kept because required, its gap closed | a consumed failure stays the family's mention, performed by its section as an instrument course is (cost 2: the e888f9ce shape with "scope", "endoscope" or the History label on its own line read READY again, not "only as planned"); the instrument rule's named section is read at the name's place - after the label to the first clause mark, or the next line's words under a bare label (structure 1, 3); a labelled paragraph binds its acts only until a sentence that takes a scope to no site or outside its tract (structure 2; "the scope was advanced to the second portion of the duodenum" changes nothing); a released label's own sentence is read as its heading twin's first sentence - by the silent-section reader and for references (structure 4) |
+| answers | the engine reads only an answer carrying its question's fingerprint, to a question no review decision opens or closes; every other answer - recorded before the binding, or to base_included, separate_em or a competition - is the review overlay's, read at read time over the current decisions as the installed release read every answer (`engine.OVERLAY_READ` in the record); another code's checks read again without an answered code keep that code's fingerprint (answers 1-3) |
+| recorded, not changed (bounded by parity) | closed 3, 4, 7 (the purpose release: a marking dated or taken back in another clause or sentence reads as the installed base reads the same statement without "for future localization"); closed 5, 8 (the reach statement: as the base reads "The colonoscope was advanced to the cecum."); closed 6 (the bolus anaphor: this release's clause-local time, as for every act); cost 3 (d44a77b3 with "36cm": the installed release holds the labelled form either way) |
+
+**Measured on the repair, and then a differential check in place of a fifth open cycle** (`verify/refute5/`):
+- **Every cycle-4 input** reads as the installed base, the parity classes apart (`tests/test_completion_refutation_c4.py`,
+  `completion-c4-cases.json` with the base, cycle-2, cycle-3 and repair readings of all 130 inputs and twins); outcome 3
+  and 4 read READY with the installed `service.incomplete` warning again.
+- **The differential scan**: every case file the lenses of cycles 1 to 4 built, deduplicated (1,862 inputs), read on this
+  repair, the installed base and the cycle-3 head. Every input this repair reads READY where the base does not is either
+  a parity twin the base reads READY (34) or a release the cycle-3 head already read READY and cycle 3 measured against
+  the base's twins (139); **none is open**. Every READY this repair adds over the cycle-3 head is READY on the base too
+  (44): the cycle-3 false holds removed. The BASE warnings it drops are U3's (the e888f9ce shapes) and the reach
+  statement's twin.
+- **The corpus** re-pinned beside `completion-refutation-c4-corpus.json`: 5 entries moved, all `ADM|C3-2-1` (the
+  abandoned observed-only arm: the participant's removal code admitted by equal eligibility is held and holds the base
+  code - a hold on the safe side); FALSE READY 35, **0 where the installed baseline had none**; FALSE HOLD 59.
+- **The retained cases**, recomputed: byte-identical to the cycle-3 head's readings - 39f0ac49 4 READY, d44a77b3 4 READY,
+  e888f9ce 2 READY with no incompleteness flag, 88d9db32 6 READY.
+- **The answers lens's scenarios** (`tests/test_completion_refutation_c4_answers.py`): no answer - unrelated, withdrawn,
+  a corrected value, recorded before the binding - invalidates a decision; a rejection that closes the base code's
+  base_included question releases it; a check the overlay cannot recompute is marked stale.
+- **The gates**: freeze holds; the battery 6 movements, none undeclared, no new violation (cycle 3's four removal
+  exclusions no longer move); the replay differs from the base by its version labels alone.

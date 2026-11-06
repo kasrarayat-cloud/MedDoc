@@ -1268,10 +1268,15 @@ UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|
 # act failed by the same word (detect._consumed_by_the_services_reader). The cycle-1 words stay ("aborted", "terminated",
 # "discontinued"). An attribute (FAILED_ACT_BEFORE) never reaches across a word of time order: "The procedure was
 # aborted after the biopsies" is the examination's abort after done biopsies, not the biopsies' failure.
-_ACT_FAILURE_PARTICIPLES = '|'.join(ACT_FAILED + (ACT_ABORTED,) + ('terminated', 'discontinued'))
-FAILED_ACT = rx(r'\b(?:' + _ACT_FAILURE_PARTICIPLES + r'|unsuccessfully)\b')
-FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + _ACT_FAILURE_PARTICIPLES + r')[ \t]+'
-                       r'(?:(?!(?:after|following|before|prior|until|since|once|when|while|during|then)\b)[\w-]+[ \t]+){0,3}$')
+# Refutation cycle 4 (outcome 1 and 5; HARNESS.md "Refutation of the integrated diff, cycle 4"): both patterns are the
+# installed release's again - its three words (ACT_FAILED), and an attribute read across any three words. The cycle-1
+# words were added because routing had stopped holding the family on "aborted" (R2's sub-act consumption); routing holds
+# it again (detect._attempted_then_failed: only "X of a ... was attempted, but the X was unsuccessful" is a sub-act's
+# own failure), so the reader needs none of them. Kept, they held plainly done acts on a medication's or another
+# session's aside ("biopsies ..., with aspirin discontinued for five days, were obtained"); and the time-order
+# exclusion read "abandoned before biopsies were obtained" and "failed during polypectomy" as done acts.
+FAILED_ACT = rx(r'\b(?:' + '|'.join(ACT_FAILED) + r'|unsuccessfully)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + '|'.join(ACT_FAILED) + r')[ \t]+(?:[\w-]+[ \t]+){0,3}$')
 # Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
 # mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
 # removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose

@@ -371,14 +371,19 @@ class FailureVocabularyTests(SimpleTestCase):
         subject-tested cues are unchanged (cues.ACT_*); the services reader reads cycle 1's failure words only; and
         routing gives a failure to a sub-act only where the services reader reads that act failed by the same word
         (detect._consumed_by_the_services_reader) - so a stop word the services reader does not read stays the
-        examination's, as the installed release reads it."""
+        examination's, as the installed release reads it. Refutation cycle 4 (outcome 1 and 5): the services reader's
+        words are the installed release's three again (cycle 1's "aborted", "terminated" and "discontinued" held plainly
+        done acts on a medication's or another session's aside) - routing holds the family on them, as installed."""
         routing = dict(cues.INCOMPLETE_CLAUSE)
         self.assertEqual(routing['terminated'].pattern, r'\b(?:' + '|'.join(cues.ACT_STOPPED) + r')\b')
         self.assertEqual(routing['stopped'].pattern, r'\bstopped\s+(?:' + '|'.join(cues.ACT_STOPPED_HOW) + r')\b')
         self.assertEqual(routing['precluded'].pattern, r'\b' + cues.ACT_PRECLUDED + r'\b')
-        for word in ('failed', 'unsuccessful', 'abandoned', 'aborted', 'terminated', 'discontinued'):
+        for word in ('failed', 'unsuccessful', 'abandoned'):
             with self.subTest(read=word):
                 self.assertIsNotNone(cues.FAILED_ACT.search(f'The polypectomy was {word}.'))
+        for word in ('aborted', 'terminated', 'discontinued'):
+            with self.subTest(not_read_by_the_services_reader=word):
+                self.assertIsNone(cues.FAILED_ACT.search(f'The polypectomy was {word}.'))
         for phrase in ('halted because of bleeding', 'stopped because of bleeding', 'precluded by the angulation'):
             with self.subTest(not_read=phrase):
                 self.assertIsNone(cues.FAILED_ACT.search(f'The polypectomy was {phrase}.'))

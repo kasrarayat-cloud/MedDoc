@@ -204,11 +204,11 @@ class SubActFailureRoutingTests(SimpleTestCase):
     def test_a_failed_sub_act_leaves_a_complete_colonoscopy_performed(self):
         # refutation cycle 3 (outcome C3-3, cost C3-1): routing gives a failure to a sub-act only where the services
         # reader reads that act failed by the same word; an accessory's "could not be passed" and a pronoun's failure keep
-        # the examination's reading (test_an_accessorys_or_a_pronouns_failure_keeps_the_base_reading below)
+        # the examination's reading (test_an_accessorys_or_a_pronouns_failure_keeps_the_base_reading below). Refutation
+        # cycle 4 (outcome 2-4, cost 1): and only in the closed attempt form (detect._attempted_then_failed) - every
+        # other failure is the examination's again, as the installed release reads it (below)
         for line in ('Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was '
-                     'unsuccessful because of poor positioning; the polyp was left in place.',
-                     'Biopsy attempts were unsuccessful.', 'Clip placement was unsuccessful.',
-                     'Argon plasma coagulation was unsuccessful.'):
+                     'unsuccessful because of poor positioning; the polyp was left in place.',):
             for title, procedure in (('Colonoscopy Report', 'Procedure: Colonoscopy. The colonoscope was advanced to '
                                       'the cecum.'),
                                      ('Endoscopy Report', 'Procedure: Colonoscopy. The colonoscope was advanced to the '
@@ -224,20 +224,34 @@ class SubActFailureRoutingTests(SimpleTestCase):
                     self.assertEqual((p.bucket, p.status), ('selected', 'ready'))
                     self.assertNotIn('service.incomplete', flagged(p))
                     self.assertFalse(p.modifier_considerations)
+        for line in ('Biopsy attempts were unsuccessful.', 'Clip placement was unsuccessful.',
+                     'Argon plasma coagulation was unsuccessful.'):
+            text = colon(COLD, line)
+            with self.subTest(line=line):
+                self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
+                p = proposal(text, '45385', COLD)
+                self.assertEqual((p.bucket, p.status), ('selected', 'ready'))
+                self.assertIn('service.incomplete', flagged(p))  # the installed warning
 
     def test_the_same_failure_on_its_own_line_and_in_a_findings_paragraph(self):
-        failure = 'Hot snare polypectomy was attempted, but the polypectomy was unsuccessful.'
-        for text in (colon(COLD) + failure + '\n',
-                     colon(COLD, procedure='Procedure: Colonoscopy.\nFindings: The colonoscope was advanced to the '
-                           'cecum.') + 'Findings: ' + failure + '\n'):
-            with self.subTest(text=text):
-                self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
-                self.assertEqual(facts(text, 'gi.colonoscopy')['extent'], 'cecum')
+        # refutation cycle 4: the closed form (an attempt introducing its own object) on its own line or in a findings
+        # paragraph is the sub-act's; an attempt naming no object of its own is the examination's, as installed
+        for failure, status in (('Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the '
+                                 'polypectomy was unsuccessful.', 'performed'),
+                                ('Hot snare polypectomy was attempted, but the polypectomy was unsuccessful.',
+                                 'incomplete')):
+            for text in (colon(COLD) + failure + '\n',
+                         colon(COLD, procedure='Procedure: Colonoscopy.\nFindings: The colonoscope was advanced to the '
+                               'cecum.') + 'Findings: ' + failure + '\n'):
+                with self.subTest(text=text):
+                    self.assertEqual(finding(text, 'gi.colonoscopy').status, status)
+                    self.assertEqual(facts(text, 'gi.colonoscopy')['extent'], 'cecum')
 
     def test_a_named_mentions_clause_takes_no_sub_acts_failure(self):
-        # clause cues: "During the colonoscopy, the polypectomy was unsuccessful." was the named mention's own
+        # clause cues: "During the colonoscopy, the polypectomy was unsuccessful." was the named mention's own; refutation
+        # cycle 4: not the closed attempt form, so the examination's, as the installed release reads it
         text = colon(COLD, 'During the colonoscopy, the polypectomy was unsuccessful.')
-        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
         # but the examination's own failure in its clause is still its own
         text = colon(COLD, 'The colonoscopy was unsuccessful beyond the hepatic flexure.')
         self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
@@ -280,7 +294,8 @@ class SubActFailureRoutingTests(SimpleTestCase):
         text = colon() + failure + '\n'
         status, cues = detect.status_for_span(text, text.index(failure), text.index(failure) + len(failure), DAY)
         self.assertEqual(status, 'incomplete', cues)
-        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+        # refutation cycle 4: an attempt naming no object of its own is not the closed form - the examination's
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
         p = proposal(text, '45385', failure)
         self.assertNotEqual(p.status, 'ready')
         # beside a snare act done today, a 45385 citing the failed attempt is supported by that act (e888f9ce's shape)
@@ -310,8 +325,12 @@ class OtherFamiliesAndLayoutsTests(SimpleTestCase):
                  'attempted. The snare could not be closed around the stalk and the polypectomy was unsuccessful.\n',
                  'cecum')):
             with self.subTest(family):
-                self.assertEqual(finding(text, family).status, 'performed')
-                self.assertEqual(facts(text, family).get('extent'), extent)
+                # refutation cycle 4: only the closed attempt form is a sub-act's (the flexible sigmoidoscopy's); the
+                # others read as the installed release reads them - the examination's failure
+                closed = family == 'gi.flex_sig'
+                self.assertEqual(finding(text, family).status, 'performed' if closed else 'incomplete')
+                if closed:
+                    self.assertEqual(facts(text, family).get('extent'), extent)
 
     def test_the_examinations_own_failure_in_other_families(self):
         for family, text in (

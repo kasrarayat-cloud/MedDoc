@@ -1715,13 +1715,26 @@ def _clinical_layout(text: str):
     return gi_structure.clinical_layout(text)
 
 
+# An instrument named as a scope, by its word's form (gastroscope, colonoscope, duodenoscope, "the scope", "the upper
+# scope"): where a labelled paragraph's label stops binding its acts (_labelled_parts; refutation cycle 4)
+_SCOPE_WORD = _rx(r'\b\w*scopes?\b')
+
+
 def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     """Completion repair 2026-11-06 (U2): each released labelled procedure paragraph (studio.gi.structure, read on the
     text routing reads) is a report part of its label's family, so an act in it binds to that family - a site-less
     "The foreign body was removed with a Roth net." in the colonoscopy's paragraph is the colonoscopy's - and it is read
     as today's report: _time_parts' kind for its lines (the Indications it stood in, or 'other') is replaced. A role
     part (a nursing, anesthesia, pathology or radiology entry) keeps its own reading, and every part outside the
-    paragraphs is unchanged. Linear in the parts and the paragraphs (bisection)."""
+    paragraphs is unchanged. Linear in the parts and the paragraphs (bisection).
+
+    Refutation cycle 4 (structure 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): a paragraph is its
+    label's part only up to the first of its sentences after its first that names an instrument as a scope (_SCOPE_WORD:
+    "The colonoscope was withdrawn.", "The upper scope was then passed ...", "the pediatric scope") and takes it to no
+    site, or to a site outside the label's own tract (structure._family_regions) - where a narrative can change
+    examinations ("... and the scope was advanced to the second portion of the duodenum" in an upper endoscopy's
+    paragraph changes nothing). From there on its lines read as they did before the release (the paragraph's heading
+    twin binds no site-less act there either), so a site-less snare or biopsy after the switch is never the label's."""
     from studio.gi import structure as gi_structure
     original = _ORIGINAL.get()
     source = original if isinstance(original, str) and len(original) == len(text) else text
@@ -1733,7 +1746,23 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     frozen = _sections.layout(source)
     held = sorted({(s.start, s.end) for s in (frozen.section_at(p.start) for p in paragraphs) if s.kind == 'indication'})
     held_starts = [a for a, _ in held]
-    cuts = sorted({b for p in paragraphs for b in (p.start, p.end)} | {b for span in held for b in span})
+    sentence_starts = [a for a, _ in frozen.sentences]
+    bound: dict[int, int] = {}  # each paragraph's start -> where its label's part ends (refutation cycle 4)
+    for p in paragraphs:
+        end = p.end
+        j = bisect.bisect_right(sentence_starts, p.start)  # the sentence after the one the paragraph opens with
+        own = gi_structure._family_regions(p.family)
+        while j < len(frozen.sentences) and frozen.sentences[j][0] < p.end:
+            a, b = frozen.sentences[j]
+            b = min(b, p.end)
+            if _SCOPE_WORD.search(source, a, b):
+                regions = {region for _, region, _, _ in _anatomy_in(source, a, b)}
+                if not (regions and regions <= own):  # a scope taken anywhere but the label's own tract, or nowhere
+                    end = a
+                    break
+            j += 1
+        bound[p.start] = end
+    cuts = sorted({b for p in paragraphs for b in (p.start, p.end, bound[p.start])} | {b for span in held for b in span})
     starts = [p.start for p in paragraphs]
     out: list[_Part] = []
     for part in plist:
@@ -1743,7 +1772,7 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
             if b <= a:
                 continue
             k = bisect.bisect_right(starts, a) - 1
-            para = paragraphs[k] if k >= 0 and paragraphs[k].start <= a < paragraphs[k].end else None
+            para = paragraphs[k] if k >= 0 and paragraphs[k].start <= a < bound[paragraphs[k].start] else None
             h = bisect.bisect_right(held_starts, a) - 1
             in_held = h >= 0 and held[h][0] <= a < held[h][1]
             if para is None and in_held and part.role == 'physician' and part.kind in ('other', 'report'):
