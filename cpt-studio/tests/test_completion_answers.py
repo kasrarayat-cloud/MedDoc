@@ -127,6 +127,10 @@ class QuestionIdentityTests(SimpleTestCase):
                             ('family', 'gi.egd'), ('scope', 'service'), ('passages', [[1, 9, 'passage2']])):
             with self.subTest(name):
                 self.assertNotEqual(questions.fingerprint([{**base, name: value}]), same)
+        # the instance itself carries the passages shown: the same question shown with another passage is another one
+        other = questions.instance('proposal', COLON, 'extent', '45385', 'Q', 'R', ((1, 9, 'passage2'),))
+        self.assertNotEqual(questions.fingerprint([other]), same)
+        self.assertEqual(base['passages'], [[1, 9, 'passage1']])
         two = [base, {**base, 'reason': 'R2'}]
         self.assertEqual(questions.fingerprint(two), questions.fingerprint(list(reversed(two))))  # order-free
         self.assertNotEqual(questions.fingerprint(two), same)  # an added instance asks differently
@@ -215,6 +219,23 @@ class EngineAnswerTests(SimpleTestCase):
         reworded = dataclasses.replace(before, proposals=tuple(replace_reason(p) for p in before.proposals))
         self.assertNotEqual(asked(reworded, UNREACHED)[('45385', COLON, 'extent')], real.question)
 
+    def test_an_answer_to_a_question_shown_with_another_passage_is_not_read(self):
+        """The question is the one its row showed, passages included: 45385 now cites only part of the hedged sentence,
+        so the question it is asked shows another passage (and its reason quotes it), and the answer is an earlier one.
+        Citing the whole sentence again, it is read."""
+        text = HEAD + HEDGED_SNARE + '\n'
+        part = 'possibly removed with a hot snare'
+        first = run(text, corti(('45385', span(text, HEDGED_SNARE))))
+        answer = given(first, text, '45385', 'performed_status')
+        moved = run(text, corti(('45385', span(text, part))), member_answers=(answer,))
+        self.assertEqual(by_code(moved)['45385'].bucket, 'selected')
+        self.assertEqual([(e['answer'], e['why']) for e in moved.completeness['member_answers']['earlier']],
+                         [('a1', questions.ASKED_DIFFERENTLY)])
+        (spec,), (before,) = by_code(moved)['45385'].clarifications, by_code(first)['45385'].clarifications
+        self.assertEqual((spec.fact, spec.question), (before.fact, before.question))  # the same words are asked
+        same = run(text, corti(('45385', span(text, HEDGED_SNARE))), member_answers=(answer,))
+        self.assertEqual(by_code(same)['45385'].bucket, 'excluded')
+
     def test_the_other_codes_endoscopic_family_check_is_read_again_without_the_answered_code(self):
         """The base code's effect recomputed: 45380 and 45385 share the endoscopic base 45378 (the multiple endoscopy
         rule, info); 45380 answered away, 45385's check reads no other code of the family."""
@@ -288,6 +309,43 @@ class EngineAnswerTests(SimpleTestCase):
                 self.assertEqual(read[key].stale, ())
         diagnostic = next(k for k, p in zip(read, after.proposals) if p.code == '45378')
         self.assertIn('base_included', [q['fact'] for q in read[diagnostic].questions])  # never released
+
+
+class EngineAnsweredHoldsTests(SimpleTestCase):
+    """L7-01's own shape (refutation round 2; session decision (e)) through the engine and at read time: the diagnostic
+    base 45378 is held only because 45385 is proposed beside it (the hedged snare is no performed act of its own; with
+    45385 never proposed, 45378 is ready). "Cannot confirm" on 45385 excludes 45385 and never releases 45378 - in the
+    engine's result, and in the overlay over the stored result. Only a reviewer's rejection releases it."""
+    TEXT = HEAD + HEDGED_SNARE + '\n'
+    CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+
+    def codes(self, *values):
+        quotes = {'45378': self.CECUM, '45385': HEDGED_SNARE}
+        return corti(*((value, span(self.TEXT, quotes[value])) for value in values))
+
+    def test_cannot_confirm_on_the_hedged_snare_never_releases_the_base(self):
+        alone = run(self.TEXT, self.codes('45378'))
+        self.assertEqual(by_code(alone)['45378'].status, 'ready')  # held by nothing but 45385's presence
+        both = run(self.TEXT, self.codes('45378', '45385'))
+        self.assertEqual([c.fact for c in by_code(both)['45378'].clarifications], ['base_included'])
+        after = run(self.TEXT, self.codes('45378', '45385'),
+                    member_answers=(given(both, self.TEXT, '45385', 'performed_status', verdict='cannot_confirm'),))
+        self.assertEqual((by_code(after)['45385'].bucket, by_code(after)['45378'].status), ('excluded',
+                                                                                               'needs_clarification'))
+        self.assertEqual([c.fact for c in by_code(after)['45378'].clarifications], ['base_included'])
+        keys = {p.code: p.key for p in after.proposals}
+        read = review_view.review_view([review_view.stored_from(p) for p in after.proposals], {},
+                                       services=after.services, reference_sources=after.reference_sources)
+        self.assertEqual((read[keys['45378']].status, [q['fact'] for q in read[keys['45378']].questions]),
+                         ('needs_clarification', ['base_included']))
+        self.assertEqual((read[keys['45385']].active, read[keys['45385']].reason),
+                         (True, review_view.DETAIL_UNAVAILABLE))  # counted wherever its presence holds another
+        # the reviewer's path, for contrast: 45385 rejected (its answer withdrawn first), the base is released
+        keys = {p.code: p.key for p in both.proposals}
+        rejected = review_view.review_view([review_view.stored_from(p) for p in both.proposals],
+                                           {keys['45385']: review_view.Decided('reject')}, services=both.services,
+                                           reference_sources=both.reference_sources)
+        self.assertEqual((rejected[keys['45378']].status, rejected[keys['45378']].questions), ('ready', ()))
 
 
 def replace_reason(p):
