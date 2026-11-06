@@ -26,11 +26,11 @@ the answers a member saves, and the date of service as the document and the memb
 An answer binds to the question it answered (completion repair 2026-11-06, U11): the code, family and fact it was asked
 of, its revision, and the fingerprint of that question as the row showed it - CPT Studio's question and reason and the
 passages it concerns (studio.validation.questions) - never to a clarification row or a proposal key, which every
-re-assessment makes anew. A later assessment applies it only where it asks the same question; an answer to a question no
-longer asked, or asked differently - or given before rows showed their passages - is kept and listed as an earlier answer,
-never applied. Every sentence a member reads here is from the fixed tables below: no stored question, reason or note
-text (engine prose, which may quote anything) is passed through; the document's own words are quoted only as exact
-slices of its text.
+re-assessment makes anew. A later assessment applies it only where it asks the same question; an answer to a question
+no longer asked, or asked differently - or given before rows showed their passages - is kept and listed as an earlier
+answer, never applied. Every sentence a member reads here is from the fixed tables below: no stored question, reason or
+note text (engine prose, which may quote anything) is passed through; the document's own words are quoted only as
+exact slices of its text.
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ PROMPTS = {
                     'does not support; the code left is then ready for review.',
 }
 CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
-DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading, not the document
+DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading
 DATE_PROMPTS = {'member': 'The date of service entered for this document differs from the date in the document.',
                 'document': 'The document states more than one date of service.',
                 'asked': 'Confirm the date of service for this document.',
@@ -509,8 +509,8 @@ def _passages_of(assessment, members, by_code) -> list:
     for start, end, quoted in found:
         if len(out) >= MAX_ROW_PASSAGES:
             break
-        if any(a <= start and end <= b for a, b in seen):
-            continue
+        if any(start < b and a < end for a, b in seen):
+            continue  # it overlaps a passage the row shows already (another code's question's)
         seen.append((start, end))
         out.append({'text': quoted, 'start': start, 'end': end, 'page': review._page_of(pages, start)})
     return out

@@ -47,7 +47,8 @@ MISSING = {
     'interpretation': 'who interpreted the study',
     'method': 'which testing method was used, and for how long',
     'route': 'how the tube was placed or replaced',
-    'base_included': 'whether this diagnostic examination is reported separately from the other procedures on this date',
+    'base_included': ('whether this diagnostic examination is reported separately from the other procedures on this '
+                      'date'),
     'separate_em': 'a significant, separately identifiable visit beside the procedure',
     'em_basis': 'what supports the visit level (total time on the date of service, or medical decision making)',
     'units': 'how many units were performed',
@@ -145,8 +146,8 @@ def passages(evidence, support, text: Optional[str] = None, acts: Optional[Mappi
     (``support['acts']``, read in ``acts``: acts_of), whatever the act's status; the code's own cited passages
     (``evidence``: its exact spans of the document, context 0) - for a code whose act is in doubt, the passage that
     raised the doubt; then CPT Studio's own located passages (``support['source']``) - for a code whose service is in
-    doubt, the passages that document the service. A passage inside one already listed adds nothing; one with fewer
-    than MIN_PASSAGE_CHARACTERS non-space characters, or a single word, shows nothing a member could read it by; at most
+    doubt, the passages that document the service. Each passage is shown once (_kept); one with fewer than
+    MIN_PASSAGE_CHARACTERS non-space characters, or a single word, shows nothing a member could read it by; at most
     MAX_PASSAGES. With ``text`` (the revision's), each is re-checked as an exact slice of it. (start, end, text) each."""
     support = support if isinstance(support, Mapping) else {}
     matched = []
@@ -158,20 +159,28 @@ def passages(evidence, support, text: Optional[str] = None, acts: Optional[Mappi
 
 
 def _kept(groups, text: Optional[str], per_source: int = PER_SOURCE) -> tuple[tuple[int, int, str], ...]:
-    out, seen = [], []
-    for group in groups:
-        taken = 0
+    """The passages of ``groups`` (lists of (start, end, text), in order), each re-checked, readable and shown once: a
+    passage inside one already listed adds nothing; one that holds listed ones takes the first one's place and the
+    others' (it shows all they show); one that only partly overlaps one listed adds nothing either. At most
+    ``per_source`` from each group and MAX_PASSAGES in all."""
+    out: list = []  # [start, end, text, group]
+    for number, group in enumerate(groups):
         for start, end, quoted in group:
-            if len(out) >= MAX_PASSAGES or taken >= per_source:
+            if len(out) >= MAX_PASSAGES or sum(1 for item in out if item[3] == number) >= per_source:
                 break
             if text is not None and not (end <= len(text) and text[start:end] == quoted):
                 continue
-            if not _readable(quoted) or any(a <= start and end <= b for a, b in seen):
+            if not _readable(quoted) or any(a <= start and end <= b for a, b, _, _ in out):
                 continue
-            seen.append((start, end))
-            out.append((start, end, quoted))
-            taken += 1
-    return tuple(out)
+            held = [i for i, (a, b, _, _) in enumerate(out) if start <= a and b <= end]
+            if any(start < b and a < end for i, (a, b, _, _) in enumerate(out) if i not in held):
+                continue
+            if held:
+                out[held[0]] = [start, end, quoted, out[held[0]][3]]
+                out = [item for i, item in enumerate(out) if i not in held[1:]]
+                continue
+            out.append([start, end, quoted, number])
+    return tuple((start, end, quoted) for start, end, quoted, _ in out)
 
 
 REACH_FACTS = ('extent', 'completion')  # a documented service's reading of these rests on its completion passages
@@ -233,8 +242,8 @@ def group(pairs: Iterable[tuple[tuple[str, str, str], dict]]) -> dict:
 def bind(answers, asked: Mapping[tuple[str, str, str], str]) -> tuple[list, list]:
     """(bound, earlier): each standing answer (mappings or objects with code, family, fact, value and question) bound to
     the question it answered - a question ``asked`` asks ({member key: fingerprint}) with its own fingerprint - else
-    earlier, as (answer, why): EARLIER_FORM for an answer recorded with no fingerprint (the earlier form, which showed no
-    passage), ASKED_DIFFERENTLY where its (code, family, fact) is asked with another fingerprint, NO_LONGER_ASKED where
+    earlier, as (answer, why): EARLIER_FORM for an answer recorded with no fingerprint (the earlier form, which showed
+    no passage), ASKED_DIFFERENTLY where its (code, family, fact) is asked with another fingerprint, NO_LONGER_ASKED where
     it is not asked at all. An answer whose value is not one a question takes binds to nothing and is left out."""
     bound, earlier = [], []
     for answer in answers or ():

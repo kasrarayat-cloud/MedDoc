@@ -88,8 +88,12 @@ class QuestionIdentityTests(SimpleTestCase):
                                'text': snare}]}
         cited = self.spans('cold snare', 'Biopsies taken.', 'sigmoid colon')
         shown = questions.passages(cited, support, self.TEXT)
-        # the code's own cited passages (at most PER_SOURCE), then CPT Studio's located sentence
-        self.assertEqual([quoted for _, _, quoted in shown], ['cold snare', 'Biopsies taken.', snare])
+        # the code's own cited passages (at most PER_SOURCE), then CPT Studio's located sentence, which holds the cited
+        # "cold snare" and takes its place: each passage once
+        self.assertEqual([quoted for _, _, quoted in shown], [snare, 'Biopsies taken.'])
+        partly = [EvidenceSpan(0, 0, 30, self.TEXT[0:30], True)]
+        later = {'source': [{'start': 20, 'end': 60, 'text': self.TEXT[20:60]}]}
+        self.assertEqual([q for _, _, q in questions.passages(partly, later, self.TEXT)], [self.TEXT[0:30]])
         # the passages of the act the code was matched to come first, whatever its status; one they hold adds nothing
         act = {'start': self.TEXT.index(snare), 'end': self.TEXT.index(snare) + len(snare), 'text': snare}
         matched = questions.passages(cited, {**support, 'acts': [{'id': 'S1-A2', 'kind': 'snare'}]}, self.TEXT,
@@ -448,8 +452,10 @@ class AnswerRecomputeChainTests(ArchiveMixin, PipelineCase):
         drain()
         assessment = self.assessment(encounter_id)
         self.assertEqual(assessment.context.user_values, {'patient_status': 'established'})
-        self.assertEqual(len(assessment.completeness['member_answers']['applied'])
-                         + len(assessment.completeness['member_answers']['earlier']), 1)  # read, either way
+        # the visit's basis is asked the same way under the new context: the answer saved beside the value is read
+        self.assertEqual([entry['fact'] for entry in assessment.completeness['member_answers']['applied']],
+                         ['em_basis'])
+        self.assertEqual(assessment.proposals.get(code='99213').bucket, 'excluded')
 
     def test_the_recompute_key_names_the_answer_history_so_the_old_assessment_is_never_returned(self):
         encounter_id = self.upload(HEDGED)
