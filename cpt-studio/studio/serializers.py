@@ -155,8 +155,14 @@ def queue_reasons(encounter, coding=None):
     if assessment is not None:
         # completion repair (2026-11-06, U11): the questions the review overlay leaves open - the stored ones as the
         # decisions and the members' answers leave them, and the ones the overlay adds (review.open_questions_of) - so
-        # the queue never says "question" of a question a member answered, nor misses one a decision raised
-        if review.open_questions_of(assessment):
+        # the queue never says "question" of a question a member answered, nor misses one a decision raised. With no
+        # decision and no standing answer the overlay is the stored rows exactly (its positive control), so the stored
+        # rows are read alone, as before: the list and the session count read this for every document.
+        stored = assessment.clarifications.filter(state=models.Clarification.OPEN).exists()
+        moved = (models.Decision.objects.filter(assessment=assessment).exists()
+                 or models.MemberAnswer.objects.filter(revision_id=assessment.revision_id,
+                                                       revocation__isnull=True).exists())
+        if (review.open_questions_of(assessment) if moved else stored):
             reasons.append('question')
         if review._decisions_waiting(assessment)[0]:
             reasons.append('decision')
