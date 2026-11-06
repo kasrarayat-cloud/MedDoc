@@ -101,7 +101,8 @@ GJ = ('A second through-the-scope balloon was positioned across the stricture at
 class CompetitionByActIdentityTests(SimpleTestCase):
     """C2-4 (lens C2-4's own inputs): two codes compete exactly where they claim one documented act. Corti's code whose
     passage shows the finding, not the act, claims the one act there is (C2-4-1); an Impression's restatement is the
-    narrative act it restates (C2-4-2); two dilations at two stated sites are two acts (C2-4-3)."""
+    narrative act it restates (C2-4-2); two dilations whose second site is unread compete on the safe side (C2-4-3,
+    cycle 4)."""
 
     def outcome(self, text, by_corti, by_participant):
         result = run(text, corti((by_corti[0], span(text, by_corti[1]))),
@@ -130,13 +131,17 @@ class CompetitionByActIdentityTests(SimpleTestCase):
                 self.assertEqual(set(self.outcome(text, by_corti, by_participant).values()),
                                  {('selected', 'needs_clarification', True)})
 
-    def test_c2_4_3_two_dilations_at_two_sites_never_compete(self):
+    def test_c2_4_3_two_dilations_whose_second_site_is_unread_compete_on_the_safe_side(self):
+        # refutation cycle 4: competition errs toward competing - the second dilation's site ("post-bulbar", "the
+        # gastrojejunal anastomosis") is not read, so its code may restate the first and the two compete, held for a
+        # reviewer's rejection. A recorded false hold (cycle 2 read both READY); two codes for one act are never both READY
         for name, text in (('post-bulbar', EGD_IND + ESO + '\n' + PB + '\n'),
                            ('GJ anastomosis', EGD_IND + ESO + '\n' + GJ + '\n')):
             with self.subTest(name):
                 second = PB if name == 'post-bulbar' else GJ
                 self.assertEqual(self.outcome(text, ('43249', ESO), ('43245', second)),
-                                 {'43249': ('selected', 'ready', False), '43245': ('selected', 'ready', False)})
+                                 {'43249': ('selected', 'needs_clarification', True),
+                                  '43245': ('selected', 'needs_clarification', True)})
 
 
 class ChainCostAndModeTests(h2p.Harness2Case):

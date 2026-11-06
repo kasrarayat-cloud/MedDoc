@@ -3311,9 +3311,10 @@ finding.
 
   The act-identity reading failed in every cycle, in one direction or the other.
 - **The new rule:** two codes for one service's act kind compete unless their acts are told apart.
-  - **What tells them apart:** two lesion records, or two stated sites neither of which contains the other, or a
-    statement that opens with "a second", "another", "a separate" or "an additional" (`OTHER_ACT_OPENER`; C2-4-3's "A
-    second through-the-scope balloon ...").
+  - **What tells them apart:** two lesion records, or two stated sites neither of which contains the other. A release
+    for statements opening with "a second" or "another" was tried and dropped the same night: "A second photograph of
+    the snare polypectomy site was taken." names a snare act to the reader, and it made two READY codes for one
+    polypectomy. C2-4-3's two dilations, whose second site is unread, compete (a recorded false hold).
   - **Findings sections** are narrative again (`RESTATING_SECTIONS` is the impression and the assessment only).
   - **A code supported by several acts** claims all of them.
 - **Recorded false hold:** L4-2's first case. Corti's 43249 on an Impression naming two strictures competes with the
