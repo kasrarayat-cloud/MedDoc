@@ -607,9 +607,9 @@ HEMOSTATIC_CUE = 'uncertain: "hemostatic" names a device or a treatment, not tha
 # Refutation fa-1 and compl-1: an attempt or a failure ("Hot snare polypectomy failed.", "Gastric decompression was
 # attempted but failed.") states the act was tried, so the act is kept in doubt rather than dropped for want of a
 # predicate.
-# (refutation cycle 1, acts F1: cues.FAILED_ACT's "aborted", "terminated" and "discontinued" are failures too)
-ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain: unsuccessful', 'uncertain: abandoned',
-                           'uncertain: aborted', 'uncertain: terminated', 'uncertain: discontinued')
+# Every reading _failed_act makes is one of these: its words are the one failure vocabulary (cues.ACT_FAILURE_WORDS,
+# which cues.FAILED_ACT reads; refutation cycle 2, outcome O6), never a second list kept here by hand.
+ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt',) + tuple('uncertain: ' + word for word in _cues.ACT_FAILURE_WORDS)
 
 
 
@@ -4261,9 +4261,36 @@ def _attachment_subject(text: str, clause_start: int, predicate_start: int) -> O
 
 
 
-# A clause that states an attempt or a failure (predicate_subject's pronoun reading, refutation cycle 1).
-_ATTEMPT_OR_FAILURE = _rx(r'\b(?:attempt(?:ed|s)?|tried|trial|failed|unsuccessful(?:ly)?|abandoned|aborted|could\s+not|'
-                          r'unable|not\s+(?:possible|feasible|successful|completed?))\b|\bcan(?:not|\'t)\b|couldn\'t')
+# The main predicates that state an attempt or a failure (predicate_subject's pronoun reading; refutation cycle 2,
+# outcome O2), a closed class read at the antecedent clause's own first verb group (_own_attempt_or_failure): "was/were
+# attempted|tried|unsuccessful", "failed", "could not be <participle>", "was/were not possible|successful|completed".
+# Cycle 1 searched the whole clause for an attempt or failure word, so "... were obtained from the stricture after two
+# attempts" and "... after a failed first pass" lent a pronoun's abort to the brushings (43260 READY).
+_ATTEMPT_OR_FAILURE = _rx(r'(?:was|were)[ \t\n]+(?:attempted|tried|unsuccessful)\b|failed\b'
+                          r'|could[ \t\n]+not[ \t\n]+be[ \t\n]+(?:[a-z]+(?:ed|en)|done)\b'
+                          r'|(?:was|were)[ \t\n]+not[ \t\n]+(?:possible|successful|completed)\b')
+_ANTECEDENT_TOKEN = re.compile(r"[A-Za-z][A-Za-z'’/-]*|[,;:()\[\]]", re.A)
+_PLURAL_VERB = _rx(r'were\b')
+SINGULAR_PRONOUNS = frozenset(('it', 'this', 'that'))
+
+
+def _own_attempt_or_failure(text: str, a0: int, a1: int) -> Optional[int]:
+    """Where the antecedent clause [a0, a1)'s own main predicate begins, when that predicate is an attempt or a failure
+    (_ATTEMPT_OR_FAILURE); None otherwise. The main predicate is the clause's first verb group - its first auxiliary or
+    modal (clauses.AUXILIARIES), or a finite "failed" (one after a determiner or a quantity word, "a failed first pass",
+    is an attribute) - and only where nothing before it but the subject could hold a verb of its own: a mark, a relative
+    pronoun or a subordinator there says that verb group may be an aside's or a subordinate clause's ("Polypectomy,
+    which was attempted twice, was completed"), and nothing is read. Bounded: clauses.SUBJECT_REACH characters."""
+    before = ''
+    for m in _ANTECEDENT_TOKEN.finditer(text, a0, min(a1, a0 + _clauses.SUBJECT_REACH)):
+        word = m.group(0).lower()
+        if word in _clauses.AUXILIARIES or (word == 'failed' and before and before not in _clauses.DETERMINERS
+                                            and before not in _clauses.QUANTITY_WORDS):
+            return m.start() if _ATTEMPT_OR_FAILURE.match(text, m.start(), a1) else None
+        if word == 'failed' or not word[0].isalpha() or word in _clauses.RELATIVES or word in _clauses.SUBORDINATORS:
+            return None
+        before = word
+    return None
 
 
 def predicate_subject(text: str, clause_start: int, predicate_start: int,
@@ -4277,10 +4304,13 @@ def predicate_subject(text: str, clause_start: int, predicate_start: int,
     overtube protecting the meat bolus was removed" and "... passed after the overtube was removed" as the bolus's
     removal, and the attachment walk alone read "The food bolus impacted before presentation was removed" as
     presentation's. A pronoun is read through the clause before it (``antecedent``) by this same reading, one level -
-    and only where that clause states an attempt or a failure (refutation cycle 1, outcome F4): "Hot snare polypectomy
-    was attempted; it was unsuccessful" names the attempted act, while "Biliary brushings were obtained from the
-    stricture; it was then aborted" names no completed act's failure, so the pronoun stays unresolved (the examination's,
-    the base reading)."""
+    and only where that clause's OWN main predicate states an attempt or a failure (_own_attempt_or_failure; refutation
+    cycle 2, outcome O2, replacing cycle 1's word search over the clause): "Hot snare polypectomy was attempted; it was
+    unsuccessful" names the attempted act, while "Biliary brushings were obtained from the stricture after two attempts;
+    it was then aborted" states a completed act, whatever word its clause holds elsewhere. A singular pronoun (it, this,
+    that) never stands for a plural subject - a plural head noun or a "were" predicate ("Biliary brushings were
+    attempted; it was then aborted"). Otherwise the pronoun stays unresolved: the examination's failure, the base
+    reading."""
     found = _clauses.subject(text, clause_start, predicate_start)
     if found is None:
         return None
@@ -4292,12 +4322,14 @@ def predicate_subject(text: str, clause_start: int, predicate_start: int,
     a0, a1 = antecedent
     if not (0 <= a0 < a1 <= clause_start):
         return found
-    if not _ATTEMPT_OR_FAILURE.search(text, a0, a1):
-        return found  # refutation cycle 1: a completed act's clause lends a pronoun no failure
-    first = _clauses.first_predicate(text, a0, a1)
-    prior = predicate_subject(text, a0, first) if first is not None else None
+    verb = _own_attempt_or_failure(text, a0, a1)
+    if verb is None:
+        return found  # the antecedent's own predicate states no attempt or failure: it lends the pronoun nothing
+    prior = predicate_subject(text, a0, verb)
     if prior is None or prior.pronoun or prior.resolved.word in _clauses.PERSONAL:
         return found
+    if found.head.word in SINGULAR_PRONOUNS and (prior.head.word.endswith('s') or _PLURAL_VERB.match(text, verb)):
+        return found  # a singular pronoun is never a plural subject
     return replace(found, resolved=prior.resolved, antecedent=prior, pronoun=False)
 
 

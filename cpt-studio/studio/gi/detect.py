@@ -6047,30 +6047,41 @@ def _in_a_failed_act(an: Analysis, start: int, end: int) -> bool:
 
 
 def _completion_states_reach(an: Analysis, ms: int, me: int, ws: int, we: int) -> bool:
-    """Whether a completion statement of the documented-service reader's own vocabulary (services.COMPLETE_POS) opens on
-    the landmark at [ms, me) in its clause window [ws, we) - the landmark as the statement's subject: "Cecal intubation
-    was achieved", "The cecum was reached" (its reach-verb forms, "advanced to the cecum", routing reads already through
-    cues.REACHED_BEFORE, so only this shape is added): routing reads the reach statements the completion reader reads,
-    so one extent fact serves routing, the documented-service reader (which takes routing's extent) and the admission's
-    required facts (completion repair, R2: D10b's "Cecal intubation was achieved." had read no extent). The caller has
-    checked the landmark's own reading (performed or incomplete) and that nothing in its window blocks the reach."""
-    from studio.gi import services as gi_services, structure as gi_structure  # local: both read routing lazily
-    for hit in gi_services.COMPLETE_POS.finditer(an.text, ws, we):
-        if hit.start() == ms:  # the statement opens on the landmark: "Cecal intubation was achieved"
-            # refutation cycle 1 (outcome F3): never a statement of another time, place, source or a hedge, a negation,
-            # a condition or an open question ("Cecal intubation was achieved on the previous attempt but not today",
-            # "Whether cecal intubation was achieved is not documented"): today's plain statement only
-            s, e = an.lay.sentence_for(ms, me)
-            if gi_structure._signals(an.text, s, e, narrative=True) or gi_services.HEDGE_WORDS.search(an.text, s, e) \
-                    or _REACH_DOUBT.search(an.text, s, e):
-                return False
-            return True
-    return False
+    """Whether the landmark at [ms, me) is the subject of a reach statement that is its whole sentence: "Cecal
+    intubation was achieved.", "Cecal intubation was achieved, as confirmed by photographs of the appendiceal orifice."
+    (completion repair, R2: D10b's "Cecal intubation was achieved." had read no extent; its reach-verb forms, "advanced
+    to the cecum", routing reads already through cues.REACHED_BEFORE). Refutation cycle 2 (outcome O5, O7, O8): a closed
+    positive form. The sentence is recognised whole by a small grammar (_REACH_STATEMENT): the landmark phrase - the hit
+    itself, after at most "the" - then "was" or "were", at most one adverb of a closed class, a completion participle of
+    a closed class, at most one tail of a closed class ("without difficulty", "with ease", "and photodocumented", "(as)
+    confirmed by photographs of the appendiceal orifice"), and the sentence's end. Anything else in the sentence -
+    another occasion ("in that examination", "during the procedure that preceded her hemicolectomy"), another person
+    ("during the procedure her sister had"), a hedge, a negation, a condition or a question - makes it no reach
+    statement, and the extent keeps its base reading, so an unlisted phrasing can only cost a hold. Cycle 1 had
+    searched the sentence for doubt words instead (structure._signals, HEDGE_WORDS and a doubt list), which let another
+    occasion's reach through and rescanned the sentence for every landmark hit. Each sentence is read once (memoised),
+    and only up to REACH_STATEMENT_CHARS characters: a longer sentence is no reach statement. The caller has checked the
+    landmark's own reading (performed or incomplete) and that nothing in its window [ws, we) blocks the reach."""
+    s, e = an.lay.sentence_for(ms, me)
+    key = ('reach-statement', s, e)
+    if key not in an.memo:
+        found = _REACH_STATEMENT.fullmatch(an.text, s, e) if e - s <= REACH_STATEMENT_CHARS else None
+        an.memo[key] = found.span('subject') if found is not None else None
+    return an.memo[key] == (ms, me)
 
 
-# A negation, a condition or an open question in a completion statement's sentence (_completion_states_reach).
-_REACH_DOUBT = re.compile(r"\b(?:not|never|neither|nor|whether|if|unless|unknown|unclear|uncertain|cannot|"
-                          r"could\s+not)\b|n['\u2019]t\b", re.I)
+# The reach statement's grammar (_completion_states_reach): closed classes throughout; the subject is read as written
+# and believed only where it is exactly the landmark hit the caller found.
+REACH_STATEMENT_CHARS = 300
+_REACH_LANDMARK = (r'(?:the\s+)?(?:appendiceal\s+orifice|ileoc(?:a)?ecal\s+valve|c(?:a)?ecum|terminal\s+ileum|'
+                   r'triradiate\s+fold|c(?:a)?ecal\s+landmarks)')
+_REACH_EVIDENCE = (r'(?:the\s+)?(?:visuali[sz]ation|identification|photographs|photodocumentation)\s+of\s+'
+                   + _REACH_LANDMARK + r'(?:\s+and\s+' + _REACH_LANDMARK + r')?')
+_REACH_STATEMENT = re.compile(
+    r'\s*(?:the\s+)?(?P<subject>[a-z0-9][a-z0-9 -]*?)\s+(?:was|were)\s+(?:(?:successfully|easily|readily|then)\s+)?'
+    r'(?:(?:achieved|accomplished|confirmed|reached|performed|completed|obtained)'
+    r'(?:,?\s+(?:without\s+difficulty|with\s+ease|and\s+photodocumented|(?:as\s+)?confirmed\s+by\s+' + _REACH_EVIDENCE
+    + r'))?|confirmed\s+by\s+' + _REACH_EVIDENCE + r')\s*\.?\s*', re.A | re.I)
 
 
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
