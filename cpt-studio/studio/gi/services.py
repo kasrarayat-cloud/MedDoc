@@ -221,8 +221,13 @@ INSTRUMENT_FAMILY = (('colonoscope', 'gi.colonoscopy'), ('sigmoidoscope', 'gi.fl
 # only where its own clause states it removed - "the bolus was removed through the mouth", the owner's 39f0ac49 - never
 # by being named, pushed, passed, cleared or advanced (round 1's vocabulary, its bare-bolus look-back and its push
 # guard were each refuted twice and are dropped). The base's own "food bolus" and "foreign body" read as before.
-REMOVAL_AHEAD = (r'(?=(?:(?!\band\b)[^.;,\n]){0,40}?\b(?:was|were)\s+(?:then\s+|successfully\s+|subsequently\s+'
-                 r'|completely\s+|gently\s+|endoscopically\s+)?(?:removed|retrieved|extracted)\b)')
+# Refutation cycle 3 (C3-1-2): the removal is the bolus's own predicate - no clause word (a conjunction, a
+# subordinator, a relative) between them, so "The meat bolus remained impacted while the scope was removed." and "The
+# steak impaction passed after the overtube was removed." state no removal of the bolus
+REMOVAL_GAP_STOP = (r'(?!\b(?:and|but|or|nor|while|whilst|after|before|when|whenever|as|once|until|till|since|because'
+                    r'|although|though|whereas|if|unless|then|so|that|which|who|whom|whose)\b)')
+REMOVAL_AHEAD = (r'(?=(?:' + REMOVAL_GAP_STOP + r'[^.;,\n]){0,40}?\b(?:was|were)\s+(?:then\s+|successfully\s+'
+                 r'|subsequently\s+|completely\s+|gently\s+|endoscopically\s+)?(?:removed|retrieved|extracted)\b)')
 ACTS: tuple[tuple[str, re.Pattern], ...] = tuple((kind, _rx(pattern)) for kind, pattern in (
     ('fna', r'\bfine[- ]needle\s+(?:aspiration|biopsy|biopsies|sampling)\b|\bFN[AB]\b|\b\d{2}[- ]gauge\b[^.;]{0,40}'
             r'\bneedle\b|\bneedle\s+pass(?:es)?\b|\bEUS-guided\s+(?:tissue\s+acquisition|sampling|biops(?:y|ies))\b'),
@@ -351,6 +356,13 @@ FRAGMENT_NOT = _rx(r"\b(?:never|not\s+(?:yet|ever|actually|as\s+yet|in\s+fact))\
                    + ACT_PARTICIPLES + r"\b"
                    r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded)\b")
 FRAGMENT_PAST = _rx(r"\s+(?:before|previously|in\s+the\s+past|prior)\b")
+# the closed list's own act kinds: "not retrieved" after "removed with a cold snare" is the specimen's, never the snare's
+# (refutation cycle 3, C3-4-13)
+FRAGMENT_KINDS = {'snared': ('snare', 'emr'), 'excised': ('snare', 'emr', 'esd', 'biopsy'), 'tattooed': ('tattoo', 'injection'),
+                  'dilated': ('dilation',), 'ablated': ('ablation',), 'clipped': ('clip',),
+                  'retrieved': ('specimen', 'foreign_body', 'stone_extraction'),
+                  'extracted': ('stone_extraction', 'foreign_body'), 'deployed': ('stent', 'clip'),
+                  'banded': ('band_ligation',)}
 FRAGMENT_CUE = 'negated: a fragment\u2019s own negation'
 FRAGMENT_GAP = 60  # characters of a noun mention's own phrase ("from the ascending colon") before its fragment
 FRAGMENT_GAP_STOP = _rx(r'[,;:()]|\b(?:and|or|but|then|which|that|who|after|before|while|was|were|is|are|been|being)\b')
@@ -476,6 +488,10 @@ LATER_REMOVAL_FAILED = _rx(r'[\s,;]*(?:but|however|although|yet)\b,?\s+(?P<subj>
                            r'[\w-]+|it|they)\s+(?:could\s+not|couldn[\'\u2019]t|cannot|was\s+unable\s+to|'
                            r'were\s+unable\s+to|failed\s+to)\s+(?:be\s+)?(?P<verb>transect|remov|resect|snar|retriev|excis|'
                            r'complet|captur|clos|tighten|open|deploy|position)\w*')
+# words that set another lesion apart in a later failure's subject (C3-4-1), and a manner's failure after it
+OTHER_LESION_WORDS = frozenset({'second', 'other', 'another', 'remaining', 'rest', 'first', 'third', 'last', 'next',
+                                'latter', 'former', 'larger', 'smaller', 'additional', 'separate', 'distal', 'proximal'})
+EN_BLOC_AFTER = _rx(r'\w*\s+en\s+bloc\b')
 # the act's own instrument, whose failure fails the act ("the snare could not be closed around the stalk": C2-2-15)
 INSTRUMENT_WORD = {'snare': 'snare', 'dilation': 'balloon', 'band_ligation': 'band', 'clip': 'clip',
                    'foreign_body': 'net'}
@@ -491,7 +507,13 @@ def _later_removal_is_the_acts(failed, kind: str) -> bool:
         return INSTRUMENT_WORD.get(kind, '\0') in subject
     if verb == 'retriev':
         return kind == 'foreign_body'
-    return True
+    # refutation cycle 3 (C3-4-1): only the act's own lesion - a pronoun, or "the" with one word that sets no other
+    # lesion apart ("the polyp", "the stalk"); "the second", "the other polyp" and "the cecal polyp" are another's.
+    # A failure of a manner ("could not be removed en bloc and was removed piecemeal") is no failure of the act.
+    words = subject.split()
+    if words[0] not in ('it', 'they') and (len(words) != 2 or words[1] in OTHER_LESION_WORDS):
+        return False
+    return not EN_BLOC_AFTER.match(failed.string, failed.end())
 DEFINITE_BEFORE = _rx(r'\bthe\s+(?:[\w-]+\s+){0,2}$')
 
 
@@ -560,25 +582,47 @@ BOLUS_ANTECEDENT = _rx(r'\bimpacted\s+(?:food|meat)(?:\s+(?:bolus(?:es)?|impacti
                        r'|\b(?:food|meat|steak|chicken|beef|pork|bread|vegetable)\s+(?:bolus(?:es)?|impactions?)\b'
                        r'|\bforeign\s+bod(?:y|ies)\b')  # "impacted meat bolus" whole, so it holds the bolus it names
 BOLUS_WORD = _rx(r'\b(?:bolus(?:es)?|impactions?|impacted|foreign\s+bod(?:y|ies))\b')
+# a food bolus by name - never a foreign body named so (refutation cycle 3, C3-1-1: "The foreign body was removed with a
+# Roth net." in a colonoscopy's part is no upper-tract act)
+FOOD_BOLUS = _rx(r'\bimpacted\s+(?:food|meat)(?:\s+(?:bolus(?:es)?|impactions?))?\b'
+                 r'|\b(?:food|meat|steak|chicken|beef|pork|bread|vegetable)\s+(?:bolus(?:es)?|impactions?)\b')
+# F-ACTS (refutation cycle 3, C3-1-2): a bolus that is a preposition's object ("The overtube placed over the bolus was
+# removed.") is not the subject of the removal after it
+BOLUS_AS_OBJECT = _rx(r'\b(?:over|under|around|behind|beside|past|through|into|onto|upon|across|with|from|near|against'
+                      r'|toward|towards|alongside|beyond|beneath|above|below|along|about|of|at|on|in|to|by|within)\s+'
+                      r'(?:the|a|an|this|that|its)?\s*(?:[\w-]+\s+){0,2}$')
 ANTECEDENT_DENIED = _rx(r'\b(?:no|not|without|negative\s+for|free\s+of|absent|absence\s+of)\b[^.;\n]{0,40}$')
 
 
 def _food_bolus(text: str, start: int, end: int) -> bool:
     """Whether the foreign-body mention [start, end) is a food bolus: named by its food or as one, or the anaphor "bolus"
-    the act finder bound to one (F-ACTS)."""
+    the act finder bound to a food one (F-ACTS) - never a foreign body named so (refutation cycle 3, C3-1-1)."""
     said = text[start:end]
-    return said.lower() == 'bolus' or bool(BOLUS_ANTECEDENT.fullmatch(said)) or bool(
-        re.fullmatch(r'food\s+(?:bolus|impaction)', said, FLAGS))
+    if said.lower() == 'bolus':
+        return _bolus_antecedent(text, start, food_only=True)
+    return bool(FOOD_BOLUS.fullmatch(said))
 
 
-def _bolus_antecedent(text: str, at: int) -> bool:
-    """Whether the anaphor "bolus" at ``at`` refers back to a food bolus the report does not deny (F-ACTS)."""
+def _removal_is_the_bolus(text: str, start: int, end: int) -> bool:
+    """Whether a removal F-ACTS reads after the bolus mention [start, end) is the bolus's own (refutation cycle 3,
+    C3-1-2): the mention is no preposition's object. The base's own "food bolus" and "foreign body" are not read here."""
+    said = text[start:end]
+    if re.fullmatch(r'foreign\s+bod(?:y|ies)|food\s+(?:bolus|impaction)', said, FLAGS):
+        return True
+    lead = text[max(0, start - 40):start]
+    return not BOLUS_AS_OBJECT.search(lead)
+
+
+def _bolus_antecedent(text: str, at: int, food_only: bool = False) -> bool:
+    """Whether the anaphor "bolus" at ``at`` refers back to a food bolus the report does not deny (F-ACTS); with
+    ``food_only``, one named by its food (never a foreign body)."""
     last = None
     for last in BOLUS_WORD.finditer(text, 0, at):
         pass
     if last is None:
         return False
-    named = next((m for m in BOLUS_ANTECEDENT.finditer(text, max(0, last.start() - 20), min(len(text), last.end() + 20))
+    pattern = FOOD_BOLUS if food_only else BOLUS_ANTECEDENT
+    named = next((m for m in pattern.finditer(text, max(0, last.start() - 20), min(len(text), last.end() + 20))
                   if m.start() <= last.start() < m.end()), None)
     return named is not None and not ANTECEDENT_DENIED.search(text, max(0, named.start() - 60), named.start())
 
@@ -631,6 +675,21 @@ def _hedged(cues) -> bool:
     mark ("Was the FNA performed? No"), which is no doubt the document states (refutation round 2, esc-8)."""
     word = cues[0][len('uncertain: '):] if cues and cues[0].startswith('uncertain: ') else ''
     return bool(word) and word != '?' and bool(HEDGE_WORDS.fullmatch(word))
+
+
+def _fragment_is_anothers(text: str, frag, pos: int, end: int, ce: int) -> bool:
+    """Whether a fragment's negation after a noun mention's own phrase belongs to something else (refutation cycle 3):
+    the clause's own finite predicate follows it, so it is a modifier of a noun in the phrase ("Band ligation of the
+    varices not yet treated was performed": C3-4-7); or its participle names another act kind than the mention's ("A 5
+    mm polyp removed with a cold snare not retrieved": the specimen's, C3-4-13)."""
+    if ACT_VERB.search(text, frag.end(), ce) or PAREN_MAIN_PREDICATE.search(text, frag.end(), ce):
+        return True
+    word = frag.group(0).split()[-1].lower()
+    kinds = FRAGMENT_KINDS.get(word)
+    if kinds is None:
+        return False
+    mentioned = {kind for kind, pattern in ACTS if pattern.search(text, pos, end)}
+    return bool(mentioned) and not (mentioned & set(kinds))
 
 
 def _against_listing(text: str, act: Act) -> bool:
@@ -2429,7 +2488,8 @@ CONDITION_OPENER = _rx(r'\b(?:if|unless|whether|in\s+case(?!\s+of\b)|provided\s+
 # participle "providing", are no conditions on the act (C2-2-7).
 CONDITION_IDIOM = _rx(r'unless\s+otherwise\s+(?:noted|stated|specified|indicated|documented)\b')
 CLOSING_PREDICATE = _rx(r'\b(?:is|are|was|were|has|have|had|did|does|do)\b(?!\s+(?:not\s+|then\s+|also\s+)?'
-                        + ACT_PARTICIPLES + r'\b)|\b(?:she|he|they|it|we|i)\s+[a-z]+ed\b')
+                        + ACT_PARTICIPLES + r'\b)|\b(?:she|he|they|it|we|i)\s+[a-z]+ed\b'
+                        r'|\band\s+(?:then\s+)?[a-z]+ed\s+(?:it|them|the|this|these|those)\b')
 
 
 def _condition_closed(between: str) -> bool:
@@ -2446,7 +2506,9 @@ CONDITION_CUE = 'uncertain: inside a condition or an open question ("if", "wheth
 #     "(outside report)", "by the referring endoscopist", "elsewhere", "according to the patient", "per Dr. Smith")
 #     leaves where and by whom it was done unestablished: held, never read as this report's act.
 # a request named after a patient or a source ("per the patient's request", "according to the patient's wishes")
-NOT_A_REQUEST = (r"(?!['\u2019]?s?\s+(?:request|preference|wish|wishes|choice|consent|decision|permission|agreement|"
+NOT_A_REQUEST = (r"(?!['\u2019]s\s+(?!(?:reports?|records?|notes?|letters?|documentation|charts?|history|"
+                 r"summary|summaries|correspondence)\b)[\w-])"
+                 r"(?!['\u2019]?s?\s+(?:request|preference|wish|wishes|choice|consent|decision|permission|agreement|"
                  r"approval|authori[sz]ation|assent|instructions?|desire|goals?|tolerance|comfort|convenience))")
 OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|transferring|outlying|external|another|different|originating)\s+'
                    r'(?!(?:the|a|an|this|that|of|its|their)\b)'
@@ -2456,8 +2518,8 @@ OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|transferring|outlying|extern
                    r'reports?|records?|notes?|letters?|documentation|charts?)\b'
                    # "elsewhere" names another place unless a place of this examination follows it ("elsewhere in the
                    # stomach"); "elsewhere on three occasions" is another time and place (refutation cycle 2, C2-2-12)
-                   r'|\belsewhere\b(?!\s+(?:in|on|along|within|throughout|at|around|near)\s+(?:the|this|that|these|'
-                   r'those|its|her|his|their)\b)'
+                   r'|\belsewhere\b(?!\s+(?:in|along|within|throughout|at|around|near|across|between)\b'
+                   r'|\s+on\s+(?:the|this|that|these|those|its|her|his|their)\b)'
                    r'|\baccording\s+to\s+(?:(?:the|her|his|their|an?|our)\s+)?(?:[\w-]+\s+){0,2}?(?:patient|pt|family|'
                    r'caregiver|outside|referring|gastroenterologists?|physicians?|doctors?|surgeons?|endoscopists?|'
                    r'providers?|clinicians?|records?|reports?|letters?|notes?|charts?|history|documentation|'
@@ -2557,8 +2619,8 @@ TODAY_AFTER_GOVERNED = _rx(r'\s+(?:today|this\s+(?:morning|afternoon|evening))\b
 # only - an ungoverned "this EGD" or "this colonoscopy" states nothing about when an act was done (refutation cycle 2,
 # C2-2-1 and C2-2-2: "dilated ... 6 weeks ago and is reassessed on this EGD" read READY)
 GOVERNED_TODAY = _rx(r"\btoday['\u2019]s\s+(?:procedure|examination|exam|colonoscopy|EGD|endoscopy|study|session|visit)\b"
-                     r'|\btoday\b|\bthis\s+(?:session|encounter|procedure|examination|exam|visit|colonoscopy|EGD|'
-                     r'endoscopy|study|case)\b')
+                     r"|\btoday\b(?!['\u2019]s)|\bthis\s+(?:session|encounter|procedure|examination|exam|visit|colonoscopy|"
+                     r'EGD|endoscopy|study|case)\b')
 
 
 def _today_reading(said: str) -> tuple[bool, str]:
@@ -2586,6 +2648,9 @@ def _today_reading(said: str) -> tuple[bool, str]:
 
 
 FRAME_REACH = 100  # characters before a clause read for the sentence's fronted frame
+# a history word in the fronted frame that a participle and its noun follow describes that noun, never the clause's act
+# (refutation cycle 3, C3-1-5: "Over the previously placed guidewire, the stricture was dilated ...")
+FRAME_ATTRIBUTIVE = _rx(r'\s+[a-z]+(?:ed|en)\s+[a-z]')
 _FRAME_BOUNDARY = re.compile(r'[.!?;:\n]')
 _FRAME_PREDICATE = _rx(r'\b(?:was|were|is|are|be|been|being|has|have|had|did|does|will|would)\b')
 
@@ -2751,7 +2816,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # ascending colon never obtained."; C2-2-14), never past a comma, a coordinator, a relative or a predicate
         if (frag.start() < end and pos < frag.end()) or (gap is not None and len(gap) <= FRAGMENT_GAP
                                                          and not FRAGMENT_GAP_STOP.search(gap)
-                                                         and not ACT_VERB.search(gap)):
+                                                         and not ACT_VERB.search(gap)
+                                                         and not _fragment_is_anothers(text, frag, pos, end, ce)):
             return Reading('negated', (FRAGMENT_CUE,))
     near = before[-40:]
     if any(not WITHOUT_COMPLICATION.match(near, w.start()) and not _outside_negation(near[w.start():], after)
@@ -2775,8 +2841,15 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     frame = frame if frame.rstrip().endswith(',') else ''
     tcs = cs - len(frame) if not joined else cs
     twhole = text[tcs:ce]
+    own_said = said
     said = frame + said
     today, before_today = _today_reading(said)  # F-TIME B
+    if frame:
+        # Refutation cycle 3 (C3-1-3, C3-1-4): the frame's own today ("Today, ...", "At today's visit, ...") never
+        # cancels the clause's own plan or history word ("... and EMR will be performed at the next colonoscopy",
+        # "... was performed in the past"); only the clause's own today does. The frame still dates by its before-today
+        # and history words (F-TIME B) and names its source (F-TIME P).
+        today = _today_reading(own_said)[0]
     act_said = bool(ACT_VERB.search(said))
     other_time = ''
     for d in _dates_in(dates, tcs, ce):
@@ -2810,6 +2883,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     elsewhere = _elsewhere_time_words(text, tcs, ce, pos)
     manner = [m.span() for m in MANNER_PHRASE.finditer(twhole)] + [m.span() for m in SEQUENCE_PHRASE.finditer(twhole)]
     hist = next((h for h in HISTORY_WORDS.finditer(twhole) if tcs + h.start() not in elsewhere
+                 and not (tcs + h.start() < cs and FRAME_ATTRIBUTIVE.match(twhole, h.end()))
                  and not any(a <= h.start() < b for a, b in manner)
                  and not REVIEW_OF_RECORDS.search(twhole, max(0, h.start() - 30), min(len(twhole), h.end() + 40))),
                 None)
@@ -3760,7 +3834,9 @@ def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -
                 continue
             # F-ACTS: the anaphor "the bolus" with no food bolus to refer back to names no act, for the act loop and
             # the engine's own-passage reading alike
-            unbound = kind == 'foreign_body' and m.group(0).lower() == 'bolus' and not _bolus_antecedent(text, m.start())
+            unbound = kind == 'foreign_body' and (
+                (m.group(0).lower() == 'bolus' and not _bolus_antecedent(text, m.start()))
+                or not _removal_is_the_bolus(text, m.start(), m.end()))
             (attributive if unbound or _attributive_compound(text, m.start(), m.end()) else found).append(
                 (kind, m.start(), m.end()))
     for m in DECOMPRESS_VERB.finditer(text, start, end):

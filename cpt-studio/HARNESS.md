@@ -3185,3 +3185,95 @@ as a re-assessment reads them; nothing written or sent):
   this tree and the base (no act is read for "left in place", so the listing stands). A participant's code is listed.
 - Two dilations of one ring with two instruments, both stated done, are one act to the reader, so a bougie code and a
   balloon code for them compete (a false hold).
+
+### Harness repair 3, refutation cycle 3 (2026-11-06): four lenses over cycle 2's rules, and the convergence policy
+
+Four lenses ran in sealed sandboxes at `b32222c8f`, over what cycle 2 and the full suite after it had built or changed:
+- C3-1: F-ACTS as rebuilt, and the fronted frame;
+- C3-2: the provider-neutral admission;
+- C3-3: competition by act identity;
+- C3-4: the holding rules as cycle 2 repaired them.
+
+They reported 25 findings (C3-1 5, C3-2 3, C3-3 4, C3-4 13). Every one was reproduced on this tree before its repair.
+Every input is pinned in `tests/test_h3_refutation_c3.py` with `tests/fixtures/gi4/refutation/h3-c3-cases.json`: 77
+single-code cases, 12 multi-code cases and 14 admission cases. Each records what the base, the stage commit, the round-1
+tree and the cycle-2 tree read.
+
+**The convergence policy, applied to every finding:** each cycle finds new wordings for the phrase-based holding rules in
+both directions, so word-list repairs are not chased.
+- **Always repaired:** an input READY on either path where the base is not, and two approvable codes for one documented
+  act. These are the most severe classes.
+- **Narrowed toward the base:** a false hold or exclusion this diff introduced. A narrowing of this diff's own rule
+  restores the base's reading of that shape, so it cannot open a false READY the base does not have.
+- **Recorded, never chased:** the base's own false READYs that no rule of this diff closes, and false holds on the safe
+  side.
+
+**Repaired:**
+- **C3-2-1 to C3-2-3, the admission:** the provider-neutral admission held a participant's code for any act read
+  "uncertain" whose cue was not on a deny-list. Three uncertain readings escaped the list: a listed act withheld by its
+  failure ("Procedure: Colonoscopy with hot snare polypectomy ... Hot snare polypectomy failed."), a consent's act and a
+  question's act. Each held code made Corti's correct base code included. A deny-list over uncertain cues does not
+  close, so the admission is narrowed to its structural core: a participant's code is held only for an act stated done
+  inside a service documented in doubt (`engine._in_doubt`; 39f0ac49's shape). An act read in doubt itself is listed
+  with PARTICIPANT_NOT_ESTABLISHED, as P-ADMIT2 lists it. All 44 admission rows now list the participant's code and leave
+  Corti's base code and the completeness as with Corti alone.
+- **C3-1-1, a foreign body was placed in the esophagus:** a site-less "The foreign body was removed with a Roth net." in a
+  colonoscopy's part became the EGD's act (43247 READY). A foreign body is never a food bolus for that placement now
+  (`FOOD_BOLUS`, `_food_bolus`).
+- **C3-1-2, F-ACTS' removal was not bound to the bolus:** "The meat bolus remained impacted while the scope was removed."
+  read as the bolus removed (READY, and D1). The removal is now the bolus's own predicate: no conjunction, subordinator or
+  relative between them (`REMOVAL_GAP_STOP`), and the bolus is no preposition's object (`BOLUS_AS_OBJECT`, "The overtube
+  placed over the bolus was removed.").
+- **C3-1-3 and C3-1-4, the frame's "Today,":** "Today, the polyp was biopsied and will be removed with a hot snare at the
+  next colonoscopy." read READY, because the frame's today cancelled the clause's own plan word, and the same held for
+  history words. This came in at the stage commit. The frame's today no longer cancels the clause's own time words; only
+  the clause's own today does.
+- **C3-1-5, the frame's attributive history:** "Over the previously placed guidewire, the stricture was dilated ..." read
+  as historical. A history word in the frame followed by a participle and its noun is another act's time
+  (`FRAME_ATTRIBUTIVE`).
+- **C3-3-1, two READY codes for one act:** a procedure line's listing ("Procedure: Upper endoscopy with balloon
+  dilation"), a Diagnosis line or a findings summary restating the narrative's act was read as a second act. Its code was
+  READY beside the narrative act's code, and both were exported. Restatements are now the acts named with no act
+  predicate and the acts in impression, assessment or findings sections (`RESTATING_SECTIONS`); they claim the
+  narrative's act, so the codes compete.
+- **C3-3-3, lesion ids compared as substrings:** S1-L1 "contained" S1-L10. Lesion records now compare whole, and sites
+  compare whole-word (`_site_contains`).
+- **C3-3-4, two READY codes behind the guard:** Corti's 43248 on "Possibly the ring was also dilated with a Savary bougie."
+  is READY on the balloon dilation done, which is the base's own false READY. Cycle 2's guard let it claim nothing, so a
+  participant's 43249 for the dilation was READY beside it. A code supported by exactly one act now claims it, so both
+  compete. Support resting on several acts establishes none (L4-2).
+- **C3-4, seven holding rules narrowed toward the base:**
+  - a later failure binds only the act's own lesion ("the second", "the other polyp" and "the cecal polyp" are
+    another's), and "could not be removed en bloc" is a manner's failure (C3-4-1);
+  - "elsewhere" before any in-body preposition is a place (C3-4-2);
+  - a person's possessive before anything but a document is a manner, never a source ("according to the surgeon's
+    specifications"; C3-4-3);
+  - a coordinated past predicate with its object closes a question ("whether ... could be resected ... and removed it";
+    C3-4-6);
+  - a fragment's negation is a noun's when the clause's own predicate follows it, or when its participle names another
+    act kind ("varices not yet treated was performed", "removed with a cold snare not retrieved"; C3-4-7, C3-4-13);
+  - "prior to today's banding" is today's (C3-4-9).
+
+**Recorded as open:**
+- **Base's own false READYs that this release does not close** (each READY on both paths there):
+  - C3-4-4: "According to the referring physician's referral letter, ...";
+  - C3-4-5: "At the community hospital, ...";
+  - C3-4-8: "Before today the stricture was dilated ...", and "Before today's repeat EGD, ...";
+  - C3-4-10: "but polyp could not be transected";
+  - C3-4-11: "the snare would not close";
+  - C3-4-12: "is reassessed during this procedure".
+
+  Round 1 had closed 4, 5 and 10; cycle 2's narrowings reopened them, and the policy does not widen a holding rule again
+  in this release.
+- **False holds:**
+  - C3-4-6b: "whether the stricture would tolerate dilation and dilated it", where the question names the act;
+  - C3-4-9c: "prior to this procedure's completion";
+  - C3-3-2: a site-less Impression restating one of two dilations competes with both, which is the safe side.
+- **Judged correct releases beyond the base:**
+  - "A large meat bolus was found at 34 cm. The bolus was removed with a Roth net." (F-ACTS, 39f0ac49's shape);
+  - "Biopsies were obtained ... prior to dilation." (L3-9).
+
+**Pins moved by the admission narrowing, each in place:**
+- the round-1 tables, regenerated: a participant's code for another source's or a doubted act is listed again;
+- the cycle-2 fixture: 5 rows, with a cycle-2 column added;
+- `tests/test_harness_engine.py` and `tests/test_harness_engine_confirmations.py`: back to their pre-cycle-2 pins.

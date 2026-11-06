@@ -47,8 +47,9 @@ def dated_both(text, which, quote, primary=()):
 class CycleTwoReadingTests(SimpleTestCase):
     """Every cycle-2 input reads as pinned. The rules refuted in both cycles (F-TIME R, F-SECTIONS T and L, F-ACTS'
     round-1 vocabulary) are dropped, so their inputs read as the base reads them; the rebuilt rules and the repaired
-    holding rules read the rest; a participant's code for an act the reading documents in doubt is held beside Corti's
-    (the provider-neutral admission), and one for an act its own words state was not done is listed."""
+    holding rules read the rest. A participant's code is held beside Corti's only for an act stated done inside a
+    service documented in doubt (the provider-neutral admission as refutation cycle 3 narrowed it); one for an act read
+    in doubt itself, or stated not done, is listed. Each fixture row carries the cycle-2 tree's own reading too."""
 
     def test_every_input_reads_as_pinned(self):
         for case in CASES:

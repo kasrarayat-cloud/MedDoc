@@ -1,0 +1,5522 @@
+{
+ "about": "Refutation cycle 3 of harness repair 3 (2026-11-06): every engine-level input of lenses C3-1 (F-ACTS and the fronted frame), C3-2 (the provider-neutral admission), C3-3 (competition by act identity) and C3-4 (the holding rules as cycle 2 repaired them), verbatim. single rows read one code on both paths through the pipeline's own date; multi rows read Corti's and the participants' codes together (bucket/status and whether a competition holds each); admission rows read Corti's base code alone and beside a participant's code for a not-done act. Each row's read gives the base 406843018, the stage commit 1974c8cb1, the round-1 tree 8b186df05 and the cycle-2 tree b32222c8f, measured before anything was decided. Synthetic documents only (tests/test_h3_refutation_c3.py).",
+ "single": [
+  {
+   "id": "C3-1:c31-1:F1b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nCOLONOSCOPY: The colonoscope was advanced to the cecum.\nA foreign body (a swallowed coin) was seen in the transverse colon. The foreign body was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The foreign body was removed with a Roth net.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-1:F2d43247",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy and flexible sigmoidoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nFLEXIBLE SIGMOIDOSCOPY: The sigmoidoscope was advanced to the descending colon.\nA foreign body was seen in the rectum. The foreign body was grasped with a snare and removed.\n",
+   "code": "43247",
+   "quote": "The foreign body was grasped with a snare and removed.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-1:F2e43247",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedures performed: Upper endoscopy with biopsy; colonoscopy with foreign-body removal.\nDescription of procedure:\nThe gastroscope was advanced under direct visualization into the esophagus.\nCold forceps biopsies were obtained from the gastric antrum.\nThe stomach and the second portion of the duodenum were examined and were normal.\nA colonoscope was introduced through the anus and advanced to the cecum.\nA foreign body (a swallowed coin) was seen in the transverse colon. The foreign body was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The foreign body was removed with a Roth net.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-1:F1a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nCOLONOSCOPY: The colonoscope was advanced to the cecum.\nA foreign body (a swallowed coin) was seen in the transverse colon. The foreign body was removed with a Roth net.\n",
+   "code": "45379",
+   "quote": "The foreign body was removed with a Roth net.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-1:F1d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy and colonoscopy\nUPPER ENDOSCOPY: The gastroscope was advanced to the second part of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nCOLONOSCOPY: The colonoscope was advanced to the cecum.\nA foreign body (a swallowed coin) was removed from the transverse colon with a Roth net.\n",
+   "code": "43247",
+   "quote": "A foreign body (a swallowed coin) was removed from the transverse colon with a Roth net.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted while the scope was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted while the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak impaction passed after the overtube was removed.\n",
+   "code": "43247",
+   "quote": "The steak impaction passed after the overtube was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B11",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak impaction cleared as soon as the guidewire was removed.\n",
+   "code": "43247",
+   "quote": "The steak impaction cleared as soon as the guidewire was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B6",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The overtube placed over the bolus was removed.\n",
+   "code": "43247",
+   "quote": "The overtube placed over the bolus was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B1p",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "READY/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B3p",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak impaction passed.\n",
+   "code": "43247",
+   "quote": "The steak impaction passed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "READY/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B11p",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak impaction cleared.\n",
+   "code": "43247",
+   "quote": "The steak impaction cleared.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "READY/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B6p",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The overtube placed over the bolus was withdrawn.\n",
+   "code": "43247",
+   "quote": "The overtube placed over the bolus was withdrawn.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-2:B6c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:T3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nToday, the 2 cm lesion was tattooed and EMR will be performed at the next colonoscopy.\n",
+   "code": "45390",
+   "quote": "Today, the 2 cm lesion was tattooed and EMR will be performed at the next colonoscopy.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:C2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nToday, the polyp was biopsied and will be removed with a hot snare at the next colonoscopy.\n",
+   "code": "45385",
+   "quote": "Today, the polyp was biopsied and will be removed with a hot snare at the next colonoscopy.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:E5",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nToday, the stricture was dilated to 15 mm with a balloon and band ligation will be performed at the next EGD.\n",
+   "code": "43244",
+   "quote": "Today, the stricture was dilated to 15 mm with a balloon and band ligation will be performed at the next EGD.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:T3n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nThe 2 cm lesion was tattooed and EMR will be performed at the next colonoscopy.\n",
+   "code": "45390",
+   "quote": "The 2 cm lesion was tattooed and EMR will be performed at the next colonoscopy.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:C2n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nThe polyp was biopsied and will be removed with a hot snare at the next colonoscopy.\n",
+   "code": "45385",
+   "quote": "The polyp was biopsied and will be removed with a hot snare at the next colonoscopy.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-3:E5n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nThe stricture was dilated to 15 mm with a balloon and band ligation will be performed at the next EGD.\n",
+   "code": "43244",
+   "quote": "The stricture was dilated to 15 mm with a balloon and band ligation will be performed at the next EGD.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:T2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nAt today's visit, she reported that a hot snare polypectomy was performed in the past.\n",
+   "code": "45385",
+   "quote": "At today's visit, she reported that a hot snare polypectomy was performed in the past.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:E2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nToday, the esophageal varices that were banded previously were small.\n",
+   "code": "43244",
+   "quote": "Today, the esophageal varices that were banded previously were small.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:C1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nToday, the site of the polyp that was removed with a hot snare in the past showed no residual tissue.\n",
+   "code": "45385",
+   "quote": "Today, the site of the polyp that was removed with a hot snare in the past showed no residual tissue.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:T2n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nShe reported that a hot snare polypectomy was performed in the past.\n",
+   "code": "45385",
+   "quote": "She reported that a hot snare polypectomy was performed in the past.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:E2n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\nThe esophageal varices that were banded previously were small.\n",
+   "code": "43244",
+   "quote": "The esophageal varices that were banded previously were small.",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-4:C1n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm flat lesion in the ascending colon was biopsied with cold forceps.\nThe site of the polyp that was removed with a hot snare in the past showed no residual tissue.\n",
+   "code": "45385",
+   "quote": "The site of the polyp that was removed with a hot snare in the past showed no residual tissue.",
+   "primary": [
+    [
+     "45380",
+     "A 12 mm flat lesion in the ascending colon was biopsied with cold forceps."
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-5:H5",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nOver the previously placed guidewire, the stricture was dilated with a Savary dilator to 15 mm.\n",
+   "code": "43248",
+   "quote": "Over the previously placed guidewire, the stricture was dilated with a Savary dilator to 15 mm.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-5:H6",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nDistal to the previously placed stent, the stricture was dilated with a balloon to 15 mm.\n",
+   "code": "43249",
+   "quote": "Distal to the previously placed stent, the stricture was dilated with a balloon to 15 mm.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-5:H5n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe stricture was dilated with a Savary dilator to 15 mm.\n",
+   "code": "43248",
+   "quote": "The stricture was dilated with a Savary dilator to 15 mm.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-5:H6n",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe stricture was dilated with a balloon to 15 mm.\n",
+   "code": "43249",
+   "quote": "The stricture was dilated with a balloon to 15 mm.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-6:X1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA meat bolus was impacted at 34 cm. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-6:B6c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-1:c31-6:X2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nShe could not swallow after a steak impaction at dinner. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-1:c31-6:X3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nWithout difficulty, the impacted meat bolus was grasped with a Roth net. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-1:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe first polyp was removed with a cold snare, but the second could not be removed because of its location.\n",
+   "code": "45385",
+   "quote": "The first polyp was removed with a cold snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-1:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 6 mm polyp in the sigmoid colon was removed with a cold snare, but the other polyp could not be removed because of its location.\n",
+   "code": "45385",
+   "quote": "A 6 mm polyp in the sigmoid colon was removed with a cold snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-1:c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nTwo polyps were seen. The 6 mm sigmoid polyp was removed with a cold snare, but the cecal polyp could not be removed because of its location.\n",
+   "code": "45385",
+   "quote": "The 6 mm sigmoid polyp was removed with a cold snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-1:c-ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nTwo polyps were seen. The 6 mm sigmoid polyp was removed with a cold snare, but a cecal polyp could not be removed because of its location.\n",
+   "code": "45385",
+   "quote": "The 6 mm sigmoid polyp was removed with a cold snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-1:d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 25 mm sessile polyp was removed with a hot snare; however, it could not be removed en bloc and was removed piecemeal.\n",
+   "code": "45385",
+   "quote": "The 25 mm sessile polyp was removed with a hot snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-2:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained from the nodule and elsewhere at 2 cm intervals.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained from the nodule and elsewhere at 2 cm intervals.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-2:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nRandom biopsies were obtained elsewhere in colon.\n",
+   "code": "45380",
+   "quote": "Random biopsies were obtained elsewhere in colon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-2:c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nBiopsies were also taken elsewhere in a random fashion.\n",
+   "code": "45380",
+   "quote": "Biopsies were also taken elsewhere in a random fashion.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-2:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nCold forceps biopsies were obtained elsewhere in the colon.\n",
+   "code": "45380",
+   "quote": "Cold forceps biopsies were obtained elsewhere in the colon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-3:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe lesion in the ascending colon was tattooed according to the surgeon's specifications.\n",
+   "code": "45381",
+   "quote": "The lesion in the ascending colon was tattooed according to the surgeon's specifications.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-3:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained according to the gastroenterologist's protocol for Barrett's surveillance.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-3:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe lesion in the ascending colon was tattooed according to the surgeon's instructions.\n",
+   "code": "45381",
+   "quote": "The lesion in the ascending colon was tattooed according to the surgeon's instructions.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-4:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nAccording to the referring physician's referral letter, the stricture was dilated to 15 mm with a balloon.\n",
+   "code": "43249",
+   "quote": "According to the referring physician's referral letter, the stricture was dilated to 15 mm with a balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-4:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nPer the referring physician's referral note, the varices were banded with four bands.\n",
+   "code": "43244",
+   "quote": "Per the referring physician's referral note, the varices were banded with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-4:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nAccording to the referral letter, the stricture was dilated to 15 mm with a balloon.\n",
+   "code": "43249",
+   "quote": "According to the referral letter, the stricture was dilated to 15 mm with a balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-5:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nAt the community hospital, a 6 mm polyp in the ascending colon was removed with a cold snare.\n",
+   "code": "45385",
+   "quote": "At the community hospital, a 6 mm polyp in the ascending colon was removed with a cold snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-5:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nAt the regional hospital, the stricture was dilated to 15 mm with a balloon.\n",
+   "code": "43249",
+   "quote": "At the regional hospital, the stricture was dilated to 15 mm with a balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-5:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nAt a community hospital, a 6 mm polyp in the ascending colon was removed with a cold snare.\n",
+   "code": "45385",
+   "quote": "At a community hospital, a 6 mm polyp in the ascending colon was removed with a cold snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD"
+   }
+  },
+  {
+   "id": "C3-4-6:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nWe assessed whether the lesion could be resected endoscopically and removed it en bloc with a hot snare.\n",
+   "code": "45385",
+   "quote": "We assessed whether the lesion could be resected endoscopically and removed it en bloc with a hot snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-6:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nWe evaluated whether the stricture would tolerate dilation and dilated it to 15 mm with a balloon.\n",
+   "code": "43249",
+   "quote": "We evaluated whether the stricture would tolerate dilation and dilated it to 15 mm with a balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-6:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nWe assessed whether the lesion was amenable to resection and removed it en bloc with a hot snare.\n",
+   "code": "45385",
+   "quote": "We assessed whether the lesion was amenable to resection and removed it en bloc with a hot snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-7:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBand ligation of the varices not yet treated was performed with four bands.\n",
+   "code": "43244",
+   "quote": "Band ligation of the varices not yet treated was performed with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-7:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nCold snare polypectomy of the remaining polyps not yet removed was performed.\n",
+   "code": "45385",
+   "quote": "Cold snare polypectomy of the remaining polyps not yet removed was performed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-7:c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nArgon plasma coagulation of the angioectasias not yet treated was performed.\n",
+   "code": "43270",
+   "quote": "Argon plasma coagulation of the angioectasias not yet treated was performed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-7:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBand ligation of the varices was performed with four bands.\n",
+   "code": "43244",
+   "quote": "Band ligation of the varices was performed with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-8:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBefore today the stricture was dilated to 15 mm with a balloon on two occasions.\n",
+   "code": "43249",
+   "quote": "Before today the stricture was dilated to 15 mm with a balloon on two occasions.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-8:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBefore today the varices were banded with four bands.\n",
+   "code": "43244",
+   "quote": "Before today the varices were banded with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-8:c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBefore today's repeat EGD, the stricture was dilated to 15 mm with a balloon.\n",
+   "code": "43249",
+   "quote": "Before today's repeat EGD, the stricture was dilated to 15 mm with a balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-8:d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBefore today's admission, the varices were banded with four bands.\n",
+   "code": "43244",
+   "quote": "Before today's admission, the varices were banded with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-8:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBefore today's procedure, the varices were banded with four bands.\n",
+   "code": "43244",
+   "quote": "Before today's procedure, the varices were banded with four bands.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-9:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained prior to today's banding.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-9:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nBiopsies of the polyp base were taken prior to today's polypectomy.\n",
+   "code": "45380",
+   "quote": "Biopsies of the polyp base were taken",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-9:c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nBiopsies were obtained from the ascending colon prior to this procedure's completion.\n",
+   "code": "45380",
+   "quote": "Biopsies were obtained from the ascending colon",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-9:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained from the stricture prior to dilation.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained from the stricture",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-10:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 25 mm pedunculated sigmoid polyp was snared, but polyp could not be transected because of the thick stalk.\n",
+   "code": "45385",
+   "quote": "The 25 mm pedunculated sigmoid polyp was snared",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-10:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 25 mm pedunculated sigmoid polyp was snared, but the polyp could not be transected because of the thick stalk.\n",
+   "code": "45385",
+   "quote": "The 25 mm pedunculated sigmoid polyp was snared",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-11:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 15 mm sigmoid polyp was snared, but the snare would not close around the stalk.\n",
+   "code": "45385",
+   "quote": "The 15 mm sigmoid polyp was snared",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-11:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 15 mm sigmoid polyp was snared, but the snare could not be closed around the stalk.\n",
+   "code": "45385",
+   "quote": "The 15 mm sigmoid polyp was snared",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C3-4-12:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe stricture was dilated to 15 mm with a balloon 6 weeks ago and is reassessed during this procedure.\n",
+   "code": "43249",
+   "quote": "The stricture was dilated to 15 mm with a balloon 6 weeks ago and is reassessed during this procedure.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-12:b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nEsophageal varices were banded at the prior EGD and are reassessed at this examination.\n",
+   "code": "43244",
+   "quote": "Esophageal varices were banded at the prior EGD and are reassessed at this examination.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY"
+   }
+  },
+  {
+   "id": "C3-4-12:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe stricture was dilated to 15 mm with a balloon 6 weeks ago and is reassessed on this EGD.\n",
+   "code": "43249",
+   "quote": "The stricture was dilated to 15 mm with a balloon 6 weeks ago and is reassessed on this EGD.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "EXCL"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "EXCL/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-4-13:a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 5 mm polyp removed with a cold snare not retrieved.\n",
+   "code": "45385",
+   "quote": "A 5 mm polyp removed with a cold snare not retrieved.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "EXCL/ALT",
+    "cycle 2": "EXCL/ALT"
+   }
+  },
+  {
+   "id": "C3-4-13:ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 5 mm polyp removed with a cold snare, not retrieved.\n",
+   "code": "45385",
+   "quote": "A 5 mm polyp removed with a cold snare, not retrieved.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "EXCL/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT"
+   }
+  }
+ ],
+ "multi": [
+  {
+   "id": "C3-3:f1_two_ready:procedure line: corti 43249 narrative, astra 43233 procedure line",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy with balloon dilation\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Procedure: Upper endoscopy with balloon dilation"
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f1_two_ready:procedure line biopsy: corti 43239 narrative, astra 43202 procedure line",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was passed to the second portion of the duodenum.\nCold forceps biopsies were obtained from the gastric antrum.\n",
+   "primary": [
+    [
+     "43239",
+     "Cold forceps biopsies were obtained from the gastric antrum."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43202",
+     "Procedure: Upper endoscopy with biopsy"
+    ]
+   ],
+   "outcome": {
+    "43202": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43239": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43202": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43239": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43202": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43239": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43202": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43239": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43202": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43239": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f1_two_ready:Impression: corti 43249 narrative, astra 43233 restatement",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nImpression: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Impression: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f1_two_ready:Diagnosis: corti 43249 narrative, astra 43233 restatement",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nDiagnosis: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Diagnosis: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f1_two_ready:Findings: corti 43249 narrative, astra 43233 restatement",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nFindings: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Findings: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f2_impression_all:control (L4-2 shape, no impression act): corti 43249 eso, astra 43245 pyl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and early satiety.\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring in the distal esophagus and inflated to 18 mm under direct visualization.\nA second through-the-scope balloon was positioned across the pyloric stricture and inflated to 15 mm under direct visualization.\n",
+   "primary": [
+    [
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring in the distal esophagus and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43245",
+     "A second through-the-scope balloon was positioned across the pyloric stricture and inflated to 15 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43245": [
+     [
+      "READY",
+      false
+     ]
+    ],
+    "43249": [
+     [
+      "READY",
+      false
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43245": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f2_impression_all:impression of the ring: corti 43249 on impression, astra 43245 on pyloric narrative",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and early satiety.\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring in the distal esophagus and inflated to 18 mm under direct visualization.\nA second through-the-scope balloon was positioned across the pyloric stricture and inflated to 15 mm under direct visualization.\nImpression: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "Impression: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43245",
+     "A second through-the-scope balloon was positioned across the pyloric stricture and inflated to 15 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43245": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43245": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f3_lesion_ids:7 polyps between: corti 43249 eso, astra 43245 pyl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and early satiety.\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA 14 mm stricture in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nA 2 mm sessile polyp was seen in the gastric fundus.\nA 3 mm sessile polyp was seen in the gastric body.\nA 4 mm sessile polyp was seen in the gastric cardia.\nA 5 mm sessile polyp was seen in the gastric antrum.\nA 6 mm sessile polyp was seen in the gastric fundus.\nA 7 mm sessile polyp was seen in the gastric body.\nA 8 mm sessile polyp was seen in the gastric cardia.\nA 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "A 14 mm stricture in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43245",
+     "A 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm."
+    ]
+   ],
+   "outcome": {
+    "43245": [
+     [
+      "READY",
+      false
+     ]
+    ],
+    "43249": [
+     [
+      "READY",
+      false
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43245": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f3_lesion_ids:8 polyps between: corti 43249 eso, astra 43245 pyl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nIndications: Dysphagia and early satiety.\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA 14 mm stricture in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nA 2 mm sessile polyp was seen in the gastric fundus.\nA 3 mm sessile polyp was seen in the gastric body.\nA 4 mm sessile polyp was seen in the gastric cardia.\nA 5 mm sessile polyp was seen in the gastric antrum.\nA 6 mm sessile polyp was seen in the gastric fundus.\nA 7 mm sessile polyp was seen in the gastric body.\nA 8 mm sessile polyp was seen in the gastric cardia.\nA 9 mm sessile polyp was seen in the gastric antrum.\nA 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "A 14 mm stricture in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43245",
+     "A 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm."
+    ]
+   ],
+   "outcome": {
+    "43245": [
+     [
+      "READY",
+      false
+     ]
+    ],
+    "43249": [
+     [
+      "READY",
+      false
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43245": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f4_doubted_ready:corti 43248 [Possibly the ring was also dilated with a Savary bougie.] astra 43249 balloon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization.\nPossibly the ring was also dilated with a Savary bougie.\n",
+   "primary": [
+    [
+     "43248",
+     "Possibly the ring was also dilated with a Savary bougie."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f4_doubted_ready:corti 43248 [Per the outside report, the ring was also dilated with a Savary bougie.] astra 43249 balloon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization.\nPer the outside report, the ring was also dilated with a Savary bougie.\n",
+   "primary": [
+    [
+     "43248",
+     "Per the outside report, the ring was also dilated with a Savary bougie."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C3-3:f4_doubted_ready:corti 43248 [A Savary dilation was attempted but the wire could not be passed.] astra 43249 balloon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization.\nA Savary dilation was attempted but the wire could not be passed.\n",
+   "primary": [
+    [
+     "43248",
+     "A Savary dilation was attempted but the wire could not be passed."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  }
+ ],
+ "admission": [
+  {
+   "id": "C3-2-1:N1 failed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy failed.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy failed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy failed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:unsuccessful",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy was unsuccessful.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy was unsuccessful.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy was unsuccessful.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy was unsuccessful.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:abandoned",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy was abandoned.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy was abandoned.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy was abandoned.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy was abandoned.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:N2 attempted",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy was attempted but the polyp could not be removed.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy was attempted but the polyp could not be removed.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy was attempted but the polyp could not be removed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy was attempted but the polyp could not be removed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:planned",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy will be performed at a later date.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy will be performed at a later date.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy will be performed at a later date.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy will be performed at a later date.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:infinitive",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy is to be performed at a later date.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Hot snare polypectomy is to be performed at a later date.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Hot snare polypectomy is to be performed at a later date.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Hot snare polypectomy is to be performed at a later date.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:open question",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nIt is unknown whether hot snare polypectomy was performed.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "It is unknown whether hot snare polypectomy was performed.",
+    "Colonoscopy with hot snare polypectomy"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "It is unknown whether hot snare polypectomy was performed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "It is unknown whether hot snare polypectomy was performed.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Colonoscopy with hot snare polypectomy",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "READY"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-1:EGD bands",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\nProcedure: EGD with band ligation\nThe endoscope was advanced to the second part of the duodenum.\nLarge esophageal varices were seen in the distal esophagus.\nBand ligation of the varices was unsuccessful.\n",
+   "base": "43235",
+   "base_quote": "The endoscope was advanced to the second part of the duodenum.",
+   "act": "43244",
+   "quotes": [
+    "Band ligation of the varices was unsuccessful.",
+    "EGD with band ligation"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Band ligation of the varices was unsuccessful.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "astra",
+     "EGD with band ligation",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Band ligation of the varices was unsuccessful.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "EGD with band ligation",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-2:colon consent, biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nConsent was obtained for biopsy and cold snare polypectomy.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45380",
+   "quotes": [
+    "Consent was obtained for biopsy and cold snare polypectomy."
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Consent was obtained for biopsy and cold snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Consent was obtained for biopsy and cold snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-2:colon consent, snare",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nConsent was obtained for biopsy and cold snare polypectomy.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Consent was obtained for biopsy and cold snare polypectomy."
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Consent was obtained for biopsy and cold snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Consent was obtained for biopsy and cold snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-2:colon consent, hot snare",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nWritten consent was obtained for possible hot snare polypectomy.\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Written consent was obtained for possible hot snare polypectomy."
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Written consent was obtained for possible hot snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Written consent was obtained for possible hot snare polypectomy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-2:EGD consent, biopsy",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nProcedure note (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient\nProcedure: EGD\nThe endoscope was advanced to the second part of the duodenum.\nA small nodule was seen in the gastric antrum.\nInformed consent was obtained for EGD with biopsy.\n",
+   "base": "43235",
+   "base_quote": "The endoscope was advanced to the second part of the duodenum.",
+   "act": "43239",
+   "quotes": [
+    "Informed consent was obtained for EGD with biopsy."
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Informed consent was obtained for EGD with biopsy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Informed consent was obtained for EGD with biopsy.",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-3:Were biopsies taken from the polyp?",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nWere biopsies taken from the polyp?\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45380",
+   "quotes": [
+    "Were biopsies taken from the polyp?"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Were biopsies taken from the polyp?",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Were biopsies taken from the polyp?",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C3-2-3:Was the polyp removed with a cold snare?",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm pedunculated polyp in the sigmoid colon was seen.\nWas the polyp removed with a cold snare?\n",
+   "base": "45378",
+   "base_quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+   "act": "45385",
+   "quotes": [
+    "Was the polyp removed with a cold snare?"
+   ],
+   "alone": [
+    [
+     "READY"
+    ],
+    "complete_pending_review"
+   ],
+   "rows": [
+    [
+     "astra",
+     "Was the polyp removed with a cold snare?",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ],
+    [
+     "fable",
+     "Was the polyp removed with a cold snare?",
+     [
+      "ALT"
+     ],
+     [
+      "READY"
+     ],
+     "complete_pending_review"
+    ]
+   ],
+   "read": {
+    "base": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "stage": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "round 1": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "cycle 2": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ]
+   }
+  }
+ ]
+}

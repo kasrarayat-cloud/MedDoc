@@ -639,3 +639,33 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
   - **The sandbox self-test's ARM 6 is stale:** it checks a Node package (`packages/auth`) that `0354cbb9f` retired. In
     its place each sandbox was proved, by a Python positive control, to import its own tree's code. Every write-safety
     arm passed.
+
+- **2026-11-06T01:45Z: harness repair 3, refutation cycle 2 applied and the full suite green; cycle 3 running.**
+  - **Cycle 2:** five lenses at `8b186df05` reported 43 findings. Each input was measured on this tree, the round-1
+    tree, the stage commit and the base before anything was decided.
+  - **Dropped under the two-cycle rule:** F-TIME R, F-SECTIONS T and L, and F-ACTS' first vocabulary. ⚠️ Directive
+    item 4's "completed marking versus future localization" and the Word walk's title routing are therefore
+    **undelivered**: their inputs read as the base reads them.
+  - **Rebuilt, smaller:** F-ACTS predicate-bound; the provider-neutral admission; competition by act identity.
+  - **Repaired at the cause:** the holding rules B, F, P, C and N.
+  - **The full suite after cycle 2 found four real defects, repaired:**
+    - a participant's code for a failed act was held, not listed (the meaning check's D14);
+    - the fronted frame dated a done act by its purpose's "future" (svc-21, 88d9db32);
+    - a doubted dilation's code claimed the done one (L4-2);
+    - the chain-mode edge is now mutation-proved.
+  - **Then green on the repaired tree:** 6,001 Django tests, 524 ops tests, 43 verification tests and the three node
+    suites.
+  - **Gates against `406843018`:** the battery has 3 declared movements and 0 new violations; the replay is identical
+    but for two labels; the freeze holds.
+  - **Pins:** `tests/test_h3_refutation_c2.py` pins all 156 cycle-2 inputs through the pipeline's own date, and none
+    is READY on either path where the base is not.
+  - **The retained cases, predicted offline** (a throwaway copy, nothing written or sent):
+    - 88d9db32: six codes READY, three of them Astra's and Fable's only (43249, 45390, 45385), each an act done today;
+    - 39f0ac49: four codes held alike, 43247 among them, now reaching review but not READY.
+  - **Recorded open, each the base's own:**
+    - "The polyp was left in place." under a procedure line naming the polypectomy reads READY on Corti's path;
+    - two dilations of one ring with two instruments compete;
+    - the asymmetry for acts stated not done (Corti's selection held, a participant's code listed).
+  - **Committed as `b32222c8f` (local).** Refutation cycle 3 is running now: four lenses in sealed sandboxes at that
+    commit, over the rebuilt and repaired parts only.
+  - Items 3, 4 and 5 stay PARTIAL.

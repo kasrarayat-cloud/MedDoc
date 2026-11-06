@@ -11,11 +11,11 @@ with its reason, never silently. The database cases (L4-5, L4-6, L6) run the rea
 nothing is sent. HARNESS.md, "Harness repair 3", "Refutation round 1".
 
 Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F-TIME R, F-SECTIONS T and L and F-ACTS'
-round-1 vocabulary under the two-cycle rule, and added the provider-neutral admission: a participant's code for an act
-the reading documents in doubt is held as Corti's code for that act is. Every row is pinned as this tree reads it, with
-its round-1 reading in its comment where it moved (46 of 214): a participant's code held beside Corti's where it was
-listed, and the dropped rules' inputs read as the base reads them. Those that now read otherwise than their lens wanted
-are in RecordedResidualTests with their reasons."""
+round-1 vocabulary under the two-cycle rule. Cycle 3 narrowed its provider-neutral admission to an act stated done inside
+a service documented in doubt. Every row is pinned as this tree reads it, with its round-1 reading in its comment where
+it moved: a participant's code held beside Corti's where the act is done in a doubted service, and the dropped rules'
+inputs read as the base reads them. Those that now read otherwise than their lens wanted are in RecordedResidualTests
+with their reasons."""
 import hashlib
 import json
 from decimal import Decimal
@@ -123,71 +123,71 @@ R1_L1_4 = [
     # stage READY/READY, base EXCL/ALT, round 1 HELD/ALT
     ('L1-4d', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed for future localization.\n',
      '45381', None, EXCL, ALT),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+    # stage READY/READY, base READY/READY
     ('L1-4d-plain', COLON + 'Outside report:\nThe lesion in the ascending colon was tattooed.\n',
-     '45381', None, HELD, HELD),
+     '45381', None, HELD, ALT),
 ]
 R1_L2_1 = [
-    # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
+    # stage READY/READY, base HELD/ALT
     ('L2-1a', EGD2 + 'At OSH, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, HELD),
-    # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage READY/READY, base HELD/ALT
     ('L2-1b', EGD2 + 'At the transferring hospital, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, HELD),
-    # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage READY/READY, base HELD/ALT
     ('L2-1c', EGD2 + 'Per the patient, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, HELD),
+     '43247', None, HELD, ALT),
     # stage READY/READY, base HELD/ALT
     ('L2-1d', EGD2 + 'Before arrival, the meat bolus was removed with a retrieval net.\n',
      '43247', None, HELD, ALT),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+    # stage READY/READY, base READY/READY
     ('L2-1e', COLON + 'At OSH, a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base READY/READY
     ('L2-1f', COLON + 'At a community hospital, a 6 mm polyp in the ascending colon was removed with a cold '
                       'snare.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base READY/READY
     ('L2-1h', COLON + 'Per outside GI, a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
-    # stage HELD/ALT, base HELD/ALT, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage HELD/ALT, base HELD/ALT
     ('ctl-1', EGD2 + 'At the referring facility, the meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, HELD),
+     '43247', None, HELD, ALT),
     # stage READY/READY, base HELD/ALT
     ('ctl-1t', EGD2 + 'The meat bolus was removed with a retrieval net.\n',
      '43247', None, READY, READY),
 ]
 R1_L2_2 = [
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+    # stage READY/READY, base READY/READY
     ('L2-2a', NOPOLYP + 'Outside records:\nA 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base READY/READY
     ('L2-2b', NOPOLYP + 'Records received from Synthetic Valley Hospital:\nA 6 mm polyp in the ascending colon was '
                         'removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base HELD/ALT
     ('L2-2c', EGD2 + 'Outside records:\nThe meat bolus was removed with a retrieval net.\n',
-     '43247', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('ctl-2', NOPOLYP + 'Outside records: a 6 mm polyp in the ascending colon was removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
+     '45385', None, HELD, ALT),
 ]
 R1_L2_3 = [
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+    # stage READY/READY, base READY/READY
     ('L2-3a', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. John Taylor MD.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base READY/READY
     ('L2-3b', DOC_REF + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. Taylor.\n',
-     '45385', None, HELD, HELD),
-    # stage READY/READY, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage READY/READY, base READY/READY
     ('L2-3c', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare BY DR. TAYLOR.\n',
-     '45385', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('ctl-3a', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. John Taylor DO.\n',
-     '45385', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '45385', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('ctl-3b', DOC + 'A 6 mm polyp in the ascending colon was removed with a cold snare by Dr. Taylor.\n',
-     '45385', None, HELD, HELD),
+     '45385', None, HELD, ALT),
 ]
 R1_L2_4 = [
     # stage READY/READY, base READY/READY
@@ -938,14 +938,14 @@ R1_L5_4 = [
            'Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the examination was completed.\nA '
            '9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
      '45385', None, EXCL, ALT),
-    # stage READY/READY, base HELD/ALT, round 1 HELD/ALT
+    # stage READY/READY, base HELD/ALT
     ('L5-4:Outside report: || Colonoscopy Report (Final)',
      SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the '
            'duodenum. The examination was normal.\nOutside report:\nColonoscopy Report (Final)\nEndoscopist: Dr. '
            'B. Synthetic (fictional)\nThe colonoscope was advanced to the cecum and the examination was '
            'completed.\nA 9 mm polyp in the sigmoid colon was removed with a cold snare.\n',
-     '45385', None, HELD, HELD),
+     '45385', None, HELD, ALT),
 ]
 R1_L5_5 = [
     # stage HELD/ALT, base HELD/ALT
@@ -1060,18 +1060,18 @@ R1_RESIDUAL = [
     # stage HELD/ALT, base READY/READY
     ('L3-2#5', EGD + 'Two large esophageal varices were ligated with bands, the small ones not banded.\n',
      '43244', 'Two large esophageal varices were ligated with bands', HELD, ALT),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+    # stage HELD/ALT, base READY/READY
     ('L3-10#0', EGD + 'The food bolus impacted before presentation was removed with a Roth net.\n',
-     '43247', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('L3-10#1', EGD + 'The food bolus, impacted since yesterday, was removed with a Roth net.\n',
-     '43247', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('L3-10#2', EGD + 'The food bolus, lodged since yesterday evening, was removed with a Roth net.\n',
-     '43247', None, HELD, HELD),
-    # stage HELD/ALT, base READY/READY, round 1 HELD/ALT
+     '43247', None, HELD, ALT),
+    # stage HELD/ALT, base READY/READY
     ('L3-10#3', COLON + "The 6 mm polyp noted on yesterday's CT colonography was removed with a cold snare.\n",
-     '45385', None, HELD, HELD),
+     '45385', None, HELD, ALT),
     # stage READY/READY, base READY/ALT
     ('L5-2:inside-a-pathology-addendum', SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: '
                                                'Synthetic Endoscopist, MD (fictional)\nSedation: Monitored '

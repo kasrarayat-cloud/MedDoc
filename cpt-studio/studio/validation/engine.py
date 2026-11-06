@@ -461,11 +461,20 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
     two different dilations do not (refutation multi-4: both had been left alternatives, the EGD uncoded)."""
     match = candidate.evaluation.match if candidate.evaluation is not None else None
     spans = [(e.start, e.end) for e in candidate.evidence]
+    support = candidate.evaluation.support if candidate.evaluation is not None else None
+    supported_by = ({a.id for a in match.acts} if match is not None and support is not None
+                    and support.status in ('pass', 'warn') else set())
 
     def summary(a) -> bool:
-        # an act stated only in an Impression or summary section restates the report's own account of it
+        # A restatement of the report's own account of an act: an act stated only in an Impression, an assessment
+        # ("Diagnosis:") or a findings summary, or one named with no act predicate of its own - a procedure line's
+        # listing ("Procedure: Upper endoscopy with balloon dilation"). Refutation cycle 3, C3-3-1: cycle 2 read only the
+        # Impression so, and a procedure line's or a Diagnosis line's restatement became a second act, its code READY
+        # beside the narrative act's code.
+        if a.cues and (a.cues[0] in gi_services.SILENT_READINGS or a.cues[0] == gi_services.LISTED_CUE):
+            return True
         return lay is not None and bool(a.evidence) and all(
-            lay.section_at(ev.start).kind == 'impression' for ev in a.evidence)
+            lay.section_at(ev.start).kind in RESTATING_SECTIONS for ev in a.evidence)
 
     def shows(a) -> bool:
         return any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)
@@ -480,14 +489,21 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
         was also dilated with a Savary bougie" is a doubted second dilation, never the balloon dilation done)."""
         own = [a for a in acts if shows(a)]
         undone = [a for a in pool if a.status != 'performed' and a.kind in kinds and shows(a)]
-        if not own and not undone:
+        backed = [a for a in acts if a.id in supported_by]
+        if not own and len(backed) == 1:
+            # a code the engine supports by one act its passages do not show claims that act (refutation cycle 3,
+            # C3-3-4: Corti's 43248 on "Possibly the ring was also dilated with a Savary bougie" is READY on the balloon
+            # dilation done, so it competes with a participant's code for that dilation). Support resting on several
+            # acts establishes none of them (L4-2: an Impression naming two strictures claims neither dilation)
+            own = backed
+        elif not own and not undone:
             own = list(acts) if len(acts) == 1 else []
         narrative = [a for a in possible if not summary(a)]
         out = []
         for a in own:
             told = [b for b in narrative if b.kind == a.kind] if summary(a) else []
             out.extend(told or [a])
-        return {('act', a.service, a.kind, a.lesion or ','.join(a.anatomy), a.id, summary(a)) for a in out}
+        return {('act', a.service, a.kind, a.lesion, ','.join(a.anatomy), a.id, summary(a)) for a in out}
 
     claimed = set()
     for service, family, act, label in items:
@@ -561,19 +577,18 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
     items += [(service.id, service.family, '', reconcile.service_label(service)) for service in inventory.services
               if service.family == 'gi.office_em' and service.status in ('performed', 'incomplete')
               and service.id not in listed]
-    # Refutation cycle 2 of harness repair 3 (provider-neutral admission, the owner's "validation is provider-neutral"):
-    # an act the reading documents in doubt - its time, place, source or performance not established - is a documented
-    # item too. Corti's code for it is selected and held for its question; a participant's code for it, read by the same
-    # path, is held the same way (_shows_doubted_act), never left an alternative a reviewer cannot approve.
+    # Refutation cycle 2 of harness repair 3 (provider-neutral admission, the owner's "validation is provider-neutral"),
+    # narrowed by cycle 3: an act the reading states done, inside a service the reading documents in doubt (its time,
+    # place or performance not established), is a documented item too. Corti's code for it is selected and held for the
+    # service's question; a participant's code for it, read by the same path, is held the same way
+    # (_shows_doubted_act), never left an alternative a reviewer cannot approve.
     have = {(item[0], item[2]) for item in items}
     for service in inventory.services:
         entry = reconcile.catalogue.entry(service.family)
-        if entry is None or entry.support != reconcile.catalogue.SUPPORTED or service.status not in (
-                'performed', 'incomplete', 'uncertain'):
+        if entry is None or entry.support != reconcile.catalogue.SUPPORTED or service.status != 'uncertain':
             continue
-        # an act in doubt itself, or any of its acts where the service is documented in doubt (its time, place or
-        # performance not established: 39f0ac49's labelled procedure paragraphs inside its Indications); never an act
-        # its own words state was not done (_in_doubt)
+        # its acts stated done, where the service is documented in doubt (39f0ac49's labelled procedure paragraphs
+        # inside its Indications) - never an act read in doubt itself (_in_doubt)
         for kind in sorted({a.kind for a in service.acts if _in_doubt(a, service) and a.role in reconcile.OWN_ROLES
                             and a.kind in entry.acts}):
             if (service.id, kind) not in have:
@@ -582,30 +597,31 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
     return items
 
 
-# An act's own reading that states it was not accomplished or not asserted: an attempt or a failure ("Cold forceps
-# biopsy of the antrum failed."), a hypothetical, a condition or an open question, an infinitive, or a later clause's
-# failure of the same act. Such an act is not in doubt; it is documented as not done today.
-NOT_DONE_CUES = gi_services.ATTEMPT_OR_FAILURE_CUES + (gi_services.HYPOTHETICAL_CUE, gi_services.CONDITION_CUE,
-                                                       gi_services.INFINITIVE_CUE, gi_services.LATER_FAILURE_CUE)
-
-
 def _in_doubt(act, service) -> bool:
-    """Whether the reading documents ``act`` (of ``service``) in doubt rather than as done or not done: the act's own
-    status is 'uncertain' for a doubt (a hedge, another source, an unestablished time or place), or the act is performed
-    inside a service documented in doubt. An act any of whose cues states it was not done (NOT_DONE_CUES) never is: the
-    meaning check's D14 inputs (negation-1, -2) stay alternatives, as the shared readers' own leniency for a proposal
-    provider's code on such an act (selected and held) is that path's, never a participant's admission rule (the owner's
-    "passes the same path as Corti is insufficient proof"; refutation cycle 2 of harness repair 3)."""
-    if any(cue.startswith(NOT_DONE_CUES) for cue in act.cues):
-        return False
-    return act.status == 'uncertain' or (act.status == 'performed' and service.status == 'uncertain')
+    """Whether ``act`` is one the provider-neutral admission adds a participant's code for, held: an act the reading
+    states done ('performed') inside a service the reading documents in doubt ('uncertain'). Corti's codes for that
+    service are held for its question, and a participant's code whose own passages show the act is held the same way.
+
+    Never an act whose own reading is 'uncertain'. Refutation cycle 3 (C3-2-1 to C3-2-3) showed that a list of the
+    uncertain readings that are not doubts never closes: a listed act withheld by its failure, a consent's act, a
+    question's act. Each was held, and its held code made Corti's correct base code included. A participant's code for
+    such an act is listed with its reason (PARTICIPANT_NOT_ESTABLISHED), as P-ADMIT2 lists it, while the shared path's
+    own leniency holds a proposal provider's selection on it (the recorded asymmetry; the owner's "passes the same path
+    as Corti is insufficient proof")."""
+    return act.status == 'performed' and service.status == 'uncertain'
+
+
+# Sections whose acts restate the report's own narrative account (_claimed): an Impression, an assessment
+# ("Diagnosis:", "Clinical impression:") and a findings summary
+RESTATING_SECTIONS = ('impression', 'assessment', 'findings')
 
 
 def _shows_doubted_act(candidate: '_Selection', code: str) -> bool:
     """Whether ``code``'s own passages (``candidate``'s evidence) show an act of a kind it accounts for that the reading
-    documents in doubt (_in_doubt, the document's own role): the provider-neutral admission of P-ADMIT2, which adds
-    the code held, as the same reading holds Corti's code for that act (refutation cycle 2 of harness repair 3). Never a
-    conflict, which has its own question, and never an act the reading denies, dates, plans or states was not done."""
+    states done inside a service it documents in doubt (_in_doubt, the document's own role): the provider-neutral
+    admission of P-ADMIT2, which adds the code held, as the same reading holds Corti's code for that act (refutation
+    cycles 2 and 3 of harness repair 3). Never a conflict, which has its own question, and never an act read in doubt
+    itself, denied, dated, planned or stated not done."""
     profile = reconcile.catalogue.code_profile(code)
     match = candidate.evaluation.match if candidate.evaluation is not None else None
     if profile is None or match is None or match.state != 'uncertain' or match.reason == 'conflict':
@@ -650,19 +666,28 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
 
 
 def _same_claim(mine: tuple, theirs: tuple) -> bool:
-    """Whether two _claimed claims are one act: the same act (its id; an Impression's restatement is already read as the
-    narrative act it restates), or two narrative statements of one service's act kind at one site, both sites stated and
+    """Whether two _claimed claims ('act', service, kind, lesion id, anatomy, act id, restated) are one act: the same act
+    (its id; a restatement is already read as the narrative act it restates); or two statements of one service's act
+    kind on one lesion record; or, where neither names a lesion record of its own, at one site, both sites stated and
     one containing the other ("Biopsies of the esophagus" after "biopsies were obtained from the distal esophagus").
-    Two narrative acts whose site is unread or different are two acts (refutation cycle 2, C2-4-3: a Schatzki ring's
-    and a post-bulbar stricture's dilations)."""
+    Two narrative acts on two lesion records, or whose site is unread or different, are two acts (refutation cycle 2,
+    C2-4-3; cycle 3, C3-3-3: lesion ids are compared whole, so S1-L1 is never S1-L10's)."""
     if mine[0] != 'act' or theirs[0] != 'act':
         return mine == theirs
     if mine[1] != theirs[1] or mine[2] != theirs[2]:
         return False
-    if mine[4] == theirs[4]:
+    if mine[5] == theirs[5]:
         return True
-    a, b = mine[3].lower(), theirs[3].lower()
-    return bool(a) and bool(b) and (a in b or b in a)
+    if mine[3] and theirs[3]:
+        return mine[3] == theirs[3]
+    a = [part.strip() for part in mine[4].lower().split(',') if part.strip()]
+    b = [part.strip() for part in theirs[4].lower().split(',') if part.strip()]
+    return bool(a) and bool(b) and any(_site_contains(x, y) or _site_contains(y, x) for x in a for y in b)
+
+
+def _site_contains(outer: str, inner: str) -> bool:
+    """Whether the site ``outer`` names ``inner`` whole-word ("distal esophagus" names "esophagus")."""
+    return re.search(r'(?<![\w-])' + re.escape(inner) + r'(?![\w-])', outer) is not None
 
 
 def _not_admitted_why(candidate: '_Selection', code: str, accounts: bool, documented: Sequence[tuple]) -> str:
