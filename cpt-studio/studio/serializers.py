@@ -635,8 +635,9 @@ def _row(name, label, vendor, model, state, detail, run, codes=(), unverified=0,
     return {'name': name, 'label': label, 'vendor': vendor, 'model': model, 'state': state, 'detail': detail,
             'run_id': str(run.pk) if run is not None else None,
             'reused': bool(run is not None and run.reused_from_id), 'codes': list(codes), 'unlisted_codes': unlisted,
-            'unverified_quotes': unverified, 'usage': dict(run.usage or {}) if run is not None else {},
-            'usage_basis': run.usage_basis if run is not None else '', 'estimated_cost_usd': review.estimated_cost(run),
+            'unverified_quotes': unverified, 'usage': dict(review.chain_usage(run)[0]) if run is not None else {},
+            'usage_basis': run.usage_basis if run is not None else '',
+            'estimated_cost_usd': review.chain_usage(run)[1] if run is not None else review.estimated_cost(run),
             'returned_model': run.returned_model if run is not None else ''}
 
 

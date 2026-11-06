@@ -451,7 +451,7 @@ def _open_items_covered(candidate: '_Selection', code: str, open_items: Sequence
         or (item[2] == '' and _includes_through(inventory, item[0], code, candidate.family)))]
 
 
-def _claimed(candidate: '_Selection', items: Sequence[tuple]) -> set:
+def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
     """What an admissible participant code claims (HARNESS.md P-ADMIT): the documented acts it is read as accounting
     for - for an open item of one act kind, the service's acts of that kind; for a whole service left without a
     proposal, its match's acts - narrowed to those its own exact passages show (an act's evidence overlaps one of them),
@@ -462,10 +462,32 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple]) -> set:
     match = candidate.evaluation.match if candidate.evaluation is not None else None
     spans = [(e.start, e.end) for e in candidate.evidence]
 
-    def shown(acts):
-        # refutation round 1 of harness repair 3 (L4-2): only the acts its own passages show - never every act of the
-        # kind, so an Impression line or a doubted act's sentence claims no other dilation's code
-        return [a for a in acts if any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)]
+    def summary(a) -> bool:
+        # an act stated only in an Impression or summary section restates the report's own account of it
+        return lay is not None and bool(a.evidence) and all(
+            lay.section_at(ev.start).kind == 'impression' for ev in a.evidence)
+
+    def shows(a) -> bool:
+        return any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)
+
+    def claims(acts, possible, kinds=(), pool=()):
+        """The acts the code claims among ``acts`` (performed acts of the kind it accounts for): those its own passages
+        show, an Impression's restatement read as the narrative's acts of its kind, and - where its passages show no act
+        of those kinds at all - the one act it can account for when there is only one (refutation cycle 2, C2-4-1:
+        Corti's 43249 on "A Schatzki ring was found" claims the one dilation). With several and none shown, nothing:
+        which one is not established (L4-2: an Impression naming two strictures claims neither dilation). Passages that
+        show an act of the kind that is not done claim no other act (L4-2's control: "It is unclear whether the ring
+        was also dilated with a Savary bougie" is a doubted second dilation, never the balloon dilation done)."""
+        own = [a for a in acts if shows(a)]
+        undone = [a for a in pool if a.status != 'performed' and a.kind in kinds and shows(a)]
+        if not own and not undone:
+            own = list(acts) if len(acts) == 1 else []
+        narrative = [a for a in possible if not summary(a)]
+        out = []
+        for a in own:
+            told = [b for b in narrative if b.kind == a.kind] if summary(a) else []
+            out.extend(told or [a])
+        return {('act', a.service, a.kind, a.lesion or ','.join(a.anatomy), a.id, summary(a)) for a in out}
 
     claimed = set()
     for service, family, act, label in items:
@@ -476,11 +498,12 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple]) -> set:
                     and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
             if not acts:
                 claimed.add(('item', service, family, act, label))
-            claimed.update(('act', service, a.kind, a.lesion or ','.join(a.anatomy)) for a in shown(acts))
+            kinds = {'tattoo', 'injection'} if act in ('tattoo', 'injection') else {act}
+            claimed.update(claims(acts, acts, kinds, svc.acts if svc is not None else ()))
             continue
         acts = match.acts if svc is not None else ()
         if acts:
-            claimed.update(('act', service, a.kind, a.lesion or ','.join(a.anatomy)) for a in shown(acts))
+            claimed.update(claims(acts, acts, {a.kind for a in acts}, svc.acts))
         else:
             claimed.add(('service', service, family))
     return claimed
@@ -538,11 +561,65 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
     items += [(service.id, service.family, '', reconcile.service_label(service)) for service in inventory.services
               if service.family == 'gi.office_em' and service.status in ('performed', 'incomplete')
               and service.id not in listed]
+    # Refutation cycle 2 of harness repair 3 (provider-neutral admission, the owner's "validation is provider-neutral"):
+    # an act the reading documents in doubt - its time, place, source or performance not established - is a documented
+    # item too. Corti's code for it is selected and held for its question; a participant's code for it, read by the same
+    # path, is held the same way (_shows_doubted_act), never left an alternative a reviewer cannot approve.
+    have = {(item[0], item[2]) for item in items}
+    for service in inventory.services:
+        entry = reconcile.catalogue.entry(service.family)
+        if entry is None or entry.support != reconcile.catalogue.SUPPORTED or service.status not in (
+                'performed', 'incomplete', 'uncertain'):
+            continue
+        # an act in doubt itself, or any of its acts where the service is documented in doubt (its time, place or
+        # performance not established: 39f0ac49's labelled procedure paragraphs inside its Indications); never an act
+        # its own words state was not done (_in_doubt)
+        for kind in sorted({a.kind for a in service.acts if _in_doubt(a, service) and a.role in reconcile.OWN_ROLES
+                            and a.kind in entry.acts}):
+            if (service.id, kind) not in have:
+                items.append((service.id, service.family, kind, reconcile.service_label(service)))
+                have.add((service.id, kind))
     return items
 
 
+# An act's own reading that states it was not accomplished or not asserted: an attempt or a failure ("Cold forceps
+# biopsy of the antrum failed."), a hypothetical, a condition or an open question, an infinitive, or a later clause's
+# failure of the same act. Such an act is not in doubt; it is documented as not done today.
+NOT_DONE_CUES = gi_services.ATTEMPT_OR_FAILURE_CUES + (gi_services.HYPOTHETICAL_CUE, gi_services.CONDITION_CUE,
+                                                       gi_services.INFINITIVE_CUE, gi_services.LATER_FAILURE_CUE)
+
+
+def _in_doubt(act, service) -> bool:
+    """Whether the reading documents ``act`` (of ``service``) in doubt rather than as done or not done: the act's own
+    status is 'uncertain' for a doubt (a hedge, another source, an unestablished time or place), or the act is performed
+    inside a service documented in doubt. An act any of whose cues states it was not done (NOT_DONE_CUES) never is: the
+    meaning check's D14 inputs (negation-1, -2) stay alternatives, as the shared readers' own leniency for a proposal
+    provider's code on such an act (selected and held) is that path's, never a participant's admission rule (the owner's
+    "passes the same path as Corti is insufficient proof"; refutation cycle 2 of harness repair 3)."""
+    if any(cue.startswith(NOT_DONE_CUES) for cue in act.cues):
+        return False
+    return act.status == 'uncertain' or (act.status == 'performed' and service.status == 'uncertain')
+
+
+def _shows_doubted_act(candidate: '_Selection', code: str) -> bool:
+    """Whether ``code``'s own passages (``candidate``'s evidence) show an act of a kind it accounts for that the reading
+    documents in doubt (_in_doubt, the document's own role): the provider-neutral admission of P-ADMIT2, which adds
+    the code held, as the same reading holds Corti's code for that act (refutation cycle 2 of harness repair 3). Never a
+    conflict, which has its own question, and never an act the reading denies, dates, plans or states was not done."""
+    profile = reconcile.catalogue.code_profile(code)
+    match = candidate.evaluation.match if candidate.evaluation is not None else None
+    if profile is None or match is None or match.state != 'uncertain' or match.reason == 'conflict':
+        return False
+    spans = [(e.start, e.end) for e in candidate.evidence]
+    return any(_in_doubt(a, match.service) and a.role in reconcile.OWN_ROLES
+               and (a.kind in profile.covers or (a.kind in ('tattoo', 'injection')
+                                                 and {'tattoo', 'injection'} & set(profile.covers)))
+               and any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)
+               for a in match.service.acts)
+
+
 def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selection'],
-                 documented: Sequence[tuple], inventory) -> dict[str, tuple[str, ...]]:
+                 documented: Sequence[tuple], inventory, text: Optional[str] = None) -> dict[str, tuple[str, ...]]:
     """code -> the codes it competes with (P-ADMIT2, harness repair 3): two different decidable codes compete where
     each claims one same documented act (_claimed: an EGD's dilation code and its biopsy code never do; two dilation
     codes for its one dilation do), and at least one of them is a participant's admitted code (``admissible``: code ->
@@ -550,17 +627,19 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
     other such code, a proposal provider's or a second review's only with the participants' (two codes the proposal
     provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
     CPT Studio never chooses between codes, nor prefers one for its proposer."""
-    claims_of: dict[str, set] = {code: _claimed(candidate, items) for code, (candidate, items, _) in admissible.items()}
+    lay = gi_sections.layout(text) if text is not None else None
+    claims_of: dict[str, set] = {code: _claimed(candidate, items, lay)
+                                 for code, (candidate, items, _) in admissible.items()}
     for selection in selections:
         if selection.evaluation is None or selection.excluded or selection.code in claims_of:
             continue
         items = (_open_items_covered(selection, selection.code, documented, inventory)
                  if inventory is not None else [])
-        claims_of[selection.code] = _claimed(selection, items) if items else set()
+        claims_of[selection.code] = _claimed(selection, items, lay) if items else set()
     out: dict[str, tuple[str, ...]] = {}
     for code, claimed in claims_of.items():
-        # refutation round 1 of harness repair 3 (L4-3): an act restated without its site ("Impression: Schatzki ring,
-        # dilated with a balloon to 18 mm.") is one act with the site stated before it, so two codes for it compete
+        # one act claimed twice competes: the same act, an Impression's restatement of it (refutation round 1, L4-3;
+        # cycle 2, C2-4-2), or the same kind at one site stated twice in the narrative (_same_claim)
         rivals = {other for other, theirs in claims_of.items() if other != code
                   and any(_same_claim(mine, their) for mine in claimed for their in theirs)}
         if code not in admissible:
@@ -571,15 +650,19 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
 
 
 def _same_claim(mine: tuple, theirs: tuple) -> bool:
-    """Whether two _claimed claims are one: equal, or two acts of one service and kind whose sites are one (either
-    contains the other), or either of which states none (refutation round 1 of harness repair 3, L4-3)."""
-    if mine == theirs:
-        return True
-    if not (mine[0] == theirs[0] == 'act' and mine[1] == theirs[1] and mine[2] == theirs[2]):
+    """Whether two _claimed claims are one act: the same act (its id; an Impression's restatement is already read as the
+    narrative act it restates), or two narrative statements of one service's act kind at one site, both sites stated and
+    one containing the other ("Biopsies of the esophagus" after "biopsies were obtained from the distal esophagus").
+    Two narrative acts whose site is unread or different are two acts (refutation cycle 2, C2-4-3: a Schatzki ring's
+    and a post-bulbar stricture's dilations)."""
+    if mine[0] != 'act' or theirs[0] != 'act':
+        return mine == theirs
+    if mine[1] != theirs[1] or mine[2] != theirs[2]:
         return False
+    if mine[4] == theirs[4]:
+        return True
     a, b = mine[3].lower(), theirs[3].lower()
-    # one site contains the other ("esophagus", "distal esophagus"): one site read twice, never two sites
-    return not a or not b or a in b or b in a
+    return bool(a) and bool(b) and (a in b or b in a)
 
 
 def _not_admitted_why(candidate: '_Selection', code: str, accounts: bool, documented: Sequence[tuple]) -> str:
@@ -3759,13 +3842,18 @@ class _Harness:
                     # the act and could hold Corti's base code as included in it (the meaning check's time-2).
                     if supported is not None and supported.status == 'pass':
                         admissible[code] = (candidate, items, first)
+                    elif supported is not None and supported.status == 'not_applicable' \
+                            and _shows_doubted_act(candidate, code):
+                        # provider-neutral (refutation cycle 2): its own passages show the act it accounts for, which
+                        # the reading documents in doubt - added and held, as Corti's code for that act is
+                        admissible[code] = (candidate, items, first)
                     elif supported is not None and supported.status == 'not_applicable':
                         why[code] = PARTICIPANT_NOT_ESTABLISHED
                     else:
                         why[code] = PARTICIPANT_NOT_SHOWN
                 else:
                     why[code] = _not_admitted_why(candidate, code, bool(items), documented)
-        competes = _competition(admissible, selections, documented, inventory)
+        competes = _competition(admissible, selections, documented, inventory, self.text)
         added, listed = [], []
         for code in order:
             if code in admissible:

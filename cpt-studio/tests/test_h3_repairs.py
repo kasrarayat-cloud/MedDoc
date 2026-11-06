@@ -1,7 +1,12 @@
 """Harness repair 3 (owner directive 2026-11-05, second message; HARNESS.md "Harness repair 3"): the readings and the
 admission rule the owner's 39f0ac49 traced to, and the five admission cases the directive names. Real engine and
 readers, no provider or database calls. The documents are synthetic, and the 39f0ac49 one is a paraphrase of its
-structure (inline service labels, an impacted meat bolus removed by retrieval net), never the owner's upload."""
+structure (inline service labels, an impacted meat bolus removed by retrieval net), never the owner's upload.
+
+Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F-SECTIONS T and L under the two-cycle
+rule: the titles with an aside and the labelled paragraphs read as the base reads them, pinned below as recorded
+residuals. The admission cases therefore read a plain report (PLAIN), and the labelled one shows the provider-neutral
+hold: a participant's code for the act its own passage shows is held as Corti's code for it is."""
 from datetime import date
 
 from django.test import SimpleTestCase
@@ -29,6 +34,11 @@ SNARE = 'A 9 mm sessile polyp in the transverse colon was removed with a cold sn
 LOWER = ('Colonoscopy: A colonoscope was introduced through the anus and advanced to the cecum.\n' + SNARE + '\n')
 TAIL = 'Impression: Food impaction cleared; esophageal biopsies; transverse colon polyp removed.\nPlan: Await pathology.\n'
 LABELLED = HEAD + INDICATION + UPPER + LOWER + TAIL
+# the same narrative with no inline labels, under a procedure list and a description heading: both services done today
+PLAIN = (HEAD + 'Indications: Food impaction after a meal the evening before, and surveillance after prior adenomas.\n'
+         'Procedures performed: Upper endoscopy with foreign-body removal and biopsy; colonoscopy with cold snare '
+         'polypectomy.\nDescription of procedure:\n' + UPPER.replace('Upper endoscopy: ', '')
+         + LOWER.replace('Colonoscopy: ', '') + TAIL)
 
 
 def families(text, day=DAY):
@@ -45,17 +55,24 @@ def acts(text, family):
 
 
 class TitleAsideTests(SimpleTestCase):
-    """F-SECTIONS T: a procedure report's title with a short aside after it is still its title."""
+    """F-SECTIONS T, dropped under the two-cycle rule (L3-1, L5-1 to L5-4, then C2-1-4 to C2-1-7): a procedure report's
+    title with an aside after it reads as the base reads it - an ordinary line, so the service it names is held
+    (uncertain), never READY. A recorded residual (a false hold); the plain title is the procedure's own."""
 
     def title_kind(self, title):
         text = f'{title}\nDate of service: 2026-10-14\nProcedure\nThe colonoscope was advanced to the cecum.\n'
         return sections.layout(text).sections[0].kind if sections.layout(text).sections[0].start == 0 else None
 
-    def test_an_aside_that_says_nothing_of_time_or_denial_keeps_the_title(self):
-        for title in ('Colonoscopy Report (fictional)', 'Colonoscopy Report (Final)', 'Upper Endoscopy Report (amended)',
-                      'EGD Procedure Note (corrected)', 'Colonoscopy Report'):
+    def test_an_aside_title_reads_as_the_base_reads_it(self):
+        for title, family in (('Colonoscopy Report (fictional)', 'gi.colonoscopy'),
+                              ('Colonoscopy Report (Final)', 'gi.colonoscopy'),
+                              ('Upper Endoscopy Report (amended)', 'gi.egd'),
+                              ('EGD Procedure Note (corrected)', 'gi.egd')):
+            text = f'{title}\nDate of service: 2026-10-14\nProcedure\nThe colonoscope was advanced to the cecum.\n'
             with self.subTest(title):
-                self.assertEqual(self.title_kind(title), 'procedure')
+                self.assertEqual(sections.layout(text).sections[0].kind, 'other')
+                self.assertEqual(families(text), {family: 'uncertain'})
+        self.assertEqual(self.title_kind('Colonoscopy Report'), 'procedure')
 
     def test_an_aside_of_another_time_a_plan_a_doubt_or_a_denial_is_no_title(self):
         for title in ('Colonoscopy Report (planned)', 'Colonoscopy Report (prior)', 'Colonoscopy Report (cancelled)',
@@ -64,25 +81,40 @@ class TitleAsideTests(SimpleTestCase):
             with self.subTest(title):
                 self.assertNotEqual(self.title_kind(title), 'procedure')
 
-    def test_the_walks_word_reports_route_their_procedure_performed(self):
+    def test_the_walks_word_reports_read_as_the_base_reads_them(self):
+        # recorded residual: the Word walk's titles with an aside route their procedure as the base does (h2b
+        # historical, h2c uncertain), so neither is READY there
         from tests.test_participants_support import FIXTURES
-        for name, day, family in (('h2b', date(2026, 10, 29), 'gi.colonoscopy'), ('h2c', date(2026, 10, 28), 'gi.egd')):
+        for name, day, family, status in (('h2b', date(2026, 10, 29), 'gi.colonoscopy', 'historical'),
+                                          ('h2c', date(2026, 10, 28), 'gi.egd', 'uncertain')):
             text = (FIXTURES / 'fable-walk' / f'{name}.context.txt').read_text(encoding='utf-8')
             with self.subTest(name):
-                self.assertEqual(families(text, day)[family], 'performed')
+                self.assertEqual(families(text, day)[family], status)
 
 
 class InlineServiceLabelTests(SimpleTestCase):
-    """F-SECTIONS L: a procedure report's paragraph labelled with one service's name and narrating that examination's
-    course is the service's own part - and nothing else is."""
+    """F-SECTIONS L, dropped under the two-cycle rule (L5-1 to L5-3, then C2-3-1 to C2-3-8): a paragraph labelled with a
+    service's name inside the Indications reads as the base reads it - both services uncertain, with or without the
+    labels - so 39f0ac49's shape is held, never READY. A recorded residual (a false hold). Its codes reach review held:
+    a participant's code for the act its own passage shows exactly as Corti's code for that act (refutation cycle 2,
+    the provider-neutral admission)."""
 
-    def test_the_labelled_parts_are_their_services_and_end_the_indication(self):
-        self.assertEqual(families(LABELLED), {'gi.egd': 'performed', 'gi.colonoscopy': 'performed'})
+    def test_the_labelled_parts_read_as_the_base_reads_them(self):
+        self.assertEqual(families(LABELLED), {'gi.egd': 'uncertain', 'gi.colonoscopy': 'uncertain'})
         kinds = [(s.kind, s.label) for s in sections.layout(LABELLED).sections]
-        self.assertIn(('procedure', 'upper endoscopy'), kinds)
-        self.assertIn(('procedure', 'colonoscopy'), kinds)
-        self.assertEqual([part.family for part in gi_services.parts(LABELLED, service_date=DAY)
-                          if part.kind == 'report'], ['gi.egd', 'gi.colonoscopy'])
+        self.assertNotIn(('procedure', 'upper endoscopy'), kinds)
+        self.assertNotIn(('procedure', 'colonoscopy'), kinds)
+        self.assertFalse([part for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'])
+
+    def test_a_participants_code_is_held_as_cortis_code_for_the_same_act(self):
+        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
+        by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
+        for name in ('astra', 'fable'):
+            with self.subTest(name):
+                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
+                self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
+                                 ('selected', 'needs_clarification', 'participant', [name]))
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -108,7 +140,8 @@ class InlineServiceLabelTests(SimpleTestCase):
 
 
 class ForeignBodyActTests(SimpleTestCase):
-    """F-ACTS: a food bolus named by what it is, or a bolus its own clause states removed, is a foreign-body act."""
+    """F-ACTS as rebuilt in refutation cycle 2 (predicate-bound): a bolus named by its food, or the anaphor "the bolus",
+    is the foreign-body act only where its own clause states it removed, retrieved or extracted."""
 
     def test_the_bolus_the_net_removed_is_the_upper_endoscopy_s_act(self):
         self.assertIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
@@ -130,18 +163,18 @@ class AdmissionCaseTests(SimpleTestCase):
     never promoted."""
 
     def test_only_astra_or_only_fable_proposes_the_supported_service(self):
-        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
+        codes = corti(('43239', span(PLAIN, EGD_BIOPSY)), ('45385', span(PLAIN, SNARE)))
         for name in ('astra', 'fable'):
             with self.subTest(name):
-                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
+                item = proposal(run(PLAIN, codes, [read(name, [code(PLAIN, '43247', NET)])]), '43247')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
                                  ('selected', 'ready', 'participant', [name]))
 
     def test_corti_disagrees_and_the_document_supports_the_independent_proposal(self):
         # Corti's 45384 (hot forceps) for the cold-snare removal: the document supports Astra's 45385, which reaches
         # review ready; Corti's code is read by its own rules (its act is not documented), and nothing is chosen for it
-        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45384', span(LABELLED, SNARE)))
-        result = run(LABELLED, codes, [read('astra', [code(LABELLED, '45385', SNARE)])])
+        codes = corti(('43239', span(PLAIN, EGD_BIOPSY)), ('45384', span(PLAIN, SNARE)))
+        result = run(PLAIN, codes, [read('astra', [code(PLAIN, '45385', SNARE)])])
         snare = proposal(result, '45385')
         self.assertEqual((snare.bucket, snare.status, snare.support['origin']), ('selected', 'ready', 'participant'))
         self.assertNotEqual(proposal(result, '45384').status, 'ready')
@@ -164,10 +197,10 @@ class AdmissionCaseTests(SimpleTestCase):
                 self.assertTrue(any(after.startswith(reason) for reason in P_ADMIT_REASONS), after)
 
     def test_a_number_only_in_an_alternative_list_is_never_promoted(self):
-        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE))) + [
+        codes = corti(('43239', span(PLAIN, EGD_BIOPSY)), ('45385', span(PLAIN, SNARE))) + [
             engine.ProviderCode('candidate', 'cpt', '43247', '', ())]
-        result = run(LABELLED, codes, [read('astra', advised=[not_coded(LABELLED, '43247', NET)]),
-                                       read('fable', [code(LABELLED, '43239', EGD_BIOPSY)])])
+        result = run(PLAIN, codes, [read('astra', advised=[not_coded(PLAIN, '43247', NET)]),
+                                    read('fable', [code(PLAIN, '43239', EGD_BIOPSY)])])
         self.assertFalse([p for p in result.proposals if p.code == '43247' and p.bucket == 'selected'])
         self.assertIn(('S1', 'gi.egd', 'foreign_body', 'not_covered'),
                       [(u['service'], u['family'], u['act'], u['reason'])
@@ -289,13 +322,20 @@ class TimePlaceConditionTests(SimpleTestCase):
 
 
 class AttachedReportTitleTests(SimpleTestCase):
-    """F-SECTIONS T (the battery's R8 D10): a report title that is the first line under a history heading titles the
-    attached report; its date of service never competes with this report's, with or without an aside."""
+    """F-SECTIONS T (the battery's R8 D10), dropped under the two-cycle rule: an attached prior report under a history
+    heading reads as the base reads it. With an aside its title is an ordinary line and this report's date stands, so
+    45378 is READY; with a plain title its date of service competes with this report's, so the date is in conflict and
+    nothing is READY (a recorded residual, a false hold; L5-4's variants with no competing date are the base's own false
+    READYs, recorded in HARNESS.md)."""
 
-    def test_an_attached_prior_reports_title_stays_in_its_history_section(self):
+    def body(self, title):
+        return (f'\nAttached prior report:\n{title}\nDate of service: 2025-03-01\nProcedure: EGD\n'
+                'The gastroscope was advanced to the second portion of the duodenum. The duodenum was normal.')
+
+    def test_an_attached_prior_reports_title_reads_as_the_base_reads_it(self):
+        from studio.gi import context as gi_context
         from tests.test_h2_refutation_r1 import COLON as HEAD_COLON, CECUM, READY as OK, both
-        for title in ('Upper endoscopy report (fictional)', 'Upper endoscopy report'):
-            body = (f'\nAttached prior report:\n{title}\nDate of service: 2025-03-01\nProcedure: EGD\n'
-                    'The gastroscope was advanced to the second portion of the duodenum. The duodenum was normal.')
-            with self.subTest(title):
-                self.assertEqual(both(HEAD_COLON + body + '\n', '45378', CECUM), ([OK], [OK]))
+        aside = HEAD_COLON + self.body('Upper endoscopy report (fictional)') + '\n'
+        self.assertEqual(both(aside, '45378', CECUM), ([OK], [OK]))
+        plain = HEAD_COLON + self.body('Upper endoscopy report') + '\n'
+        self.assertEqual(gi_context.extract_context(plain)['service_date'].origin, 'conflict')

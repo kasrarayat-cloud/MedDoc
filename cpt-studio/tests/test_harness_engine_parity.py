@@ -158,7 +158,7 @@ HARNESS_REPAIR_PINNED = {
     'visit-beside-a-procedure': 'b0e0feeca5683863ece0e638b9b9dddf9071ad4a8fc12627bc651102ffe01ad7',
 }
 
-# Harness repair 3 (2026-11-05, second message; cpt-studio-validation@8, gi-services@5, gi-routing@8) computes these.
+# Harness repair 3 (2026-11-05, second message; cpt-studio-validation@8, gi-services@5, gi-routing@7 kept) computes these.
 # With the three labels set back to installed e6d451f03d86's every case equals HARNESS_REPAIR_PINNED above, byte for
 # byte: on these Corti-only cases the repair moves the labels and nothing else (ServedLabelParity3Tests).
 PINNED = {

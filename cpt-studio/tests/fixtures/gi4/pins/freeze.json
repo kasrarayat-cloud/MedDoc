@@ -195,7 +195,7 @@
   "repo:tests/corpus/services/documents/svc-06-hp-and-colonoscopy-random-biopsies.txt": "a6f8cc1a63f635fee51e2d1e7bc112420cbdfa0ba51130cf17e9e5a5d920b8e8",
   "repo:tests/corpus/services/documents/svc-07-em-established-partner-mdm-high.txt": "4c751fc8307ecef189e28f682a6a70826225268cd78bb618624827d1048a56db",
   "repo:tests/corpus/services/documents/svc-08-egd-multisite-biopsy-list-negation.txt": "a6e02cdb2f3bac415f54a27f15256f87fd1db93cf7f7d4f111f78b9aa65bbce9",
-  "repo:tests/corpus/services/documents/svc-09-egd-balloon-dilation-impression-only.txt": "bb5237737f8943c530055d051d35a98ce1263126c558f613fd45e887727aaf68",
+  "repo:tests/corpus/services/documents/svc-09-egd-balloon-dilation-impression-only.txt": "5518a270be14bb337d7debb1923d54bfbc0faa40f2117b16a5021f2d01452332",
   "repo:tests/corpus/services/documents/svc-10-egd-savary-dilation.txt": "10fd78fb45b2d73486e9e5e8cb26086d27d208b52f0a4ebfd611e7393d668b9d",
   "repo:tests/corpus/services/documents/svc-11-egd-ulcer-bleeding-control.txt": "dc936bf67050c83d4881b74ed0393a2c094495a9e00c292733bb4a47803498d8",
   "repo:tests/corpus/services/documents/svc-12-egd-peg.txt": "25729a2cdd610468b84d0f2644b1d4ab41eb79426ce9a45787086c20a201b5c8",

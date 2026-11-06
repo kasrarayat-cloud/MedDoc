@@ -724,8 +724,9 @@ class BindingTests(SimpleTestCase):
 
     def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
         """Moved by refutation round 6 (R6-MEANING, the session's D14): Astra's reading, read after a reconcile,
-        selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). It is listed
-        now, never selected, so it takes no key and no confirmation, and Corti's 45380 reads its own."""
+        selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). Under refutation
+        cycle 2's provider-neutral admission its hedged snare passage shows the act in doubt, so it is selected again,
+        held, after 45380: it takes its own key and no confirmation, and Corti's 45380 reads its own."""
         fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
         early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
         codes = (('45380', UNCLEAR),)
@@ -734,9 +735,9 @@ class BindingTests(SimpleTestCase):
         made = made_for(one, 'sel:0', DONE_BX)
         later = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]), fable]
         two = run(DOUBTS_STATED, codes, [made], participants=later)
-        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('altp:0', '45385')])
-        listed = proposal(two, 'altp:0')
-        self.assertEqual((listed.status, listed.support.get('confirmed')), ('informational', None))
+        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('sel:1', '45385')])
+        held = proposal(two, 'sel:1')
+        self.assertEqual((held.status, held.support.get('confirmed')), ('needs_clarification', None))
         self.assertEqual((proposal(two, 'sel:0').code, proposal(two, 'sel:0').status), ('45380', 'ready'))
 
     def test_a_new_answer_that_selects_a_code_ahead_never_takes_the_confirmation(self):

@@ -31,17 +31,19 @@ def assess_body(body, codes):
 class TattooPredicateTests(SimpleTestCase):
     # The first three, and test_bare_completed_marking_keeps_its_own_purpose below, were the package's two releases.
     # Harness repair round 6 dropped them after two refutation cycles of their whole-sentence form (HARNESS.md
-    # "Refutation round 6") and pinned main's reading. Harness repair 3 (F-NEG S, F-TIME R; the owner's second message of
-    # 2026-11-05, item 4) reads the same sentences by two narrower rules, through every other reading, so these pin the
-    # package's own intent again: the denial is the resection's, and the purpose's "future" is the localization's. The
-    # rest are the package's holds, kept.
+    # "Refutation round 6") and pinned main's reading. Harness repair 3 read the same sentences by two narrower rules
+    # (F-NEG S, F-TIME R; the owner's second message of 2026-11-05, item 4). F-NEG S stands: the denial is the
+    # resection's. F-TIME R was refuted in two cycles and is dropped (HARNESS.md "Harness repair 3, refutation cycle
+    # 2"): the purpose's "future" dates the marking as planned, as at main - a recorded residual, directive item 4's
+    # "completed marking versus future localization" undelivered. The rest are the package's holds, kept.
 
     def test_nominal_tattoo_and_its_purpose_do_not_inherit_resection_denial(self):
         body = ('Carbon tattoo ink was injected into the transverse colon submucosa. '
                 'The transverse colon lesion was marked with submucosal tattoo for future localization '
                 'and not resected today.')
         inv = inventory(body)
-        # harness repair 3: the denial is the resection's, so no conflict with the injection, and 45381 is ready
+        # harness repair 3 (F-NEG S): the denial is the resection's, so no conflict with the injection (the purpose's
+        # tattoo reads planned, F-TIME R being dropped, which contradicts nothing), and 45381 is ready
         self.assertEqual(inv.conflicts, ())
         self.assertFalse([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
         result = assess_body(body, [('45381', 'Carbon tattoo ink was injected into the transverse colon submucosa.')])
@@ -51,10 +53,11 @@ class TattooPredicateTests(SimpleTestCase):
         body = 'Tattoo ink was injected into the transverse colon submucosa for future localization.'
         tattoo = [a for a in colon(inventory(body)).acts if a.kind == 'tattoo']
         self.assertTrue(tattoo)
-        # harness repair 3 (F-TIME R): "future" is the localization's time, so the completed injection is done today
-        self.assertEqual({a.status for a in tattoo}, {'performed'})
+        # main's reading (F-TIME R dropped in refutation cycle 2): "future" dates the act as planned, and the code is
+        # excluded - a recorded residual (a false exclusion)
+        self.assertEqual({a.status for a in tattoo}, {'planned'})
         result = assess_body(body, [('45381', body)])
-        self.assertEqual(proposal(result, '45381').status, 'ready')
+        self.assertNotEqual(proposal(result, '45381').status, 'ready')
 
     def test_noun_tattoo_does_not_inherit_a_tissue_resection_denial(self):
         body = 'The transverse colon lesion was marked with tattoo and not resected today.'
@@ -104,7 +107,7 @@ class TattooPredicateTests(SimpleTestCase):
     def test_bare_completed_marking_keeps_its_own_purpose(self):
         body = ('Tattoo ink was injected into the transverse colon submucosa. '
                 'Transverse colon lesion marked with submucosal tattoo for future localization and not resected today.')
-        # harness repair 3 (F-NEG S, F-TIME R): the fragment's denial is the resection's - no tattoo conflict
+        # harness repair 3 (F-NEG S): the fragment's denial is the resection's - no tattoo conflict
         self.assertEqual(inventory(body).conflicts, ())
 
     def test_marking_an_object_does_not_establish_a_clinical_tattoo(self):

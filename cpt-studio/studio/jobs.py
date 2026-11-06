@@ -630,6 +630,10 @@ def _stopped_attempt(encounter, provider, request, purpose):
     run = _newest_finished(models.ProviderRun.objects.filter(
         encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, purpose=purpose, sent=True))
+    # refutation cycle 2 (C2-5, an edge): a replay adapter shares the live adapter's version, so the mode is compared
+    # too - a chain never mixes a live run and a replay one; a stopped run of the other mode is no attempt to continue
+    if run is not None and (run.scope or {}).get('mode', 'live') != getattr(provider, 'mode', 'live'):
+        return None
     return run if _resumable_stop(run) else None
 
 

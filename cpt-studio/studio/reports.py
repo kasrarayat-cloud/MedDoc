@@ -396,27 +396,8 @@ CORTI_STATES = {ProviderRun.SUCCEEDED: 'answered; its codes were checked', Provi
                 ProviderRun.NOT_SENT: 'nothing was sent', ProviderRun.CANCELLED: 'nothing was sent'}
 
 
-def _chain_usage(run):
-    """(usage, estimated cost in USD as text or None, the ids of the stopped runs it continues) of ``run``'s whole tool
-    loop: for a continuation (F-STOP) its chain's usage summed and each run's estimate added, so the exchanges a report
-    counts and the cost it prints describe the same loop (refutation round 1 of harness repair 3, L6-3); otherwise the
-    run's own."""
-    from decimal import Decimal  # noqa: PLC0415 - only for a chain
-    from .jobs import loop_runs  # local import: jobs imports this module
-    from .participants.loop import summed_usage
-
-    if run is None:
-        return {}, None, []
-    chain = loop_runs(run) if not run.reused_from_id else [run]
-    if len(chain) < 2:
-        return (run.usage or {}), review.estimated_cost(run), []
-    costs = [review.estimated_cost(each) for each in chain]
-    cost = None if any(c is None for c in costs) else str(sum((Decimal(c) for c in costs), Decimal('0')))
-    return summed_usage([each.usage for each in chain if each.usage]), cost, [str(each.pk) for each in chain[:-1]]
-
-
 def _participant_entry(name, label, vendor, run, state, reason='', unverified=0, refused=False):
-    usage, cost, continues = _chain_usage(run)
+    usage, cost, continues = review.chain_usage(run)
     return {'name': name, 'label': label, 'vendor': vendor, 'state': state, 'reason': str(reason or ''),
             'refused': refused,
             'run': str(run.pk) if run is not None else None, 'mode': review.run_mode(run) if run is not None else '',

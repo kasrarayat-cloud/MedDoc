@@ -451,23 +451,23 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         self.assertEqual(two.support['proposed_by'], ['astra', 'fable'])
 
     def test_another_proposer_s_own_passage_can_hold_a_code_and_agreement_never_releases_it(self):
-        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9), under HARNESS.md P-ADMIT
-        (2026-11-05). Fable's passage alone shows the biopsy, so its 45380 is admitted and ready. Astra's hedging passage
-        alone leaves the act in doubt; and beside Fable's, read with it, it leaves the act not established as done, so the code is
-        not admitted at all (never ready, never a held code that could cover the biopsy) - whichever proposer comes
+        """I3 as the engine guarantees it (refutation round 1, EV-5; HARNESS.md 5 and 9), under HARNESS.md P-ADMIT2 and
+        refutation cycle 2's provider-neutral admission. Fable's passage alone shows the biopsy, so its 45380 is admitted
+        and ready. Astra's hedging passage alone shows the act in doubt, so its code is held - exactly as Corti's 45380
+        on that passage is - and beside Fable's, read with it, the doubt holds the code too, whichever proposer comes
         first: agreement never releases, and a doubt another proposer raises never makes the code more ready. (D14
-        listed it in all three; before D14 the pair held it.)"""
+        listed it in all three; before D14 the pair held it; P-ADMIT2 listed the hedged one before cycle 2.)"""
         codes = corti(('45385', span(COLON_HEDGE, SNARE)))
         fable, astra = (read('fable', [code(COLON_HEDGE, '45380', BIOPSY)]),
                         read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
         alone = proposal(run(COLON_HEDGE, codes, [fable]), '45380')
         self.assertEqual((alone.bucket, alone.status), ('selected', 'ready'))
         hedged = proposal(run(COLON_HEDGE, codes, [astra]), '45380')
-        self.assertEqual((hedged.bucket, hedged.status), ('alternative', 'informational'))
-        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, hedged.exclusion_reason)  # its own passage puts the act in doubt
+        self.assertEqual((hedged.bucket, hedged.status), ('selected', 'needs_clarification'))
+        by_corti = proposal(run(COLON_HEDGE, codes + corti(('45380', span(COLON_HEDGE, HEDGE)))), '45380')
+        self.assertEqual((by_corti.bucket, by_corti.status), (hedged.bucket, hedged.status))  # provider-neutral
         both = proposal(run(COLON_HEDGE, codes, [astra, fable]), '45380')
-        self.assertEqual((both.bucket, both.status, both.clarifications), ('alternative', 'informational', ()))
-        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, both.exclusion_reason)
+        self.assertEqual((both.bucket, both.status), ('selected', 'needs_clarification'))
         self.assertEqual([e.text for e in both.evidence], [BIOPSY, HEDGE])
         self.assertEqual(decision(proposal(run(COLON_HEDGE, codes, [fable, astra]), '45380')), decision(both))
 

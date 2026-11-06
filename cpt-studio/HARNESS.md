@@ -3060,3 +3060,128 @@ were this repair's own regressions, each repaired at its cause:
 channel and the 58 retained revision texts carry no numbered part under a history heading; the suite's own date tests
 do. So the context reader's change on that shape was found by the suite, not by the measurement written to rule it
 out. That measurement is now taken over every text the full suite hands the date reader as well (below).
+
+### Harness repair 3, refutation cycle 2 (2026-11-06): five lenses over the round-1 repairs, and the two-cycle rule applied
+
+Five lenses ran in sealed sandboxes at `8b186df05`, told to break round 1's repairs: the releasing rules; the holding
+rules in both directions; sections and the date; admission and competition; acts and Stop/Resume. They reported 43
+findings (C2-1 7, C2-2 16, C2-3 8, C2-4 4, C2-5 8). Every input of every lens - 156 engine cases, read through the
+pipeline's own date of service, plus the database cases - was measured on this tree, on the round-1 tree `8b186df05`,
+on the stage commit and on the base before anything below was decided.
+
+**Dropped under the two-cycle rule (each a releasing rule refuted twice, read again as the base reads it):**
+- **F-TIME R**, the future purpose (L1-1/L1-2, then C2-1-1 to C2-1-3: a size with a decimal, a parenthesis or "Dr."
+  ended the purpose early; the release keyed on any act's participle). `cues.py` and `detect.py` are the base's again;
+  routing's label stays `gi-routing@7`.
+- **F-SECTIONS T and L**, the titles with an aside, the attached report's title and the services' labelled paragraphs
+  (L3-1, L3-11, L5-1 to L5-4, L5-7, then C2-1-4 to C2-1-7 and C2-3-1 to C2-3-8: another occasion in words, another
+  place, an anesthesia or office note, an attached report's own heading, today's own section dropped, the date moved,
+  and a layout whose cost grew with the square of the line count). `sections.py` is the base's again, so the layout -
+  and with it the date of service - is the base's by construction.
+- **F-ACTS' round-1 vocabulary**: the named foods read from any predicate, the bare-bolus look-back, the push guard
+  and the container rule that existed only for R (L5-5/L5-6, then C2-5-1 to C2-5-6).
+
+**Rebuilt, smaller, and read structurally rather than by word lists (each faces the next cycle):**
+- **F-ACTS (predicate-bound):** a bolus named by its food, or the anaphor "the bolus", is the foreign-body act only
+  where its own clause states it removed, retrieved or extracted; the anaphor binds to the nearest bolus, impaction or
+  foreign body named before it when that is a food one the report does not deny. A push, a passage, "cleared" or a
+  medication, contrast or secretion bolus states no removal, so no guard is needed. The base's "food bolus" and
+  "foreign body" read as before - including the base's own residual, a pushed food bolus read as done.
+- **Provider-neutral admission:** a participant's code whose own passages show an act of its kind that the reading
+  documents in doubt is added and held, as the same reading holds Corti's code for that act - never left an
+  alternative no reviewer can approve. A historical, planned, denied or conflicting act still admits nothing.
+- **Competition by act identity:** a code claims the acts its own passages show; an Impression's restatement is the
+  narrative act it restates; a code whose passages show none claims the act only when one is possible; two narrative
+  acts compete only when both sites are stated and one contains the other (C2-4-1 to C2-4-3).
+
+**Repaired at the cause (the holding rules, both directions):**
+- **B:** "this EGD" and "this colonoscopy" are read only where a preposition governs them; they never cancel a history
+  or plan word (C2-2-1/2). A governed bare "today" dates the act only as the sentence's fronted frame (C2-2-13). An
+  index or original procedure's site is today's place (C2-2-3).
+- **F:** a later "but ... could not be" fails the act only for its own lesion (definite or a pronoun), a retrieval only
+  a foreign body's, and an instrument's failure only its act's (C2-2-4, C2-2-15).
+- **P:** a facility by an indefinite article or records from one; never a proper name alone (C2-2-5), a request after
+  the provider (C2-2-8), or a tolerance or permission "per the patient" (C2-2-6). "According to" a person or a
+  document, and "elsewhere on three occasions", name another source (C2-2-12). The named agent is never another verb's
+  ("as requested by Dr. Lee", C2-2-9).
+- **C:** no noun-phrase or participial opener ("in the event of", "in case of", "providing hemostasis"; C2-2-7), and
+  no embedded-question exemption: a question's own closing predicate decides (C2-2-11).
+- **N:** past a noun's own phrase ("Biopsies from the ascending colon never obtained"), inside a parenthesis with no
+  main predicate after it, "as yet", "in fact", "wont be" (C2-2-14, C2-2-16).
+- **Elsewhere:** "Injection sites:" labels injections done (C2-5-7); the report and the API row read one chain usage
+  (C2-5-8); a chain never mixes a live run and a replay one (C2-5's edge). The L4-6 addendum pin now reaches the real
+  endpoint (C2-4-4).
+
+**Recorded as open, not this diff's against the base:**
+- the base's own false READYs that the dropped rules had closed: an attached report under a history heading with a
+  plain title (L5-4's variants, C2-1-4's plain forms), a pushed food bolus (L5-6), an EGD part taking a colon finding
+  under "Procedure: Upper endoscopy" (L5-7), a proper-named outside hospital (L2-1g);
+- ⚠️ **39f0ac49's two labelled procedure paragraphs inside its Indications read as the base reads them, uncertain.**
+  Its 43247 now reaches review held - Astra's and Fable's, by the provider-neutral admission - with the question
+  Corti's three codes carry; it is no longer READY as the round-1 tree read it;
+- ~~88d9db32's 45381 is held by its tattoo conflict again~~ - **corrected below** (measured on an intermediate tree):
+  with F-NEG S kept and the fronted frame's plan words no longer read, 88d9db32 reads READY. Directive item 4's
+  "completed marking versus future localization" stays undelivered all the same: a marking whose own sentence carries
+  "for future localization" reads planned, as at the base;
+- the Word walk's titles with an aside ("Colonoscopy Report (fictional)") read as the base reads them;
+- C2-2-10 ("the week before" as another event's time), and C2-2-16's "removal was not possible" and "by Drs.".
+
+### Harness repair 3, after refutation cycle 2 (2026-11-06): what the full suite, the gates and the retained cases found
+
+The full suite on the cycle-2 tree failed 97 subtests. Most were pins of the dropped rules, moved below; four were real
+and are repaired at the cause, each with the input that showed it.
+
+**Repaired:**
+- **The provider-neutral admission held a participant's code for a failed act.** The meaning check's D14 inputs
+  ("Cold forceps biopsy of the antrum failed.", "Band ligation of the varices was unsuccessful.") had become held
+  participant codes. An act any of whose cues states it was not done - an attempt or a failure, a hypothetical, a
+  condition or an open question, an infinitive, a later clause's failure of it (`engine.NOT_DONE_CUES`) - is not in
+  doubt; it is documented as not done. `engine._in_doubt` admits only a genuine doubt (a hedge, another source, an
+  unestablished time or place) and a performed act inside a service documented in doubt (39f0ac49's shape).
+  ⚠️ **Recorded asymmetry:** the shared path still holds a proposal provider's own selection on such an act for its
+  question, as the base does, while a participant's code for it is listed with its reason. The owner's "passes the
+  same path as Corti is insufficient proof" is why the shared path's leniency is not extended to participants; neither
+  is ever READY. Measured over every D14 input: 22 inputs read alike on both paths, 26 differ only in that way.
+- **The fronted frame dated a done act by its purpose.** "To mark the site for future surveillance, the colon wall ...
+  was tattooed ..." (svc-21) read the tattoo as planned and lost the corpus's recorded nursing conflict; 88d9db32's "To
+  facilitate subsequent localization, ... tattoo ink was injected" read the same way. The frame is now read for its
+  history, today and source words only - never a plan word - which is exactly what the base read of it (the base never
+  read the frame). svc-21 and 88d9db32 read as the base reads them again.
+- **Competition by act identity let a doubted act's code claim the act done.** L4-2's control: Corti's 43248 on "It is
+  unclear whether the ring was also dilated with a Savary bougie" claimed, through the one-possible-act fallback, the
+  balloon dilation Astra's 43249 claimed, and the two competed. Passages that show an act of the kind that is not done
+  now claim no other act (`engine._claimed`); the fallback stays for passages that show no act of the kind at all
+  (C2-4-1).
+- **C2-5's mode edge** is pinned by a mutation proof: removing the mode check from `jobs._stopped_attempt` fails
+  `tests/test_h3_refutation_c2.py` (restored byte-identical, sha256 compared).
+
+**Moved pins, each saying so in place:** `tests/test_h3_repairs.py` (the titles and the labelled paragraphs read as the
+base reads them; the admission cases on a plain report; the labelled report's provider-neutral hold);
+`tests/test_h2_refutation_r1.py`, `tests/test_h2_marking_tense.py` and `tests/test_advanced_gi_binding.py` (F-TIME R's
+forms read as the base reads them; F-NEG S's stay READY); `tests/test_harness_engine.py` (a hedged passage's code held
+as Corti's is); `tests/test_harness_engine_confirmations.py` (a held participant code takes its own key, never the
+confirmation); `tests/test_h3_refutation_r1.py` (regenerated from a fresh harvest: 46 of 214 rows moved, each with its
+round-1 reading in its comment; RecordedResidualTests names the dropped rules' base readings). New:
+`tests/test_h3_refutation_c2.py` with `tests/fixtures/gi4/refutation/h3-c2-cases.json` (all 156 cycle-2 inputs through
+the pipeline's own date, with base, stage and round-1 readings; no input READY on either path where the base is not),
+C2-4's competition cases and C2-5's database findings.
+
+**Gates on this tree:** battery 3 declared movements (D9, X3, Y4), 0 undeclared, 0 new violations; replay identical
+except the two declared labels; freeze holds (0 patterns, the layout over 5,723 texts identical, the date channel 0
+new over 44,014 states, 19,780 requests unchanged, 0 mention counts moved).
+
+**The retained cases, predicted offline** (a throwaway copy of the database, the final assessments' retained answers re-read
+as a re-assessment reads them; nothing written or sent):
+- **88d9db32: six codes READY.** Corti's 45380, 45381 and 43239, and Astra's and Fable's 43249 (the ring's balloon
+  dilation), 45390 (the ascending lesion's EMR) and 45385 (the sigmoid polyp's cold snare), which Corti did not
+  select. Each is the document's own act today; the transverse lesion's "not resected today" is that lesion's. The
+  stomach's decompression stays unresolved and uncoded, as ruled.
+- **39f0ac49: four codes held, none READY.** Corti's 43239, 45380 and 45385 and Astra's and Fable's 43247, held alike,
+  because the labelled procedure paragraphs inside its Indications read as the base reads them (F-SECTIONS L dropped).
+  43247 now reaches review, never an alternative only.
+
+**Recorded as open (each the base's own, none this diff's):**
+- "The polyp was left in place." under "Procedure: Colonoscopy with hot snare polypectomy": Corti's 45385 READY on
+  this tree and the base (no act is read for "left in place", so the listing stands). A participant's code is listed.
+- Two dilations of one ring with two instruments, both stated done, are one act to the reader, so a bougie code and a
+  balloon code for them compete (a false hold).

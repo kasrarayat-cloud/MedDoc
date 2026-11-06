@@ -1752,6 +1752,26 @@ def _usd(value):
         return None
 
 
+def chain_usage(run):
+    """(usage, estimated cost in USD as text or None, the ids of the stopped runs it continues) of ``run``'s whole tool
+    loop: for a continuation (F-STOP) its chain's usage summed and each run's estimate added, so the exchanges a report
+    counts and the cost it prints describe the same loop (refutation round 1 of harness repair 3, L6-3); otherwise the
+    run's own. The report's entry and the API's participant row read it alike (refutation cycle 2, C2-5-8: the row had
+    read the continuation's own usage and cost)."""
+    from decimal import Decimal  # noqa: PLC0415 - only for a chain
+    from .jobs import loop_runs  # local import: jobs imports this module
+    from .participants.loop import summed_usage
+
+    if run is None:
+        return {}, None, []
+    chain = loop_runs(run) if not run.reused_from_id else [run]
+    if len(chain) < 2:
+        return (run.usage or {}), estimated_cost(run), []
+    costs = [estimated_cost(each) for each in chain]
+    cost = None if any(c is None for c in costs) else str(sum((Decimal(c) for c in costs), Decimal('0')))
+    return summed_usage([each.usage for each in chain if each.usage]), cost, [str(each.pk) for each in chain[:-1]]
+
+
 def estimated_cost(run):
     """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
     (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). A tool loop (HARNESS.md 11.2) is
