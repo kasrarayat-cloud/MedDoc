@@ -241,3 +241,34 @@ class DatedHistoryInTheIndicationTests(SimpleTestCase):
     def test_follow_announces_and_follow_up_does_not(self):
         self.assertNotEqual(self.snare('Indications: Surveillance; details of the colonoscopy in 2019 follow.'), 'ready')
         self.assertEqual(self.snare('Indications: Follow-up colonoscopy after polypectomy in 2023.'), 'ready')
+
+
+class AnotherActsDoubtTests(SimpleTestCase):
+    """engine._another_acts_doubt (integration): a proposer's passage about another, not-done act of the code's kinds
+    never holds a code whose own documented act no passage doubts; a passage that also states the matched act keeps the
+    routing-era reader's hold (the NEG-REL refuters of the completion corpus)."""
+    HEAD = (SYN + 'Colonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+            'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the ileocecal valve was identified.\n')
+    COLD = 'A 6 mm polyp in the transverse colon was removed with a cold snare.'
+    FAILED = ('Hot snare polypectomy of a 15 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could '
+              'not be closed around the stalk, and the polyp was left in place.')
+
+    def test_a_participants_passage_about_the_failed_attempt_does_not_hold_the_supported_code(self):
+        text = self.HEAD + self.COLD + '\n' + self.FAILED + '\n'
+        result = run(text, corti(('45385', span(text, self.COLD))), [read('astra', [code(text, '45385', self.FAILED)])])
+        item = proposal(result, '45385')
+        self.assertEqual(item.status, 'ready')
+        self.assertEqual((item.support['supporting'], item.support['unrelated']), ([0], [1]))
+        alone = proposal(run(text, corti(('45385', span(text, self.FAILED))), [read('astra', [])]), '45385')
+        self.assertEqual(alone.status, 'ready')
+
+    def test_the_failed_attempt_alone_is_never_ready(self):
+        text = self.HEAD + self.FAILED + '\n'
+        item = proposal(run(text, corti(('45385', span(text, self.FAILED))), [read('astra', [])]), '45385')
+        self.assertNotEqual(item.status, 'ready')
+
+    def test_a_passage_that_also_states_the_matched_act_keeps_the_hold(self):
+        line = 'In the distal rectum, a 5 mm sessile polyp was seen; zero (0) biopsies were taken; it was not snared.'
+        text = self.HEAD + line + '\n'
+        item = proposal(run(text, corti(('45380', span(text, line))), [read('astra', [])]), '45380')
+        self.assertNotEqual(item.status, 'ready')

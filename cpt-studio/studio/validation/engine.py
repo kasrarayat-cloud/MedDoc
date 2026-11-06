@@ -1716,8 +1716,13 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     if positive and old.state in ('uncertain', 'not_performed'):
         doubt = old.decisive
         own = doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
-        holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing, inventory)) or (
-            old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
+        # completion repair (integration): a doubt or denial in a passage about another act of the code's kinds - the
+        # reader's evidence of an act it does not read done, overlapping none of the matched acts' evidence - is that
+        # act's, not the code's (_another_acts_doubt; directive item 3, evidence-based reconciliation)
+        another = own and _another_acts_doubt(doubt, found, code)
+        holds = (old.state == 'uncertain' and own and not another
+                 and _about(doubt, found, code, text, routing, inventory)) or (
+            old.state == 'not_performed' and own and not another and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
         if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
@@ -2427,6 +2432,34 @@ def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bo
 STATUS_WORDS = re.compile(r'\b(?:perform\w*|done|complet\w*|cancel\w*|abort\w*|terminat\w*|discontinu\w*|postpon\w*|'
                           r'defer\w*|declin\w*|refus\w*|pending|incomplete|attempt\w*|stopp\w*|halt\w*|resched\w*|'
                           r'called\s+off|on\s+hold|tbd|unknown|requested)\b', re.I)
+
+
+def _another_acts_doubt(reading: checks.Reading, found: reconcile.Match, code: str = '') -> bool:
+    """Completion repair (integration, 2026-11-06; directive item 3, evidence-based reconciliation): whether the doubt or
+    denial the routing-era reader reads in a passage the code cites belongs to ANOTHER act than the acts the code is
+    matched to (``found.acts``, done): the passage overlaps none of the matched acts' own evidence, and it overlaps the
+    evidence of an act of the code's own kinds that the documented-service reader does not read as done ("Hot snare
+    polypectomy of a 15 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could not be closed
+    around the stalk, and the polyp was left in place." cited for 45385 beside "A 6 mm polyp in the transverse colon was
+    removed with a cold snare."). One proposer's citation of another act then never holds a code whose own documented act
+    no passage doubts.
+
+    Never for a passage that also states a matched act: there the second reader's hold stands, whatever clause its
+    doubt is in. Measured (the completion corpus, H2|NEG-REL-08 to -16): a clause-by-clause release there turned eight
+    refuters READY - "...; zero (0) biopsies were taken; it was not snared." - because the passage's other clause held a
+    code whose own clause the readers misread as done. Any doubt the reader binds to no act holds as before."""
+    if not found.acts or reading.start is None or reading.end is None:
+        return False
+
+    def overlaps(ev) -> bool:
+        return ev.start < reading.end and reading.start < ev.end
+    if any(overlaps(ev) for a in found.acts for ev in a.evidence):
+        return False
+    profile = reconcile.catalogue.code_profile(code) if code else None
+    kinds = set(profile.covers) if profile is not None else {a.kind for a in found.acts}
+    matched = {a.id for a in found.acts}
+    return any(a.kind in kinds and a.id not in matched and a.status != 'performed'
+               and any(overlaps(ev) for ev in a.evidence) for a in found.service.acts)
 
 
 def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str,
