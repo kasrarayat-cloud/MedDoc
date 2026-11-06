@@ -144,15 +144,21 @@ class InlineServiceLabelTests(SimpleTestCase):
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
                                  ('selected', 'ready', 'participant', [name]))
 
-    def test_without_f_acts_39f0ac49s_bolus_removal_is_no_documented_act(self):
-        # F-ACTS was refuted in cycles 3 and 4 and is dropped (recorded residual): "the bolus was removed" names no
-        # foreign-body act, so Corti's 43247 on it is held by the service's doubt and a participant's is listed
+    def test_39f0ac49s_bolus_removal_is_the_egds_foreign_body_act(self):
+        # MOVED PIN (completion repair 2026-11-06, integration of builders R1 and A). Was: F-ACTS refuted in cycles 3
+        # and 4 and dropped, so "the bolus was removed" named no foreign-body act, Corti's 43247 was held by the
+        # service's doubt and a participant's was listed. Now the bolus resolves to its documented antecedent ("A large
+        # impacted meat bolus was found at 34 cm") and is the structural subject of its removal (U1, builder A), inside
+        # the report's own labelled "Upper endoscopy:" part (U2, builder R1): one foreign-body act today, so Corti's
+        # 43247 is READY and a participant's 43247 for the same passage reads exactly as Corti's
         codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
         by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
-        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
-        listed = proposal(run(LABELLED, codes, [read('astra', [code(LABELLED, '43247', NET)])]), '43247')
-        self.assertEqual((listed.bucket, listed.status), ('alternative', 'informational'))
-        self.assertIn(engine.PARTICIPANT_NO_ACT, listed.exclusion_reason)
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'ready'))
+        for name in ('astra', 'fable'):
+            with self.subTest(name):
+                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
+                self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
+                                 ('selected', 'ready', 'participant', [name]))
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -183,11 +189,14 @@ class InlineServiceLabelTests(SimpleTestCase):
 
 class ForeignBodyActTests(SimpleTestCase):
     """F-ACTS (a bolus named by its food, or "the bolus", read as the foreign-body act where its clause states it
-    removed) was refuted in refutation cycles 3 and 4 and is dropped under the two-cycle rule: the foreign-body act is
-    the base's "foreign body", "food bolus" and "food impaction" again. A recorded residual (39f0ac49's 43247)."""
+    removed) was refuted in refutation cycles 3 and 4 and dropped under the two-cycle rule. The completion repair
+    (2026-11-06, U1, builder A) changed the approach rather than the requirement: a definite bolus phrase resolves to
+    its documented antecedent, and a removal is the bolus's only when the bolus is the removal predicate's structural
+    subject or object (services._removal_subject, _bolus_index). The F-ACTS refuters below stay non-removals."""
 
-    def test_the_bolus_the_net_removed_reads_as_the_base_reads_it(self):
-        self.assertNotIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
+    def test_the_bolus_the_net_removed_is_the_foreign_body_act(self):
+        # MOVED PIN (integration of builders R1 and A): was assertNotIn - the base read no act there
+        self.assertIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
 
     def test_a_medication_bolus_a_finding_or_a_push_is_no_removal(self):
         egd = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\n'
