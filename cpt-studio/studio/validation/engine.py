@@ -1287,6 +1287,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         found = _second_opinion(outcome, found, code, text, inventory, routing)
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
+                and not _listing_contradicted(code, found.service) \
                 and _agreed_not_done(code, outcome, found.service, text, day, pages):
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure), and the inventory reads the same not-done status there: the
@@ -1543,6 +1544,18 @@ def _time_in_doubt(code: str, service) -> bool:
     kinds = set(profile.covers) if profile is not None else set()
     return any(a.kind in kinds and a.status == 'uncertain'
                and any(cue.startswith(gi_services.OTHER_TIME_CUE) for cue in a.cues) for a in service.acts)
+
+
+def _listing_contradicted(code: str, service) -> bool:
+    """Whether ``service`` documents an act ``code`` accounts for as a procedure-line listing the report contradicts
+    (services.listed_contradicted; completion repair, builder A). The inventory holds that listing in doubt: it reads
+    the act neither done nor not done, so it never agrees with the routing-era reading of the code's own passage that
+    the act was not done, and the code is held, never newly excluded through it (cux-hold R8 D3 N17: "The polyp was not
+    removed." cited for 45385 under "Procedure: Colonoscopy with hot snare polypectomy" stays held, as the base read it).
+    """
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    return any(a.kind in kinds and gi_services.listed_contradicted(a) for a in service.acts)
 
 
 def _not_done_class(status: str) -> str:
@@ -2614,11 +2627,17 @@ def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
         # Completion repair (2026-11-06, F5; builder A): an intervention the procedure line lists and the report states
         # only in doubt ("It is unknown whether hot snare polypectomy was performed.") may have been done, and then this
         # base code is included in it: held beside it, never final alone (never excluded either)
-        doubted = [a for a in service.acts if gi_services.listed_in_doubt(a) and a.role in ('physician', 'unknown')
+        # Full-suite repair (builder A): so too a listed removal the report contradicts (every lesion it records stated
+        # not removed today, services.listed_contradicted). The listing and the report disagree, and that rule only
+        # holds: the base code stays held beside it as the base read it (cux-hold R8 D3 N17), never released READY
+        doubted = [a for a in service.acts if (gi_services.listed_in_doubt(a) or gi_services.listed_contradicted(a))
+                   and a.role in ('physician', 'unknown')
                    and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
         if others or reportable or doubted:
             bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}
-                                                       | {reconcile.act_label(a.kind) + ' (stated in doubt)'
+                                                       | {reconcile.act_label(a.kind) + (' (stated in doubt)'
+                                                                                         if gi_services.listed_in_doubt(a)
+                                                                                         else ' (listed, stated not done)')
                                                           for a in doubted}))))
     return tuple(bases)
 

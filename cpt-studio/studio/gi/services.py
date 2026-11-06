@@ -288,6 +288,13 @@ LISTED_DOUBTED_CUE = 'uncertain: the report states the act its procedure line li
 def listed_in_doubt(act) -> bool:
     """Whether an act is its procedure line's listing that the report states only in doubt (LISTED_DOUBTED_CUE)."""
     return act.status == 'uncertain' and LISTED_DOUBTED_CUE in act.cues
+
+
+def listed_contradicted(act) -> bool:
+    """Whether an act is its procedure line's listed removal that the report contradicts, every lesion it records being
+    stated not removed today (LISTED_CONTRADICTED_CUE). Hold-only: the engine holds the base code beside it and never
+    excludes a code through it (engine.base_included, engine._listing_contradicted)."""
+    return act.status == 'uncertain' and LISTED_CONTRADICTED_CUE in act.cues
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
                         'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
@@ -4347,13 +4354,40 @@ REMOVAL_KINDS = frozenset(('snare', 'emr', 'esd', 'hot_biopsy'))
 NOT_REMOVED = frozenset(('untreated', 'scheduled'))
 LISTED_CONTRADICTED_CUE = ('uncertain: the report states every lesion of the service that the procedure line lists the '
                            'removal for not removed today')
+# Full-suite repair (builder A, 2026-11-06): a disposition is read from its plain form only. The auxiliary group before
+# the predicate, exactly (lower-cased, whitespace-normalised), per disposition; and what may follow the predicate in its
+# sentence: nothing, "today", or a reason. Both are closed classes whose failure mode is the safe side - any other form
+# states no disposition and leaves the listing as the base reads it: "was initially not removed ..., but was removed
+# after irrigation", "was not removed until the end of the procedure", "At the prior colonoscopy the polyp was not
+# removed" (a phrase before the subject), "was left in place briefly ..., then snared" each sets none.
+DISPOSITION_GROUPS = {
+    'left': frozenset(('was', 'were', 'is', 'are', 'has been', 'have been')),
+    'untreated': frozenset(('was not', 'were not', 'could not be', 'cannot be', 'can not be', 'has not been',
+                            'have not been', 'was never', 'were never')),
+    'scheduled': frozenset(('will be', 'is to be', 'are to be')),
+}
+DISPOSITION_TAIL = _rx(r'[ \t]*(?:today[ \t]*)?(?:[.;!]|$|,?[ \t]*(?:because|due[ \t]+to|given|owing[ \t]+to|as|since|'
+                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to)\b)')
+
+
+def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: tuple[int, int, str], se: int,
+                       disposition: str) -> bool:
+    """Whether the predicate ``m`` states ``disposition`` in its plain form: its subject's noun phrase opens its clause
+    and its head stands right before the auxiliary group, that group is exactly one of DISPOSITION_GROUPS[disposition],
+    and (but for a removal still to come, whose own reading dates it) only DISPOSITION_TAIL follows it."""
+    group = _VERB_GROUP.search(text, max(clause[0], m.start() - 60), m.start())
+    if group is None or ' '.join(group.group(0).lower().split()) not in DISPOSITION_GROUPS[disposition]:
+        return False
+    if text[found[1]:group.start()].strip() or text[clause[0]:_np_phrase_start(text, clause[0], found[0])].strip():
+        return False
+    return disposition == 'scheduled' or DISPOSITION_TAIL.match(text, m.end(), se) is not None
 
 
 def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service_date, dates,
                          part) -> list[tuple['Lesion', str]]:
-    """The (lesion, disposition) pairs a sentence [ss, se) states (see above). ``lesion_at(position)`` gives the recorded
-    lesion whose mention's noun covers a position, or None. Bounded: the sentence's predicates of the two forms, each
-    read once in its own clause."""
+    """The (lesion, disposition) pairs a sentence [ss, se) states (see above), each in its plain form only
+    (_plain_disposition). ``lesion_at(position)`` gives the recorded lesion whose mention's noun covers a position, or
+    None. Bounded: the sentence's predicates of the two forms, each read once in its own clause."""
     out: list[tuple[Lesion, str]] = []
     for pattern, form in ((LEFT_IN_PLACE, 'left'), (LESION_REMOVAL, 'removal')):
         for m in pattern.finditer(text, ss, se):
@@ -4365,12 +4399,16 @@ def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service
             reading = read_clause(text, clause, m.start(), m.end(), service_date=service_date, dates=dates, part=part,
                                   in_today_report=part.kind == 'report')
             if form == 'left' and reading.status == 'performed':
-                out.append((lesion, 'untreated'))
+                disposition, plain = 'untreated', _plain_disposition(text, clause, m, found, se, 'left')
             elif form == 'removal' and reading.status in ('negated', 'cancelled'):
-                out.append((lesion, 'untreated'))
+                disposition, plain = 'untreated', _plain_disposition(text, clause, m, found, se, 'untreated')
             elif form == 'removal' and reading.status == 'planned' and reading.cues \
                     and not reading.cues[0].startswith(SECTION_PLAN_CUES):
-                out.append((lesion, 'scheduled'))
+                disposition, plain = 'scheduled', _plain_disposition(text, clause, m, found, se, 'scheduled')
+            else:
+                continue
+            if plain:
+                out.append((lesion, disposition))
     return out
 
 

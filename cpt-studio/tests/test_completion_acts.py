@@ -349,6 +349,35 @@ class DispositionTests(SimpleTestCase):
                 'A 6 mm polyp in the descending colon was removed with a cold snare and retrieved.\n' + FAILED_SNARE + '\n')
         self.assertEqual(dispositions(text), ['removed', 'untreated'])
 
+    def test_a_contradicted_listing_only_holds(self):
+        # full-suite repair (cux-hold R8 D3 N17): the contradiction never releases the base code - held beside the
+        # listed removal (base_included), as the base read it - and never excludes the listed code through its own
+        # cited denial: the inventory reads the listing in doubt, never not done
+        for sentence in ('The polyp was not removed.', 'The polyp was left in place.'):
+            with self.subTest(sentence):
+                text = LISTED_HEAD + sentence + '\n'
+                base = proposal(run(text, corti(('45378', span(text, CECUM)))), '45378')
+                self.assertEqual(base.status, 'needs_clarification')
+                self.assertIn('base_included', [c.fact for c in base.clarifications])
+                result = run(text, corti(('45378', span(text, CECUM)), ('45385', span(text, sentence))))
+                self.assertEqual((proposal(result, '45385').bucket, proposal(result, '45385').status),
+                                 ('selected', 'needs_clarification'))
+                self.assertEqual(proposal(result, '45378').status, 'needs_clarification')
+
+    def test_no_plain_form_states_no_disposition(self):
+        # the refuter shapes: another occasion before the subject, a removal still to come today ("until"), an adverb
+        # in the auxiliary group, a later removal of the same lesion - each leaves the listing as the base reads it
+        for sentence in ('At the prior colonoscopy the polyp was not removed.',
+                         'The polyp was not removed until the end of the procedure.',
+                         'The polyp was initially not removed because of poor views, but was removed after irrigation.',
+                         'The polyp was not removed by the fellow; the attending completed the polypectomy.'):
+            with self.subTest(sentence):
+                text = LISTED_HEAD + sentence + '\n'
+                self.assertNotIn('untreated', dispositions(text))
+                self.assertNotIn(gi_services.LISTED_CONTRADICTED_CUE,
+                                 [c for _, cues in acts_of(text, 'gi.colonoscopy', 'snare') for c in cues])
+                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'ready'))
+
 
 MARK_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
              'Date of service: 2026-10-14\nProcedure: Colonoscopy\n'
