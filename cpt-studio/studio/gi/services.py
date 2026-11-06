@@ -4786,8 +4786,9 @@ def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service
 # the act is not today's - denied ("No biopsy specimens were obtained."), cancelled, planned ("EMR margin marking was
 # performed around the lesion for future resection") or historical - as it reads it today, since dropping that would
 # release; it reads no done, failed or doubted act from it. An unknown head keeps today's reading (the safe side), and
-# so does a verb form ("We biopsied tissue from the antrum").
-PRESUPPOSING_HEAD = _rx(r'[ \t]+(?:defect|specimen|site|scar|bed|margin|base|ulcer|area|tissue)s?\b')
+# so does a verb form ("We biopsied tissue from the antrum") and a head that opens a field of its own ("Biopsy
+# Site: sigmoid colon", "Injection sites: four quadrants ...": a label and its answer, as the injection pattern reads it).
+PRESUPPOSING_HEAD = _rx(r'[ \t]+(?:defect|specimen|site|scar|bed|margin|base|ulcer|area|tissue)s?\b(?![ \t]*:)')
 
 
 def _presupposed(text: str, ms: int, me: int) -> bool:

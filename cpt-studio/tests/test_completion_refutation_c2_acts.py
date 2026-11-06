@@ -353,6 +353,10 @@ class PresupposingHeadTests(SimpleTestCase):
         text = upper('No biopsy specimens were obtained.\n', 'Procedure: ' + listing + '\n')
         self.assertNotIn('43239', ready(text, [('43239', listing)]))
         self.assertIn('negated', [s for s, _ in acts(text, 'gi.egd', 'biopsy')])
+        sentence = 'EMR margin marking was performed around the lesion for future resection'
+        text = colon('A 30 mm flat lesion was found in the ascending colon.\n' + sentence + '.\n')
+        self.assertEqual([s for s, _ in acts(text, 'gi.colonoscopy', 'emr')], ['planned'])
+        self.assertNotIn('45390', ready(text, [('45390', sentence)]))
 
     def test_the_held_shapes(self):
         """Cycle 2, acts A8: recorded readings on the safe side. "Specimen retrieval after the polypectomy failed." stays
@@ -371,17 +375,26 @@ class PresupposingHeadTests(SimpleTestCase):
         self.assertEqual(outcome(upper(quote + '.\n'), [('43239', quote)])['43239'], ('selected', 'needs_clarification'))
 
     def test_the_closed_head(self):
-        """Cycle 2, rule 6b: services._presupposed - a noun before a closed head; never a verb form or another head."""
+        """Cycle 2, rule 6b: services._presupposed - a noun before a closed head; never a verb form, another head, or a
+        head that opens a field of its own ("Biopsy        Site: sigmoid colon", "Injection sites: ...")."""
         for text, word in (('the polypectomy defect', 'polypectomy'), ('the biopsy sites', 'biopsy'),
                            ('the EMR margin', 'EMR'), ('the snare defect', 'snare'), ('biopsy tissue', 'biopsy')):
             with self.subTest(text):
                 m = re.search(word, text)
                 self.assertTrue(gi_services._presupposed(text, m.start(), m.end()))
         for text, word in (('we biopsied tissue', 'biopsied'), ('the polypectomy was', 'polypectomy'),
-                           ('the biopsy forceps', 'biopsy'), ('the polypectomy, defect', 'polypectomy')):
+                           ('the biopsy forceps', 'biopsy'), ('the polypectomy, defect', 'polypectomy'),
+                           ('Biopsy        Site: sigmoid colon', 'Biopsy'), ('Injection sites: four quadrants', 'Injection'),
+                           ('Biopsy site : antrum', 'Biopsy')):
             with self.subTest(text):
                 m = re.search(word, text)
                 self.assertFalse(gi_services._presupposed(text, m.start(), m.end()))
+
+    def test_a_checked_item_with_its_own_site_field(self):
+        """Cycle 2, rule 6b (the full suite's r4d ingest pin): a checked item whose own detail field follows it on its
+        line ("Interventions: ☒ Biopsy        Site: sigmoid colon") is the item done, never a closed head."""
+        text = colon('Interventions: ☒ Biopsy        Site: sigmoid colon\n')
+        self.assertIn('performed', [s for s, _ in acts(text, 'gi.colonoscopy', 'biopsy')])
 
 
 class PurposeReleaseTests(SimpleTestCase):
