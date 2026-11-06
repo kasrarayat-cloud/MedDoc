@@ -691,3 +691,19 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
   - **The retained cases, predicted offline:** 88d9db32 has six codes READY (three of them Astra's and Fable's only),
     and 39f0ac49 has three held and 43247 listed.
   - Items 3, 4 and 5 stay PARTIAL.
+
+- **2026-11-06T04:40Z: harness repair 3 merged, and its install declared before the act.**
+  - **Merged:** PR #1477 is merged as `fd8040d71e44` (branch head `84707acd5`; byte-identical `cpt-studio/` tree
+    `0eac8315dd89`).
+  - **Citation on the merge commit:**
+    - CI run 42159987582 and secrets-scan run 42159987651 pass;
+    - cpt-studio run 42159987583 passes every test (6,011 Django, 524 ops, 43 verification), with its audit red on the
+      accounted-for pypdf advisories.
+  - **Declaration:** `docs/foundation/mutations/20261106-cpt-studio-harness-repair3-install.md`, committed before any
+    phase runs.
+  - **Image precheck:** dependency layers CACHED; dpkg list identical to the live image's.
+  - **Offline prediction** (read-only dump 03:08:47Z, nothing sent):
+    - 88d9db32 goes needs_clarification to ready_for_review, with six codes READY (three Astra's and Fable's only);
+    - 39f0ac49 holds Corti's three codes by six questions and lists 43247.
+  - **Live baseline:** re-read at 04:37:46Z, unchanged since the dump.
+  - Item 8 is in progress; the install follows.
