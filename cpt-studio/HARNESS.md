@@ -3042,3 +3042,21 @@ is byte-identical to the harness repair's pins.
 **Two-cycle status.** This round is the first cycle for every rule harness repair 3 added. A second cycle, with new
 lenses over these repairs, runs before the install. A releasing rule refuted again is dropped and its inputs are pinned
 as residuals.
+
+### Harness repair 3: what the full suite found after round 1 (2026-11-06), and what changed
+
+The chunked full suite over the round-1 tree (5,989 Django tests; ops 524, verification 43 and the three node suites all
+passed) failed 21 subtests. One was the freeze test reading the declaration before its last update. The other twenty
+were this repair's own regressions, each repaired at its cause:
+
+| what read wrong | the cause | the repair |
+|---|---|---|
+| a planned EGD "at the hospital endoscopy unit" in an office note's plan was held, never planned (structure:9, sections:1) | F-TIME P's other-source check ran before a plan or history section dated the act; and its facility branch read any "at the hospital" or "at the clinic" as another facility | the source and the named agent are read after the section has dated the act, as a hedge is; a facility is another one only when named by an indefinite article ("at a community hospital") or a proper name ("at Synthetic Valley Hospital"), or qualified (outside, referring, sending, transferring, ...) |
+| "Per the patient's permission to proceed, hot snare polypectomy ... was performed." lost its act | "per the patient" excepted a request or a consent but not a permission | a permission, an agreement, an approval, an authorization, an assent, instructions, a desire, goals, tolerance, comfort or convenience is no source either |
+| a numbered part's own date ("PART 2 - PROCEDURE NOTE" / "Date of service: ...") was no longer read: the part read as an attached report under the history section above it (gi2 dates, the PART cases) | round 1's L5-4 repair let a history section run over any later report title, and this round's head-field evidence ("a date or physician field on its next lines") took a numbered part of the same document for an attached report | the head-field branch is dropped; positive evidence is a history label naming a report or record, or the section's text saying one is attached ("see the attached report", "report below", "by fax", "received"); a numbered part's title (`sections.DOCUMENT_PART`) is never an attached report's |
+| the assessment-digest pins (the superscript code; the imported-reference parity) | the three label moves | re-pinned after the I1 check: at installed `e6d451f03d86`'s labels the head makes the harness repair's digests exactly (`harness_repair_reader_labels`) |
+
+⚠️ **The third row moved the date channel, and neither the freeze nor the retained texts saw it.** The freeze's date
+channel and the 58 retained revision texts carry no numbered part under a history heading; the suite's own date tests
+do. So the context reader's change on that shape was found by the suite, not by the measurement written to rule it
+out. That measurement is now taken over every text the full suite hands the date reader as well (below).

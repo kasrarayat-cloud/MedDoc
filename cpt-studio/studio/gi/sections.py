@@ -1097,41 +1097,24 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
 
 _SEPARATOR_LINE = re.compile(r'[-=_*~.]{3,}')  # a rule line between a heading and what it holds
 # Refutation round 1 (L3-1: "Interval history:" with nothing after it, then today's own "Procedure Note" and its
-# narrative): a report title in a history section titles an attached report only on positive evidence - the section's
-# own label names another report or record ("Attached prior report:", "Outside report:", "Records received:"), or the
-# title carries a report head of its own on its next lines, before any narrative: a date, physician, patient or
-# facility field ("Date of service: 2025-03-01", "Endoscopist: Dr. B. Synthetic (fictional)"), as an attached report
-# does and today's own section title, whose head is the document's, does not.
+# narrative): a report title in a history section titles an attached report only on positive evidence that it is another
+# report's - the section's own label names another report or record ("Attached prior report:", "Outside report:",
+# "Records received:"), or its text above the title says a report is attached ("History: see the attached report.",
+# "Previous procedures: colonoscopy, report below.", "Received by fax."). A numbered part of the document ("PART 2 -
+# PROCEDURE NOTE", "Section B: Procedure note") is this document's own part, never an attached report, whatever its
+# head carries (the full suite after round 1: a date-of-service line under its title made it read as attached).
 _ANOTHER_REPORT_LABEL = re.compile(r'\b(?:reports?|records?|attached|attachments?|enclosed|scanned|faxed|received)\b',
                                    re.A | re.I)
-_REPORT_HEAD_FIELD = re.compile(
-    r'[ \t]*(?:date(?:\s+of\s+(?:service|procedure|exam(?:ination)?|birth))?|procedure\s+date|'
-    r'exam(?:ination)?\s+date|DOS|DOB|endoscopists?|physicians?|proceduralists?|'
-    r'performing\s+(?:physician|endoscopist|gastroenterologist)|attending(?:\s+physician)?|gastroenterologists?|'
-    r'colonoscopists?|surgeons?|operators?|providers?|performed\s+by|patient(?:\s+name)?|name|MRN|'
-    r'medical\s+record\s+(?:number|no\.?)|account(?:\s+(?:number|no\.?))?|facility|location|hospital|'
-    r'institution)[ \t]*:', re.A | re.I)
-_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][A-Za-z .()/#-]{0,40}:', re.A)  # a "Label: value" line of a report head
-ATTACHED_HEAD_LINES = 4  # non-empty lines after a title read for a report head of its own (bounded)
+_ATTACHED_CONTENT = re.compile(r'\b(?:attached|attachments?|enclosed|appended|faxed|scanned|received|(?:reports?|records?|'
+                               r'notes?)\s+(?:below|follows?|following))\b|\bby\s+fax\b', re.A | re.I)
+_NUMBERED_PART = re.compile(r'[ \t]*' + DOCUMENT_PART, re.A)
 
 
-def _titles_another_report(text: str, lines: list[tuple[int, int]], i: int, label: str) -> bool:
-    """Whether the report title on line ``i``, in a history section labelled ``label``, titles an attached report
-    (see _REPORT_HEAD_FIELD above): the label names another report or record, or the title's next lines carry a head
-    field of their own before any line that is not a field."""
-    if _ANOTHER_REPORT_LABEL.search(label or ''):
-        return True
-    seen = 0
-    for ls, le in lines[i + 1:]:
-        line = text[ls:le].strip()
-        if not line or _SEPARATOR_LINE.fullmatch(line):
-            continue
-        if _REPORT_HEAD_FIELD.match(line):
-            return True
-        seen += 1
-        if not _FIELD_LINE.match(line) or seen >= ATTACHED_HEAD_LINES:
-            return False  # narrative before any head field: today's own section title
-    return False
+def _titles_another_report(text: str, opened: int, title_start: int, label: str) -> bool:
+    """Whether the report title starting at ``title_start``, in the history section labelled ``label`` whose heading
+    line starts at ``opened``, titles an attached report (see _ANOTHER_REPORT_LABEL above): the label names another
+    report or record, or the section's text above the title says one is attached."""
+    return bool(_ANOTHER_REPORT_LABEL.search(label or '') or _ATTACHED_CONTENT.search(text, opened, title_start))
 
 
 def _attached_titles(text: str, lines: list[tuple[int, int]], headings: dict) -> None:
@@ -1143,20 +1126,21 @@ def _attached_titles(text: str, lines: list[tuple[int, int]], headings: dict) ->
     a bare section label such as "Procedure"), wherever the history section it stands in runs ("Prior report:",
     "Received by fax.", then the title), with a rule line passed over - and in a history section only on positive
     evidence that the title is another report's (_titles_another_report). In place."""
-    in_force, in_force_label = None, ''  # the kind and label of the section the last heading opened
+    in_force, in_force_label, opened = None, '', 0  # the kind, label and line start of the last heading's section
     for i, (ls, le) in enumerate(lines):
         line = text[ls:le].strip()
         if not line or _SEPARATOR_LINE.fullmatch(line):
             continue  # a blank line, or a rule ("----------"), stands between the heading and the title it holds
         heading = headings.get(i)
         if heading and heading[0] == 'procedure' and ':' not in heading[2].text \
-                and ((in_force == 'history' and _titles_another_report(text, lines, i, in_force_label))
+                and not _NUMBERED_PART.match(text, ls) \
+                and ((in_force == 'history' and _titles_another_report(text, opened, ls, in_force_label))
                      or _NOT_TODAYS_SECTION.search(in_force_label)) \
                 and (cues.PROCEDURE_TITLE.match(line) or _aside_title(line) is not None):
             headings[i] = None  # a report title inside a history or another report's section: the attached report's
             continue
         if heading:
-            in_force, in_force_label = heading[0], heading[1]
+            in_force, in_force_label, opened = heading[0], heading[1], ls
 
 
 # Harness repair 3 (HARNESS.md, "Harness repair 3", F-SECTIONS L): in a procedure report, a paragraph that opens with

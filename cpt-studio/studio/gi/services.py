@@ -2452,7 +2452,7 @@ CONDITION_CUE = 'uncertain: inside a condition or an open question ("if", "wheth
 # P - another facility, provider or source in the act's clause ("at the referring facility", "per outside report",
 #     "(outside report)", "by the referring endoscopist", "elsewhere", "according to the patient", "per Dr. Smith")
 #     leaves where and by whom it was done unestablished: held, never read as this report's act.
-OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|outlying|external|another|different|originating)\s+'
+OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|transferring|outlying|external|another|different|originating)\s+'
                    r'(?!(?:the|a|an|this|that|of|its|their)\b)'
                    r'(?:(?!(?:and|or|but|was|were|is|are|with|for)\b)[\w-]+\.?\s+){0,2}?'
                    r'(?:hospitals?|hosp|facilit(?:y|ies)|fac|cent(?:er|re)s?|ctr|institutions?|clinics?|practices?|'
@@ -2466,11 +2466,13 @@ OTHER_SOURCE = _rx(r'\b(?:outside|referring|sending|outlying|external|another|di
                    # place or the source of the act ("At OSH,", "At the transferring hospital,", "At Synthetic Valley
                    # Hospital,", "Records received from ... Hospital:"), never this one ("at this hospital"); the
                    # patient or a record as the source ("Per the patient,"), never a request ("per patient request")
-                   r'|\b(?:at|from)\s+(?!(?:this|our|the\s+same)\b)(?:(?:the|a|an)\s+)?(?:[\w.\'-]+\s+){0,3}?'
+                   r'|\b(?:at|from)\s+(?:an?\s+(?:[\w.\'-]+\s+){0,2}?|(?:the\s+)?(?-i:(?:(?!(?i:the|this|that|our|its|'
+                   r'their|same)\b)[A-Z][\w.\'-]*\s+){1,4}))'
                    r'(?:hospital|hosp|medical\s+cent(?:er|re)|clinic|infirmary|institution)\b|\bOSH\b'
                    r'|\bper\s+(?:the\s+)?(?:patient|pt|family|caregiver|history|records?|report|outside|referring|'
                    r'outlying|external|sending)\b'
-                   r"(?!['\u2019]?s?\s+(?:request|preference|wish|wishes|choice|consent|decision))")
+                   r"(?!['\u2019]?s?\s+(?:request|preference|wish|wishes|choice|consent|decision|permission|agreement|"
+                   r"approval|authori[sz]ation|assent|instructions?|desire|goals?|tolerance|comfort|convenience))")
 OTHER_SOURCE_CUE = 'uncertain: its clause names another facility, provider or source: '
 # a provider or a facility named as the requester, the recipient or a helper is no other source of the act ("At the
 # request of the referring physician", "a copy of this report to the referring physician", "with the assistance of
@@ -2782,15 +2784,6 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
                  and not any(a <= m.start() < b for a, b in manner + purpose)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
-    # the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1, L1-4)
-    heading = _sections.layout(text).section_at(pos).heading
-    source = _other_source(said) or (_other_source(heading.text) if heading is not None else None)
-    if source is not None:
-        return Reading('uncertain', (OTHER_SOURCE_CUE + ' '.join(source.group(0).split()),))  # F-TIME P
-    agent = AGENT_NAMED.search(said)
-    surname = [w for w in agent.group('name').split() if not CREDENTIAL.match(w)][-1:] if agent is not None else []
-    if surname and surname[0].lower() not in _report_physician_words(text):
-        return Reading('uncertain', (AGENT_CUE + 'Dr. ' + agent.group('name'),))  # F-TIME P, a named agent
     skipped = next((tcs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(twhole)
                     if tcs + m.start() in elsewhere), None) if elsewhere else None
     if skipped is not None and not other_time:
@@ -2802,6 +2795,17 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return Reading('historical', ('historical: in a history section',))
     if part.kind == 'plan' and not today:
         return Reading('planned', ('planned: in a plan section',))
+    # F-TIME P: the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1,
+    # L1-4) - read after a history or plan section has dated the act, as a hedge is (the full suite after round 1: a
+    # planned EGD "at the hospital endoscopy unit" was held, never planned)
+    heading = _sections.layout(text).section_at(pos).heading
+    source = _other_source(said) or (_other_source(heading.text) if heading is not None else None)
+    if source is not None:
+        return Reading('uncertain', (OTHER_SOURCE_CUE + ' '.join(source.group(0).split()),))  # F-TIME P
+    agent = AGENT_NAMED.search(said)
+    surname = [w for w in agent.group('name').split() if not CREDENTIAL.match(w)][-1:] if agent is not None else []
+    if surname and surname[0].lower() not in _report_physician_words(text):
+        return Reading('uncertain', (AGENT_CUE + 'Dr. ' + agent.group('name'),))  # F-TIME P, a named agent
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
         return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))

@@ -607,3 +607,35 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
     (`docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md`); no readiness for wider uploads is claimed.
   - **Next:** reproduce every finding before repair, apply the two-cycle rule, then CI, the install declaration, the
     install, the reassessments and the fresh walk.
+
+- **2026-11-06T00:20Z (session a12d8fb3): refutation round 1 repaired and pinned; the full suite's regressions repaired; cycle 2 running.**
+  - **Round 1:** six lenses over the stage commit `1974c8cb1` reported 41 findings, and every one was reproduced before
+    its repair. Every lens input and control is pinned in `cpt-studio/tests/test_h3_refutation_r1.py`: 214 engine cases
+    on both paths, plus the database cases (competition, Stop and Resume). That module fails 185 subtests on the stage
+    commit and passes on the repaired tree. Committed as `8b186df05` (local), with the record in `cpt-studio/HARNESS.md`,
+    "Harness repair 3, refutation round 1".
+  - **Residuals recorded, none a regression against the base:** L1-4's plain "tattoo was requested" (Corti's path),
+    L2-1i, "the small ones not banded", L3-10's event times, and L5-2's pathology addendum (Corti's path). Also ⚠️
+    **L4-4**: Corti's own-passage release is not open to a participant's code, and Corti's same code with another
+    passage decides that code. This is a provider asymmetry the directive rules out, recorded as open; it is visible,
+    never READY.
+  - **The full suite after round 1:** 5,989 Django tests; ops, verification and the node suites all passed. It failed
+    21 subtests: one was the freeze test's timing, and twenty were this repair's own regressions, now repaired.
+    - F-TIME P read before a plan section dated the act, and "at the hospital" counted as another facility.
+    - "per the patient's permission" counted as another source.
+    - A numbered part of the same document ("PART 2 - PROCEDURE NOTE" with its own date line) read as an attached
+      report. ⚠️ This was a **date-channel** change that neither the freeze corpus nor the 58 retained texts carried;
+      the suite found it.
+    - Three digest pins moved through the labels alone (I1 checked at `e6d451f03d86`'s labels).
+  - **Measured on the repaired tree:**
+    - the battery: 3 movements, all declared;
+    - the replay: identical but for the labels;
+    - the freeze: holds with 18 declared patterns;
+    - the 58 retained texts' context facts: identical.
+  - **Running:** the second refutation cycle (five lenses: the releasing rules; the holding rules in both directions;
+    sections and the date; admission and competition; acts and Stop/Resume) in sealed sandboxes at `8b186df05`. Also
+    the full suite again, this time recording every text it hands the date reader, for a base-against-head date and
+    routing differential over all of them.
+  - **The sandbox self-test's ARM 6 is stale:** it checks a Node package (`packages/auth`) that `0354cbb9f` retired. In
+    its place each sandbox was proved, by a Python positive control, to import its own tree's code. Every write-safety
+    arm passed.

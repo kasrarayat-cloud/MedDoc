@@ -1403,6 +1403,10 @@ CORE_REPAIR_SUPERSCRIPT_SHA256 = 'fd0b37c42efda94479a3130cd164c998298b9d997dad9b
 # CORE_REPAIR_SUPERSCRIPT_SHA256 exactly with the four labels put back to installed b0dc3446c64c's
 # (served_reader_labels), and this at its own labels.
 HARNESS_REPAIR_SUPERSCRIPT_SHA256 = '66345791125e7bf5c13ac471eafc1543cad6c8d93661288d7770ac628e7ec6ce'
+# Harness repair 3 (2026-11-06) moved the routing, inventory and engine labels by one again: this head makes
+# HARNESS_REPAIR_SUPERSCRIPT_SHA256 exactly with the four labels put back to installed e6d451f03d86's
+# (harness_repair_reader_labels), and this at its own labels.
+HARNESS_REPAIR_3_SUPERSCRIPT_SHA256 = '9a638ec9cf208ceda0d9d1e85416d2616050f5556908cde48b04de54a1d26aaf'
 
 
 def installed_reader_labels():
@@ -1423,6 +1427,17 @@ def served_reader_labels():
     from tests.test_gi4_state import HARNESS_REPAIR_INSTALLED_LABELS
     stack = ExitStack()
     for (module, name), value in HARNESS_REPAIR_INSTALLED_LABELS.items():
+        stack.enter_context(mock.patch.object(module, name, value))
+    return stack
+
+
+def harness_repair_reader_labels():
+    """The four reader labels as installed e6d451f03d86 records them (tests.test_gi4_state's map), for the pins that
+    prove harness repair 3's head reads their inputs exactly as the served harness repair does, the labels apart."""
+    from contextlib import ExitStack
+    from tests.test_gi4_state import HARNESS_REPAIR_3_INSTALLED_LABELS
+    stack = ExitStack()
+    for (module, name), value in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
         stack.enter_context(mock.patch.object(module, name, value))
     return stack
 
@@ -1467,7 +1482,12 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
             extraction_messages=tuple(revision.messages), second=None, second_scope=None))
 
     def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
-        self.superscript(HARNESS_REPAIR_SUPERSCRIPT_SHA256)
+        self.superscript(HARNESS_REPAIR_3_SUPERSCRIPT_SHA256)
+
+    def test_at_the_harness_repairs_labels_the_superscript_code_is_its_digest_exactly(self):
+        # harness repair 3 (2026-11-06): the labels apart, this head reads it as served e6d451f03d86 does
+        with harness_repair_reader_labels():
+            self.superscript(HARNESS_REPAIR_SUPERSCRIPT_SHA256)
 
     def test_at_the_served_labels_the_superscript_code_is_the_core_repairs_digest_exactly(self):
         with served_reader_labels():
