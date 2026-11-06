@@ -2657,19 +2657,27 @@ OCCASION_INDICATION_CUE = ('uncertain: stated under an indication that names ano
 @functools.lru_cache(maxsize=16)
 def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tuple[int, int], ...]:
     """F1 (completion repair, builder A): the bodies - from the end of the heading line to the section's end - of the
-    layout's indication sections that come after a procedure, findings or technique section of today's report and whose
-    own heading line names another occasion of a service: a service name with a history word, another facility or
-    source, or a date before the service date. One pass over the layout's sections, cached per text."""
+    layout's indication sections in a report whose procedure narrative has a procedure, findings or technique section of
+    its own (before or after the indication), and whose own heading line names another occasion of a service: a service
+    name with a history word, another facility or source, or a date before the service date. One pass over the layout's
+    sections, cached per text."""
     lay = _sections.layout(text)
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
     out = []
-    after_procedure = False
-    for s in lay.sections:
-        if s.kind in ('procedure', 'findings', 'technique'):
-            after_procedure = True
+    # today's procedure narrative under its own heading, before or after the indication: then the indication's body is
+    # not that narrative (a report whose narrative has no procedure heading at all - the labelled paragraphs inside an
+    # Indications section, U2 - is never read here)
+    procedural = [s.kind in ('procedure', 'findings', 'technique') for s in lay.sections]
+    later = [False] * (len(procedural) + 1)
+    for i in range(len(procedural) - 1, -1, -1):
+        later[i] = later[i + 1] or procedural[i]
+    earlier = False
+    for i, s in enumerate(lay.sections):
+        if procedural[i]:
+            earlier = True
             continue
-        if s.kind != 'indication' or not after_procedure or s.heading is None:
+        if s.kind != 'indication' or not (earlier or later[i + 1]) or s.heading is None:
             continue
         line_end = text.find('\n', s.start, s.end)
         if line_end < 0:
@@ -4254,21 +4262,25 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         part = _part_at(plist, starts, s)
         clause = _clause_for(clauses_of(ss, read_end), s)
         own_sites = _bolus_sites(text, tuple(clause), (ss, read_end), site_cache)
-        # a definite or bare phrase with no modifier of its own refers to its antecedent: what it is, and where
+        # a definite phrase refers to its antecedent - the nearest preceding phrase of its head class in its part - and
+        # is stated where that one is when it names no site of its own ("An impacted meat bolus was found in the
+        # distal esophagus ... the food bolus was removed"); what it is comes from its own modifiers when it has any,
+        # and only a bare one ("the bolus", "the impaction", "Bolus removal") takes that from the antecedent too
         bare = not mods and not comp_words and (det in _DEFINITE or not det)
-        antecedent = last.get((part.start, head)) if bare else None
+        definite = det in _DEFINITE or bare
+        antecedent = last.get((part.start, head)) if definite else None
         if negated:
             foreign = False
         elif head == 'foreign body' or head == 'coin':
             foreign = True
         elif head == 'object':
-            foreign = bool(words & FOREIGN_OBJECT_WORDS) or (antecedent is not None and antecedent.foreign)
+            foreign = bool(words & FOREIGN_OBJECT_WORDS) or (bare and antecedent is not None and antecedent.foreign)
         elif not low_head.startswith(('bolus', 'boli', 'impaction')):
             foreign = True  # "the impacted meat": its own food is its head
         elif words & FOOD_WORDS or (low_head.startswith(('bolus', 'boli')) and 'impacted' in mods):
             foreign = True
         else:
-            foreign = antecedent is not None and antecedent.foreign
+            foreign = bare and antecedent is not None and antecedent.foreign
         sites = own_sites or (antecedent.sites if antecedent is not None and not negated else ())
         mention = _BolusMention(s, e, head, foreign, negated, sites)
         out.append(mention)

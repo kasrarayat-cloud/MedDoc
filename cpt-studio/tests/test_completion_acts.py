@@ -257,6 +257,17 @@ class BolusAntecedentTests(SimpleTestCase):
                 quote = 'the bolus was removed through the mouth'
                 self.assertEqual(outcome(text, '43247', quote), (('selected', 'ready'), ('selected', 'ready')))
 
+    def test_a_definite_phrase_takes_its_antecedents_site_whatever_its_modifiers(self):
+        # D|AB-B2's removal names the bolus again with its own modifier ("the food bolus") and no site: it is the
+        # impacted meat bolus found in the distal esophagus, so it binds to the upper endoscopy with a colonoscopy present
+        removal = 'A retrieval net was passed through the working channel and the food bolus was removed through the mouth.'
+        text = (COMBINED_HEAD + 'The gastroscope was advanced to the second portion of the duodenum. An impacted meat bolus '
+                'was found in the distal esophagus. ' + removal + '\nThe colonoscope was advanced to the cecum. A 5 mm '
+                'polyp in the sigmoid colon was removed with a cold snare.\n')
+        self.assertEqual(removal_acts(text), [('performed', ('distal esophagus',))])
+        quote = 'the food bolus was removed through the mouth'
+        self.assertEqual(outcome(text, '43247', quote), (('selected', 'ready'), ('selected', 'ready')))
+
     def test_a_colon_foreign_body_binds_to_the_colonoscopy(self):
         # C3-1-1's refuter: the site-less removal of a foreign body seen in the transverse colon is the colonoscopy's,
         # never the upper endoscopy's (43247 not READY; 45379 READY)
@@ -481,6 +492,15 @@ class IndicationAndReferralTests(SimpleTestCase):
             with self.subTest(sentence):
                 self.assertEqual(outcome(OCCASION_HEAD + sentence + '\n', '45381', sentence)[0],
                                  ('selected', 'needs_clarification'))
+
+    def test_before_the_procedure_heading_too(self):
+        # the announcing indication's body before today's procedure section is the indication's, as after it
+        sentence = 'The transverse colon lesion was marked with tattoo and not resected.'
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+                'Date of service: 2026-10-14\nIndication: Referred after an outside colonoscopy on 2026-09-01.\n'
+                + sentence + '\nProcedure: Colonoscopy\n'
+                'The colonoscope was advanced to the cecum and the examination was completed.\n')
+        self.assertNotIn('ready', statuses(text, '45381', sentence))
 
     def test_a_coordinated_predicates_today_is_not_the_acts(self):
         for sentence in ('The transverse colon lesion was marked with tattoo and not resected today.',
