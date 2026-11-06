@@ -1241,9 +1241,11 @@ tests are `tests/test_completion_answers.py` unless named.
   documented" or "Cannot confirm" is excluded by the engine (`bucket` excluded, `exclusion_reason` "The member answered
   "<answer>" to <fact>; this code is excluded by that answer until it is withdrawn.", a `member.answer` check,
   `support.answered`), and its answered question is kept, closed: the Clarification row is `answered` with `answer` (the
-  MemberAnswer), on the new assessment and on the one the member answered, so `queue_reasons` no longer says
-  `question`. The code reads exactly as before on the customer page (`excluded`, "A needed detail is not documented"),
-  in the reports and in readiness (resolved, needing no decision).
+  MemberAnswer), on the new assessment and on the one the member answered. `queue_reasons`' `question` reads the
+  questions the review overlay leaves open (`review.open_questions_of`; the stored OPEN rows alone where no decision
+  and no standing answer moves them), so the queue never says `question` of one a member answered; the operator view's
+  `open_clarifications` stays the stored rows' count. The code reads exactly as before on the customer page
+  (`excluded`, "A needed detail is not documented"), in the reports and in readiness (resolved, needing no decision).
 - **Its cross-code effects are the overlay's, read by the engine.** The code still holds every code its presence held -
   a diagnostic base beside it keeps its `base_included` question, an E/M its separate-visit question (session decision
   (e), refutation round 2 L7-01: a member's answer never releases a code; only a reviewer's decision does). A
