@@ -92,7 +92,6 @@ from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, Section
 from studio.types import Span
 
-STRUCTURE_VERSION = 'gi-structure@1'
 FLAGS = re.A | re.I
 
 # --- P2: the label line --------------------------------------------------------------------------------------------
@@ -118,6 +117,8 @@ def _label_at(line: str) -> Optional[tuple[str, int, int]]:
     if value >= len(line):
         return None
     return label, lead, value
+
+
 _SERVICE_NAMES = '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVICE_PATTERNS)
 # Today's procedure steps that may open the first sentence before its instrument (an allow-list: anything else fails).
 _FRAME = (r'(?:(?:after|following)[ \t\n]++(?:(?:the[ \t\n]++)?(?:patient[ \t\n]++)?repositioning(?:[ \t\n]++(?:of[ \t\n]++)?the[ \t\n]++'
@@ -168,8 +169,6 @@ _LANDMARK_NAMES = '|'.join(f'(?:{p.pattern})' for _, _, p in cues.UPPER_LANDMARK
 _BY_AGENT = re.compile(r'\bby[ \t\n]++(?!(?:both[ \t\n]++)?(?:the[ \t\n]++)?(?:' + _LANDMARK_NAMES + r'))', FLAGS)
 # A proper name after a place preposition ("At Synthetic Valley Medical Center", "from Mercy"): read with case.
 _PROPER_PLACE = re.compile(r'\b(?:[Aa]t|[Ii]n|[Ff]rom|[Pp]er)[ \t\n]++(?:the[ \t\n]++)?[A-Z][a-z]{2,}', re.A)
-HOLD_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_YEAR, _WEEKDAY, _TIME_UNIT, _PAST_WORD, _OTHER_PLACE,
-                                                       _AGENT, _SOURCE, _ANOTHER)), FLAGS)
 _MONTH = re.compile(_MONTH_NAMES, re.A)
 # The same signals without the time ones (a plan section's or a future form's time is the plan's).
 _NOT_TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_OTHER_PLACE, _AGENT, _SOURCE, _ANOTHER)), FLAGS)
@@ -912,10 +911,3 @@ def reader_layout(text: str, original: str) -> Layout:
     if original == text or len(original) != len(text):
         return clinical_layout(text)
     return overlay(gi_sections.layout(text), released(original))
-
-
-def paragraph_at(text: str, pos: int) -> Optional[LabelledParagraph]:
-    """The released labelled paragraph holding ``pos``, or None (one bisection)."""
-    paragraphs = released(text)
-    k = bisect.bisect_right([p.start for p in paragraphs], pos) - 1
-    return paragraphs[k] if k >= 0 and paragraphs[k].start <= pos < paragraphs[k].end else None
