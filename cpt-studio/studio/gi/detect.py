@@ -5963,11 +5963,17 @@ def _failed_acts(an: Analysis, s: int, e: int) -> tuple[list[int], list[int]]:
                 spans.append(found.phrase)
                 if found.antecedent is not None:
                     spans.append(found.antecedent.phrase)
-                elif _DEFINITE.match(an.text, found.phrase[0]):
+                elif _DEFINITE.match(an.text, found.phrase[0]) and not found.attached:
+                    # a definite anaphor names the earlier act only when it adds nothing of its own: no lesion or
+                    # site attached ("the polypectomy of the 14 mm polyp" is another act), no technique the earlier
+                    # phrase lacks ("the hot snare polypectomy" after "A cold snare polypectomy")
                     prior = _clause_before(an, cs)
                     predicate = gi_clauses.first_predicate(an.text, *prior) if prior else None
                     earlier = gi_clauses.subject(an.text, prior[0], predicate) if predicate is not None else None
-                    if earlier is not None and earlier.head.word == found.head.word:
+                    said = set(re.findall(r'[a-z]+', an.text[earlier.phrase[0]:earlier.phrase[1]].lower())) \
+                        if earlier is not None else set()
+                    if earlier is not None and earlier.head.word == found.head.word \
+                            and all(word.word in said for word in found.modifiers):
                         spans.append(earlier.phrase)
         merged: list[list[int]] = []  # indexed once: overlapping phrases are one failed act's
         for a, b in sorted(spans):
@@ -5989,15 +5995,16 @@ def _in_a_failed_act(an: Analysis, start: int, end: int) -> bool:
 
 
 def _completion_states_reach(an: Analysis, ms: int, me: int, ws: int, we: int) -> bool:
-    """Whether a completion statement of the documented-service reader's own vocabulary (services.COMPLETE_POS: "Cecal
-    intubation was achieved", "The cecum was reached", "advanced to the second portion of the duodenum") covers the
-    landmark at [ms, me) in its clause window [ws, we): routing reads the reach statements the completion reader reads,
+    """Whether a completion statement of the documented-service reader's own vocabulary (services.COMPLETE_POS) opens on
+    the landmark at [ms, me) in its clause window [ws, we) - the landmark as the statement's subject: "Cecal intubation
+    was achieved", "The cecum was reached" (its reach-verb forms, "advanced to the cecum", routing reads already through
+    cues.REACHED_BEFORE, so only this shape is added): routing reads the reach statements the completion reader reads,
     so one extent fact serves routing, the documented-service reader (which takes routing's extent) and the admission's
     required facts (completion repair, R2: D10b's "Cecal intubation was achieved." had read no extent). The caller has
     checked the landmark's own reading (performed or incomplete) and that nothing in its window blocks the reach."""
     from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
     for hit in gi_services.COMPLETE_POS.finditer(an.text, ws, we):
-        if hit.start() < me and ms < hit.end():
+        if hit.start() == ms:  # the statement opens on the landmark: "Cecal intubation was achieved"
             return True
     return False
 
@@ -8465,7 +8472,10 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 # - I8 no name of the family in the head or a positive section reads planned, historical, negated, cancelled or held;
 # - I9 the document is a procedure's own report by its head (_procedure_report: a procedure title, the strong head, or a
 #   head of fields and headings only), never an office visit, a consult, a discharge summary, a nursing note, a letter;
-# - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back).
+# - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back);
+# - I11 no act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
+#   (_procedure_line_doubt: its procedure-line promotion, U6, would make the failed or hedged act READY where the base
+#   held it for want of a performed mention).
 # Its reading is the section's ('section' basis), so a cancellation, a denial or a doubt about today's service still
 # contradicts it in _aggregate. Bounded: INSTRUMENT_READS instrument words in positive sections are examined, and
 # INSTRUMENT_MENTIONS kept per family (routing's mention bound, settings.MAX_SERVICE_MENTIONS, is untouched by them).
@@ -8681,6 +8691,52 @@ def _instrument_statement_held(an: Analysis, m: Mention) -> bool:
             or gi_services.in_condition(text, cs, m.start, m.end))
 
 
+_LISTED_ACT_READS = 32  # acts on procedure lines read at most (beyond them: not read, so the instrument rule holds)
+_ACTS_EXAMINED = 256  # act mentions of the document examined for a procedure line at most (beyond: not read)
+
+
+def _procedure_line_doubt(an: Analysis) -> bool:
+    """I11: an act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
+    (services._on_procedure_line: a "Procedure:" field line, the first line under a bare procedure heading, a physician
+    part's title): "Procedure: The colonoscope was advanced to the cecum. Hot snare polypectomy was attempted, but the
+    polypectomy was unsuccessful." Read with that reader's own read_clause, over its own parts and clauses: an attempt,
+    a failure, a hedge, a source or a condition - never a listing's silence (services.SILENT_READINGS), and not a reading
+    the lift leaves alone (hypothetical, a row's hold). The lift (U6, the services reader's placement repair) makes such
+    an act performed; where routing had no performed mention of its family the base held its code, so the instrument
+    rule keeps the base reading while one stands. A boxed line is not read (read_clause hands a box back to routing):
+    it holds too. Memoised per document; bounded by _ACTS_EXAMINED and _LISTED_ACT_READS (beyond them: held)."""
+    key = ('procedure-line-doubt',)
+    if key not in an.memo:
+        from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+        text = an.text
+        plist = gi_services.parts(text, service_date=an.service_date, dates=an.dates)
+        starts = [p.start for p in plist]
+        acts = gi_services._acts_in(text, 0, len(text))
+        doubt, reads = len(acts) > _ACTS_EXAMINED, 0
+        for _, ms, me in acts if not doubt else ():
+            s, e = an.lay.sentence_for(ms, me)
+            part = gi_services._part_at(plist, starts, s)
+            if not gi_services._on_procedure_line(text, ms, part):
+                continue
+            reads += 1
+            ls = text.rfind('\n', 0, ms) + 1
+            le = text.find('\n', ms)
+            le = len(text) if le < 0 else le
+            if reads > _LISTED_ACT_READS or gi_services.BOX_MARK.search(text, ls, le):
+                doubt = True
+                break
+            lo, hi = max(s, ms - _INSTRUMENT_CLAUSE_WINDOW), min(e, me + _INSTRUMENT_CLAUSE_WINDOW)
+            clause = next((c for c in gi_services.clauses(text, lo, hi) if c[0] <= ms < c[1]), (lo, hi))
+            reading = gi_services.read_clause(text, clause, ms, me, service_date=an.service_date, dates=an.dates,
+                                              part=part, in_today_report=part.kind == 'report')
+            if reading.status == 'uncertain' and reading.cues and reading.cues[0] not in gi_services.SILENT_READINGS \
+                    and not gi_services.hypothetical_reading(reading) and not gi_services._row_hold(reading):
+                doubt = True
+                break
+        an.memo[key] = doubt
+    return an.memo[key]
+
+
 def _named_otherwise(an: Analysis, family: str) -> bool:
     """I8: a name of ``family`` in the document's head or in a positive section, about this encounter, reads planned,
     historical, negated, cancelled or held (any uncertain reading but silence)."""
@@ -8698,7 +8754,7 @@ def _named_otherwise(an: Analysis, family: str) -> bool:
 
 
 def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mention]:
-    """The candidates that meet I4, I5 and I8, at most INSTRUMENT_MENTIONS per family (see above). The candidates'
+    """The candidates that meet I4, I5, I8 and I11, at most INSTRUMENT_MENTIONS per family (see above). The candidates'
     spans are in an.instrument_spans before any of them is read, so a sub-act's failure in its clause is never its own
     (_examination_target)."""
     kept: dict[str, list[Mention]] = {}
@@ -8715,6 +8771,8 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
             blocked[m.family] = _named_otherwise(an, m.family)
         if blocked[m.family]:  # I8
             continue
+        if _procedure_line_doubt(an):  # I11, read once, for the first mention that would be kept
+            return []
         kept.setdefault(m.family, []).append(m)
     return [m for family in kept.values() for m in family]
 

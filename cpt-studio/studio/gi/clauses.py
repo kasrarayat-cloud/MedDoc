@@ -443,12 +443,23 @@ def _word_class(text: str, head: Head, words: tuple[Head, ...]) -> Optional[str]
         return EXAMINATION
     if w in ACCESSORIES or w in SUB_ACTS:
         return SUB_ACT
-    if w in REACHES or w in GENERIC_ACTS:
+    if w in GENERIC_ACTS:
         if any(o.word in ACCESSORIES or o.word in SUB_ACTS for o in words):
-            return SUB_ACT  # "clip placement", "passage of the snare", "insertion of the needle"
-        if w in REACHES or any(o.word in SCOPES for o in words):
-            return EXAMINATION  # "cecal intubation", "passage of the colonoscope", "biliary cannulation"
+            return SUB_ACT  # "Clip placement", "deployment of the stent"
+        if any(o.word in SCOPES for o in words):
+            return EXAMINATION
         return None
+    if w in REACHES:
+        if any(o.word in ACCESSORIES or o.word in SUB_ACTS for o in words):
+            # "Passage of the snare", "Balloon cannulation": the accessory may be what moved or the means of the
+            # examination's own reach - which one is not read, so neither is answered (the base reading stands)
+            return None
+        return EXAMINATION  # "Cecal intubation", "passage of the colonoscope", "biliary cannulation"
+    return _named_class(text, head, w)
+
+
+def _named_class(text: str, head: Head, w: str) -> Optional[str]:
+    """The examination named or referred to by the head itself, or a landmark or an obstruction named at it."""
     if w in EXAMINATIONS or _service_head(text, head):
         return EXAMINATION
     if w in OBSTRUCTIONS or _landmark_head(text, head):

@@ -94,7 +94,6 @@ SUB_ACT_FAILURES = (
     ('The snare that was used could not be passed around the polyp.', r'could not'),
     ('During the colonoscopy, the polypectomy was unsuccessful.', r'was unsuccessful'),
     ('Polypectomy was attempted; the attempt was unsuccessful.', r'was unsuccessful'),
-    ('Passage of the snare around the polyp was unsuccessful.', r'was unsuccessful'),
     ('Two of the clips could not be passed.', r'could not'),
     ('Repeated biopsy attempts were unsuccessful.', r'were unsuccessful'),
     ('The polypectomy was terminated because of bleeding.', r'terminated'),
@@ -115,6 +114,7 @@ EXAMINATION_FAILURES = (
     ('Biliary cannulation was unsuccessful.', r'was unsuccessful'),
     ('The papilla could not be cannulated.', r'could not'),
     ('The procedure was terminated because of patient discomfort.', r'terminated'),
+    ('Wire-guided cannulation with the balloon catheter was unsuccessful.', r'was unsuccessful'),
 )
 # Whose failure cannot be told: the base reading (incomplete) stands.
 UNREAD = (
@@ -125,6 +125,9 @@ UNREAD = (
     ('The sigmoid polyp could not be reached.', r'could not'),  # a lesion: neither class
     ('In the sigmoid colon polypectomy was unsuccessful.', r'was unsuccessful'),  # a fronted phrase holds the subject
     ('The endoscopist was unable to advance the colonoscope.', r'unable'),
+    # a reach with an accessory beside it: the accessory may be what moved or the means of the examination's own reach
+    ('Passage of the snare around the polyp was unsuccessful.', r'was unsuccessful'),
+    ('Balloon cannulation was unsuccessful.', r'was unsuccessful'),
 )
 
 
@@ -245,6 +248,16 @@ class SubActFailureRoutingTests(SimpleTestCase):
         text = colon(COLD, 'Hot snare polypectomy of the 14 mm polyp was attempted, but the polypectomy was '
                      'unsuccessful.', 'A 9 mm polyp in the cecum was removed with a hot snare.')
         self.assertEqual(facts(text, 'gi.colonoscopy')['interventions'], 'cold snare; hot snare')
+
+    def test_a_definite_anaphor_names_the_earlier_act_only_when_it_adds_nothing(self):
+        for line, listed in (
+                ('Cold snare polypectomy of a 6 mm polyp was attempted, but the polypectomy was unsuccessful.', None),
+                ('A cold snare polypectomy of the 6 mm polyp was performed, but the polypectomy of the 14 mm polyp was '
+                 'unsuccessful.', 'cold snare'),
+                ('A cold snare polypectomy was performed, but the hot snare polypectomy was unsuccessful.', 'cold snare')):
+            text = colon(line)
+            with self.subTest(line):
+                self.assertEqual(facts(text, 'gi.colonoscopy').get('interventions'), listed)
 
     def test_a_cited_failed_attempt_keeps_its_own_reading(self):
         # the failed act's own passage is not made performed: routing reads it as its clause states it, and where it is
@@ -484,6 +497,29 @@ class InstrumentGuardTests(SimpleTestCase):
             with self.subTest(title=title, head=head):
                 self.assertTrue(instrument_mentions(text, 'gi.colonoscopy'))
                 self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+
+    def test_a_doubted_act_where_the_services_reader_lifts_a_listing(self):
+        # I11: its procedure-line promotion (U6, the services reader's placement repair) would make the failed or hedged
+        # act performed; where routing had no performed mention of the family the base held the code, so the instrument
+        # does not count while it stands (D|RT-f1's and D|ARCH-D3a's shape with no service named)
+        head = ('Date of service: 2026-10-14\nEndoscopist: Jane Synthetic, MD\nSedation: monitored anesthesia care\n'
+                'Indication: Chronic diarrhea.\n')
+        failed = ('Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was '
+                  'unsuccessful because of poor positioning; the polyp was left in place.')
+        dilation = 'Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful.'
+        for title, narrative, value, quote in (
+                ('', 'The colonoscope was advanced to the cecum. ' + failed, '45385', failed),
+                ('Colonoscopy\n', 'The colonoscope was advanced to the cecum. ' + failed, '45385', failed),
+                ('', 'The gastroscope was advanced to the second portion of the duodenum. ' + dilation, '43249', dilation),
+                ('', 'The colonoscope was advanced to the cecum. Possibly a biopsy was obtained from the cecum.',
+                 '45380', 'Possibly a biopsy was obtained from the cecum.')):
+            text = title + head + 'Procedure: ' + narrative + '\n'
+            with self.subTest(title=title, narrative=narrative[:60]):
+                self.assertFalse(instrument_mentions(text, 'gi.colonoscopy') + instrument_mentions(text, 'gi.egd'))
+                self.assertNotEqual(proposal(text, value, quote).status, 'ready')
+        # a listing with no predicate is what the lift is for: the instrument still counts
+        text = head + 'Procedure: The colonoscope was advanced to the cecum. ' + self.COLD + '\n'
+        self.assertTrue(instrument_mentions(text, 'gi.colonoscopy'))
 
     def test_a_narrative_its_section_calls_a_copy_or_another_report(self):
         # I10
