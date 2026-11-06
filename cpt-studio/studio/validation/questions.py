@@ -13,8 +13,11 @@ never applied.
 
 **The form** is how a question is shown to the member who answers it. ``FORM`` shows each question's passages beside the
 fact it names. An answer recorded before answers carried a fingerprint (``MemberAnswer.question`` '') was given to the
-earlier form: a fixed prompt with no passage. No question of this form is that question, so such an answer is never
-applied, and is shown as an earlier answer (the rule for stored answers; API.md "Completion repair (2026-11-06):
+earlier form (``EARLIER``): a fixed prompt with no passage - the words of the question its own assessment asked
+(scope, family, fact, code, CPT Studio's question and reason). Refutation cycle 1 (2026-11-06): such an answer binds
+where the question asked now has exactly those words (``wording``, the earlier form's identity), and is shown as an
+earlier answer otherwise. An install therefore changes no record its answers settled, while an answer is still never
+applied to a question asked in other words (the rule for stored answers; API.md "Completion repair (2026-11-06):
 questions, answers and their recompute").
 """
 from __future__ import annotations
@@ -81,6 +84,7 @@ class MemberAnswerInput:
     value: str
     question: str
     answer_id: str
+    worded: str = ''  # an earlier-form answer's: the wording of the question its own assessment asked (refutation c1)
 
 
 ANSWERED_SUPPORT = 'answered'  # support[...] of a code the engine excluded by a member's answer: {fact, value, answers}
@@ -213,6 +217,21 @@ def service_passages(services, family: str, fact: str, text: Optional[str] = Non
     return _kept((candidates,), text, MAX_PASSAGES)
 
 
+def question_passages(services, family: str, fact: str, evidence, support, text: Optional[str] = None,
+                      acts: Optional[Mapping] = None) -> tuple[tuple[int, int, str], ...]:
+    """The passages a code's question shows and its fingerprint reads (refutation cycle 1, answers F3 and F4): for how
+    far the examination reached or whether it was completed, the passages the documented service's reading of that
+    rests on - the extent sentence, never the code's polypectomy sentence ("How far was the instrument advanced?" beside
+    "The colonoscope was advanced.") - and for a conflict about an act, each side's own passage, the denial that raised
+    the doubt included (service_passages); for any other fact, or where the service reading gives none, the code's own
+    (passages). One reading for every reader: the engine, the review overlay's binding, and the details rows."""
+    if fact.startswith('conflict:') or fact in REACH_FACTS:
+        found = service_passages(services, family, fact, text)
+        if found:
+            return found
+    return passages(evidence, support, text, acts)
+
+
 def instance(scope: str, family: str, fact: str, code: str, question: str, reason: str, shown=()) -> dict:
     """One question as its fingerprint reads it: every part a member is shown or CPT Studio reasons from."""
     return {'scope': str(scope or ''), 'family': str(family or ''), 'fact': str(fact or ''), 'code': str(code or ''),
@@ -227,6 +246,31 @@ def fingerprint(instances: Iterable[dict]) -> str:
     return sha256_json({'form': FORM, 'questions': items}) if items else ''
 
 
+EARLIER = 'cpt-studio-question@0'  # the earlier form: a fixed prompt, no passage
+
+
+def wording(instances: Iterable[dict]) -> str:
+    """The earlier form's identity of the question a (code, family, fact) asks in one assessment: every instance's words -
+    scope, family, fact, code, question and reason - without the passages that form never showed, in canonical order.
+    '' for none."""
+    items = sorted(({key: value for key, value in dict(item).items() if key != 'passages'} for item in instances),
+                   key=sha256_json)
+    return sha256_json({'form': EARLIER, 'questions': items}) if items else ''
+
+
+def group_wording(pairs: Iterable[tuple[tuple[str, str, str], dict]]) -> dict:
+    """{member key: wording} of (member key, instance) pairs."""
+    by: dict = {}
+    for key, item in pairs:
+        by.setdefault(key, []).append(item)
+    return {key: wording(items) for key, items in by.items()}
+
+
+def answer_key(answer) -> str:
+    """An answer's id as text: a MemberAnswerInput's answer_id, a stored MemberAnswer's pk."""
+    return str(_field(answer, 'answer_id') or _field(answer, 'pk') or '')
+
+
 def member_key(code, family, fact) -> tuple[str, str, str]:
     return (str(code or ''), str(family or ''), str(fact or ''))
 
@@ -239,20 +283,32 @@ def group(pairs: Iterable[tuple[tuple[str, str, str], dict]]) -> dict:
     return {key: fingerprint(items) for key, items in by.items()}
 
 
-def bind(answers, asked: Mapping[tuple[str, str, str], str]) -> tuple[list, list]:
+def bind(answers, asked: Mapping[tuple[str, str, str], str], asked_words: Optional[Mapping] = None,
+         given_words: Optional[Mapping] = None) -> tuple[list, list]:
     """(bound, earlier): each standing answer (mappings or objects with code, family, fact, value and question) bound to
     the question it answered - a question ``asked`` asks ({member key: fingerprint}) with its own fingerprint - else
-    earlier, as (answer, why): EARLIER_FORM for an answer recorded with no fingerprint (the earlier form, which showed
-    no passage), ASKED_DIFFERENTLY where its (code, family, fact) is asked with another fingerprint, NO_LONGER_ASKED where
-    it is not asked at all. An answer whose value is not one a question takes binds to nothing and is left out."""
+    earlier, as (answer, why): ASKED_DIFFERENTLY where its (code, family, fact) is asked with another fingerprint,
+    NO_LONGER_ASKED where it is not asked at all. An answer recorded in the earlier form (no fingerprint) binds where the
+    question asked now has the words of the one its own assessment asked (``given_words``: {answer id: wording}, from
+    the caller that reads the stored questions; ``asked_words``: {member key: wording} of the questions asked now), and
+    is EARLIER_FORM where it does not (NO_LONGER_ASKED where its key is not asked at all). An answer whose value is not
+    one a question takes binds to nothing and is left out."""
     bound, earlier = [], []
     for answer in answers or ():
         if _field(answer, 'value') not in UNAVAILABLE:
             continue
         key = member_key(_field(answer, 'code'), _field(answer, 'family'), _field(answer, 'fact'))
         given, now = str(_field(answer, 'question') or ''), asked.get(key, '')
-        if given and now and given == now:
-            bound.append(answer)
+        if given:
+            if now and given == now:
+                bound.append(answer)
+            else:
+                earlier.append((answer, ASKED_DIFFERENTLY if now else NO_LONGER_ASKED))
+            continue
+        was = str((given_words or {}).get(answer_key(answer), '') or '')
+        words = str((asked_words or {}).get(key, '') or '')
+        if was and words and was == words:
+            bound.append(answer)  # refutation cycle 1: the earlier form's question, word for word
         else:
-            earlier.append((answer, EARLIER_FORM if not given else ASKED_DIFFERENTLY if now else NO_LONGER_ASKED))
+            earlier.append((answer, EARLIER_FORM if now else NO_LONGER_ASKED))
     return bound, earlier

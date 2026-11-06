@@ -32,6 +32,7 @@ from __future__ import annotations
 import bisect
 import contextvars
 import dataclasses
+from collections import Counter
 import functools
 import re
 from dataclasses import dataclass, field, replace
@@ -480,6 +481,12 @@ MARKING_AGENT = _rx(r'\b(?:tattoo|ink|india)')  # the instrument mention names a
 # or not done ("..., but the polypectomy was unsuccessful", "...; the tattoo did not take"): a contradiction, held,
 # never read as done. A later mention of another occurrence ("the second polypectomy") holds too, on the safe side.
 LATER_FAILURE_CUE = 'uncertain: a later clause of its sentence states the same act failed or not done: '
+# An act its own words call another one ("a second biopsy", "another polypectomy", "a repeat dilation").
+ANOTHER_ACT_WORDS = _rx(r'\b(?:second|third|another|additional|further|repeat(?:ed)?|other|separate|subsequent|new)\b')
+# Refutation cycle 1 (answers F1): a later sentence states the same act on the same recorded lesion failed.
+SAME_ACT_FAILED_CUE = 'uncertain: a later statement says the same act on the same lesion failed'
+FAILURE_CUES = ('uncertain: failed', 'uncertain: unsuccessful', 'uncertain: abandoned', 'uncertain: aborted',
+                'uncertain: terminated', 'uncertain: discontinued')
 # the later mention's own denial is of its performance, never of a consequence ("was not complicated by bleeding",
 # "did not result in bleeding": refutation round 1, L3-4)
 LATER_NOT_DONE = _rx(r'\s+(?:was|were|did|could|had)\s+not\s+(?:be\s+|been\s+)?(?:performed|done|completed|successful|'
@@ -600,7 +607,9 @@ HEMOSTATIC_CUE = 'uncertain: "hemostatic" names a device or a treatment, not tha
 # Refutation fa-1 and compl-1: an attempt or a failure ("Hot snare polypectomy failed.", "Gastric decompression was
 # attempted but failed.") states the act was tried, so the act is kept in doubt rather than dropped for want of a
 # predicate.
-ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain: unsuccessful', 'uncertain: abandoned')
+# (refutation cycle 1, acts F1: cues.FAILED_ACT's "aborted", "terminated" and "discontinued" are failures too)
+ATTEMPT_OR_FAILURE_CUES = ('uncertain: attempt', 'uncertain: failed', 'uncertain: unsuccessful', 'uncertain: abandoned',
+                           'uncertain: aborted', 'uncertain: terminated', 'uncertain: discontinued')
 
 
 
@@ -2731,10 +2740,18 @@ def statement_hold(text: str, said: str, whole: str, pos: int) -> Optional[str]:
     surname = [w for w in agent.group('name').split() if not CREDENTIAL.match(w)][-1:] if agent is not None else []
     if surname and surname[0].lower() not in _report_physician_words(text):
         return AGENT_CUE + 'Dr. ' + agent.group('name')  # F-TIME P, a named agent
-    hedge = HEDGE_WORDS.search(whole)
-    if hedge:
+    for hedge in HEDGE_WORDS.finditer(whole):
+        if REASON_LEAD.search(whole, 0, hedge.start()):
+            continue  # refutation cycle 1 (acts F5): the reason's diagnosis ("biopsies for suspected celiac disease")
         return 'uncertain: ' + hedge.group(0).lower()
     return None
+
+
+# A hedge word right after a reason's lead (statement_hold): the reason's diagnosis is in doubt, never the act ("Upper
+# endoscopy with duodenal biopsies for suspected celiac disease", "biopsies to rule out possible eosinophilic
+# esophagitis").
+REASON_LEAD = _rx(r'(?:\bfor|\bto[ \t\n]+(?:rule[ \t\n]+out|evaluate(?:[ \t\n]+for)?|assess(?:[ \t\n]+for)?|exclude|investigate)|'
+                  r'\bgiven|\bdue[ \t\n]+to|\bbecause[ \t\n]+of)[ \t\n]+(?:(?:a|an|the|her|his|their)[ \t\n]+)?$')
 
 
 def in_condition(text: str, cs: int, pos: int, end: int) -> bool:
@@ -2761,8 +2778,13 @@ def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tupl
     layout's indication sections in a report whose procedure narrative has a procedure, findings or technique section of
     its own (before or after the indication), and whose own heading line names another occasion of a service: a service
     name with a history word, another facility or source, or a date before the service date; each with the families its
-    line names (_in_an_occasion_indication). One pass over the layout's sections, cached per text."""
-    lay = _sections.layout(text)
+    line names (_in_an_occasion_indication). One pass over the layout's sections, cached per text.
+
+    Read on the clinical layout (refutation cycle 1, structure F6): a released labelled paragraph is a procedure section
+    of its own there, so an indication's body never runs over it - on the frozen layout a report title the layout reads
+    as a procedure heading ("Colonoscopy Report") made the paragraph that indication's body, and its acts were held as
+    stated under an occasion indication while routing read them as today's."""
+    lay = _clinical_layout(text)
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
     out = []
@@ -2805,6 +2827,11 @@ def _in_an_occasion_indication(text: str, pos: int, service_date: Optional[date]
     return i >= 0 and spans[i][0] <= pos < spans[i][1] and (not family or family in spans[i][2])
 
 
+# The heads a marking act's word may modify and still name that act done (_purpose_releases): its material.
+_PURPOSE_MATERIAL_HEADS = frozenset(('ink', 'inks', 'dye', 'dyes', 'tattoo', 'tattoos', 'spot', 'carbon', 'marker',
+                                     'markers', 'marking', 'markings', 'solution', 'suspension'))
+
+
 def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, end: int) -> bool:
     """Whether the purpose phrase whose time word starts at ``word_start`` (studio.gi.purpose) is no time of the act
     mentioned at [pos, end) in its clause [cs, ce): the mention lies before the phrase's opener, and the clause's main
@@ -2827,9 +2854,15 @@ def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, en
     subject = _removal_subject(text, cs, start)
     if subject is None:
         return False
-    # the mention lies inside the subject noun phrase, from its first modifier to its head ("Tattoo ink", "India ink",
-    # "sterile carbon-based tattoo ink") - never after its head, in a complement ("The vial of tattoo ink")
-    return _np_phrase_start(text, cs, subject[0]) <= pos and end <= subject[1] or pos <= subject[0] < end
+    # the mention is the subject's head ("A tattoo was placed ..."), or lies inside the subject noun phrase before a head
+    # that is the act's own material ("Tattoo ink", "India ink", "sterile carbon-based tattoo ink") - never a modifier of
+    # any other head ("EMR referral placed for future resection", "An EMR appointment was made ...", "The EMR target
+    # lesion was marked ...": refutation cycle 1, acts F2), and never after its head, in a complement ("The vial of
+    # tattoo ink")
+    if pos <= subject[0] < end:
+        return True
+    return _np_phrase_start(text, cs, subject[0]) <= pos and end <= subject[1] \
+        and subject[2].lower() in _PURPOSE_MATERIAL_HEADS
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -4211,6 +4244,11 @@ def _attachment_subject(text: str, clause_start: int, predicate_start: int) -> O
 
 
 
+# A clause that states an attempt or a failure (predicate_subject's pronoun reading, refutation cycle 1).
+_ATTEMPT_OR_FAILURE = _rx(r'\b(?:attempt(?:ed|s)?|tried|trial|failed|unsuccessful(?:ly)?|abandoned|aborted|could\s+not|'
+                          r'unable|not\s+(?:possible|feasible|successful|completed?))\b|\bcan(?:not|\'t)\b|couldn\'t')
+
+
 def predicate_subject(text: str, clause_start: int, predicate_start: int,
                       antecedent: Optional[tuple[int, int]] = None) -> Optional[_clauses.Subject]:
     """The one subject reading of a predicate (completion repair, integration of builders R2 and A): builder R2's
@@ -4221,7 +4259,11 @@ def predicate_subject(text: str, clause_start: int, predicate_start: int,
     completion corpus asks for: the two walks agree on 191 of 222; of the rest, the structural walk alone misread "The
     overtube protecting the meat bolus was removed" and "... passed after the overtube was removed" as the bolus's
     removal, and the attachment walk alone read "The food bolus impacted before presentation was removed" as
-    presentation's. A pronoun is read through the clause before it (``antecedent``) by this same reading, one level."""
+    presentation's. A pronoun is read through the clause before it (``antecedent``) by this same reading, one level -
+    and only where that clause states an attempt or a failure (refutation cycle 1, outcome F4): "Hot snare polypectomy
+    was attempted; it was unsuccessful" names the attempted act, while "Biliary brushings were obtained from the
+    stricture; it was then aborted" names no completed act's failure, so the pronoun stays unresolved (the examination's,
+    the base reading)."""
     found = _clauses.subject(text, clause_start, predicate_start)
     if found is None:
         return None
@@ -4233,6 +4275,8 @@ def predicate_subject(text: str, clause_start: int, predicate_start: int,
     a0, a1 = antecedent
     if not (0 <= a0 < a1 <= clause_start):
         return found
+    if not _ATTEMPT_OR_FAILURE.search(text, a0, a1):
+        return found  # refutation cycle 1: a completed act's clause lends a pronoun no failure
     first = _clauses.first_predicate(text, a0, a1)
     prior = predicate_subject(text, a0, first) if first is not None else None
     if prior is None or prior.pronoun or prior.resolved.word in _clauses.PERSONAL:
@@ -4276,6 +4320,10 @@ def _removal_object(text: str, after: int, limit: int) -> Optional[tuple[int, in
     return toks[head][0], toks[head][1], word
 
 
+# A coordinator right before a verb group of its own ("... and was removed"): _predicate_subject's shared subject.
+_VP_COORDINATOR_BEFORE = _rx(r'(?:,[ \t\n]*)?\b(?:and|but|then|and[ \t\n]+then|yet)[ \t\n]+$')
+
+
 def _predicate_subject(text: str, cs: int, verb_start: int, verb_end: int, limit: int,
                        active: bool = True) -> Optional[tuple[int, int, str]]:
     """What the participle at [verb_start, verb_end) is said of, in its clause starting at ``cs``: the subject of its
@@ -4285,6 +4333,16 @@ def _predicate_subject(text: str, cs: int, verb_start: int, verb_end: int, limit
     passive ("Meat bolus removed with a Roth net."). The form _removal_subject and _removal_object give."""
     group = _VERB_GROUP.search(text, max(cs, verb_start - 60), verb_start)
     if group is not None and _GROUP_AUXILIARY.search(group.group(0)):
+        shared = _VP_COORDINATOR_BEFORE.search(text, max(cs, group.start() - 16), group.start())
+        if shared is not None:
+            # refutation cycle 1 (acts F6, admission F2): a verb phrase coordinated with its own auxiliary shares the
+            # first conjunct's subject ("A 25 mm polyp was found in the cecum and was removed piecemeal", "... and was
+            # left in place for surgical resection") - read only where the first conjunct has that one auxiliary
+            auxes = list(_GROUP_AUXILIARY.finditer(text, cs, shared.start()))
+            if len(auxes) != 1:
+                return None
+            first = _VERB_GROUP.search(text, max(cs, auxes[0].start() - 40), auxes[0].end() + 1)
+            return _removal_subject(text, cs, first.start() if first is not None else auxes[0].start())
         return _removal_subject(text, cs, group.start())
     coordinated = _COORDINATED_PARTICIPLE_BEFORE.search(text, max(cs, verb_start - 30), verb_start)
     if coordinated is not None:
@@ -4316,6 +4374,7 @@ class _BolusMention:
     foreign: bool
     negated: bool
     sites: tuple
+    occasion: bool = False  # refutation cycle 1: another occasion's bolus (_BOLUS_OCCASION, an earlier date), inherited
 
 
 def _bolus_class(word: str) -> str:
@@ -4398,6 +4457,7 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         part = _part_at(plist, starts, s)
         clause = _clause_for(clauses_of(ss, read_end), s)
         own_sites = _bolus_sites(text, tuple(clause), (ss, read_end), site_cache)
+        own_occasion = bool(_BOLUS_OCCASION.search(text, ss, read_end)) or _earlier_date(text, ss, read_end)
         # a definite phrase refers to its antecedent - the nearest preceding phrase of its head class in its part - and
         # is stated where that one is when it names no site of its own ("An impacted meat bolus was found in the
         # distal esophagus ... the food bolus was removed"); what it is comes from its own modifiers when it has any,
@@ -4405,6 +4465,10 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         bare = not mods and not comp_words and (det in _DEFINITE or not det)
         definite = det in _DEFINITE or bare
         antecedent = last.get((part.start, head)) if definite else None
+        if antecedent is not None:
+            # refutation cycle 1 (acts F7): an anaphor's own site is its clause's only - never another clause's site of
+            # its sentence ("The coin was removed with a Roth net, and the colonoscope was then advanced to the cecum")
+            own_sites = _bolus_sites(text, tuple(clause), tuple(clause), site_cache)
         if negated:
             foreign = False
         elif head == 'foreign body' or head == 'coin':
@@ -4418,7 +4482,8 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         else:
             foreign = bare and antecedent is not None and antecedent.foreign
         sites = own_sites or (antecedent.sites if antecedent is not None and not negated else ())
-        mention = _BolusMention(s, e, head, foreign, negated, sites)
+        occasion = own_occasion or (antecedent is not None and antecedent.occasion)
+        mention = _BolusMention(s, e, head, foreign, negated, sites, occasion)
         out.append(mention)
         if not negated:
             last[(part.start, head)] = mention
@@ -4451,7 +4516,7 @@ def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMent
         if found is None:
             return
         mention = _bolus_at(index, index_starts, found[0], found[1])
-        if mention is None or not mention.foreign or mention.negated:
+        if mention is None or not mention.foreign or mention.negated or mention.occasion:
             return
         span = (mention.start, mention.end)
         if any(a < span[1] and span[0] < b for _, a, b in list(taken) + out):
@@ -4459,14 +4524,64 @@ def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMent
         out.append(('foreign_body', span[0], span[1]))
 
     for m in REMOVAL_PREDICATE.finditer(text, ss, se):
-        cs, _ = _clause_for(cls, m.start())
+        cs, ce = _clause_for(cls, m.start())
+        if _BOLUS_OCCASION.search(text, cs, ce) or _earlier_date(text, cs, ce):
+            continue  # refutation cycle 1 (acts F4): "the impaction was removed endoscopically at that time"
         add(_predicate_subject(text, cs, m.start(), m.end(), se))
     for m in REMOVAL_NOMINAL.finditer(text, ss, se):
-        add(_removal_object(text, m.end(), se))
+        found = _removal_object(text, m.end(), se)
+        if found is not None and _nominal_removal_done(text, found[1], _clause_for(cls, m.start())[1]):
+            add(found)
     for mention in index[bisect.bisect_left(index_starts, ss):bisect.bisect_left(index_starts, se)]:
         if REMOVAL_COMPOUND.match(text, mention.end) and mention.foreign and not mention.negated:
-            add((mention.start, mention.end, mention.head))  # "Bolus removal was performed"
+            compound = REMOVAL_COMPOUND.match(text, mention.end)
+            if _nominal_removal_done(text, compound.end(), _clause_for(cls, mention.start)[1]):
+                add((mention.start, mention.end, mention.head))  # "Bolus removal was performed"
     return sorted(out, key=lambda x: x[1])
+
+
+# Refutation cycle 1 (acts F3): a nominal removal ("Removal of the bolus", "Bolus removal") states the act done only as
+# a statement of its own - its clause has no verb after it ("Removal of the food bolus with a Roth net.") - or with a
+# done predicate ("... was performed", "... was successful"); "Removal of the bolus was impossible, so it was pushed
+# into the stomach", "... was deemed unsafe", "... was precluded by ...", "... was discussed" add no removal.
+_NOMINAL_DONE = _rx(r'^[^.;:]*?\b(?:was|were)[ \t\n]+(?:then[ \t\n]+|successfully[ \t\n]+|subsequently[ \t\n]+|easily[ \t\n]+|'
+                    r'uneventfully[ \t\n]+|safely[ \t\n]+)?(?:performed|done|accomplished|achieved|completed|carried[ \t\n]+out|'
+                    r'undertaken|successful|uneventful)\b')
+_NOMINAL_FINITE = _rx(r"\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|did|"
+                      r"does|do|must|deemed|considered|felt|thought|precluded|impossible|unsafe|unable|not)\b|n't\b")
+
+
+def _nominal_removal_done(text: str, after: int, ce: int) -> bool:
+    rest = text[after:max(after, ce)]
+    return not _NOMINAL_FINITE.search(rest) or bool(_NOMINAL_DONE.match(rest))
+
+
+# Refutation cycle 1 (acts F4): another occasion's bolus - stated at another time ("at that time", an earlier date),
+# another place ("outside", "another hospital"), or swallowed by another person ("her twin brother swallowed a coin") -
+# read in the bolus phrase's own sentence and inherited by an anaphor from its antecedent: its removal is no act today.
+_BOLUS_OCCASION = _rx(r'\bat[ \t\n]+(?:that|the)[ \t\n]+time\b|\bback[ \t\n]+then\b|\b(?:outside|elsewhere|referring|OSH)\b'
+                      r'|\b(?:another|other|different)[ \t\n]+(?:hospital|facility|clinic|center|centre|provider|physician|'
+                      r'patient|person)s?\b'
+                      r'|\b(?:sister|brother|mother|father|son|daughter|husband|wife|spouse|partner|cousin|aunt|uncle|twin|'
+                      r'sibling|relative|roommate|friend|neighbou?r)s?(?:[ \t\n]+\w+){0,2}[ \t\n]+(?:swallowed|ingested|ate|had|'
+                      r'underwent)\b')
+
+
+def _earlier_date(text: str, lo: int, hi: int) -> bool:
+    """Whether [lo, hi) states a year or a date before the document's own date (any, when it states none)."""
+    from studio.gi import structure as gi_structure  # local: the structure module reads this module's instruments
+    day = gi_structure._document_day(text)
+    for m in gi_structure._DATE_IN_TEXT.finditer(text, lo, hi):
+        if m.group('y4'):
+            y, mo, d = int(m.group('y4')), int(m.group('m1')), int(m.group('d1'))
+        elif m.group('m2'):
+            yy = m.group('y2')
+            y, mo, d = (int(yy) if len(yy) == 4 else 2000 + int(yy)), int(m.group('m2')), int(m.group('d2'))
+        else:
+            y, mo, d = int(m.group('y')), 0, 0
+        if day is None or y < day.year or (y == day.year and mo and (mo, d) < (day.month, day.day)):
+            return True
+    return False
 
 
 # --- completion repair (2026-11-06, U6 and U13; builder A): a lesion's stated disposition --------------------------
@@ -4495,8 +4610,10 @@ DISPOSITION_GROUPS = {
                             'have not been', 'was never', 'were never')),
     'scheduled': frozenset(('will be', 'is to be', 'are to be')),
 }
+# (refutation cycle 1, admission F2: a purpose or a pending tail - "for surgical resection", "pending referral", "to be
+# removed at a later date" - states the same disposition today; it only ever holds more, the safe side)
 DISPOSITION_TAIL = _rx(r'[ \t]*(?:today[ \t]*)?(?:[.;!]|$|,?[ \t]*(?:because|due[ \t]+to|given|owing[ \t]+to|as|since|'
-                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to)\b)')
+                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to|for|pending|awaiting|until|to[ \t]+be)\b)')
 
 
 def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: tuple[int, int, str], se: int,
@@ -4507,9 +4624,19 @@ def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: t
     group = _VERB_GROUP.search(text, max(clause[0], m.start() - 60), m.start())
     if group is None or ' '.join(group.group(0).lower().split()) not in DISPOSITION_GROUPS[disposition]:
         return False
-    if text[found[1]:group.start()].strip() or text[clause[0]:_np_phrase_start(text, clause[0], found[0])].strip():
+    between = text[found[1]:group.start()]
+    if (between.strip() and not _OBSERVED_AND.fullmatch(between)) \
+            or text[clause[0]:_np_phrase_start(text, clause[0], found[0])].strip():
         return False
     return disposition == 'scheduled' or DISPOSITION_TAIL.match(text, m.end(), se) is not None
+
+
+# Refutation cycle 1 (admission F2): a first conjunct that only observes the lesion stands between its head and the
+# disposition's auxiliary group ("A 10 mm polyp was found in the sigmoid colon and was left in place for surgical
+# resection."): the disposition is still the plain statement of that lesion's. Any other first conjunct (an act, a
+# second auxiliary, a clause mark other than a comma before the coordinator) is not.
+_OBSERVED_AND = _rx(r'[ \t\n]+(?:was|were)[ \t\n]+(?:also[ \t\n]+)?(?:found|seen|noted|identified|visualized|visualised|'
+                    r'observed|located|detected)\b[^.;:]{0,80}?(?:,[ \t\n]*)?\b(?:and|but)[ \t\n]+')
 
 
 def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service_date, dates,
@@ -4534,6 +4661,11 @@ def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service
             elif form == 'removal' and reading.status == 'planned' and reading.cues \
                     and not reading.cues[0].startswith(SECTION_PLAN_CUES):
                 disposition, plain = 'scheduled', _plain_disposition(text, clause, m, found, se, 'scheduled')
+            elif form == 'removal' and reading.status == 'performed':
+                # refutation cycle 1 (acts F6): the lesion stated removed today ("was removed piecemeal"): a residual
+                # left in place, or another lesion's disposition, never makes this lesion untreated
+                out.append((lesion, 'removed'))
+                continue
             else:
                 continue
             if plain:
@@ -5636,9 +5768,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
                         continue
-                    subject = predicate_subject(text, cs, _clauses.predicate_start(text, cs, m.start()),
-                                                sentence_clauses[k - 1] if k else None)
-                    if _clauses.failure_of(text, subject) == _clauses.SUB_ACT:
+                    predicate = _clauses.predicate_start(text, cs, m.start())
+                    subject = predicate_subject(text, cs, predicate, sentence_clauses[k - 1] if k else None)
+                    if not _clauses.examinations_failure(text, cs, predicate, m.start(), ce) \
+                            and _clauses.failure_of(text, subject) == _clauses.SUB_ACT:
                         continue  # completion repair (R2): "The snare could not be passed", a sub-act's own failure
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
@@ -5647,6 +5780,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         sentence_starts = [s for s, _ in sentences]
         bolus_index, bolus_starts = _bolus_index(text, sentences, sentence_starts, clauses_of, plist, starts)
         dispositions: dict[str, str] = {}  # U6/U13: a recorded lesion's stated disposition (_stated_dispositions)
+        removed_lesions: set[str] = set()  # refutation cycle 1: the lesions stated removed today, in any sentence
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
         indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
@@ -5860,6 +5994,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     return next((lesion for a, b, lesion in nouns if a <= pos < b), None)
                 for lesion, disposition in _stated_dispositions(text, ss, read_end, cls, lesion_at,
                                                                 service_date=service_date, dates=dates, part=part):
+                    if disposition == 'removed':
+                        removed_lesions.add(lesion.id)
+                        continue
                     dispositions.setdefault(lesion.id, disposition)
             # an act's lesion is at one known place only when every lesion its sentence names is at the same places
             # (_lesion_for picks one of several by position)
@@ -6146,9 +6283,34 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
         # READY and hid the listed polypectomy). It failed two refutation cycles (round 2's narrowing, round 7) and is
         # dropped: such a sentence leaves the listing as main reads it.
         for d in drafts.values():
+            # refutation cycle 1 (answers F1): a later statement that the same act on the same recorded lesion failed
+            # ("A 5 mm polyp ... was biopsied with cold forceps." then "The biopsy was aborted due to bleeding and no
+            # tissue was obtained.") puts the earlier statement in doubt - a failure word, never an attempt, and only
+            # after it (a failure followed by a repeat that succeeded is the repeat's)
+            # - a failed act bound to no lesion counts against the service's ONLY performed act of its kind, unless it
+            # names another site or calls itself another act ("A second biopsy of the cecum was aborted")
+            failed_after = [(a.kind, a.lesion, frozenset(a.anatomy), min((ev.start for ev in a.evidence), default=-1))
+                            for a in d.acts if a.status == 'uncertain' and a.cues and a.cues[0].startswith(FAILURE_CUES)
+                            and (a.lesion or not any(ANOTHER_ACT_WORDS.search(ev.text) for ev in a.evidence))]
+            # one act of a kind per recorded lesion (or passage, where it has none): two mentions of one statement
+            # ("was biopsied with cold forceps") are one act
+            done_of_kind = Counter(kind for kind, _key in {(a.kind, a.lesion or min((ev.start for ev in a.evidence),
+                                                                                    default=-1))
+                                                           for a in d.acts
+                                                           if a.status == 'performed' and LISTED_CUE not in a.cues})
+            for i, a in enumerate(d.acts):
+                if a.status != 'performed' or not a.lesion or LISTED_CUE in a.cues:
+                    continue
+                first = min((ev.start for ev in a.evidence), default=-1)
+                if any(kind == a.kind and at > first and (lesion == a.lesion or (
+                        not lesion and done_of_kind[kind] == 1 and (not sites or sites & set(a.anatomy))))
+                       for kind, lesion, sites, at in failed_after):
+                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (SAME_ACT_FAILED_CUE,))
             body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}
-            # U6 (completion repair, builder A): every lesion recorded for the service stated not removed today
-            contradicted = bool(d.lesions) and all(dispositions.get(lesion.id) in NOT_REMOVED for lesion in d.lesions)
+            # U6 (completion repair, builder A): every lesion recorded for the service stated not removed today - and
+            # none stated removed (refutation cycle 1: removed_lesions, whatever order the sentences come in)
+            contradicted = bool(d.lesions) and all(dispositions.get(lesion.id) in NOT_REMOVED
+                                                   and lesion.id not in removed_lesions for lesion in d.lesions)
             for i, a in enumerate(d.acts):
                 if a.status != 'performed' or LISTED_CUE not in a.cues or a.kind in body_done:
                     continue
@@ -6171,6 +6333,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_CONTRADICTED_CUE,))
     except _Capped as exc:
         problems.append(str(exc))
+    # refutation cycle 1: a lesion stated removed today carries no untreated or scheduled disposition of a residual
+    dispositions = {lesion_id: disposition for lesion_id, disposition in dispositions.items()
+                    if lesion_id not in removed_lesions}
     services = [_finish(d, text, routing, context_facts, encounter_intents, dispositions) for d in drafts.values()]
     services = _included([s for s in services if s is not None])
     em = _em_service(text, routing, context_facts, services, routine_em, sentences, len(services) + 1, em_absent)

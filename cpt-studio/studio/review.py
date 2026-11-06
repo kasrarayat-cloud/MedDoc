@@ -245,6 +245,33 @@ def _standing(assessment):
                 .select_related('answered_by').order_by('answered_at', 'pk'))
 
 
+def _reopened(row, clarifications, standing: set):
+    """``row`` as the overlay reads it (refutation cycle 1, answers F2): a code the engine excluded by a member's answer
+    (questions.answered_away) none of whose answers stands any longer - withdrawn, while the recompute that withdrawal
+    queued has not run, or was stopped or failed - reads as it did before that answer: selected, needing the detail it
+    was asked, the questions that answer closed open again, without the member-answer check or marker. Never "excluded
+    by that answer" once the answer is withdrawn; the recompute then re-makes the assessment, and every surface reads
+    this one row until it does."""
+    import dataclasses as _dataclasses  # local: only a withdrawn engine-applied answer needs it
+    marker = (row.support or {}).get(questions.ANSWERED_SUPPORT)
+    if not isinstance(marker, dict) or not questions.answered_away(row):
+        return row
+    ids = {str(item) for item in marker.get('answers') or ()}
+    if not ids or ids & standing:
+        return row
+    asked = list(row.questions)
+    for clarification in clarifications:
+        if clarification.answer_id is not None and str(clarification.answer_id) in ids:
+            question = {'id': str(clarification.pk), 'scope': clarification.scope, 'family': clarification.family,
+                        'fact': clarification.fact, 'question': clarification.question, 'reason': clarification.reason}
+            if question not in asked:
+                asked.append(question)
+    support = {key: value for key, value in (row.support or {}).items() if key != questions.ANSWERED_SUPPORT}
+    checks = tuple(check for check in row.checks if not (isinstance(check, dict) and check.get('id') == 'member.answer'))
+    return _dataclasses.replace(row, bucket='selected', status='needs_clarification', reinstatable=False, checks=checks,
+                                support=support, questions=tuple(asked))
+
+
 def _overlay_inputs(assessment, current):
     """(proposals, stored rows, decided, keyword arguments) review_view.review_view reads ``assessment`` with."""
     from .jobs import context_service_date  # local import: jobs imports this module
@@ -255,7 +282,9 @@ def _overlay_inputs(assessment, current):
     for clarification in assessment.clarifications.all():  # every state: the open ones are the questions shown
         if clarification.proposal_id:
             rows.setdefault(clarification.proposal_id, []).append(clarification)
-    stored = [review_view.stored_from(proposal, rows.get(proposal.pk, [])) for proposal in proposals]
+    standing = {str(answer.pk) for answer in _standing(assessment)}
+    stored = [_reopened(review_view.stored_from(proposal, rows.get(proposal.pk, [])), rows.get(proposal.pk, []), standing)
+              for proposal in proposals]
     decided = {proposal.key: review_view.Decided(current[proposal.pk].action,
                                                  tuple(current[proposal.pk].modifiers or ()))
                for proposal in proposals if proposal.pk in current}
@@ -280,9 +309,10 @@ def question_pairs(assessment, proposals, views):
     pairs = []
     for proposal in sorted(proposals, key=lambda item: item.position):
         view = views.get(proposal.key)
-        shown = questions.passages(proposal.evidence, proposal.support, text, acts)
         for item in (view.questions if view is not None else ()):
             family = item.get('family') or proposal.family
+            shown = questions.question_passages(assessment.services, family, item.get('fact') or '', proposal.evidence,
+                                                proposal.support, text, acts)
             pairs.append((questions.member_key(proposal.code, family, item.get('fact')),
                           questions.instance(item.get('scope'), family, item.get('fact'), proposal.code,
                                              item.get('question'), item.get('reason'), shown)))
@@ -321,8 +351,37 @@ def answer_states(assessment, current=None, inputs=None):
         return applied, [], []
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
     views = review_view.review_view(stored, decided, **kwargs, answers=())
-    bound, earlier = questions.bind(rest, questions.group(question_pairs(assessment, proposals, views)))
+    pairs = question_pairs(assessment, proposals, views)
+    bound, earlier = questions.bind(rest, questions.group(pairs), questions.group_wording(pairs), earlier_wordings(rest))
     return applied, bound, earlier
+
+
+def earlier_wordings(answers) -> dict:
+    """{answer id: questions.wording} of each answer recorded in the earlier form (MemberAnswer.question ''): the words
+    of the question its own assessment asked at its (code, family, fact) - every stored question of that assessment
+    with that key, as the earlier form showed them (scope, family, fact, code, question and reason; no passage). An
+    answer whose assessment asked no such question has none, and binds to nothing (questions.bind). Refutation cycle 1
+    (2026-11-06): the one reading of what an earlier-form answer answered, for the overlay and the engine's inputs
+    (jobs.member_answers_of). One query per call."""
+    legacy = [answer for answer in answers or () if not (getattr(answer, 'question', '') or '')
+              and getattr(answer, 'assessment_id', None)]
+    if not legacy:
+        return {}
+    pairs: dict = {}
+    for row in Clarification.objects.filter(assessment_id__in={answer.assessment_id for answer in legacy}) \
+            .select_related('proposal').order_by('created_at', 'pk'):
+        code = row.proposal.code if row.proposal_id else ''
+        family = row.family or (row.proposal.family if row.proposal_id else '')
+        pairs.setdefault(row.assessment_id, []).append(
+            (questions.member_key(code, family, row.fact),
+             questions.instance(row.scope, family, row.fact, code, row.question, row.reason)))
+    out = {}
+    for answer in legacy:
+        words = questions.group_wording(pairs.get(answer.assessment_id, ())).get(
+            questions.member_key(answer.code, answer.family, answer.fact), '')
+        if words:
+            out[str(answer.pk)] = words
+    return out
 
 
 def asked_fingerprints(assessment, current=None) -> dict:

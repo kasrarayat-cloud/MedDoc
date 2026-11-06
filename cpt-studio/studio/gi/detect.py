@@ -1879,10 +1879,11 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
         return False
     clause_start = an.lay.clauses_for(cue.start, cue.end)[0][0]
     # bounded: the main predicate is read within CLAUSE_REACH characters before the opener (further, none is read)
-    predicate = purpose.main_predicate_done(text, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), phrase[0])
-    if predicate is None:
-        return False
-    return ts < predicate[2] or purpose.instrument_of(text, predicate[2], ts)
+    # refutation cycle 1 (acts F2): the target must be what the done predicate is said of - its participle, its
+    # subject's head, a modifier of the act's own material, or its instrument - by the services reader's own test
+    # (services._purpose_releases), never any act word before the participle ("EMR referral placed for future resection")
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    return gi_services._purpose_releases(text, cue.start, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), se, ts, te)
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
@@ -5962,6 +5963,11 @@ def _a_sub_acts_failure_at(an: Analysis, clause_start: int, pos: int, name: str,
     False wherever the subject is the examination's or cannot be told: the base reading stands."""
     if not _subject_tested(name, said):
         return False
+    # refutation cycle 1 (outcome F6): a passage predicate or a subject naming the scope is the examination's failure
+    predicate = gi_clauses.predicate_start(an.text, clause_start, pos)
+    clause_end = next((ce for cs, ce in an.lay.clauses_for(pos, pos + 1) if cs == clause_start), len(an.text))
+    if gi_clauses.examinations_failure(an.text, clause_start, predicate, pos, clause_end):
+        return False
     return gi_clauses.failure_of(an.text, _failure_subject(an, clause_start, pos)) == gi_clauses.SUB_ACT
 
 
@@ -6037,11 +6043,23 @@ def _completion_states_reach(an: Analysis, ms: int, me: int, ws: int, we: int) -
     so one extent fact serves routing, the documented-service reader (which takes routing's extent) and the admission's
     required facts (completion repair, R2: D10b's "Cecal intubation was achieved." had read no extent). The caller has
     checked the landmark's own reading (performed or incomplete) and that nothing in its window blocks the reach."""
-    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    from studio.gi import services as gi_services, structure as gi_structure  # local: both read routing lazily
     for hit in gi_services.COMPLETE_POS.finditer(an.text, ws, we):
         if hit.start() == ms:  # the statement opens on the landmark: "Cecal intubation was achieved"
+            # refutation cycle 1 (outcome F3): never a statement of another time, place, source or a hedge, a negation,
+            # a condition or an open question ("Cecal intubation was achieved on the previous attempt but not today",
+            # "Whether cecal intubation was achieved is not documented"): today's plain statement only
+            s, e = an.lay.sentence_for(ms, me)
+            if gi_structure._signals(an.text, s, e, narrative=True) or gi_services.HEDGE_WORDS.search(an.text, s, e) \
+                    or _REACH_DOUBT.search(an.text, s, e):
+                return False
             return True
     return False
+
+
+# A negation, a condition or an open question in a completion statement's sentence (_completion_states_reach).
+_REACH_DOUBT = re.compile(r"\b(?:not|never|neither|nor|whether|if|unless|unknown|unclear|uncertain|cannot|"
+                          r"could\s+not)\b|n['\u2019]t\b", re.I)
 
 
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
@@ -8794,16 +8812,55 @@ def _named_otherwise(an: Analysis, family: str) -> bool:
     return False
 
 
+# I13 (refutation cycle 1, outcome F1): a statement that the examination did not take place, anywhere in the document
+# and naming no sub-act ("Status: Cancelled - inadequate bowel preparation.", "The procedure was not performed."): the
+# instrument rule then reads nothing, and the base reading stands. A sentence naming a sub-act or an accessory and not
+# the examination or its scope ("Retroflexion was not performed.", "The polypectomy was aborted.") is that act's; one
+# naming the examination is the examination's whatever else it names ("The examination was aborted before the
+# polypectomy.").
+_EXAM_CANCELLED = re.compile(r'\b(?:cancel(?:l)?ed|cancell?ations?|abort(?:ed)?|terminated|discontinued|postponed|deferred|'
+                             r'rescheduled|called[ \t\n]++off|not[ \t\n]++(?:performed|done|started|attempted)|did[ \t\n]++not[ \t\n]++'
+                             r'(?:proceed|take[ \t\n]++place|occur))\b', re.I)
+_A_SUB_ACT_WORD = re.compile(r'\b(?:retroflexion|photo(?:graph)?s?|photodocumentation|' + '|'.join(
+    sorted((w for w in gi_clauses.SUB_ACTS | gi_clauses.ACCESSORIES if w.isalpha()), key=len, reverse=True)) + r')\b', re.I)
+
+
+def _examination_cancelled(an: Analysis) -> bool:
+    key = ('examination-cancelled',)
+    if key not in an.memo:
+        an.memo[key] = False
+        for m in _EXAM_CANCELLED.finditer(an.text):
+            s, e = an.lay.sentence_for(m.start(), m.end())
+            if gi_clauses._EXAM_IN_SUBJECT.search(an.text, s, e) or not _A_SUB_ACT_WORD.search(an.text, s, e):
+                an.memo[key] = True
+                break
+    return an.memo[key]
+
+
+def _course_sentence_doubted(an: Analysis, m: Mention) -> bool:
+    """I12 (refutation cycle 1, outcome F2): the instrument's own sentence states another time, place, agent or source,
+    a person's report, or a hedge (studio.gi.structure's narrative signals - the labelled paragraph's own reading - and the
+    services reader's hedge words): "... advanced to the cecum on a prior occasion", "The patient states that ...",
+    "Presumably, ...". A course so stated is not today's plain statement, and the base reading stands."""
+    from studio.gi import services as gi_services, structure as gi_structure  # local: both read routing lazily
+    s, e = an.lay.sentence_for(m.start, m.end)
+    return bool(gi_structure._signals(an.text, s, e, narrative=True) or gi_services.HEDGE_WORDS.search(an.text, s, e))
+
+
 def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mention]:
     """The candidates that meet I4, I5, I8 and I11, at most INSTRUMENT_MENTIONS per family (see above). The candidates'
     spans are in an.instrument_spans before any of them is read, so a sub-act's failure in its clause is never its own
-    (_examination_target)."""
+    (_examination_target). Refutation cycle 1: and I12 (_course_sentence_doubted) and I13 (_examination_cancelled)."""
     kept: dict[str, list[Mention]] = {}
     blocked: dict[str, bool] = {}
+    if candidates and _examination_cancelled(an):  # I13
+        return []
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
             continue
         if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
+            continue
+        if _course_sentence_doubted(an, m):  # I12
             continue
         if not in_todays_narrative(an.text, m.start, an.service_date, an.lay.sentence_for(m.start, m.end),
                                    excuse=lambda d, family=m.family: _another_familys_date(an, d, family)):  # I5

@@ -878,7 +878,9 @@ function detailsPanel(doc, ui = {}) {
       : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
         : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
   const save = editable && rows.some(answerable) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
-  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">A few details needed</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
+  // refutation cycle 1 (answers F7): with only earlier answers left, the panel never says details are needed
+  const title = rows.length ? 'A few details needed' : 'Earlier answers';
+  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">${title}</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
 }
 
 // --- the codes-first result list ---

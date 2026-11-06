@@ -467,6 +467,28 @@ def _named_class(text: str, head: Head, w: str) -> Optional[str]:
     return None
 
 
+# Refutation cycle 1 (outcome F6): a predicate of the scope's own passage fails the examination whatever its subject's
+# head ("A fixed loop in the sigmoid colon could not be traversed.", "The indwelling esophageal stent could not be
+# traversed.", "The previously placed tattoo could not be reached."), and so does a subject that names the scope or the
+# examination anywhere in it ("The colonoscope and the snare could not be advanced."). Never "passed" alone ("The snare
+# could not be passed" is the snare's own failure).
+_PASSAGE_PREDICATE = re.compile(r'\b(?:reach(?:ed)?|travers(?:ed|e)|negotiat(?:ed|e)|cross(?:ed)?|intubat(?:ed|e)|'
+                                r'enter(?:ed)?|navigat(?:ed|e)|pass(?:ed)?[ \t\n]++(?:beyond|across))\b', re.I)
+_EXAM_IN_SUBJECT = re.compile(r'\b(?:colonoscope|sigmoidoscope|gastroscope|endoscope|duodenoscope|echoendoscope|'
+                              r'enteroscope|scope|instrument|examination|exam|procedure|colonoscopy|sigmoidoscopy|'
+                              r'endoscopy|egd|ercp|eus)s?\b', re.I)
+PASSAGE_READ = 60  # characters of the clause after the failure word read for its passage predicate
+
+
+def examinations_failure(text: str, clause_start: int, predicate_start: int, pos: int, clause_end: int) -> bool:
+    """Whether the failure predicate at ``pos`` (its predicate starting at ``predicate_start``) in the clause
+    [clause_start, clause_end) is the examination's by its predicate or its subject (above), whatever failure_of reads
+    from the subject's head. Bounded: the subject and PASSAGE_READ characters after the failure word."""
+    lo = max(clause_start, min(predicate_start, pos))
+    return bool(_EXAM_IN_SUBJECT.search(text, clause_start, lo)
+                or _PASSAGE_PREDICATE.search(text, lo, min(clause_end, pos + PASSAGE_READ)))
+
+
 def failure_of(text: str, found: Optional[Subject]) -> Optional[str]:
     """Whose failure a not-done or not-completed predicate with this subject states: EXAMINATION - the service named
     or referred to ("the procedure"), its scope, its reach or entry ("Cecal intubation"), or a landmark or an obstruction

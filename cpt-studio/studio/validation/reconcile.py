@@ -144,7 +144,14 @@ def gi_services_name_only(act) -> bool:
 # act's own evidence: a balloon (any "balloon", TTS, CRE, through-the-scope, pneumatic); dilators passed over a guide wire
 # (Savary or Savary-Gilliard, American dilators, a wire-guided bougie or dilator, or a bougie or dilator with a guide wire
 # named and no balloon); an unguided bougie (Maloney, Hurst, or a bougie or dilator with no wire and no balloon named).
-DILATION_BALLOON = re.compile(r'\bballoons?\b|\bCRE\b|\bTTS\b|\bthrough[- ]the[- ]scope\b|\bpneumatic\b', re.I)
+# (refutation cycle 1, admission F3 and F5: an inflation names a balloon - "a 15 mm dilator advanced over a guide wire
+# and inflated to 6 atm", "a hydrostatic dilator", "controlled radial expansion"; and a generic "wire-guided ... dilator"
+# is a balloon's where a balloon is named in the same passage - "a CRE wire-guided balloon dilator" - while a named
+# bougie device, Savary or American, names its own technique whatever else the passage names)
+DILATION_BALLOON = re.compile(r'\bballoons?\b|\bCRE\b|\bTTS\b|\bthrough[- ]the[- ]scope\b|\bpneumatic\b|\binflat\w*'
+                              r'|\b\d+(?:\.\d+)?\s*(?:atm|atmospheres?|psi)\b|\bhydrostatic\b'
+                              r'|\bcontrolled\s+radial\s+expansion\b', re.I)
+DILATION_NAMED_BOUGIE = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b', re.I)
 DILATION_WIRE_GUIDED = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b'
                                   r'|\bwire[- ]guided\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?)\b', re.I)
 DILATION_BOUGIE = re.compile(r'\bbougie\w*\b|\bMaloney\b|\bHurst\b|\bdilators?\b', re.I)
@@ -158,7 +165,7 @@ def dilation_techniques(text: str) -> frozenset:
     found = set()
     if DILATION_BALLOON.search(text):
         found.add(catalogue.BALLOON)
-    if DILATION_WIRE_GUIDED.search(text):
+    if DILATION_NAMED_BOUGIE.search(text) or (not found and DILATION_WIRE_GUIDED.search(text)):
         found.add(catalogue.WIRE_BOUGIE)
     elif not found and DILATION_BOUGIE.search(text):
         found.add(catalogue.WIRE_BOUGIE if DILATION_WIRE.search(text) else 'bougie')
@@ -876,10 +883,15 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              'profile of this service accounts for it', act.evidence[:2],
                                              'unsupported'))
                 continue
-            if act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'}):
+            # refutation cycle 1 (consistency F2): a one-technique dilation code covers a dilation of its own technique
+            # only (technique_fits), as the engine's match and competition read it - a Savary dilation beside 43249 alone
+            # is unresolved, never covered
+            fits = act.kind != 'dilation' or any(technique_fits(p, act, service) for p in profiles
+                                                 if p is not None and p.family == service.family and act.kind in p.covers)
+            if fits and (act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'})):
                 continue
-            if any(other.kind in covers for other in service.acts if other.status == 'performed'
-                   and other.kind == act.kind):
+            if fits and any(other.kind in covers for other in service.acts if other.status == 'performed'
+                            and other.kind == act.kind):
                 continue
             unresolved.append(Unresolved(service.id, service.family, act.kind,
                                          f'{describe_act(service, act)} in the {service_label(service)}',

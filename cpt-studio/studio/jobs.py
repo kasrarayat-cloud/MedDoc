@@ -3275,10 +3275,13 @@ def member_answers_of(revision) -> tuple[MemberAnswerInput, ...]:
     no MemberAnswerRevocation withdrew, oldest first, each with the question it answered - its fingerprint, '' for an
     answer recorded before answers carried one, which binds to no question asked now. () for none, and the engine is
     then called exactly as before."""
+    rows = list(models.MemberAnswer.objects.filter(revision=revision, revocation__isnull=True)
+                .order_by('answered_at', 'pk'))
+    words = review.earlier_wordings(rows)  # refutation cycle 1: what each earlier-form answer answered, word for word
     return tuple(MemberAnswerInput(code=answer.code, family=answer.family, fact=answer.fact, value=answer.value,
-                                   question=answer.question or '', answer_id=str(answer.pk))
-                 for answer in models.MemberAnswer.objects.filter(revision=revision, revocation__isnull=True)
-                 .order_by('answered_at', 'pk'))
+                                   question=answer.question or '', answer_id=str(answer.pk),
+                                   worded=words.get(str(answer.pk), ''))
+                 for answer in rows)
 
 
 def answers_digest(revision) -> str:

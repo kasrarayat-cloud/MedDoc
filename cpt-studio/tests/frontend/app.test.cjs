@@ -724,7 +724,7 @@ test('earlier answers are listed as such, with why, and can be withdrawn by a re
   doc.earlier_answers = [{ answer_id: '11111111-1111-4111-8111-111111111111', fact: 'extent', family_label: 'Colonoscopy',
     prompt: 'How far was the instrument advanced?', affects: ['45385'], value: 'not_documented', label: 'Not documented',
     by: 'Synthetic Reviewer', at: '2026-11-05T20:12:09Z', why: 'earlier_form',
-    why_text: 'This answer was saved before each question showed the passages it concerns, so it is not applied; answer the question as it is asked now.' }];
+    why_text: 'This answer was saved before each question showed the passages it concerns, and the question is now asked in other words, so it is not applied; answer the question as it is asked now.' }];
   const html = app.detailsPanel(doc, ui(doc));
   assert.match(html, /<h3>Earlier answers, not applied<\/h3>/);
   const listed = doc.earlier_answers[0];
@@ -737,6 +737,10 @@ test('earlier answers are listed as such, with why, and can be withdrawn by a re
   // a document with nothing left to ask still lists its earlier answers
   const none = { ...doc, details_needed: [] };
   assert.match(app.detailsPanel(none, ui(none)), /No detail is needed now\..*Earlier answers, not applied/s);
+  // refutation cycle 1 (answers F7): headed for what it lists, never "A few details needed" above "No detail is needed now."
+  assert.match(app.detailsPanel(none, ui(none)), /<h2 id="detailsTitle">Earlier answers<\/h2>/);
+  assert.doesNotMatch(app.detailsPanel(none, ui(none)), /A few details needed/);
+  assert.match(app.detailsPanel(doc, ui(doc)), /<h2 id="detailsTitle">A few details needed<\/h2>/);
   assert.equal(app.earlierAnswers({ ...doc, earlier_answers: [] }), '');
 });
 

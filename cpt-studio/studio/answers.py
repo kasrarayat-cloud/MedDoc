@@ -124,8 +124,9 @@ EARLIER_WHY = {
     questions.NO_LONGER_ASKED: 'This question is no longer asked, so this answer is not applied.',
     questions.ASKED_DIFFERENTLY: ('This question is now asked differently, so this answer is not applied; answer the '
                                   'question as it is asked now.'),
-    questions.EARLIER_FORM: ('This answer was saved before each question showed the passages it concerns, so it is not '
-                             'applied; answer the question as it is asked now.'),
+    questions.EARLIER_FORM: ('This answer was saved before each question showed the passages it concerns, and the '
+                             'question is now asked in other words, so it is not applied; answer the question as it is '
+                             'asked now.'),
     'not_applied': 'This answer is not applied to the current results.',
 }
 STATED_IN_DOCUMENT = '{value} (stated in the document)'
@@ -502,7 +503,8 @@ def _passages_of(assessment, members, by_code) -> list:
     for fact, family, code in members:
         if code:
             for proposal in by_code.get(code, ()):
-                found += questions.passages(proposal.evidence, proposal.support, text, acts)
+                found += questions.question_passages(assessment.services, family, fact, proposal.evidence,
+                                                     proposal.support, text, acts)
         else:
             found += questions.service_passages(assessment.services, family, fact, text)
     out, seen = [], []

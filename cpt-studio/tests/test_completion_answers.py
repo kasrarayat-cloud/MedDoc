@@ -51,9 +51,9 @@ def asked(result, text):
     pairs = []
     acts = questions.acts_of(result.services)
     for p in result.proposals:
-        shown = questions.passages(p.evidence, p.support, text, acts)
         for spec in p.clarifications:
             family = spec.family or p.family
+            shown = questions.question_passages(result.services, family, spec.fact, p.evidence, p.support, text, acts)
             pairs.append((questions.member_key(p.code, family, spec.fact),
                           questions.instance(spec.scope, family, spec.fact, p.code, spec.question, spec.reason,
                                              shown)))

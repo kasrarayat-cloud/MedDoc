@@ -793,6 +793,13 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     # service, before or after it, reads anything but not done (a silent one included); and nothing read after it says
     # anything was done or is in doubt.
     texts = [ev for _s, _c, ev in stated]
+    for _status, _cue, ev in stated:
+        # refutation cycle 1 (admission F4): a removal the service states BEFORE the statement - with no technique word,
+        # so no act mention of the code's kinds ("A 25 mm sessile polyp ... was removed piecemeal and retrieved." then
+        # "En bloc hot snare polypectomy failed.") - may be the act the failure of one technique left done: held, never
+        # excluded
+        if gi_services.LESION_REMOVAL.search(flow, service.scope_start, ev.start):
+            return ()
     for status, cue, ev in stated:
         failure = status == 'uncertain' and (cue in STATED_FAILURE_CUES or cue.startswith(gi_services.LATER_FAILURE_CUE))
         if not _closes_its_paragraph(flow, sentences, starts, mentions, mention_starts, kinds, ev, failure):
@@ -1556,7 +1563,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     placed = None
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
-        found = _second_opinion(outcome, found, code, text, inventory, routing)
+        found = _second_opinion(outcome, found, code, text, inventory, routing, own)
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
                 and not _listing_contradicted(code, found.service) \
@@ -1693,8 +1700,27 @@ def _today_passage(text: str, span, day: Optional[date]) -> bool:
     return gi_services.current_statement(text, span.start, span.end, day)
 
 
+_OPEN_QUESTION = re.compile(r'\b(?:whether|unknown|unclear|uncertain|not[ \t\n]+(?:clear|known|documented))\b', re.I)
+
+
+def _matched_act_in_doubt(found: reconcile.Match, text: str) -> bool:
+    """Whether a sentence holding a matched act's own evidence hedges or asks about it (the services reader's hedge
+    words, an open question): "A 6 mm polyp was removed with a cold snare, but it is unclear whether the polyp was
+    removed or only biopsied." Refutation cycle 1 (admission F1): another act's doubt releases a hold only beside an act
+    its own passages state plainly. Bounded: each evidence span's sentence, at most 400 characters either side."""
+    from studio.gi import services as gi_services  # local: the services reader is read lazily here as elsewhere
+    for act in found.acts:
+        for ev in act.evidence:
+            lo = max(text.rfind('.', max(0, ev.start - 400), ev.start), text.rfind('\n', max(0, ev.start - 400), ev.start)) + 1
+            stops = [i for i in (text.find('.', ev.end, ev.end + 400), text.find('\n', ev.end, ev.end + 400)) if i >= 0]
+            hi = min(stops) if stops else min(len(text), ev.end + 400)
+            if gi_services.HEDGE_WORDS.search(text, lo, hi) or _OPEN_QUESTION.search(text, lo, hi):
+                return True
+    return False
+
+
 def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
-                    inventory=None, routing: Optional[RoutingResult] = None) -> reconcile.Match:
+                    inventory=None, routing: Optional[RoutingResult] = None, readings=()) -> reconcile.Match:
     """The documented service decides the code's status, with the routing-era reading as a second opinion that can
     only hold (ARCHITECTURE 5.10):
     - a hedge, a denial or a cancellation read in the code's OWN passage, when that passage is about the matched
@@ -1719,7 +1745,13 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
         # completion repair (integration): a doubt or denial in a passage about another act of the code's kinds - the
         # reader's evidence of an act it does not read done, overlapping none of the matched acts' evidence - is that
         # act's, not the code's (_another_acts_doubt; directive item 3, evidence-based reconciliation)
-        another = own and _another_acts_doubt(doubt, found, code)
+        # refutation cycle 1 (admission F1): and so is EVERY doubtful reading of the code's own passages (``readings``),
+        # never the decisive (first) one alone - a hedge on the matched act itself in another of its passages ("removed
+        # with a cold snare, but it is unclear whether the polyp was removed") keeps the hold, whatever the passages' order
+        another = own and _another_acts_doubt(doubt, found, code) and all(
+            _another_acts_doubt(r, found, code) for r in readings
+            if r.origin == 'evidence' and r.start is not None and r.status not in checks.POSITIVE and not checks._silent(r)) \
+            and not _matched_act_in_doubt(found, text)
         holds = (old.state == 'uncertain' and own and not another
                  and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and not another and doubt.status in ('negated', 'cancelled')
@@ -5216,12 +5248,14 @@ class _MemberAnswers:
             if not isinstance(answer, questions.MemberAnswerInput):
                 raise ValueError(f'A member answer must be a MemberAnswerInput, not {type(answer).__name__}.')
             if not all(isinstance(getattr(answer, name), str)
-                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id')):
-                raise ValueError('A member answer names its code, family, fact, value, question and id as text.')
+                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id', 'worded')):
+                raise ValueError('A member answer names its code, family, fact, value, question, id and wording as text.')
             answers.append(answer)
         self.answers = sorted(answers, key=lambda a: (a.answer_id, a.code, a.family, a.fact, a.value, a.question))
         self.reading: dict = {}  # the documented-service reading's JSON form, as Assessment.services records it
         self.asked: dict = {}  # member key -> fingerprint of every question these inputs ask without any answer
+        self.asked_words: dict = {}  # member key -> its earlier form's wording (refutation cycle 1)
+        self.given_words = {a.answer_id: a.worded for a in self.answers if a.worded}
         self.applied: list = []  # (answer, scope, proposal key or '')
         self.closed = 0  # the questions an applied answer answers: kept, answered, never open
 
@@ -5229,12 +5263,14 @@ class _MemberAnswers:
         pairs = []
         acts = questions.acts_of(self.reading)
         for p in proposals:
-            shown = questions.passages(p.evidence, p.support, self.text, acts)
             for spec in p.clarifications:
                 family = spec.family or p.family
+                shown = questions.question_passages(self.reading, family, spec.fact, p.evidence, p.support, self.text,
+                                                    acts)
                 pairs.append((questions.member_key(p.code, family, spec.fact),
                               questions.instance(spec.scope, family, spec.fact, p.code, spec.question, spec.reason,
                                                  shown)))
+        self.asked_words.update(questions.group_wording(pairs))
         return questions.group(pairs)
 
     def apply(self, proposals: Sequence[ProposalAssessment], by_key: Mapping[str, '_Selection'], services,
@@ -5246,7 +5282,7 @@ class _MemberAnswers:
 
         asked = self._proposal_questions(proposals)
         self.asked.update(asked)
-        bound, _ = questions.bind([a for a in self.answers if a.code], asked)
+        bound, _ = questions.bind([a for a in self.answers if a.code], asked, self.asked_words, self.given_words)
         answer_of: dict = {}
         for answer in bound:
             answer_of.setdefault(questions.member_key(answer.code, answer.family, answer.fact), answer)
@@ -5327,7 +5363,8 @@ class _MemberAnswers:
                  for spec in specs if spec.scope == 'service' and not spec.proposal_key]
         asked = questions.group(pairs)
         self.asked.update(asked)
-        bound, _ = questions.bind([a for a in self.answers if not a.code], asked)
+        self.asked_words.update(questions.group_wording(pairs))
+        bound, _ = questions.bind([a for a in self.answers if not a.code], asked, self.asked_words, self.given_words)
         counts = Counter(key for key, _ in pairs)
         done = set()
         for answer in bound:
@@ -5358,7 +5395,7 @@ class _MemberAnswers:
             if key and key not in entry['proposals']:
                 entry['proposals'].append(key)
         rest = [answer for answer in self.answers if answer.answer_id not in applied]
-        bound, earlier = questions.bind(rest, self.asked)
+        bound, earlier = questions.bind(rest, self.asked, self.asked_words, self.given_words)
         why = {id(answer): reason for answer, reason in earlier}
         listed = [{'answer': a.answer_id, 'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value,
                    'why': why.get(id(a), NOT_APPLIED)}

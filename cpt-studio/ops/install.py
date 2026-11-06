@@ -1948,8 +1948,10 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              code is stored Excluded with the answer as its reason (support 'answered') while it still holds the codes
 #              it held (the base code of a therapeutic code answered away: decision (e)). A revision before the
 #              completion repair reads that row as an ordinary exclusion, which holds nothing, so its page may show such
-#              a base code READY. Every such assessment has the standing answer that made it, so this same reason names
-#              it; nothing else is needed to find it, and no state can be put back for it either.
+#              a base code READY. Such an assessment is named by this same reason whether or not the answer that made
+#              it still stands (refutation cycle 1, answers F6: withdrawn, and the recompute it queued stopped or
+#              failed, the stored marker stays): a current or shown assessment with a proposal carrying support
+#              'answered' is named too. No state can be put back for it either.
 #   modifier - a current decision of the current assessment carries the reviewer's chosen modifier (Decision.modifiers,
 #              core repair 2026-11-03). No revision before it reads one: its page and both reports show that approval
 #              without the modifier. The decision row stays; no state can be put back for it (SHOWN_HAZARDS).
@@ -2065,6 +2067,12 @@ def undo_hazards():
         # reads them (answers.standing_answers), for the shown assessment's revision and the current one.
         if hasattr(models, 'MemberAnswer'):
             if any(standing_answers(revision_id) for revision_id in answer_revisions(encounter, assessment)):
+                found.setdefault(str(encounter.pk), set()).add('member_answer')
+            # refutation cycle 1 (answers F6): an assessment the engine re-made with an answer carries its marker
+            # (support 'answered') even once that answer is withdrawn and its recompute stopped or failed
+            elif any(isinstance(proposal.support, dict) and proposal.support.get('answered')
+                     for shown in {assessment, getattr(encounter, 'current_assessment', None)} if shown is not None
+                     for proposal in shown.proposals.all()):
                 found.setdefault(str(encounter.pk), set()).add('member_answer')
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers for decision in review.current_decisions(assessment).values()):

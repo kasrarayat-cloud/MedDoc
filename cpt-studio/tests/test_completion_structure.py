@@ -241,11 +241,26 @@ class HeldConditionTests(SimpleTestCase):
             'future': 'Colonoscopy: The colonoscope will be advanced to the cecum.\n',
             'negated': 'Colonoscopy: The colonoscope was not advanced beyond the sigmoid colon.\n',
             'no course': 'Colonoscopy: Two adenomas were removed.\n',
-            'a bare endoscope': 'Colonoscopy: The endoscope was advanced to the cecum.\n',
+            # refutation cycle 1: a generic instrument is read by the tract its course names - none, or the other one
+            'a bare endoscope that names no tract': 'Colonoscopy: The endoscope was advanced.\n',
+            'a bare endoscope in the upper tract': 'Colonoscopy: The endoscope was advanced to the duodenum.\n',
+            'a scope in both tracts': 'Colonoscopy: The scope was advanced through the mouth to the cecum.\n',
             'another family\'s instrument': 'Colonoscopy: The gastroscope was advanced to the cecum.\n',
         }.items():
             with self.subTest(label):
                 self.assertHeld(colonoscopy(paragraph + SNARE + '\n'), 'P2')
+
+    def test_p2_a_generic_instrument_whose_course_names_the_labels_tract(self):
+        """Refutation cycle 1: "The endoscope" or "The scope" names no family, and the tract its course names - a
+        landmark of it or the route in - does: a report that names its scope generically reads as one that names it by
+        the service."""
+        for paragraph in ('Colonoscopy: The endoscope was advanced to the cecum.\n',
+                          'Colonoscopy: The scope was introduced through the anus and advanced to the terminal ileum.\n'):
+            with self.subTest(paragraph):
+                self.assertEqual(why(colonoscopy(paragraph + SNARE + '\n')), [''])
+        egd = ('Upper endoscopy: The endoscope was inserted through the mouth and advanced under direct visualization to '
+               'the second portion of the duodenum. ' + EGD_BIOPSY + '\n')
+        self.assertEqual(why(HEAD + IND + egd + COL + TAIL), ['', ''])
 
     def test_p2_a_label_line_run_on_from_the_line_above(self):
         self.assertEqual(structure.released(HEAD + 'Indications: Surveillance after an outside\n' + COL), ())
@@ -449,8 +464,11 @@ class SelfRefutationTests(SimpleTestCase):
                  'to the cecum. ' + SNARE + '\n')
         both = HEAD + IND + EGD + frame + 'Impression: Esophageal biopsies; sigmoid polyp removed.\n'
         self.assertEqual(why(both), ['', ''])
-        # the EGD paragraph held by its own P2 (a bare "endoscope" names no family), with no hold signal of its own
-        held_egd = EGD.replace('The gastroscope', 'The endoscope')
+        # the EGD paragraph held by its own P2 (a bare "endoscope" whose course names no tract: refutation cycle 1),
+        # with no hold signal of its own
+        held_egd = EGD.replace('The gastroscope was advanced under direct visualization into the esophagus and to the '
+                               'second portion of the duodenum', 'The endoscope was advanced under direct visualization')
+        self.assertNotEqual(held_egd, EGD)
         first = HEAD + IND + frame + held_egd + 'Impression: Esophageal biopsies; sigmoid polyp removed.\n'
         reasons = why(first)
         self.assertEqual([r[:2] for r in reasons], ['P2', 'P2'], reasons)

@@ -1235,8 +1235,11 @@ UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|
 # A failure word of the act's own predicate (services.read_clause, R8 D2): after the mention in its clause ("Cold forceps
 # biopsy of the antrum failed.") or right before it as its attribute ("an unsuccessful polypectomy"). It reads the act
 # uncertain - held, as "attempted" already is - never performed and never denied.
-FAILED_ACT = rx(r'\b(?:failed|unsuccessful(?:ly)?|abandoned)\b')
-FAILED_ACT_BEFORE = rx(r'\b(?P<w>failed|unsuccessful|abandoned)[ \t]+(?:[\w-]+[ \t]+){0,3}$')
+# Refutation cycle 1 (acts F1): "aborted", "terminated" and "discontinued" fail an act too ("The polypectomy was
+# aborted."), so the services reader holds the act whose failure routing reads as a sub-act's (R2) - one failure
+# vocabulary for both readers.
+FAILED_ACT = rx(r'\b(?:failed|unsuccessful(?:ly)?|abandoned|aborted|terminated|discontinued)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>failed|unsuccessful|abandoned|aborted|terminated|discontinued)[ \t]+(?:[\w-]+[ \t]+){0,3}$')
 # Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
 # mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
 # removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose
