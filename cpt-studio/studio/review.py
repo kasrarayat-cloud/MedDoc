@@ -185,6 +185,12 @@ NOT_FINAL_DECISION = ('The peer reviews of this document have not finished: a de
 NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment'
 # refutation round 2, L7-02: an upload date that chose between the dates the document states is asked back as a
 # confirmation (answers.date_confirmation_open); the approved export waits for it
+# Integration of refutation cycle 2 (the withdrawal window, answers W1): the stored assessment read a member's answer
+# that no longer stands - withdrawn or superseded - and the recompute that applies the change has not run (queued,
+# stopped or failed). Every surface reads that stored assessment until it does; approving and exporting meanwhile
+# could omit a code on the strength of an answer the member took back, so readiness holds.
+STALE_ANSWER_BLOCKER = ('A detail answer was withdrawn or changed and the re-assessment that applies it has not '
+                        'finished')
 DATE_CONFIRMATION_BLOCKER = ('The date of service entered at upload chooses between the dates the document states and '
                              'has not been confirmed')
 
@@ -1176,6 +1182,20 @@ def _could_bill(proposal, decision):
     return decision.action in (APPROVE, REINSTATE)
 
 
+def _reads_a_withdrawn_answer(assessment) -> bool:
+    """Whether ``assessment`` was made with a member's answer that no longer stands (STALE_ANSWER_BLOCKER): a question it
+    closed with an answer (Clarification.answer) or a code it excluded by one (support 'answered') names an answer that
+    is not among its revision's standing answers. Two queries."""
+    standing = {answer.pk for answer in _standing(assessment)}
+    if assessment.clarifications.filter(answer__isnull=False).exclude(answer__in=standing).exists():
+        return True
+    for proposal in assessment.proposals.all():
+        marker = (proposal.support or {}).get(questions.ANSWERED_SUPPORT) if isinstance(proposal.support, dict) else None
+        if isinstance(marker, dict) and {str(item) for item in marker.get('answers') or ()} - {str(pk) for pk in standing}:
+            return True
+    return False
+
+
 def _assessment_blockers(encounter, assessment):
     from . import answers  # local import: the details flow reads this module
     blockers = []
@@ -1185,6 +1205,8 @@ def _assessment_blockers(encounter, assessment):
         blockers.append(DATE_CONFIRMATION_BLOCKER)
     if assessment.context_id != encounter.current_context_id:
         blockers.append('The encounter context changed; re-assessment has not finished')
+    if _reads_a_withdrawn_answer(assessment):
+        blockers.append(STALE_ANSWER_BLOCKER)
     run = assessment.provider_run
     if run is None:
         blockers.append('The provider was not run')

@@ -729,6 +729,30 @@ def _mention_readings(text: str, flow: str, ev, kind: str, day: Optional[date], 
     return out or None
 
 
+# A sentence that only observes a lesion (_stated_not_done, integration of refutation cycle 2): an optional field label,
+# the lesion's noun phrase, "was|were" [also] and an observation participle, then at most one locative phrase and the
+# sentence's end - nothing else. Closed: any other predicate ("and removed", "was taken out", "was snared") is no match.
+_OBSERVED_ONLY = re.compile(
+    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?:there[ \t\n]++(?:was|were)[ \t\n]++)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++'
+    r'(?:was|were)[ \t\n]++(?:also[ \t\n]++)?(?:found|seen|noted|identified|visualized|visualised|observed|detected|present)'
+    r'(?:[ \t\n]++(?:in|at|within|on|near|along)[ \t\n]++[^.;:,\n]{1,80}?)?[ \t]*+\.?[ \t\n]*+', re.I)
+_REMOVAL_IN_NP = re.compile(r'\b(?:remov\w*|resect\w*|excis\w*|snar\w*|polypectom\w*|retriev\w*|extract\w*|'
+                            r'taken|cleared|biops\w*|ablat\w*|cauteri\w*)\b', re.I)
+
+
+def _observed_only(lesion, text: str) -> bool:
+    """Whether every sentence the documented-service reader records ``lesion`` in is an observation of it alone
+    (_OBSERVED_ONLY, its noun phrase naming no removal or sampling): the report says nothing was done to it."""
+    if not lesion.evidence:
+        return False
+    for ev in lesion.evidence:
+        sentence = text[ev.start:ev.end]
+        m = _OBSERVED_ONLY.fullmatch(sentence)
+        if m is None or _REMOVAL_IN_NP.search(m.group('np')):
+            return False
+    return True
+
+
 def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Reading], text: str,
                      day: Optional[date], pages=()) -> tuple:
     """((status, cue, passage), ...): where the documented service is performed and every act it documents of a kind
@@ -771,8 +795,15 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     # "cleared", a nominal "resection ... was completed") can only cost a hold. Cycle 1's early return on any removal word
     # before the statement (LESION_REMOVAL) is abandoned, refuted both ways (unlisted removal phrasings still excluded;
     # "could not be removed" and removed stool blocked a correct exclusion).
+    # Integration of refutation cycle 2: a lesion the report only observes - every sentence the reader records it in is
+    # an observation in its closed form (_OBSERVED_ONLY: "A 9 mm pedunculated polyp in the sigmoid colon was seen.",
+    # "Findings: A 9 mm polyp was found in the sigmoid colon.") - is no removal either, so a failed or planned removal
+    # beside it still excludes the code, as the installed release read it; any other predicate about the lesion
+    # ("Piecemeal resection of ... was completed.", "... was taken out piecemeal ...", "was seen and removed") keeps the
+    # hold. Closed: an unrecognised sentence can only cost a hold.
     if kinds & gi_services.REMOVAL_KINDS and (not service.lesions or any(
-            lesion.disposition not in gi_services.NOT_REMOVED for lesion in service.lesions)):
+            lesion.disposition not in gi_services.NOT_REMOVED and not _observed_only(lesion, text)
+            for lesion in service.lesions)):
         return ()
     # the reader's own reflowed view, its sentences and its act mentions: one index per document, date and pages
     # (_reader_index) - never a rescan of the text per code
@@ -1558,6 +1589,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
+    documented = found  # the documented match before any hold: what the code's units count against (cycle 2)
     unmatched = found is None  # the inventory documents no service of the code's family (found is reset below too)
     if found is None and READ_DOCUMENTED_SERVICES and inventory is not None and outcome.state == 'not_performed':
         # No documented service of the code's family: the routing-era reading of its own passage decided alone. The
@@ -1657,7 +1689,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
     row = reference.lookup(code, day if dated else None)
-    return replace(selection, units=_supported_units(selection, found, text),
+    return replace(selection, units=_supported_units(selection, documented, text),
                    evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
                                           (row if dated else reference.lookup(code, day)).pfs))
 
@@ -1739,82 +1771,6 @@ def _today_passage(text: str, span, day: Optional[date]) -> bool:
     return gi_services.current_statement(text, span.start, span.end, day)
 
 
-@functools.lru_cache(maxsize=1)
-def _predicate_index(text: str, day: Optional[date], pages: tuple) -> tuple:
-    """(the documented-service reader's act predicates - services.ACT_VERB and BARE_PARTICIPLE matches - over its
-    reflowed view, as sorted (start, end) pairs; their starts): one pass per document, date and pages, searched by
-    bisection (_matched_acts_plain), never a rescan of the text per code."""
-    flow = _reader_index(text, day, pages)[0]
-    spans = sorted({m.span() for pattern in (gi_services.ACT_VERB, gi_services.BARE_PARTICIPLE)
-                    for m in pattern.finditer(flow)})
-    return tuple(spans), tuple(start for start, _ in spans)
-
-
-def _matched_acts_plain(found: reconcile.Match, text: str, day: Optional[date], pages=(), readings=()) -> bool:
-    """Whether the another-act release may stand (_second_opinion): a closed positive form read on the readers' own
-    output, never on words of the document. Refutation cycle 2 (admission D1, D5): cycle 1's _matched_act_in_doubt - a
-    window cut at a raw '.' or newline, searched for a hedge word list - is abandoned, refuted both ways (a hard-wrapped
-    hedge or an unlisted one released a doubted act; the next sentence's words, "attempted" or "Possible", held a plain
-    one depending on sentence order). The release stands only where all three hold:
-    - the routing-era reader reads EVERY matched act's own evidence positive or silent, read by the same function that
-      reads a provider's own passage for the second opinion (checks.evidence_readings): the evidence span, and the
-      documented-service reader's sentence holding it (its reflowed view: a hard wrap inside a sentence is one sentence) -
-      "... removed with a cold snare, but it is\\nunclear whether ...", "..., but removal cannot be confirmed.", "...
-      removed with a cold snare at her last colonoscopy." hold;
-    - EVERY act of the matched service that the documented-service reader does not read as done lies in a passage the
-      code cites: the other act whose doubt the release moves off the code. Any other act it reads in doubt, denied or of
-      another time holds ("..., but it may only have been biopsied.", the same doubt a sentence before or two sentences
-      later, whichever lesion the reader binds it to);
-    - and EVERY act mention and act predicate the documented-service reader reads in the service's text outside those
-      passages (services.passage_readings, each in its own clause, as _stated_not_done reads them) reads done today or
-      says nothing: a doubt it binds to no act holds too ("It is unknown whether the polyp was removed.", "This was done
-      at her colonoscopy in 2023."). More than PASSAGE_READS of them: not read through, held.
-    Anything these do not recognise keeps the hold, the base reading: an unlisted phrasing costs a false hold, never a
-    false READY; and no reading depends on where a sentence stands, so the same passages read the same in any order.
-    Bounded: one pass over the service's acts, at most PASSAGE_READS reads of its mentions and predicates (both indexed
-    once per document, _reader_index and _predicate_index), and two reads per evidence span of a matched act."""
-    cited = [(r.start, r.end) for r in readings if r.origin == 'evidence' and r.start is not None and r.end is not None]
-
-    def in_cited(start: int, end: int) -> bool:
-        return any(a < end and start < b for a, b in cited)
-    service = found.service
-    for act in service.acts:
-        if act.status != 'performed' and not any(in_cited(ev.start, ev.end) for ev in act.evidence):
-            return False
-    key = tuple(pages or ())
-    _flow, sentences, starts, mentions, mention_starts = _reader_index(text, day, key)
-    predicates, predicate_starts = _predicate_index(text, day, key)
-    edges = [(ev.start, ev.end) for act in found.acts for ev in act.evidence] + cited
-    lo = min([service.scope_start] + [a for a, _ in edges])
-    hi = max([service.scope_end] + [b for _, b in edges])
-    spots = [(ms, me) for _kind, ms, me in mentions[bisect.bisect_left(mention_starts, lo):
-                                                    bisect.bisect_left(mention_starts, hi)]]
-    spots += list(predicates[bisect.bisect_left(predicate_starts, lo):bisect.bisect_left(predicate_starts, hi)])
-    spots = sorted({spot for spot in spots if not in_cited(*spot)})
-    if len(spots) > gi_services.PASSAGE_READS:
-        return False  # too many to read through: what they say is not established
-    for ms, me in spots:
-        read = gi_services.passage_readings(text, ms, me, day, pages)
-        if read is None or any(not gi_services.done_today(r) and not _says_nothing(r.status, r.cues) for r, _ in read):
-            return False
-    for act in found.acts:
-        for ev in act.evidence:
-            spans = [(ev.start, ev.end)]
-            first = bisect.bisect_right(starts, ev.start) - 1
-            last = bisect.bisect_right(starts, max(ev.start, ev.end - 1)) - 1
-            if 0 <= first <= last and sentences[first][0] <= ev.start < sentences[last][1]:
-                spans.append((sentences[first][0], sentences[last][1]))
-            for start, end in spans:
-                while end > start and text[end - 1].isspace():
-                    end -= 1
-                if end <= start:
-                    continue
-                for reading in checks.evidence_readings(text, (EvidenceSpan(0, start, end, text[start:end], True),), day):
-                    if reading.status not in checks.POSITIVE and not checks._silent(reading):
-                        return False
-    return True
-
-
 def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
                     inventory=None, routing: Optional[RoutingResult] = None, readings=(),
                     day: Optional[date] = None, pages=()) -> reconcile.Match:
@@ -1839,23 +1795,17 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     if positive and old.state in ('uncertain', 'not_performed'):
         doubt = old.decisive
         own = doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
-        # completion repair (integration): a doubt or denial in a passage about another act of the code's kinds - the
-        # reader's evidence of an act it does not read done, overlapping none of the matched acts' evidence - is that
-        # act's, not the code's (_another_acts_doubt; directive item 3, evidence-based reconciliation)
-        # refutation cycle 1 (admission F1): and so is EVERY doubtful reading of the code's own passages (``readings``),
-        # never the decisive (first) one alone - a hedge on the matched act itself in another of its passages ("removed
-        # with a cold snare, but it is unclear whether the polyp was removed") keeps the hold, whatever the passages' order
-        # refutation cycle 2 (admission D1, D5): and the release asks the readers whether the matched acts stand plainly
-        # (_matched_acts_plain: the routing-era reading of every matched act's own evidence, read as a provider's passage
-        # is; every act the documented-service reader leaves undone lying in a cited passage; and every act mention or
-        # predicate it reads elsewhere in the service done or silent), in place of cycle 1's window and word list
-        another = own and _another_acts_doubt(doubt, found, code) and all(
-            _another_acts_doubt(r, found, code) for r in readings
-            if r.origin == 'evidence' and r.start is not None and r.status not in checks.POSITIVE and not checks._silent(r)) \
-            and _matched_acts_plain(found, text, day, pages, readings)
-        holds = (old.state == 'uncertain' and own and not another
+        # Refutation cycle 2 (2026-11-06), the owner's two-cycle rule: the integration's another-act release - a doubt in
+        # the code's own passage about another act of its kinds did not hold it (_another_acts_doubt) - is abandoned. It
+        # was refuted in cycle 1 (another lesion's failure releasing a doubted act) and again in cycle 2 (a hard-wrapped
+        # or unlisted hedge; sentence order), and its cycle-2 repair still released doubts no reader binds to an act
+        # ("Removal could not be confirmed.", "The removal was likely incomplete."). The base reading stands: a doubt the
+        # routing-era reader reads in the code's own passage about this service holds the code, whichever act of the
+        # service it is about, for every proposer alike. Measured: one completion corpus entry moves to a hold
+        # (E|ANOTHER-failed-attempt), the four retained cases read as before.
+        holds = (old.state == 'uncertain' and own
                  and _about(doubt, found, code, text, routing, inventory)) or (
-            old.state == 'not_performed' and own and not another and doubt.status in ('negated', 'cancelled')
+            old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
         if holds and old.state == 'uncertain' and _negation_resolved(doubt, found):
@@ -2565,40 +2515,6 @@ def _elsewhere(reading: checks.Reading, found: reconcile.Match, inventory) -> bo
 STATUS_WORDS = re.compile(r'\b(?:perform\w*|done|complet\w*|cancel\w*|abort\w*|terminat\w*|discontinu\w*|postpon\w*|'
                           r'defer\w*|declin\w*|refus\w*|pending|incomplete|attempt\w*|stopp\w*|halt\w*|resched\w*|'
                           r'called\s+off|on\s+hold|tbd|unknown|requested)\b', re.I)
-
-
-def _another_acts_doubt(reading: checks.Reading, found: reconcile.Match, code: str = '') -> bool:
-    """Completion repair (integration, 2026-11-06; directive item 3, evidence-based reconciliation): whether the doubt or
-    denial the routing-era reader reads in a passage the code cites belongs to ANOTHER act than the acts the code is
-    matched to (``found.acts``, done): the passage overlaps none of the matched acts' own evidence, and it overlaps the
-    evidence of an act of the code's own kinds that the documented-service reader does not read as done ("Hot snare
-    polypectomy of a 15 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could not be closed
-    around the stalk, and the polyp was left in place." cited for 45385 beside "A 6 mm polyp in the transverse colon was
-    removed with a cold snare."). One proposer's citation of another act then never holds a code whose own documented act
-    no passage doubts.
-
-    Never for a passage that also states a matched act: there the second reader's hold stands, whatever clause its
-    doubt is in. Measured (the completion corpus, H2|NEG-REL-08 to -16): a clause-by-clause release there turned eight
-    refuters READY - "...; zero (0) biopsies were taken; it was not snared." - because the passage's other clause held a
-    code whose own clause the readers misread as done. Any doubt the reader binds to no act holds as before."""
-    if not found.acts or reading.start is None or reading.end is None:
-        return False
-
-    def overlaps(ev) -> bool:
-        return ev.start < reading.end and reading.start < ev.end
-    if any(overlaps(ev) for a in found.acts for ev in a.evidence):
-        return False
-    profile = reconcile.catalogue.code_profile(code) if code else None
-    kinds = set(profile.covers) if profile is not None else {a.kind for a in found.acts}
-    matched = {a.id for a in found.acts}
-    lesions = {a.lesion for a in found.acts}
-    # the other act must be told apart from every matched act by the reader itself: each on a lesion record of its own
-    # (a listing and its narrative, or a restatement, are one act the reader may record twice - the full suite measured
-    # 31 releases of genuine holds without this: a cut plan verb, a history item, a check box, a confirmation)
-    if '' in lesions:
-        return False
-    return any(a.kind in kinds and a.id not in matched and a.status != 'performed' and a.lesion
-               and a.lesion not in lesions and any(overlaps(ev) for ev in a.evidence) for a in found.service.acts)
 
 
 def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str,

@@ -54,11 +54,12 @@ EXCLUDED = ('excluded', 'excluded')
 
 
 class AnotherActReleaseTests(SimpleTestCase):
-    """engine._matched_acts_plain: the another-act release (a doubt in the cited passage about another act of the code's
-    kinds moves off the code) stands only where the readers read the matched act plainly - the routing-era reading of its
-    own evidence and of the reader's sentence holding it, every act the reader leaves undone lying in a cited passage, and
-    every act mention and predicate the reader reads elsewhere in the service done or silent. Cycle 1's window cut at a
-    raw '.' or newline and its hedge word list are gone."""
+    """The another-act release is abandoned (integration of refutation cycle 2, the owner's two-cycle rule): a doubt the
+    routing-era reader reads in the code's own passage about this service holds the code, whichever act of the service it
+    is about, for every proposer alike - the base reading. The release (a doubt about another act of the code's kinds
+    moved off the code) was refuted in cycle 1 and again in cycle 2 (D1, D5), and its cycle-2 repair
+    (_matched_acts_plain, reading the readers' own output) still released doubts no reader binds to an act. Cycle 1's
+    window and word list are gone with it. The cost, declared: E|ANOTHER-failed-attempt (corpus) is held."""
 
     P1 = ('Hot snare polypectomy of a 15 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could not '
           'be closed around the stalk, and the polyp was left in place.')
@@ -96,8 +97,8 @@ class AnotherActReleaseTests(SimpleTestCase):
 
     def test_the_same_passages_read_the_same_in_either_order(self):
         """Cycle 2, admission D5: the plainly removed polyp and the other polyp's failed attempt in one paragraph read
-        the same in either order, and an unrelated "Possible ..." finding no longer holds the removed polyp (cycle 1's
-        window read the next sentence's "attempted" or "Possible" as doubt about it)."""
+        the same in either order (cycle 1's window read the next sentence's "attempted" or "Possible" as doubt about it):
+        held in both orders, the doubt in the cited passage holding the code - the base reading, never order-dependent."""
         for label, body in (('removed, then the attempt', self.B + ' ' + self.P1),
                             ('the attempt, then removed', self.P1 + ' ' + self.B),
                             ('an unrelated possible finding', self.B + ' Possible diverticulosis was noted in the '
@@ -105,18 +106,23 @@ class AnotherActReleaseTests(SimpleTestCase):
             text = colon(body)
             for who, result in three_ways(text, '45385', self.P1).items():
                 with self.subTest(label, who=who):
-                    self.assertEqual(outcome(result, '45385')['45385'][:2], READY)
+                    self.assertEqual(outcome(result, '45385')['45385'][:2], HELD)
 
-    def test_the_pinned_controls_stay_ready(self):
-        """Cycle 2, admission D1 controls (the cycle-1 pinned another-act controls): another polyp plainly removed is
-        READY whoever cites the failed attempt, and with the plainly removed polyp's own passage cited beside it."""
+    def test_a_cited_failed_attempt_holds_beside_another_removed_polyp(self):
+        """The cycle-1 another-act controls under the base reading: another polyp plainly removed beside the cited failed
+        attempt no longer releases the code; it is held for the reviewer whoever cites the failed attempt, and with the
+        removed polyp's own passage cited beside it (one reading over every proposer's passages). The release this
+        replaced was refuted twice; the hold is the declared cost (E|ANOTHER-failed-attempt)."""
         for body in (self.P1 + '\n' + self.B, self.B + '\n' + self.P1):
             text = colon(body)
             for who, result in three_ways(text, '45385', self.P1).items():
                 with self.subTest(body[:20], who=who):
-                    self.assertEqual(outcome(result, '45385')['45385'][:2], READY)
+                    self.assertEqual(outcome(result, '45385')['45385'][:2], HELD)
             joint = run(text, corti(('45385', span(text, self.P1))), [read('astra', [code(text, '45385', self.B)])])
-            self.assertEqual(outcome(joint, '45385')['45385'][:2], READY)
+            self.assertEqual(outcome(joint, '45385')['45385'][:2], HELD)
+        # the removed polyp's own passage, cited alone, is READY: the hold is the cited failure's, not the code's
+        text = colon(self.P1 + '\n' + self.B)
+        self.assertEqual(outcome(run(text, corti(('45385', span(text, self.B)))), '45385')['45385'][:2], READY)
 
     def test_a_doubt_the_reader_binds_to_no_act_holds_too(self):
         """Cycle 2, admission D1 (the class, beyond the lens's variants; found by the builder): a later sentence whose
@@ -124,44 +130,29 @@ class AnotherActReleaseTests(SimpleTestCase):
         holds; an unrelated done act does not (the base held all three)."""
         for body, expected in (('It is unknown whether the polyp was removed.', HELD),
                                ('This was done at her colonoscopy in 2023.', HELD),
-                               ('Cold forceps biopsies of the rectum were taken.', READY)):
+                               ('Removal could not be confirmed.', HELD),
+                               ('The removal was likely incomplete.', HELD),
+                               ('It is unknown whether the polyp was actually removed.', HELD),
+                               ('Cold forceps biopsies of the rectum were taken.', HELD)):
             text = colon(self.P1 + '\n' + self.B + ' ' + body)
             with self.subTest(body):
                 result = run(text, corti(('45385', span(text, self.P1))))
                 self.assertEqual(outcome(result, '45385')['45385'][:2], expected)
 
-    def test_an_act_the_inventory_leaves_undone_holds_whatever_its_clause_reads(self):
-        """Cycle 2, admission D1 (the inventory's own reading, the release's first test): an act the documented-service
-        reader's inventory leaves undone outside the cited passages holds the release even where its clause, read alone,
-        says it was done - the inventory's final status, not a second reading of its words, decides. (No document the
-        reader builds was found where this differs from the reading of each mention; the pin is on the rule itself.)"""
-        from dataclasses import replace as replaced
-        from studio.gi import detect, services as gi_services
-        from studio.types import Span
-        from studio.validation import checks
-        from tests.test_harness_engine import DAY
-        text = colon(self.P1 + '\n' + self.B)
-        inventory = gi_services.build(text, service_date=DAY, routing=detect.route(text, DAY), context_facts=None,
-                                      pages=())
-        found = reconcile.match('45385', inventory, inventory.services[0].family)
-        cited = checks.evidence_readings(text, [span(text, self.P1)], DAY)
-        self.assertTrue(engine._matched_acts_plain(found, text, DAY, (), cited))
-        at = text.index(ADVANCED)
-        undone = gi_services.Act(id='S1-X1', service=found.service.id, kind='biopsy', status='uncertain',
-                                 role='physician', evidence=(Span(at, at + len(ADVANCED), ADVANCED),),
-                                 cues=('uncertain: a status this pin gives it',))
-        held = replaced(found, service=replaced(found.service, acts=found.service.acts + (undone,)))
-        self.assertFalse(engine._matched_acts_plain(held, text, DAY, (), cited))
+    def test_the_release_and_its_repair_are_gone(self):
+        """The another-act release and its cycle-2 repair are removed, not patched a third time."""
+        self.assertFalse(hasattr(engine, '_matched_acts_plain'))
+        self.assertFalse(hasattr(engine, '_another_acts_doubt'))
 
     def test_an_upper_endoscopy_reads_the_same(self):
-        """Cycle 2, admission D1 and D5 in another GI family: an EGD snare code beside a failed attempt at another
-        gastric polyp - READY in either order, held where the removed polyp is hedged."""
+        """Cycle 2, admission D1 and D5 in another GI family: an EGD snare code cited on a failed attempt at a gastric
+        polyp is held in either order and where the removed polyp is hedged - the base reading."""
         p1 = ('Hot snare polypectomy of a 15 mm pedunculated polyp in the gastric body was attempted, but the snare could '
               'not be closed around the stalk, and the polyp was left in place.')
         done = 'A 6 mm polyp in the gastric antrum was removed with a cold snare.'
         hedged = ('A 6 mm polyp in the gastric antrum was removed with a cold snare, but it is\nunclear whether the polyp '
                   'was removed or only biopsied.')
-        for body, expected in ((p1 + '\n' + done, READY), (done + ' ' + p1, READY), (p1 + '\n' + hedged, HELD)):
+        for body, expected in ((p1 + '\n' + done, HELD), (done + ' ' + p1, HELD), (p1 + '\n' + hedged, HELD)):
             text = upper(body)
             for who, result in three_ways(text, '43251', p1).items():
                 with self.subTest(body[-30:], who=who):
@@ -257,9 +248,10 @@ class DilationTechniqueTests(SimpleTestCase):
 
 
 class NotPerformedNeedsDocumentationTests(SimpleTestCase):
-    """engine._stated_not_done for a removal kind: excluded only where the service records its lesions and the reader
-    states every one of them not removed today (services.NOT_REMOVED); otherwise held. Cycle 1's early return on any
-    removal word before the statement is gone."""
+    """engine._stated_not_done for a removal kind: excluded only where the service records its lesions and each is
+    stated not removed today (services.NOT_REMOVED) or only observed (engine._observed_only: every sentence the reader
+    records it in is an observation in its closed form); otherwise held. Cycle 1's early return on any removal word
+    before the statement is gone."""
 
     FAIL = 'En bloc hot snare polypectomy failed.'
     D4 = ('Piecemeal resection of a 25 mm sessile polyp in the ascending colon was completed.',
@@ -298,12 +290,31 @@ class NotPerformedNeedsDocumentationTests(SimpleTestCase):
                     self.assertIn(self.FAIL, item.exclusion_reason)
                     self.assertTrue(item.reinstatable)
 
-    def test_a_lesion_only_seen_or_unread_holds(self):
-        """Cycle 2, admission D4 and D7 ("not performed" needs supporting documentation): a failure beside a lesion the
-        reader only records as seen, beside removed stool or another polyp taken with forceps, or with no lesion the
-        reader records, establishes nothing about removal - held, the base's reading."""
-        for body in ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.',
-                     'Liquid stool was suctioned and removed from the right colon.\n' + self.FAIL,
+    def test_a_lesion_only_observed_still_excludes(self):
+        """Integration of cycle 2 (the closed observation form): a failed or planned removal beside a lesion the report
+        only observes - "was seen", "was found" after a field label - excludes 45385 and 45378 is READY, as the installed
+        release read it (the ADM C3-2-1 corpus entries); "was seen and removed" or a decimal size is no observation form
+        and holds."""
+        for body, expected, base in (
+                ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.', EXCLUDED, READY),
+                ('Findings: A 9 mm pedunculated polyp was found in the sigmoid colon.\nHot snare polypectomy was '
+                 'unsuccessful.', EXCLUDED, READY),
+                ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nHot snare polypectomy will be performed at a '
+                 'later date.', EXCLUDED, READY),
+                ('A 25 mm sessile polyp in the ascending colon was seen and removed piecemeal.\n' + self.FAIL, HELD, HELD),
+                ('A 1.5 cm polyp in the sigmoid colon was seen.\nHot snare polypectomy failed.', HELD, HELD)):
+            text = colon(body)
+            quote = body.split('\n')[-1]
+            for who, result in three_ways(text, '45385', quote, base=('45378', span(text, ADVANCED))).items():
+                with self.subTest(body[:40], who=who):
+                    got = outcome(result, '45385', '45378')
+                    self.assertEqual((got['45385'][:2], got['45378'][:2]), (expected, base))
+
+    def test_a_lesion_unread_or_removed_otherwise_holds(self):
+        """Cycle 2, admission D4 and D7 ("not performed" needs supporting documentation): a failure beside removed stool,
+        another polyp taken with forceps, or with no lesion the reader records, establishes nothing about removal - held,
+        the base's reading."""
+        for body in ('Liquid stool was suctioned and removed from the right colon.\n' + self.FAIL,
                      'A 3 mm polyp in the rectum was removed with cold forceps.\n' + self.FAIL,
                      'Hot snare polypectomy failed.'):
             text = colon(body)
@@ -354,13 +365,15 @@ class UnitsTests(SimpleTestCase):
 
     def test_a_failed_attempt_listed_beside_a_done_polypectomy_is_no_unit(self):
         """Cycle 2, the owner session's units defect: Corti's 45385 listed for the done polypectomy and for another
-        polyp's failed attempt is READY with one unit, in either listing order (it read READY with two)."""
+        polyp's failed attempt read READY with two units under the another-act release. With that release abandoned the
+        cited failure holds the code for the reviewer, and its units, counted against the documented match before the
+        hold, are one - what an approval would carry - in either listing order."""
         text = colon(self.DONE + '\n' + self.FAILED)
-        self.assertEqual(self.units(text, (self.DONE, self.FAILED)), ('ready', 1))
-        self.assertEqual(self.units(text, (self.FAILED, self.DONE)), ('ready', 1))
+        self.assertEqual(self.units(text, (self.DONE, self.FAILED)), ('needs_clarification', 1))
+        self.assertEqual(self.units(text, (self.FAILED, self.DONE)), ('needs_clarification', 1))
         # a participant citing the same passages adds no unit
         self.assertEqual(self.units(text, (self.DONE, self.FAILED), [read('astra', [code(text, '45385', self.FAILED)])]),
-                         ('ready', 1))
+                         ('needs_clarification', 1))
 
     def test_two_done_polypectomies_listed_twice_are_two_units(self):
         """Cycle 2, units control: two cold snare polypectomies, each listed, stay two units."""
@@ -368,11 +381,12 @@ class UnitsTests(SimpleTestCase):
         self.assertEqual(self.units(text, (self.DONE, self.DONE2)), ('ready', 2))
 
     def test_a_participant_alone_has_one_unit(self):
-        """Cycle 2, units with Astra alone: a participant's admitted code is one entry, one unit, as before."""
+        """Cycle 2, units with Astra alone: a participant's admitted code is one entry, one unit, as before (held: one
+        of its passages is the failed attempt)."""
         text = colon(self.DONE + '\n' + self.FAILED)
         result = run(text, [], [read('astra', [code(text, '45385', self.DONE), code(text, '45385', self.FAILED)])])
         item = next(p for p in result.proposals if p.code == '45385' and p.bucket == 'selected')
-        self.assertEqual((item.status, item.units), ('ready', 1))
+        self.assertEqual((item.status, item.units), ('needs_clarification', 1))
 
     def test_an_entry_with_no_exact_passage_keeps_its_unit(self):
         """Cycle 2, units bounds: never fewer than one, and an entry with no exact passage keeps its unit (an empty test

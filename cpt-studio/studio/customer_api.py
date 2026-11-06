@@ -246,6 +246,7 @@ BLOCKER_EXACT = {
     'No text was extracted': 'The text of the document could not be read.',
     review.NOT_FINAL_BLOCKER: 'The independent checks have not finished.',
     review.DATE_CONFIRMATION_BLOCKER: 'Confirm the date of service under "A few details needed".',
+    review.STALE_ANSWER_BLOCKER: 'A detail you withdrew or changed is still being applied: resume processing if it was stopped.',
     'The encounter context changed; re-assessment has not finished': 'The details changed; the results are being updated.',
     'The provider was not run': 'The coding service did not run for this document.',
     'The provider outcome is unknown': 'We are confirming whether an earlier check completed.',

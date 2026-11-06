@@ -87,6 +87,9 @@ def facts_asked(doc, fact):
 
 # --- W2, W4: the binding rule itself -----------------------------------------------------------------------------------
 
+STALE_WORDS = customer_api.BLOCKER_EXACT[review.STALE_ANSWER_BLOCKER]
+
+
 class EarlierFormKeyBindingTests(SimpleTestCase):
     def test_an_earlier_form_answer_binds_by_its_key_and_a_fingerprinted_one_by_its_fingerprint(self):
         """Cycle 2, answers W2 and W4 (questions.bind): an answer recorded with no fingerprint binds wherever its (code,
@@ -204,8 +207,12 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
         for label, now in (('queued', queued), ('stopped', held)):
             with self.subTest(label):
                 # one source of truth: every reader as it read the stored assessment before the withdrawal
-                for name in ('codes', 'blockers', 'operator_blockers', 'draft', 'coding', 'customer_draft', 'views'):
+                for name in ('codes', 'draft', 'coding', 'customer_draft', 'views'):
                     self.assertEqual(now[name], answered[name], name)
+                # and readiness holds while the stored assessment reads an answer that no longer stands (integration of
+                # cycle 2): an approval meanwhile could export without 45385 on the strength of the withdrawn answer
+                self.assertEqual(now['blockers'], [STALE_WORDS] + answered['blockers'])
+                self.assertEqual(now['operator_blockers'], [review.STALE_ANSWER_BLOCKER] + answered['operator_blockers'])
                 status, sub_label, allowed, qualifications = now['codes']['45385']
                 self.assertNotEqual(sub_label, customer_api.CHECK_EXCLUDED_SUB_LABEL)
                 self.assertNotIn(UNTRUE_QUALIFICATION, qualifications)
@@ -238,8 +245,10 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
         self.client.post(f'/api/encounters/{encounter_id}/details/{answer.pk}/revoke')
         self.client.post(f'/api/encounters/{encounter_id}/stop')
         held = self.readers(encounter_id)
-        for name in ('codes', 'blockers', 'operator_blockers', 'draft', 'coding', 'customer_draft', 'views'):
+        for name in ('codes', 'draft', 'coding', 'customer_draft', 'views'):
             self.assertEqual(held[name], answered[name], name)
+        self.assertEqual(held['blockers'][0], STALE_WORDS)  # readiness holds while the withdrawn answer is read
+        self.assertLessEqual(set(held['blockers'][1:]), set(answered['blockers']))
         self.assertEqual(facts_asked(held['doc'], 'performed_status'), [])
         self.client.post(f'/api/encounters/{encounter_id}/resume')
         drain()
