@@ -277,6 +277,68 @@ class BolusAntecedentTests(SimpleTestCase):
         self.assertEqual(removal_acts(text), [])
 
 
+LISTED_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+               'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+               'Procedure: Colonoscopy with hot snare polypectomy\n'
+               'The colonoscope was advanced to the cecum and the examination was completed.\n'
+               'A 9 mm pedunculated polyp in the sigmoid colon was seen.\n')
+LISTING = 'Colonoscopy with hot snare polypectomy'
+
+
+def dispositions(text, family='gi.colonoscopy'):
+    svc = next(s for s in inventory(text).services if s.family == family)
+    return [lesion.disposition for lesion in svc.lesions]
+
+
+class DispositionTests(SimpleTestCase):
+    """U6's base false READY (H2|NEG3-5) and U13: "The polyp was left in place." under "Procedure: Colonoscopy with hot
+    snare polypectomy" left the lesion's disposition unknown and the listed polypectomy READY. A recorded lesion's
+    stated disposition is read from the predicate whose subject it is; a listed removal whose every lesion is stated
+    not removed today is contradicted, so it is held."""
+
+    def test_left_in_place_not_removed_or_scheduled(self):
+        for sentence, disposition in (('The polyp was left in place.', 'untreated'),
+                                      ('The polyp was left in situ.', 'untreated'),
+                                      ('The polyp was not removed.', 'untreated'),
+                                      ('The polyp could not be removed because of anticoagulation.', 'untreated'),
+                                      ('The polyp will be removed at a later date.', 'scheduled')):
+            with self.subTest(sentence):
+                text = LISTED_HEAD + sentence + '\n'
+                self.assertEqual(dispositions(text), [disposition])
+                self.assertEqual(acts_of(text, 'gi.colonoscopy', 'snare')[0][0], 'uncertain')
+                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'needs_clarification'))
+
+    def test_the_same_in_an_upper_endoscopy(self):
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
+                'Date of service: 2026-10-14\nProcedure: Upper endoscopy with snare polypectomy\n'
+                'The gastroscope was advanced to the second portion of the duodenum.\n'
+                'A 10 mm sessile polyp in the gastric body was seen.\nThe polyp was left in place.\n')
+        self.assertEqual(dispositions(text, 'gi.egd'), ['untreated'])
+        self.assertEqual(outcome(text, '43251', 'Upper endoscopy with snare polypectomy')[0][1], 'needs_clarification')
+
+    def test_a_negative_quantifier_another_time_or_another_lesion_contradicts_nothing(self):
+        # "No polyps were removed." names no recorded lesion (the dropped kindless branch's shape, a recorded base
+        # residual); a past statement is no disposition today; a second lesion with nothing stated keeps the listing
+        for sentence in ('No polyps were removed.', 'Previously, the polyp was left in place.',
+                         'The polyp was left in place. A 5 mm polyp in the cecum was seen.'):
+            with self.subTest(sentence):
+                text = LISTED_HEAD + sentence + '\n'
+                self.assertNotIn('uncertain', [s for s, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
+                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'ready'))
+
+    def test_a_removal_done_beside_a_lesion_left_in_place(self):
+        text = (LISTED_HEAD + 'The polyp was left in place.\n'
+                'A 6 mm polyp in the cecum was removed with a hot snare.\n')
+        self.assertEqual(dispositions(text), ['untreated', 'removed'])
+        self.assertEqual(outcome(text, '45385', 'A 6 mm polyp in the cecum was removed with a hot snare.')[0],
+                         ('selected', 'ready'))
+
+    def test_the_failed_attempts_lesion(self):
+        text = (COLON_HEAD + 'Procedure: The colonoscope was advanced to the terminal ileum.\n'
+                'A 6 mm polyp in the descending colon was removed with a cold snare and retrieved.\n' + FAILED_SNARE + '\n')
+        self.assertEqual(dispositions(text), ['removed', 'untreated'])
+
+
 class CoordinatedAnatomyTests(SimpleTestCase):
     """U13: "from the right and left colon" had read the descending colon only (the left colon) - the coordinated
     modifier shares the site's head."""
