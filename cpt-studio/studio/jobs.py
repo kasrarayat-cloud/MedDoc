@@ -2195,7 +2195,11 @@ def _retrieval(result, service_date, reference, provider_codes):
     CMS reference file applied to the service date - so that the codes' checks read the CMS facts - is the engine's own
     record of the lookup (``result.reference_sources``), read here in memory, never asked of the database again. The
     entry names the step that failed: loading the stored passages, or the retrieval (refutation round 4, truth-5)."""
-    codes = sorted({proposal.code for proposal in result.proposals if review.decidable(proposal)} & set(provider_codes))
+    # Completion repair (integration, 2026-11-06; builder Q1's measured patch): every decidable proposal's code, whoever
+    # proposed it - an admitted participant code is a proposal a member decides (directive item 3), and its checks read
+    # the lookup prefetched for every proposed code (stage_assess). ``provider_codes`` is kept for the record's callers;
+    # review.decidable still keeps every alternative out, so the refutation rounds' cases above are unchanged.
+    codes = sorted({proposal.code for proposal in result.proposals if review.decidable(proposal)})
     if not codes:
         return []
     step = RETRIEVAL_STEP_LOAD

@@ -20,7 +20,6 @@ C3 and C5; builder Q1): equal proposal eligibility, evidence-based reconciliatio
 Real readers and engine, synthetic documents, nothing sent. Expected outcomes are written here, outside the coding
 input.
 """
-from unittest import expectedFailure
 
 from django.test import SimpleTestCase
 
@@ -567,7 +566,6 @@ class AdmittedCodePipelineTests(r6m.MeaningCase):
         self.assertEqual(((item.get('support') or {}).get('origin'), item['bucket'], item['status']),
                          ('participant', 'selected', 'ready'))
 
-    @expectedFailure
     def test_an_admitted_code_is_traced_as_corti_s_selection_is(self):
         """RECORDED CROSS-FILE DEPENDENCY, failing on this branch by design. The assess stage traces the CMS references
         only for the decidable codes among the provider's own selections (jobs._retrieval's ``& set(provider_codes)``,
