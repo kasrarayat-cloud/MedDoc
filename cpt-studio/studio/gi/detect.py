@@ -8452,7 +8452,9 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 # - I2 its section is a positive one;
 # - I3 the instrument is the subject of its own course predicate in its clause (_INSTRUMENT_COURSE, read by the shared
 #   subject primitive: "The snare was passed through the colonoscope" is the snare's course), never under "No";
-# - I4 its own reading is performed (no negation, hedge, condition, other time, place, source or label hold);
+# - I4 its own reading is performed (no negation, hedge, condition, other time, place, source or label hold), and the
+#   documented-service reader's own source, agent, hedge and condition rules do not hold its statement
+#   (_instrument_statement_held: the same functions that reader reads them with);
 # - I5 it lies inside today's procedure narrative (in_todays_narrative: no attached, copied, outside or other-day block
 #   above it, no history, plan or indication heading over it, no sign-off in its block);
 # - I6 its family is named in the document, or no procedure family is named at all (a colonoscope in a flexible
@@ -8460,7 +8462,10 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 # - I7 no title-shaped line above it names a service or a report in a shape routing's title rules do not read, unless
 #   its only addition is an aside of a closed class about the document itself (_ASIDE_SAFE: fictional, synthetic,
 #   final). "(Void)", "(Preop)", "(Tomorrow)", "(External)" ... keep the base reading;
-# - I8 no name of the family in the head or a positive section reads planned, historical, negated, cancelled or held.
+# - I8 no name of the family in the head or a positive section reads planned, historical, negated, cancelled or held;
+# - I9 the document is a procedure's own report by its head (_procedure_report: a procedure title, the strong head, or a
+#   head of fields and headings only), never an office visit, a consult, a discharge summary, a nursing note, a letter;
+# - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back).
 # Its reading is the section's ('section' basis), so a cancellation, a denial or a doubt about today's service still
 # contradicts it in _aggregate. Bounded: INSTRUMENT_READS instrument words in positive sections are examined, and
 # INSTRUMENT_MENTIONS kept per family (routing's mention bound, settings.MAX_SERVICE_MENTIONS, is untouched by them).
@@ -8525,6 +8530,99 @@ def _unsafe_title_at(an: Analysis) -> int:
     return an.memo[key]
 
 
+# I9's closed class: the words of a generic procedure report's title ("Endoscopy Report", "Procedure Note",
+# "Gastroenterology Procedure Report"); an unknown word reads as no such title (the safe side).
+_GENERIC_TITLE_WORD = re.compile(r'(?:endoscopy|endoscopic|gastroenterology|gastrointestinal|gi|lower|upper|operative|'
+                                 r'procedure|procedural|digestive|report|note|record)', re.A | re.I)
+# I10: a statement that the narrative is a copy or another occasion's report (a closed list, read only to hold).
+_BACK_REFERENCE = re.compile(
+    r'\b(?:cop(?:y|ied)|pasted|transcribed|reproduced|excerpted|imported|carried[ \t]+forward)\b'
+    r'|\b(?:from|of|in)[ \t]+(?:the|an?|her|his|their)[ \t]+(?:prior|previous|earlier|outside|old|last|index|referring)'
+    r'[ \t]+(?:reports?|records?|notes?|procedures?|examinations?|exams?|stud(?:y|ies)|colonoscop(?:y|ies)|'
+    r'endoscop(?:y|ies)|EGDs?)\b', re.A | re.I)
+_BACK_REFERENCE_REACH = 2000  # characters of the instrument's section read either side of it
+
+
+def _accepted_title(line: str) -> bool:
+    """A title routing's own title rules read (_plain_title), or the same with an _ASIDE_SAFE aside after it (I7)."""
+    if _plain_title(line):
+        return True
+    aside = _TITLE_ASIDE.fullmatch(line)
+    return (aside is not None and _plain_title(aside.group('title'))
+            and _ASIDE_SAFE.fullmatch(aside.group('paren') or aside.group('dash') or '') is not None)
+
+
+def _procedure_title(line: str) -> bool:
+    """I9: a procedure report's own title - an accepted title naming a procedure service ("Colonoscopy Report
+    (fictional)", "Colonoscopy", "EGD Report"), or an accepted title whose words are all of a generic procedure report's
+    (_GENERIC_TITLE_WORD: "Endoscopy Report", "Procedure Note"). "Office Visit Note", "Nursing Note" and "Discharge
+    Summary" are none."""
+    if not _accepted_title(line):
+        return False
+    if any(pattern.search(line) for _, pattern in cues.SERVICE_PATTERNS):
+        return True
+    aside = None if _plain_title(line) else _TITLE_ASIDE.fullmatch(line)
+    words = re.findall(r'[A-Za-z]+', aside.group('title') if aside is not None else line)
+    return bool(words) and all(_GENERIC_TITLE_WORD.fullmatch(word) for word in words)
+
+
+def _fields_and_headings_only(an: Analysis, upto: int) -> bool:
+    """Whether every non-empty line before ``upto`` - at most sections.PROCEDURE_HEAD_LINES of them - is a labelled field
+    or opens a layout section by its heading (D1b: "Date of service: ..." and "Indications: Dysphagia." before
+    "Procedure:"): a head with nothing else in it, no salutation, letterhead or other title."""
+    text, start, seen = an.text, 0, 0
+    while start < upto:
+        nl = text.find('\n', start, upto)
+        end = upto if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, end).end()
+        if body < end:
+            seen += 1
+            if seen > gi_sections.PROCEDURE_HEAD_LINES:
+                return False
+            section = an.lay.section_at(start)
+            if not (section.heading is not None and section.start == start) and not _GI4_FIELD.match(text, body, end):
+                return False
+        if nl < 0:
+            break
+        start = nl + 1
+    return True
+
+
+def _procedure_report(an: Analysis, section_start: int) -> bool:
+    """I9: positive evidence that the document is a procedure's own report, any one of: a head title that is a procedure
+    title (_procedure_title); routing's strong head (todays_procedure_report); or, with no title-shaped head line at all,
+    a head of fields and section headings only up to the instrument's section (_fields_and_headings_only). Never where a
+    head title names a later review, a result, a copy or another record (_GI4_TITLE_HOLD), or the document is a note
+    written around a procedure (sections.around_procedure_title: a letter, instructions, a consent, a call, a booking).
+    An office visit note, a consult, a discharge summary or a nursing note recounting the instrument's course is no
+    procedure report, and there the base reading stands. Memoised per document; the head check per section."""
+    key = ('procedure-report',)
+    if key not in an.memo:
+        text = an.text
+        titles = [line for line in (_gi4_line(text, s, e) for s, e in _gi4_head(text).titles) if line]
+        if any(_GI4_TITLE_HOLD.search(line) for line in titles) or gi_sections.around_procedure_title(text):
+            an.memo[key] = 'no'
+        elif any(_procedure_title(line) for line in titles) or todays_procedure_report(text):
+            an.memo[key] = 'yes'
+        else:
+            an.memo[key] = 'no' if titles else 'head'
+    verdict = an.memo[key]
+    if verdict != 'head':
+        return verdict == 'yes'
+    hkey = ('procedure-report-head', section_start)
+    if hkey not in an.memo:
+        an.memo[hkey] = _fields_and_headings_only(an, section_start)
+    return an.memo[hkey]
+
+
+def _section_refers_back(an: Analysis, start: int) -> bool:
+    """I10: the instrument's own section, within _BACK_REFERENCE_REACH characters either side of it, says its narrative is
+    a copy or another occasion's report ("This narrative is copied from the prior report."). Hold-only."""
+    section = an.lay.section_at(start)
+    lo, hi = max(section.start, start - _BACK_REFERENCE_REACH), min(section.end, start + _BACK_REFERENCE_REACH)
+    return _BACK_REFERENCE.search(an.text, lo, hi) is not None
+
+
 def _instrument_course(an: Analysis, start: int, end: int) -> bool:
     """I3: the instrument word at [start, end) is the subject of its own course predicate in its clause."""
     cs, ce = _clause_at(an, start)
@@ -8537,7 +8635,7 @@ def _instrument_course(an: Analysis, start: int, end: int) -> bool:
 
 
 def _instrument_candidates(an: Analysis) -> list[Mention]:
-    """The instrument words that meet I1, I2, I3, I6 and I7, in one pass over services.INSTRUMENTS."""
+    """The instrument words that meet I1, I2, I3, I6, I7, I9 and I10, in one pass over services.INSTRUMENTS."""
     from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
     named = {m.family for m in an.services}
     found, reads = [], 0
@@ -8552,9 +8650,35 @@ def _instrument_candidates(an: Analysis) -> list[Mention]:
         reads += 1
         if reads > INSTRUMENT_READS or m.start() >= _unsafe_title_at(an):  # the bound; I7 (every later word is below it)
             break
+        if not _procedure_report(an, an.lay.section_at(m.start()).start) or _section_refers_back(an, m.start()):
+            continue  # I9, I10
         if _instrument_course(an, m.start(), m.end()):  # I3
             found.append(Mention(family, m.start(), m.end(), 'instrument', m.group(0)))
     return found
+
+
+_INSTRUMENT_CLAUSE_WINDOW = 600  # characters either side of the instrument its clause is cut within (bounds the cut)
+
+
+def _instrument_statement_held(an: Analysis, m: Mention) -> bool:
+    """I4, the documented-service reader's half: that reader's own rules hold the instrument's statement - another
+    facility, provider or source in its clause, its fronted frame or its section's heading ("At a community hospital,
+    the colonoscope was advanced", "Reportedly ...", "(outside report)"), a named agent no physician line names ("by
+    Dr. Other Person"), a hedge, or a condition or an open question over it ("It is unknown whether the colonoscope was
+    advanced"). Read with that reader's own functions (services.statement_hold and services.in_condition, which its
+    read_clause reads them with) over its own clause cut, so one instrument statement reads alike in both readers.
+    Hold-only: a hold keeps the base reading. Bounded: the cut is made within _INSTRUMENT_CLAUSE_WINDOW characters."""
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    text = an.text
+    s, e = an.lay.sentence_for(m.start, m.end)
+    lo, hi = max(s, m.start - _INSTRUMENT_CLAUSE_WINDOW), min(e, m.end + _INSTRUMENT_CLAUSE_WINDOW)
+    clause = next((c for c in gi_services.clauses(text, lo, hi) if c[0] <= m.start < c[1]), (lo, hi))
+    cs, ce = gi_services._bounded_clause(text, clause, m.start, m.end)
+    frame = gi_services._fronted_frame(text, cs)
+    frame = frame if frame.rstrip().endswith(',') else ''
+    whole = text[cs:ce]
+    return (gi_services.statement_hold(text, frame + whole, whole, m.start) is not None
+            or gi_services.in_condition(text, cs, m.start, m.end))
 
 
 def _named_otherwise(an: Analysis, family: str) -> bool:
@@ -8582,7 +8706,7 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
             continue
-        if _generic_reading(an, m.start, m.end).status != 'performed':  # I4
+        if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
             continue
         if not in_todays_narrative(an.text, m.start, an.service_date, an.lay.sentence_for(m.start, m.end),
                                    excuse=lambda d, family=m.family: _another_familys_date(an, d, family)):  # I5

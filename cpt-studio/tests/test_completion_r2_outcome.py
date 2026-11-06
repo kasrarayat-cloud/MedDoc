@@ -433,6 +433,66 @@ class InstrumentMentionTests(SimpleTestCase):
         self.assertEqual(detect.service_mention_count(text), 1)
 
 
+class InstrumentGuardTests(SimpleTestCase):
+    """The refuter shapes that opened the instrument rule before I4's second half, I9 and I10 (each READY on the rule's
+    first form, held on the base), and the controls that still release."""
+
+    HEAD = 'Date of service: 2026-10-14\nEndoscopist: Jane Synthetic, MD\n'
+    COLD = 'A 6 mm polyp in the sigmoid colon was removed with a cold snare.'
+
+    def doc(self, body, title='Colonoscopy', heading='Procedure: '):
+        return (title + '\n' if title else '') + self.HEAD + heading + body + ' ' + self.COLD + '\n'
+
+    def assert_base(self, text):
+        self.assertFalse(instrument_mentions(text, 'gi.colonoscopy'), text)
+        found = finding(text, 'gi.colonoscopy')
+        self.assertTrue(found is None or found.status != 'performed', found)
+        if dated_today(text):
+            self.assertNotEqual(proposal(text, '45385', self.COLD).status, 'ready')
+
+    def test_the_documented_service_readers_own_holds_hold_the_instrument(self):
+        # I4: services.statement_hold and services.in_condition, the functions read_clause reads them with
+        for body in ('It is unknown whether the colonoscope was advanced to the cecum.',
+                     'At a community hospital, the colonoscope was advanced to the cecum.',
+                     'Reportedly the colonoscope was advanced to the cecum.',
+                     'The colonoscope was advanced to the cecum by Dr. Other Person.',
+                     'According to the patient, the colonoscope was advanced to the cecum.',
+                     'The colonoscope was advanced to the cecum (outside report).',
+                     'The colonoscope was possibly advanced to the cecum.'):
+            for title in ('Colonoscopy', ''):
+                with self.subTest(body=body, title=title):
+                    self.assert_base(self.doc(body, title))
+        # the report's own physician named as the agent is no other source
+        text = self.doc('The colonoscope was advanced to the cecum by Dr. Synthetic.')
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+
+    def test_another_kind_of_document_is_no_procedure_report(self):
+        # I9: an office visit, a discharge summary, a consult, a letter or a nursing note recounting the course
+        for title, heading in (('Office Visit Note', 'HPI: Follow-up.\nFindings: '), ('Discharge Summary', 'Procedures: '),
+                               ('GI Consult', 'Findings: '), ('Dear Dr. Smith,', 'Findings: '), ('Nursing Note', 'Procedure: '),
+                               ('Nursing Record', 'Procedure: '), ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'Findings: ')):
+            text = self.doc('The colonoscope was advanced to the cecum.', title, heading)
+            with self.subTest(title):
+                self.assert_base(text)
+        # a procedure report's own head: a procedure title, a generic procedure report title, a strong head, or fields
+        # and headings only
+        for title, head in (('Colonoscopy', self.HEAD), ('Endoscopy Report', self.HEAD), ('Procedure Note', self.HEAD),
+                            ('', 'Date of service: 2026-10-14\nEndoscopist: Jane Synthetic, MD\nSedation: MAC\n'),
+                            ('', 'Date of service: 2026-10-14\nIndications: Screening.\n')):
+            text = (title + '\n' if title else '') + head + 'Procedure: The colonoscope was advanced to the cecum. ' \
+                + self.COLD + '\n'
+            with self.subTest(title=title, head=head):
+                self.assertTrue(instrument_mentions(text, 'gi.colonoscopy'))
+                self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+
+    def test_a_narrative_its_section_calls_a_copy_or_another_report(self):
+        # I10
+        for line in ('This narrative is copied from the prior report.', 'Text carried forward from the 2024 note.',
+                     'Findings are from the previous colonoscopy.'):
+            with self.subTest(line):
+                self.assert_base(self.doc('The colonoscope was advanced to the cecum. ' + line))
+
+
 class ExtentFactTests(SimpleTestCase):
     """U12: one extent fact - routing reads the completion reader's reach statements; truthful wording otherwise."""
 
