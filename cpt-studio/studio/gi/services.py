@@ -3962,14 +3962,31 @@ class _ServiceDraft:
     shared: list = field(default_factory=list)
 
 
+def _taken_overlaps(starts: list, ends: list, s: int, e: int) -> bool:
+    """Whether [s, e) overlaps one of the taken spans (``starts``/``ends``: sorted, pairwise disjoint, so the span with the
+    last start before ``e`` has the last end too, and it alone decides): one bisection."""
+    i = bisect.bisect_left(starts, e)
+    return i > 0 and ends[i - 1] > s
+
+
+def _take(starts: list, ends: list, s: int, e: int) -> None:
+    i = bisect.bisect_left(starts, s)
+    starts.insert(i, s)
+    ends.insert(i, e)
+
+
 def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, int]]:
+    # refutation cycle 1 (cost F1): the taken spans are kept sorted and each overlap is one bisection (_taken_overlaps)
+    # - a scan of every span taken so far made a long run of site names quadratic (the tract check reads a whole
+    # section). The spans taken and the sites found are exactly the scan's.
     found: list[tuple[str, str, int, int]] = []
-    taken: list[tuple[int, int]] = []
+    starts: list[int] = []
+    ends: list[int] = []
     for name, region, pattern in ANATOMY:
         for m in pattern.finditer(text, start, end):
-            if any(a < m.end() and m.start() < b for a, b in taken):
+            if _taken_overlaps(starts, ends, m.start(), m.end()):
                 continue
-            taken.append((m.start(), m.end()))
+            _take(starts, ends, m.start(), m.end())
             found.append((name, region, m.start(), m.end()))
     for name, region, s, e in list(found):
         # Completion repair (2026-11-06, U13; builder A): a coordinated modifier shares the site's head ("from the right
@@ -3981,12 +3998,12 @@ def _anatomy_in(text: str, start: int, end: int) -> list[tuple[str, str, int, in
         if shared is None or len(head) < 2:
             continue
         a, b = shared.span('modifier')
-        if any(x < b and a < y for x, y in taken):
+        if _taken_overlaps(starts, ends, a, b):
             continue
         written = text[a:b] + ' ' + head[1]
         site = next(((n, r) for n, r, pattern in ANATOMY if pattern.fullmatch(written)), None)
         if site is not None and site[0] != name:
-            taken.append((a, b))
+            _take(starts, ends, a, b)
             found.append((site[0], site[1], a, b))
     return sorted(found, key=lambda x: x[2])
 
