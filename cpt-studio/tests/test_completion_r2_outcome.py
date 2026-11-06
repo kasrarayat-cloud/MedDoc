@@ -498,6 +498,20 @@ class InstrumentGuardTests(SimpleTestCase):
                 self.assertTrue(instrument_mentions(text, 'gi.colonoscopy'))
                 self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
 
+    def test_a_head_of_fields_is_not_enough_without_a_procedure_title(self):
+        # I9: a strong head of fields under another document's title, a letterhead or a flowsheet keeps the base reading
+        head = 'Date of service: 2026-10-14\nEndoscopist: Jane Synthetic, MD\nSedation: monitored anesthesia care\n'
+        body = 'Procedure: The colonoscope was advanced to the cecum. ' + self.COLD + '\n'
+        for title in ('Anesthesia Note', 'Synthetic Valley GI Associates', 'Sedation Flowsheet'):
+            with self.subTest(title):
+                self.assert_base(title + '\n' + head + body)
+        # a positive section's own heading is no title ("Procedure note:"), under a title whose aside is the document's
+        text = 'Colonoscopy Report (fictional)\n' + head + 'Procedure note:\nThe colonoscope was advanced to the cecum. ' \
+            + self.COLD + '\n'
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+        text = text.replace('(fictional)', '(Void)')
+        self.assertNotEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+
     def test_a_doubted_act_where_the_services_reader_lifts_a_listing(self):
         # I11: its procedure-line promotion (U6, the services reader's placement repair) would make the failed or hedged
         # act performed; where routing had no performed mention of the family the base held the code, so the instrument

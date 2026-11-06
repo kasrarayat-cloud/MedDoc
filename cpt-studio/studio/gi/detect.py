@@ -8470,7 +8470,7 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 #   its only addition is an aside of a closed class about the document itself (_ASIDE_SAFE: fictional, synthetic,
 #   final). "(Void)", "(Preop)", "(Tomorrow)", "(External)" ... keep the base reading;
 # - I8 no name of the family in the head or a positive section reads planned, historical, negated, cancelled or held;
-# - I9 the document is a procedure's own report by its head (_procedure_report: a procedure title, the strong head, or a
+# - I9 the document is a procedure's own report by its head (_procedure_report: a procedure title, or no title and a
 #   head of fields and headings only), never an office visit, a consult, a discharge summary, a nursing note, a letter;
 # - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back);
 # - I11 no act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
@@ -8526,7 +8526,10 @@ def _unsafe_title_at(an: Analysis) -> int:
             nl = text.find('\n', start)
             end = len(text) if nl < 0 else nl
             line = _gi4_line(text, start, end)
-            if line and _gi4_heading_like(line) and not _plain_title(line) and (
+            section = an.lay.section_at(start)
+            positive_heading = section.kind in POSITIVE_SECTIONS and section.heading is not None \
+                and section.start == start  # "Procedure note:": a heading of today's narrative, never a title
+            if line and not positive_heading and _gi4_heading_like(line) and not _plain_title(line) and (
                     _TITLE_REPORT_WORD.search(line) or any(p.search(line) for _, p in cues.SERVICE_PATTERNS)):
                 aside = _TITLE_ASIDE.fullmatch(line)
                 if aside is None or not _plain_title(aside.group('title')) \
@@ -8599,20 +8602,22 @@ def _fields_and_headings_only(an: Analysis, upto: int) -> bool:
 
 
 def _procedure_report(an: Analysis, section_start: int) -> bool:
-    """I9: positive evidence that the document is a procedure's own report, any one of: a head title that is a procedure
-    title (_procedure_title); routing's strong head (todays_procedure_report); or, with no title-shaped head line at all,
-    a head of fields and section headings only up to the instrument's section (_fields_and_headings_only). Never where a
-    head title names a later review, a result, a copy or another record (_GI4_TITLE_HOLD), or the document is a note
-    written around a procedure (sections.around_procedure_title: a letter, instructions, a consent, a call, a booking).
-    An office visit note, a consult, a discharge summary or a nursing note recounting the instrument's course is no
-    procedure report, and there the base reading stands. Memoised per document; the head check per section."""
+    """I9: positive evidence that the document is a procedure's own report, one of: a head title that is a procedure
+    title (_procedure_title); or, with no title-shaped head line at all, a head of fields and section headings only up
+    to the instrument's section (_fields_and_headings_only). Never where a head title names a later review, a result, a
+    copy or another record (_GI4_TITLE_HOLD), or the document is a note written around a procedure
+    (sections.around_procedure_title: a letter, instructions, a consent, a call, a booking). An office visit note, a
+    consult, a discharge summary, an anesthesia or nursing note, or a letterhead with no procedure title, recounting the
+    instrument's course is no procedure report by its head, and there the base reading stands - a strong head of fields
+    is not enough without a procedure title ("Anesthesia Note" over date, proceduralist and sedation fields). Memoised
+    per document; the head check per section."""
     key = ('procedure-report',)
     if key not in an.memo:
         text = an.text
         titles = [line for line in (_gi4_line(text, s, e) for s, e in _gi4_head(text).titles) if line]
         if any(_GI4_TITLE_HOLD.search(line) for line in titles) or gi_sections.around_procedure_title(text):
             an.memo[key] = 'no'
-        elif any(_procedure_title(line) for line in titles) or todays_procedure_report(text):
+        elif any(_procedure_title(line) for line in titles):
             an.memo[key] = 'yes'
         else:
             an.memo[key] = 'no' if titles else 'head'
