@@ -46,7 +46,8 @@ from tests.test_services_second_review import TwoPassProvider, ask
 
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 EUS_ITEM = 'endoscopic ultrasound (documented as performed) has no supported proposal'
-NOT_DONE = 'the act it accounts for is not documented as done in the service left unresolved'
+# completion repair (builder Q1, U9): what CPT Studio could not find, never a fact of the document from its silence
+NOT_DONE = 'CPT Studio could not find the act it accounts for documented as done in the service left unresolved'
 NOT_ADDED = 'it accounts for no documented service or act the primary proposals left unresolved'
 SELECTED_NOT_ADDED = 'Selected by the provider in the bounded second review, but not added as a proposal: '
 CANNOT_APPROVE = ' Candidates and alternatives cannot be approved.'

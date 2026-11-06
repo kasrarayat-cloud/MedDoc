@@ -15,8 +15,7 @@ from django.test import SimpleTestCase
 from studio.gi import detect, sections
 from studio.gi import services as gi_services
 from studio.validation import engine, review_view
-from tests.test_harness_engine import DAY, code, corti, not_coded, proposal, read, run, span
-from tests.test_harness2_r6_meaning import P_ADMIT_REASONS
+from tests.test_harness_engine import DAY, code, corti, decision, not_coded, proposal, read, run, span
 
 HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
         'Gastroenterology Procedure Report\n'
@@ -121,13 +120,17 @@ class InlineServiceLabelTests(SimpleTestCase):
 
     def test_without_f_acts_39f0ac49s_bolus_removal_is_no_documented_act(self):
         # F-ACTS was refuted in cycles 3 and 4 and is dropped (recorded residual): "the bolus was removed" names no
-        # foreign-body act, so Corti's 43247 on it is held by the service's doubt and a participant's is listed
+        # foreign-body act, so Corti's 43247 on it is held by the service's doubt. Moved by the completion repair (owner
+        # directive 2026-11-06, items 3 and 5; builder Q1): a participant's 43247 is no longer listed "not documented as
+        # done" for a reader's silence (U8, U9) - it is admitted and reaches review held exactly as Corti's is
         codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
         by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
         self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
-        listed = proposal(run(LABELLED, codes, [read('astra', [code(LABELLED, '43247', NET)])]), '43247')
-        self.assertEqual((listed.bucket, listed.status), ('alternative', 'informational'))
-        self.assertIn(engine.PARTICIPANT_NO_ACT, listed.exclusion_reason)
+        admitted = proposal(run(LABELLED, codes, [read('astra', [code(LABELLED, '43247', NET)])]), '43247')
+        self.assertEqual((admitted.bucket, admitted.status, admitted.support['origin']),
+                         ('selected', 'needs_clarification', 'participant'))
+        self.assertEqual(decision(admitted), decision(by_corti))
+        self.assertNotIn('not documented', admitted.clarifications[0].reason.lower())
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -206,9 +209,17 @@ class AdmissionCaseTests(SimpleTestCase):
                 result = run(text, corti(('45380', span(text, biopsy))),
                              [read('astra', [code(text, '45385', line)]), read('fable', [code(text, '45385', line)])])
                 found = [p for p in result.proposals if p.code == '45385']
-                self.assertEqual([(p.bucket, p.status) for p in found], [('alternative', 'informational')])
-                after = found[0].exclusion_reason.split('but not added as a proposal: ', 1)[1]
-                self.assertTrue(any(after.startswith(reason) for reason in P_ADMIT_REASONS), after)
+                # moved by the completion repair (builder Q1, equal eligibility): never READY, and read exactly as
+                # Corti's own selection of the passage - excluded with the passage that states the act failed, denied
+                # or planned (reinstatable), held for the earlier colonoscopy's - never an alternative
+                self.assertEqual(len(found), 1)
+                self.assertNotEqual(found[0].status, 'ready')
+                self.assertIn((found[0].bucket, found[0].status),
+                              (('excluded', 'excluded'), ('selected', 'needs_clarification')))
+                by_corti = proposal(run(text, corti(('45380', span(text, biopsy)), ('45385', span(text, line)))),
+                                    '45385')
+                self.assertEqual((found[0].bucket, found[0].status, found[0].exclusion_reason),
+                                 (by_corti.bucket, by_corti.status, by_corti.exclusion_reason))
 
     def test_a_number_only_in_an_alternative_list_is_never_promoted(self):
         codes = corti(('45385', span(PLAIN, SNARE))) + [engine.ProviderCode('candidate', 'cpt', '43239', '', ())]
