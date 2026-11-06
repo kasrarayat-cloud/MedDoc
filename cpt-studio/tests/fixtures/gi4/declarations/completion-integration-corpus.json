@@ -1,0 +1,2994 @@
+{
+ "about": "Completion repair integration (2026-11-06): the completion corpus re-pinned once on the integrated tree (tests/fixtures/gi4/completion/corpus.json). Every entry whose pinned verdict or reading moved, with its pinned verdict before and after; measured by ops.gi4.completion --report before --repin. Group E (16 entries) is new: its baseline verdicts were read on the installed tree. One requirement is revised with its reason (C4M|C4-2:C4-2-4a, required_revised). Invariant: no FALSE READY where the installed baseline had none (0).",
+ "totals_after": {
+  "matches": 275,
+  "safe side (held where listed is required)": 248,
+  "FALSE READY": 39,
+  "FALSE HOLD": 51,
+  "held pending ruling": 11,
+  "needs ruling (installed READY)": 3
+ },
+ "transitions": {
+  "safe side (held where listed is required) -> safe side (held where listed is required)": 204,
+  "matches -> matches": 126,
+  "FALSE HOLD -> matches": 43,
+  "FALSE HOLD -> FALSE HOLD": 38,
+  "safe side (held where listed is required) -> matches": 15,
+  "FALSE READY -> matches": 14,
+  "held pending ruling -> held pending ruling": 10,
+  "matches -> safe side (held where listed is required)": 7,
+  "matches -> FALSE HOLD": 7,
+  "FALSE READY -> safe side (held where listed is required)": 6,
+  "WRONG FLAG -> matches": 6,
+  "listed where a hold is required -> matches": 3,
+  "needs ruling (installed READY) -> needs ruling (installed READY)": 1,
+  "FALSE READY -> FALSE READY": 1
+ },
+ "moved": [
+  {
+   "id": "R1|L1-1a",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-1b",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-1c",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-1d",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-1e",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-1f",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-2a",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L1-4a",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-4b",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-4c",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-4d",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-1:1a-decimal-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1a-ctl-plain",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1b-decimal-snare",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1b-ctl-plain",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1c-paren-APC",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1c-ctl-L1-1d",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1d-decimal-EGD-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1d-ctl-plain",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1e-comma-biopsy",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1e-comma-snare",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1e-ctl-L1-1e",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-paren-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-colon-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-Dr-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-comma-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-eg-EMR",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:1f-ctl-L1-1b",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:2a-paren-colonoscopy",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:2b-comma-colonoscopy",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:2c-colon-colonoscopy",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:2-ctl-L1-2a",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:3a-after-pathology",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:3b-pending-auth",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-1:3c-needs-tattooing",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-MARK-SHAPE-PURPOSE",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-PURPOSE-OWN-0",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-PURPOSE-OWN-1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-PURPOSE-OWN-2",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-PURPOSE-OWN-3",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|TIME1-DONE-0",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|TIME1-DONE-1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "R1|L1-3a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-3b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-3c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-3d",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-3e",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L1-3f",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Preop)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Preoperative)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Orders)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Possibly)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Probably)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Photocopy)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Duplicate)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Another Facility)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(External)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Void)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:void_report"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Entered in Error)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:void_report"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(October Twelfth)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:service_date"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Tomorrow)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Unsigned)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Addendum)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Consult)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Request)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Awaiting)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Geplant)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Programada)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Abgesagt)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Vorlage)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Borrador)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Copia)",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Previa)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L5-3:title-aside-(Final)",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L5-4:Prior report: / Received by fax. || Colonoscopy Report (Final)",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L5-4:History: see the attached report. || Colonoscopy Report (Final)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L5-4:Previous procedures: colonoscopy, report below. || Colonoscopy Report (Final)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L5-4:Outside report: || Colonoscopy Report (Final)",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-1:4a-signed-dated",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-1:4b-exam-date-no-colon",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-1:4c-see-attached",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-1:4d-electronically-signed",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-1:4e-head-after-narrative",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-1:4-ctl-L5-4-pinned",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|TITLE-ASIDE-fictional",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|TITLE-ASIDE-Final",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "R1|L5-1:previously-then-extent",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L5-1:year-after-Dr-abbreviation",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|LABELLED-43239",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|LABELLED-45385",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-1:F1a",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "R1|L5-5:A saline bolus was injected and the polyp was then removed with a hot snare.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:A fentanyl bolus was given and the clip was then removed.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:After a 50 mg propofol bolus, the bite block was removed.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:The bolus was cleared by peristalsis.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:The contrast bolus was cleared from the esophagus by peristalsis.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:The water bolus was cleared promptly by normal peristalsis.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:A bolus of retained secretions was cleared with suction.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-5:A bolus of contrast was removed from the field with suction.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-6:The meat bolus was passed into the stomach with gentle pressure.",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "R1|L5-6:The steak bolus was advanced into the stomach.",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "R1|L5-6:The bolus was cleared into the stomach with gentle insufflation.",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "R1|L5-6:The bolus was dislodged distally into the stomach with the tip of the scope.",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "R1|L5-6:The meat impaction resolved spontaneously before arrival.",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "R1|L5-6:The food bolus was pushed into the stomach.",
+   "old": "needs ruling (installed READY)",
+   "new": "needs ruling (installed READY)",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "R1|ctl-1t",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "R1|L2-1a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "R1|L2-1b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "R1|L2-1c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "R1|L2-1d",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L2-2c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-5:C2-5-1a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-1b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-1c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-2a",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C2|C2-5:C2-5-2b",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C2|C2-5:C2-5-2c",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C2|C2-5:C2-5-2-control",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C2|C2-5:C2-5-3a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-3b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-3c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C2|C2-5:C2-5-3-control",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B1p",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B3p",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B11p",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-comma-ctl",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-plain",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-plain",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-3-1ctl",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C4|C4-3-3ctl",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "H2|LABELLED-43247",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|PLAIN-43247",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-1:F1b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:wrong_family"
+  },
+  {
+   "id": "C3|C3-1:c31-1:F2d43247",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:wrong_family"
+  },
+  {
+   "id": "C3|C3-1:c31-1:F2e43247",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:wrong_family"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B1",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B3",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B11",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B6",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C3|C3-1:c31-2:B6c",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-6:X1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-6:X2",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-6:X3",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-1:ctl-C3-1-2",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-because",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-after",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-once",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-when",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:1-since",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-yet",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-however",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-therefore",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-thus",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:2-whereupon",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:3-missed",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:3-protecting",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "C4|C4-1:3-pushed",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C4|C4-1:3-pushed-named",
+   "old": "held pending ruling",
+   "new": "held pending ruling",
+   "required": "RULING:push technique"
+  },
+  {
+   "id": "C3|C3-1:c31-3:T3",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C3|C3-1:c31-3:C2",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C3|C3-1:c31-3:E5",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C3|C3-1:c31-4:T2",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C3|C3-1:c31-4:E2",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C3|C3-1:c31-4:C1",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1a",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1b",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1c",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1d",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1e",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1f",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1g",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:1h",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:2",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "C2|C2-2:11a",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C2|C2-2:11b",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C2|C2-2:11c",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C2|C2-2:12a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-2:12b",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C2|C2-2:12c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-2:12d",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-2:12e",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C2|C2-2:13a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:13b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:13c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C2|C2-2:14a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "C2|C2-2:14b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "C2|C2-2:10",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-1a",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C4|C4-3-1b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "C4|C4-3-1c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "C4|C4-3-2a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C4|C4-3-2b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C4|C4-3-2c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C4|C4-3-2d",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C4|C4-3-3a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "C4|C4-3-3b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "C4|C4-3-3c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C4|C4-3-4a",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C4|C4-3-4b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "C4|C4-3-4c",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "C4|C4-3-5a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "C4|C4-3-5b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "C4|C4-3-6a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C4|C4-3-6b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "C3|C3-4-4:a",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C3|C3-4-4:b",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "C3|C3-4-8:d",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "R1|L1-4a-plain",
+   "old": "FALSE READY",
+   "new": "FALSE READY",
+   "required": "L:not_done"
+  },
+  {
+   "id": "R1|L5-2:inside-a-pathology-addendum",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_role"
+  },
+  {
+   "id": "H2|NEG3-5",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|KINDLESS-COST-1-titled",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|KINDLESS-COST-1-untitled",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|KINDLESS-COST-2-titled",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|KINDLESS-COST-2-untitled",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-L6-0",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-L6-1",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-HEADING-referral-letter",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-L6-0-plain",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-L6-1-plain",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-HEADING-referral-letter-plain",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|NEG-REL-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-02",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-03",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-04",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-05",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-06",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-07",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-08",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|NEG-REL-09",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-10",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-11",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-12",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-13",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-14",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|NEG-REL-15",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|NEG-REL-16",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|NEG-REL-17",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|NEG-REL-18",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|NEG-REL-19",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-02",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-03",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-04",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-05",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-06",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-07",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-08",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-09",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-10",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-11",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-12",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-13",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-14",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-15",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-MARK-PLACE-16",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|PKG-MARK-SHAPE-00",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-MARK-SHAPE-01",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-MARK-SHAPE-02",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-00",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-00+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-01",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-01+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-02",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-02+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-03",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-03+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-04",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-04+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-05",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-05+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-09",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-MARK-ADV-09+45378",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-MARK-OWN-also",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "H2|PKG-COORD-00",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-00+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-01",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-01+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-02",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-02+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-03",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-03+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-04",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-04+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-05",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-05+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-06",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-COORD-06+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-COORD-07",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-07+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-08",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-08+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-09",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-09+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-10",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-10+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-11",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-11+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-COORD-12",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-12+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-13",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-13+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-14",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-COORD-14+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-COORD-15",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-15+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-16",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-16+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-17",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-17+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-18",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-18+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-COORD-19",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-19+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-20",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-20+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-21",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "H2|PKG-COORD-21+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "H2|PKG-COORD-22",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-22+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-23",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-23+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-24",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-COORD-24+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-00+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-01+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-02",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-02+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-03",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-03+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-04",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-04+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-05",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-05+45378",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-06",
+   "old": "listed where a hold is required",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-PURPO-06+45378",
+   "old": "listed where a hold is required",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-PURPO-07",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-07+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-PURPO-08",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-08+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-PURPO-09",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-09+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-10",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-PURPO-10+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "H2|PKG-PURPO-11",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-11+45378",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-PURPO-12",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "H2|PKG-PURPO-12+45378",
+   "old": "matches",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_source"
+  },
+  {
+   "id": "H2|PKG-HEADING-outside-report",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-HEADING-per-outside-endoscopist",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_provider"
+  },
+  {
+   "id": "H2|PKG-L6-purpose",
+   "old": "listed where a hold is required",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|PKG-EXCISED-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-00+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-01+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-02",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-02+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-03",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-03+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:not_done"
+  },
+  {
+   "id": "H2|PKG-EXCISED-04",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-04+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-05",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-05+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-06",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-06+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-07",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|PKG-EXCISED-08",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|PKG-EXCISED-08+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-00+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-01+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-02",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-02+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-03",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-03+45378",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-04",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_role"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-04+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_role"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-05",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "H2|DECOMP-ATTEMPT-06",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "H2|DECOMP-VERB-00",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:planned"
+  },
+  {
+   "id": "H2|DECOMP-VERB-01",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|DECOMP-VERB-02",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|DECOMP-VERB-03",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:other_role"
+  },
+  {
+   "id": "H2|DECOMP-VERB-04",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:no_act"
+  },
+  {
+   "id": "H2|LISTING-PLAN-RESIDUAL",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3M|C3-3:f4_doubted_ready:corti 43248 [Possibly the ring was also dilated with a Savary bougie.] astra 43249 balloon",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "R",
+    "43248": "H:performed_status"
+   }
+  },
+  {
+   "id": "C3M|C3-3:f4_doubted_ready:corti 43248 [Per the outside report, the ring was also dilated with a Savary bougie.] astra 43249 balloon",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "R",
+    "43248": "L:other_provider"
+   }
+  },
+  {
+   "id": "C3M|C3-3:f4_doubted_ready:corti 43248 [A Savary dilation was attempted but the wire could not be passed.] astra 43249 balloon",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "R",
+    "43248": "L:failed"
+   }
+  },
+  {
+   "id": "C4M|C4-2:C4-2-4a EGD: sited dilation + \"The dilation was performed without complication.\" (corti 43249, astra 43248)",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "43249": "R",
+    "43248": "H:performed_status"
+   }
+  },
+  {
+   "id": "C4M|C4-2:C4-2-3 EGD: two balloon dilations + doubted Savary (corti 43248 on the doubt, astra 43249 ring)",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "R",
+    "43248": "H:performed_status"
+   }
+  },
+  {
+   "id": "H2|L4-4-a",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "45385": "R"
+   }
+  },
+  {
+   "id": "H2|L4-4-b",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|H2-CLIP-0",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "H2|H2-CLIP-1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "ADM|C3-2-1:N1 failed",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:failed",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:unsuccessful",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:failed",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:abandoned",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:failed",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:N2 attempted",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:failed",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:planned",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:planned",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:infinitive",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:planned",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:open question",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": {
+    "participant": "H:performed_status",
+    "corti_base": "H:base_included"
+   }
+  },
+  {
+   "id": "ADM|C3-2-1:EGD bands",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "participant": "L:failed",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-2:colon consent, biopsy",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-2:colon consent, snare",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-2:colon consent, hot snare",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-2:EGD consent, biopsy",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-3:Were biopsies taken from the polyp?",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "ADM|C3-2-3:Was the polyp removed with a cold snare?",
+   "old": "matches",
+   "new": "FALSE HOLD",
+   "required": {
+    "participant": "L:not_done",
+    "corti_base": "R"
+   }
+  },
+  {
+   "id": "C3|C3-4-1:c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-1:d",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-2:a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-2:b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-2:c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-3:a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-3:b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-6:a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-6:b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-7:a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-7:b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-7:c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-4-9:c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-7a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-7b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-7c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-8a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-8b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-8c",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-9a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-9b",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C4|C4-3-10a",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L3-2#5",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L3-10#0",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L3-10#1",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L3-10#2",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "R1|L3-10#3",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "C3|C3-1:c31-5:H6",
+   "old": "FALSE HOLD",
+   "new": "FALSE HOLD",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-a1",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-a2",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-c1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-c3",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "D|RT-d1",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-d2",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|RT-f1",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|RT-f2",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|RT-f3",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|RT-f4",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|ARCH-D1a",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|ARCH-D1b",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|ARCH-D2a",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|ARCH-D3a",
+   "old": "FALSE READY",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|ARCH-D3b",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:failed"
+  },
+  {
+   "id": "D|ARCH-D4a",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "D|ARCH-D4b",
+   "old": "matches",
+   "new": "matches",
+   "required": "L:historical"
+  },
+  {
+   "id": "D|ARCH-D4c",
+   "old": "safe side (held where listed is required)",
+   "new": "safe side (held where listed is required)",
+   "required": "L:historical"
+  },
+  {
+   "id": "D|ARCH-D5a",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_facility"
+  },
+  {
+   "id": "D|ARCH-D5b",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "D|ARCH-D5c",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "D|ARCH-D9",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|ARCH-D10b",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|AB-B1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|AB-B2",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|AB-B3",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|AB-B4",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|AB-B5",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "D|CASE-d44a77b3",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43239": "R",
+    "43247": "R",
+    "45381": "R",
+    "45385": "R"
+   }
+  },
+  {
+   "id": "D|CASE-e888f9ce",
+   "old": "WRONG FLAG",
+   "new": "matches",
+   "required": {
+    "45380": "R",
+    "45385": "R"
+   }
+  },
+  {
+   "id": "E|TECH-savary",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "H:performed_status",
+    "43248": "R"
+   }
+  },
+  {
+   "id": "E|TECH-tts",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43248": "H:performed_status",
+    "43249": "R"
+   }
+  },
+  {
+   "id": "E|TECH-maloney",
+   "old": "matches",
+   "new": "matches",
+   "required": {
+    "43249": "H:performed_status",
+    "43248": "H:performed_status"
+   }
+  },
+  {
+   "id": "E|TECH-impression",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": {
+    "43249": "H:performed_status",
+    "43248": "R"
+   }
+  },
+  {
+   "id": "E|TECH-savary-43249-alone",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "E|TECH-tts-43248-alone",
+   "old": "FALSE READY",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "E|ANOTHER-failed-alone",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  },
+  {
+   "id": "E|N3-dated-0",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "E|N3-dated-1",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "E|N3-dated-2",
+   "old": "FALSE HOLD",
+   "new": "matches",
+   "required": "R"
+  },
+  {
+   "id": "E|N3-held-2",
+   "old": "matches",
+   "new": "matches",
+   "required": "H:performed_status"
+  }
+ ]
+}
