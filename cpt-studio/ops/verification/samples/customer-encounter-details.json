@@ -222,7 +222,10 @@
         "45385"
       ],
       "saved": null,
-      "addendum_allowed": false
+      "addendum_allowed": false,
+      "missing": "",
+      "statement": "",
+      "passages": []
     },
     {
       "id": "detail-extent",
@@ -242,9 +245,20 @@
         "45385"
       ],
       "saved": null,
-      "addendum_allowed": true
+      "addendum_allowed": true,
+      "missing": "how far the instrument was advanced",
+      "statement": "From the document, CPT Studio could not confirm how far the instrument was advanced.",
+      "passages": [
+        {
+          "text": "COL-2: a 9 mm sigmoid colon polyp was removed with a cold snare.",
+          "start": 330,
+          "end": 394,
+          "page": 1
+        }
+      ]
     }
   ],
+  "earlier_answers": [],
   "unresolved": [],
   "recheck": {
     "available": false,
