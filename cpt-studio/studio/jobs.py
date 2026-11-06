@@ -549,7 +549,7 @@ def _assess_child(text, service_date, pages, context, normalized, reference, pro
 
 
 ROUTING_CACHE_MODULES = ('studio.gi.detect', 'studio.gi.sections', 'studio.gi.context', 'studio.validation.checks',
-                         'studio.validation.engine')
+                         'studio.validation.engine', 'studio.gi.structure')
 
 
 def release_routing_caches():

@@ -7,12 +7,16 @@ Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F
 rule, and cycle 4 dropped F-ACTS: the titles with an aside, the labelled paragraphs and "the bolus was removed" read as
 the base reads them, pinned below as recorded residuals - so 39f0ac49's 43247 has no documented act and is listed. The
 admission cases therefore read a plain report (PLAIN) and its documented biopsy, and the labelled one shows the
-provider-neutral hold: a participant's code for an act stated done in a doubted service is held as Corti's code is."""
+provider-neutral hold: a participant's code for an act stated done in a doubted service is held as Corti's code is.
+
+Completion repair (2026-11-06, U2): the labelled paragraphs are read as today's procedures by studio.gi.structure, so
+the labelled report's codes are READY for Corti and a participant alike (InlineServiceLabelTests' moved pins); the
+bolus stays the base's (no foreign-body act for "the bolus was removed")."""
 from datetime import date
 
 from django.test import SimpleTestCase
 
-from studio.gi import detect, sections
+from studio.gi import detect, sections, structure
 from studio.gi import services as gi_services
 from studio.validation import engine, review_view
 from tests.test_harness_engine import DAY, code, corti, not_coded, proposal, read, run, span
@@ -94,30 +98,42 @@ class TitleAsideTests(SimpleTestCase):
 
 
 class InlineServiceLabelTests(SimpleTestCase):
-    """F-SECTIONS L, dropped under the two-cycle rule (L5-1 to L5-3, then C2-3-1 to C2-3-8): a paragraph labelled with a
-    service's name inside the Indications reads as the base reads it - both services uncertain, with or without the
-    labels - so 39f0ac49's shape is held, never READY. A recorded residual (a false hold). Its codes reach review held:
-    a participant's code for the act its own passage shows exactly as Corti's code for that act (refutation cycle 2,
-    the provider-neutral admission)."""
+    """F-SECTIONS L, dropped under the two-cycle rule (L5-1 to L5-3, then C2-3-1 to C2-3-8), changed sections.py
+    itself. The completion repair (2026-11-06, U2) reads the same shape without touching the layout:
+    studio.gi.structure releases a labelled procedure paragraph only on the structural conditions P1-P4 and N1-N3, and
+    the clinical readers read the derived layout (tests/test_completion_structure.py pins each condition).
 
-    def test_the_labelled_parts_read_as_the_base_reads_them(self):
-        self.assertEqual(families(LABELLED), {'gi.egd': 'uncertain', 'gi.colonoscopy': 'uncertain'})
+    MOVED PINS (completion repair, U2; these were the residual pins of the dropped rule): 39f0ac49's shape - a
+    "Gastroenterology Procedure Report" whose "Upper endoscopy:" and "Colonoscopy:" paragraphs narrate each scope's own
+    course after an Indications line with content of its own - now reads both services performed, each paragraph a
+    report part of its family, and its codes READY for Corti and for a participant alike (the provider-neutral
+    admission: one evaluation, whoever proposed the code). sections.layout itself is unchanged: the frozen layout still
+    opens no procedure section there. Every counter-case pin below is kept, and now also asserts that nothing is
+    released."""
+
+    def test_the_labelled_parts_read_as_todays_procedures(self):
+        # moved (U2): was {'gi.egd': 'uncertain', 'gi.colonoscopy': 'uncertain'} and no report part, as the base read it
+        self.assertEqual(families(LABELLED), {'gi.egd': 'performed', 'gi.colonoscopy': 'performed'})
         kinds = [(s.kind, s.label) for s in sections.layout(LABELLED).sections]
-        self.assertNotIn(('procedure', 'upper endoscopy'), kinds)
+        self.assertNotIn(('procedure', 'upper endoscopy'), kinds)  # the frozen layout is unchanged
         self.assertNotIn(('procedure', 'colonoscopy'), kinds)
-        self.assertFalse([part for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'])
+        derived = [(s.kind, s.label) for s in structure.clinical_layout(LABELLED).sections]
+        self.assertIn(('procedure', 'upper endoscopy'), derived)
+        self.assertIn(('procedure', 'colonoscopy'), derived)
+        self.assertEqual([part.family for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'],
+                         ['gi.egd', 'gi.colonoscopy'])
 
-    def test_a_participants_code_is_held_as_cortis_code_for_the_same_act(self):
-        # the biopsy is stated done inside the EGD the reading documents in doubt: a participant's 43239 is held exactly
-        # as Corti's is (the provider-neutral admission as refutation cycle 3 narrowed it)
+    def test_a_participants_code_reads_as_cortis_code_for_the_same_act(self):
+        # moved (U2): the biopsy is stated done inside today's EGD, so Corti's 43239 is READY, and a participant's 43239
+        # for the same passage reads exactly as Corti's (was: both held, the service's doubt)
         codes = corti(('45385', span(LABELLED, SNARE)))
         by_corti = proposal(run(LABELLED, codes + corti(('43239', span(LABELLED, EGD_BIOPSY)))), '43239')
-        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'ready'))
         for name in ('astra', 'fable'):
             with self.subTest(name):
                 item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43239', EGD_BIOPSY)])]), '43239')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
-                                 ('selected', 'needs_clarification', 'participant', [name]))
+                                 ('selected', 'ready', 'participant', [name]))
 
     def test_without_f_acts_39f0ac49s_bolus_removal_is_no_documented_act(self):
         # F-ACTS was refuted in cycles 3 and 4 and is dropped (recorded residual): "the bolus was removed" names no
@@ -150,6 +166,10 @@ class InlineServiceLabelTests(SimpleTestCase):
         for label, text in cases.items():
             with self.subTest(label):
                 self.assertNotIn(('procedure', 'colonoscopy'), [(s.kind, s.label) for s in sections.layout(text).sections])
+                # the completion repair's release opens nothing here either (U2: each counter-case keeps the base)
+                self.assertEqual(structure.released(text), ())
+                self.assertNotIn(('procedure', 'colonoscopy'),
+                                 [(s.kind, s.label) for s in structure.clinical_layout(text).sections])
 
 
 class ForeignBodyActTests(SimpleTestCase):

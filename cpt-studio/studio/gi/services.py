@@ -1473,7 +1473,7 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
         if end > start:
             out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind, combined,
                              noted, host))
-    return _time_parts(text, out, lay)
+    return _labelled_parts(text, _time_parts(text, out, lay))
 
 
 # P2 READ-HOLD, R8 D7: a note, procedure or addendum label before a heading of its own ("Separate note: Flexible
@@ -1638,6 +1638,63 @@ def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int
         return False
     section = by_start[at]
     return section.start < ls and section.end > le and section.heading is not None and section.kind != 'other'
+
+
+def _clinical_layout(text: str):
+    """The clinical readers' one section layout (studio.gi.structure): routing's derived layout, in which a released
+    labelled procedure paragraph is a procedure section of its own (completion repair 2026-11-06, U2/U12). Inside
+    build() this reader reads a reflowed view of the text routing reads (_ORIGINAL), of the same length: its own layout
+    then carries the original's released paragraphs. With nothing released it is sections.layout(text) itself."""
+    from studio.gi import structure as gi_structure  # local: the structure module reads this module's instruments
+    original = _ORIGINAL.get()
+    if isinstance(original, str) and original is not text:
+        return gi_structure.reader_layout(text, original)
+    return gi_structure.clinical_layout(text)
+
+
+def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
+    """Completion repair 2026-11-06 (U2): each released labelled procedure paragraph (studio.gi.structure, read on the
+    text routing reads) is a report part of its label's family, so an act in it binds to that family - a site-less
+    "The foreign body was removed with a Roth net." in the colonoscopy's paragraph is the colonoscopy's - and it is read
+    as today's report: _time_parts' kind for its lines (the Indications it stood in, or 'other') is replaced. A role
+    part (a nursing, anesthesia, pathology or radiology entry) keeps its own reading, and every part outside the
+    paragraphs is unchanged. Linear in the parts and the paragraphs (bisection)."""
+    from studio.gi import structure as gi_structure
+    original = _ORIGINAL.get()
+    source = original if isinstance(original, str) and len(original) == len(text) else text
+    paragraphs = gi_structure.released(source)
+    if not paragraphs:
+        return tuple(plist)
+    # the Indications each paragraph stood in, as routing's layout has them: their other lines are the indication's to
+    # this reader too, as they are to routing (one section fact; never the report's own text, which routing holds)
+    frozen = _sections.layout(source)
+    held = sorted({(s.start, s.end) for s in (frozen.section_at(p.start) for p in paragraphs) if s.kind == 'indication'})
+    held_starts = [a for a, _ in held]
+    cuts = sorted({b for p in paragraphs for b in (p.start, p.end)} | {b for span in held for b in span})
+    starts = [p.start for p in paragraphs]
+    out: list[_Part] = []
+    for part in plist:
+        lo, hi = bisect.bisect_right(cuts, part.start), bisect.bisect_left(cuts, part.end)
+        edges = [part.start] + cuts[lo:hi] + [part.end]
+        for a, b in zip(edges, edges[1:]):
+            if b <= a:
+                continue
+            k = bisect.bisect_right(starts, a) - 1
+            para = paragraphs[k] if k >= 0 and paragraphs[k].start <= a < paragraphs[k].end else None
+            h = bisect.bisect_right(held_starts, a) - 1
+            in_held = h >= 0 and held[h][0] <= a < held[h][1]
+            if para is None and in_held and part.role == 'physician' and part.kind in ('other', 'report'):
+                out.append(replace(part, start=a, end=b, kind='indication',
+                                   title=part.title if a == part.start else None))
+            elif para is None or part.role != 'physician' or part.kind == 'role':
+                out.append(part if (a, b) == (part.start, part.end)
+                           else replace(part, start=a, end=b, title=part.title if a == part.start else None))
+            elif out and out[-1].role == 'physician' and out[-1].kind == 'report' and out[-1].family == para.family \
+                    and out[-1].end == a and out[-1].start >= para.start:
+                out[-1] = replace(out[-1], end=b)  # one part per paragraph, across the cuts of the parts it overlaid
+            else:
+                out.append(_Part(a, b, para.family, 'physician', None, 'report', False, '', ''))
+    return tuple(out)
 
 
 def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...]:
@@ -2111,7 +2168,7 @@ def _ability_realized(text: str, a: int, b: int, cs: int, ce: int, report: bool)
         return False
     if report or PAST_STATEMENT.search(text[cs:a] + ' ' + text[b:ce]):
         return True
-    return _sections.layout(text).section_at(a).kind in ('impression', 'findings', 'technique', 'procedure')
+    return _clinical_layout(text).section_at(a).kind in ('impression', 'findings', 'technique', 'procedure')
 
 
 def _hypothetical_spans(text: str, cs: int, ce: int, report: bool = False) -> list[tuple[int, int]]:
@@ -2845,7 +2902,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # F-TIME P: the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1,
     # L1-4) - read after a history or plan section has dated the act, as a hedge is (the full suite after round 1: a
     # planned EGD "at the hospital endoscopy unit" was held, never planned)
-    heading = _sections.layout(text).section_at(pos).heading
+    heading = _clinical_layout(text).section_at(pos).heading
     source = _other_source(said) or (_other_source(heading.text) if heading is not None else None)
     if source is not None:
         return Reading('uncertain', (OTHER_SOURCE_CUE + ' '.join(source.group(0).split()),))  # F-TIME P
@@ -3518,7 +3575,7 @@ def _nominal_act(text: str, before: str, pos: int) -> bool:
     the act's predicate. Never in an indication, a history or a plan, where it names what was asked for or intended."""
     if not NOMINAL_ACT.search(before[-60:]) and not NOMINAL_HEAD.match(text, pos, pos + 120):
         return False
-    return _sections.layout(text).section_at(pos).kind in ('impression', 'findings', 'technique', 'procedure')
+    return _clinical_layout(text).section_at(pos).kind in ('impression', 'findings', 'technique', 'procedure')
 
 
 def _intent_word(text: str, ss: int, se: int, m: re.Match, name: str, *, service_date: Optional[date], dates,
@@ -3671,7 +3728,7 @@ def _studies_reported(text: str, service_date: Optional[date], pages: tuple, sec
     each pattern over the titles and the sections' text."""
     flow, _dates, plist, _starts, _cut = _act_frame(text, service_date, pages)
     spans = [(p.title.start, p.title.end) for p in plist if p.title is not None and p.role == 'physician']
-    spans += [(s.start, s.end) for s in _sections.layout(text).sections if s.kind in sections]
+    spans += [(s.start, s.end) for s in _clinical_layout(text).sections if s.kind in sections]
     named, kinds = set(), set()
     for lo, hi in spans:
         named.update(family for family, _, pattern in SERVICES + TITLE_SERVICES
@@ -5353,6 +5410,12 @@ ROUTING_CONTRARY_CUE = 'uncertain: routing reads the family as '
 ROUTING_DOUBT_CUE = 'uncertain: routing holds the family: '
 
 
+def _holding_cue(mention_cues: Sequence[str]) -> str:
+    """The cue that holds a mention routing reads uncertain: its first cue that is no statement of performance (a hedge,
+    another time, a section's label, a hold); its first cue when every one is ('doubt' when it has none)."""
+    return next((c for c in mention_cues if not c.startswith('performed:')), mention_cues[0] if mention_cues else 'doubt')
+
+
 def doubted_by_routing_alone(service) -> bool:
     """Whether ``service`` is uncertain only through routing's reading of its family: the inventory read it as performed
     (or incomplete), and a contrary statement in today's report or routing's own doubt about today's service made it
@@ -5740,7 +5803,7 @@ def _restatement_context(text: str, plist=None, starts=None, marks=None):
         starts = [p.start for p in plist]
     marks = _instrument_marks(text) if marks is None else marks
     mark_starts = [at for at, _ in marks]
-    lay = _sections.layout(text)
+    lay = _clinical_layout(text)
 
     def contradicts(ls: int, places: frozenset, sized: bool) -> bool:
         part = _part_at(plist, starts, ls)
@@ -5954,8 +6017,11 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
                         + (contrary[0].cues[0] if contrary[0].cues else contrary[0].sentence.text[:80]))
             status = 'uncertain'
         elif status in POSITIVE and routing_status == 'uncertain' and doubting:
-            # routing's own doubt about today's service (a hedge, an ambiguous box row, a plan label) holds it
-            cues.append(ROUTING_DOUBT_CUE + (doubting[0].cues[0] if doubting[0].cues else 'doubt'))
+            # routing's own doubt about today's service (a hedge, an ambiguous box row, a plan label) holds it; the
+            # cue quoted is the one that holds the mention, never its own performance cue (completion repair
+            # 2026-11-06, SIDE-1: "routing holds the family: performed: was advanced" named a statement of performance
+            # as the doubt, where the section cue "section: indication (Indications)" held it)
+            cues.append(ROUTING_DOUBT_CUE + _holding_cue(doubting[0].cues))
             status = 'uncertain'
         elif status in ('planned', 'historical', 'cancelled', 'negated') and routing_status in POSITIVE:
             cues.append(f'{ROUTING_CONTRARY_CUE}{routing_status}')

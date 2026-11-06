@@ -21,6 +21,7 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
                                  HYPOTHETICAL_CUE, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
@@ -353,8 +354,10 @@ def held_why(kind: str) -> str:
 
 def held_section(text: str, start: int, end: int) -> str:
     """The first history, plan or indication section (gi.sections, the routing sections reader) the passage [start, end)
-    lies in, or '' - a passage there never documents a service at this encounter."""
-    lay = gi_sections.layout(text)
+    lies in, or '' - a passage there never documents a service at this encounter. Read on routing's own derived layout
+    (studio.gi.structure.clinical_layout: a released labelled procedure paragraph is a procedure section of its own), so
+    the admission and routing read one section fact (completion repair 2026-11-06, U12)."""
+    lay = gi_structure.clinical_layout(text)
     kinds = [section.kind for section in lay.sections if section.start < end and start < section.end]
     return next((kind for kind in kinds or [lay.section_at(start).kind] if kind in HELD_SECTIONS), '')
 
