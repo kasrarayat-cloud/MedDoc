@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-CATALOGUE_VERSION = 'gi-catalogue@1'
+CATALOGUE_VERSION = 'gi-catalogue@2'  # @2: the completion repair (one-technique dilation codes: CodeProfile.technique)
 
 SUPPORTED, RECOGNISED, UNSUPPORTED = 'supported', 'recognised', 'unsupported'
 

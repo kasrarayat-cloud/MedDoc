@@ -46,7 +46,7 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@5'  # @5: harness repair 3 (F-ACTS, F-TIME, F-NEG S)
+INVENTORY_VERSION = 'gi-services@6'  # @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
 
 FLAGS = re.A | re.I
 

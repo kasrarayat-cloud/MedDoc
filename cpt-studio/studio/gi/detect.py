@@ -51,7 +51,8 @@ from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@7'
+ROUTING_VERSION = 'gi-routing@9'  # @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
+# a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')

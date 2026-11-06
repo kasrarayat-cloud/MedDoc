@@ -68,6 +68,14 @@ HARNESS_REPAIR_3_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7'
                                      (gi_services, 'INVENTORY_VERSION'): 'gi-services@4',
                                      (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@4',
                                      (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@7'}
+# The completion repair (owner directive 2026-11-06): the four labels as installed fd8040d71e44 records them. Every
+# reader reads differently (routing: the labelled paragraphs, the sub-act failure, the instrument course; the inventory:
+# the bolus, placement and outcome, purpose time; the engine: equal eligibility, member answers, the dilation
+# technique), so each moves once more - routing to @9, past harness repair 3's dropped @8.
+COMPLETION_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
+                               (gi_services, 'INVENTORY_VERSION'): 'gi-services@5',
+                               (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@5',
+                               (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@8'}
 # a rule (a) document (pd.json, CTS-6's PD-06): installed reads and sends 2026-10-19; the round-4 reader asks the date
 RULE_A = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
           'Date of service: 10/19/2026\nDate seen: 10/12/2026 in clinic; procedure today\nEndoscopist: Synthetic MD\n'
@@ -341,7 +349,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@7', 'gi-services@5', 'cpt-studio:gi-services@5', 'cpt-studio-validation@8'))
+                         ('gi-routing@9', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@9'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -356,9 +364,11 @@ class RoundFourLabelTests(SimpleTestCase):
         # base's again after refutation cycle 2, keeps its label
         for (module, name), installed in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
             if name == 'ROUTING_VERSION':
-                self.assertEqual(getattr(module, name), installed)
-            else:
-                self.assertNotEqual(getattr(module, name), installed, name)
+                self.assertEqual(installed, 'gi-routing@7')  # harness repair 3 kept routing's label
+            self.assertNotEqual(getattr(module, name), installed, name)
+        # the completion repair (2026-11-06): every reader once more beside installed fd8040d71e44
+        for (module, name), installed in COMPLETION_INSTALLED_LABELS.items():
+            self.assertNotEqual(getattr(module, name), installed, name)
 
     def labels_and_fingerprints(self):
         """Every H4 row read through the stages (ops/gi4/battery.py): the labels each result carries and every
@@ -387,8 +397,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@5')},
-                         {('gi-routing@7', 'gi-services@5', 'cpt-studio-validation@8')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@6')},
+                         {('gi-routing@9', 'gi-services@6', 'cpt-studio-validation@9')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

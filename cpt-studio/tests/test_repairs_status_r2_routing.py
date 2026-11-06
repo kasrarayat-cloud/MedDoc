@@ -100,7 +100,7 @@ class VersionTests(unittest.TestCase):
         # (2026-11-03) reads differently from installed 41e03656df61's @5 (P1 rule 8's E/M absence, P2's D12/D13); @7:
         # the harness repair (2026-11-05) reads differently from installed b0dc3446c64c's @6 (the repair package's
         # marking-purpose rule, shared with the inventory)
-        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@7')
+        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@9')  # the completion repair (2026-11-06)
 
 
 GI03_LINE = 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.'

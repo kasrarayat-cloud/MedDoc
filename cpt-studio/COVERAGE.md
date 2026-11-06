@@ -1,6 +1,6 @@
 # CPT Studio — GI coverage catalogue
 
-Generated from `studio/gi/catalogue.py` (gi-catalogue@1); do not edit by hand. One GI workspace, one upload flow and one combined results screen: these families are internal profiles, never navigation.
+Generated from `studio/gi/catalogue.py` (gi-catalogue@2); do not edit by hand. One GI workspace, one upload flow and one combined results screen: these families are internal profiles, never navigation.
 
 Support levels: **supported** — the documented-service reader reads the family's services and acts, and the catalogue reconciles them with provider-selected codes, with regression documents; **recognised** — listed for review, not reconciled; **unsupported** — named so a result can say so.
 
