@@ -1879,11 +1879,22 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
         return False
     clause_start = an.lay.clauses_for(cue.start, cue.end)[0][0]
     # bounded: the main predicate is read within CLAUSE_REACH characters before the opener (further, none is read)
-    # refutation cycle 1 (acts F2): the target must be what the done predicate is said of - its participle, its
-    # subject's head, a modifier of the act's own material, or its instrument - by the services reader's own test
-    # (services._purpose_releases), never any act word before the participle ("EMR referral placed for future resection")
+    predicate = purpose.main_predicate_done(text, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), phrase[0])
+    if predicate is None:
+        return False
+    if not (ts < predicate[2] or purpose.instrument_of(text, predicate[2], ts)):
+        return False
+    # refutation cycle 1 (acts F2): never a word modifying a subject head that is not the act's own material ("EMR referral
+    # placed for future resection", "An EMR appointment was made ...", "The EMR target lesion was marked ...") - the
+    # services reader's own subject and material reading (services._removal_subject, _PURPOSE_MATERIAL_HEADS); "Tattoo
+    # ink was injected ..." and "India ink was injected ..." are released as before
     from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
-    return gi_services._purpose_releases(text, cue.start, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), se, ts, te)
+    pcs = an.lay.clauses_for(predicate[0], predicate[0] + 1)[0][0]
+    subject = gi_services._removal_subject(text, pcs, predicate[0])
+    if subject is not None and te <= subject[0] and ts >= gi_services._np_phrase_start(text, pcs, subject[0]) \
+            and subject[2].lower() not in gi_services._PURPOSE_MATERIAL_HEADS:
+        return False
+    return True
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,

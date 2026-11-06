@@ -1259,13 +1259,18 @@ tests are `tests/test_completion_answers.py` unless named.
   later assessment, the engine or the read-time overlay, applies it only where it asks the same question. Any other
   standing answer is kept and listed in `earlier_answers` (`[{answer_id, fact, family_label, prompt, affects, value,
   label, by, at, why, why_text}]`, `why` one of `no_longer_asked`, `asked_differently`, `earlier_form`), never
-  applied, and can be withdrawn alone. **The rule for answers stored before this release** (no fingerprint): they were
-  given to the earlier form of the question, a fixed prompt with no passage, so no question asked now is the question
-  they answered; they are never applied, and are listed with `why` `earlier_form`. Measured on the throwaway restore of
-  39f0ac49: its six answers (recorded against engine@7's assessment) are all `earlier_form`, its three codes read as
-  needing a detail again, and an in-memory recompute that reads them changes no proposal. (Its current engine@8
-  assessment asks the same six questions word for word, so a rule binding by the stored question's text and evidence
-  alone would have applied them again.)
+  applied, and can be withdrawn alone. **The rule for answers stored before this release** (no fingerprint; refutation
+  cycle 1 of the integrated diff, 2026-11-06): they were given to the earlier form of the question, a fixed prompt with
+  no passage - the words of the question their own assessment asked (scope, family, fact, code, CPT Studio's question
+  and reason; `questions.wording`, form `cpt-studio-question@0`). Such an answer binds where the question asked now has
+  exactly those words, and is listed with `why` `earlier_form` where it is asked in other words (`no_longer_asked` where
+  it is not asked at all); it is never applied to a question asked in other words. The first form of this rule never
+  applied any of them, and the install's prediction measured what that does to a live record nobody touches: on the
+  read-only restore of 2026-11-06T15:12Z, the state recompute alone turned three reviewed encounters (two of the owner's,
+  one agent's) back to needing details, because the questions their answers settled reopened. All 14 stored answers had
+  been given to questions their current assessments still ask word for word. With this rule the recompute changes no
+  encounter, and an encounter re-assessed by this release reads its stored answers against the questions the new reading
+  asks: 39f0ac49's six answers are `no_longer_asked` once its labelled paragraphs are read as today's (its codes READY).
 - **Migration `0013_completion_answer_binding`** adds `MemberAnswer.question` (`db_default` '') and
   `Clarification.answer` (a nullable foreign key): additive (`ops/install.py migration_verdict` safe), so a row the
   previous release inserts stays valid. A rollback past this release leaves assessments whose answered codes carry
