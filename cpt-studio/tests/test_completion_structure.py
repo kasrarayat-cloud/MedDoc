@@ -487,3 +487,74 @@ class TodaysStepsAndStructureTests(SimpleTestCase):
         self.assertEqual(why(colonoscopy(COL, tail='Withdrawal time: 8 minutes.\nImpression: Polyp removed.\n')), [''])
         self.assertHeldBy(colonoscopy(COL, tail='Prior colonoscopy: 2019, adenomas.\nImpression: Polyp removed.\n'), 'N2')
         self.assertEqual(why(colonoscopy(COL, tail='\n\nImpression: Polyp removed.\n')), [''])
+
+
+class NarrativePlaceTests(SimpleTestCase):
+    """Patch 5 of the author's own pass (N1): a labelled paragraph's place adjuncts anchor to today's anatomy, lesions
+    or handling, and nobody's reported speech is in it. Read in the paragraph only: an indication, impression or plan
+    keeps its own readers ("in a patient with", "follow up in clinic", "at the time of examination")."""
+
+    def assertHeldBy(self, text, condition):
+        reasons = why(text)
+        self.assertTrue(reasons and all(r.startswith(condition) for r in reasons), reasons)
+
+    def paragraph(self, sentence):
+        return colonoscopy('Colonoscopy: The colonoscope was introduced through the anus and advanced to the cecum. '
+                           + sentence + '\n')
+
+    def test_another_place_time_or_source_in_the_paragraph_holds(self):
+        for tail in ('on the cruise ship', 'in her twenties', 'at home', 'at the edge of the city', 'in high school',
+                     'in the area where she was traveling', "in the patient's home", 'on vacation', 'aboard the ship',
+                     'in her twenties from the sigmoid colon', 'in the endoscopy suite of the ship', 'at the bedside',
+                     'at that point', 'on the way to the airport', 'at the site where she works',
+                     # the object is read to a word's end, never a cut word ("base|ment" is not "base")
+                     'in the satisfactory satisfactory satisfactory satisfactory basement'):
+            with self.subTest(tail):
+                self.assertHeldBy(self.paragraph('A 6 mm polyp was removed with a cold snare ' + tail + '.'), 'N1')
+        for sentence in ('A 6 mm polyp in the sigmoid colon was removed with a cold snare, as she recalls.',
+                         'The patient reports that a 6 mm polyp in the sigmoid colon was removed with a cold snare.',
+                         'Her husband states a 6 mm polyp in the sigmoid colon was removed with a cold snare.'):
+            with self.subTest(sentence):
+                self.assertHeldBy(self.paragraph(sentence), 'N1')
+
+    def test_todays_anatomy_handling_and_measurements_still_release(self):
+        for sentence in ('Polyps were removed in the right colon, in the transverse colon, and in the left colon.',
+                         'The rectum was examined on direct and retroflexed views.',
+                         'A 6 mm polyp was removed in two pieces and sent in separate jars.',
+                         'The patient was placed in the left lateral decubitus position.',
+                         'A 20 mm polyp was removed in a piecemeal fashion; clips were placed at the polypectomy site.',
+                         'A clip was placed at the base of the polyp.',
+                         'Small erosions were seen in the mid and distal rectum.',
+                         'A 6 mm polyp was removed in the rest of the colon, measuring 6 mm in maximal dimension.',
+                         'At the end of withdrawal, the patient was in stable condition.',
+                         'A tattoo was placed at 30 cm in the 3 o\'clock position, in addition to the clip.',
+                         'Surveillance is recommended in 3 to 5 years.',
+                         'The cecum was identified by the appendiceal orifice, at this time, on NBI.',
+                         'On careful inspection, biopsies were taken in a random fashion; clips were placed at the site.',
+                         'The cecum was reached at 10:05 and the lesion was removed en bloc in a single piece.'):
+            with self.subTest(sentence):
+                self.assertEqual(why(self.paragraph(sentence)), [''])
+
+    def test_the_indication_impression_and_plan_keep_their_own_readers(self):
+        # the retained shapes paraphrased: an indication timing the request to the examination, a patient on a drug in
+        # the impression, home in the plan; none of them is the paragraph's own account, and each would hold inside it
+        text = colonoscopy(COL, ind='Indications: Iron deficiency anemia noted at the time of examination planning, '
+                                    'in a patient with a family history.\n',
+                           tail='Impression: Normal colonoscopy in a patient on aspirin; polyp removed.\n'
+                                'Plan: Resume diet at home after the procedure.\n')
+        self.assertEqual(why(text), [''])
+        for inside in ('in a patient on aspirin', 'at home'):
+            with self.subTest(inside):
+                self.assertHeldBy(self.paragraph('A 6 mm polyp was removed with a cold snare ' + inside + '.'), 'N1')
+
+    def test_the_time_reader_still_reads_a_time_heading_the_object(self):
+        for tail in ('in 2019', 'at that time', 'in March', 'in the past'):
+            with self.subTest(tail):
+                self.assertHeldBy(self.paragraph('A 6 mm polyp was removed with a cold snare ' + tail + '.'), 'N1')
+
+    def test_the_place_reading_is_bounded(self):
+        sentence = 'A polyp was removed in the sigmoid colon. ' * 400
+        text = self.paragraph(sentence)
+        started = time.perf_counter()
+        structure._unanchored_place(text, 0, len(text))
+        self.assertLess(time.perf_counter() - started, 2.0)
