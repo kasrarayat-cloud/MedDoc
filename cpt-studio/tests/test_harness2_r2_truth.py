@@ -141,11 +141,14 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
                                    {'service_date': '2026-10-20'}).status_code, 201)
         drain()
         # moved by refutation round 7 (d14-2): the member's date conflicts with the document's, so Corti's request is
-        # held and Corti selects nothing; every code listed is a participant's alternative (D14), never traced, so
-        # nothing was checked and the row reads not run (it read 'not_verified' with the no-date reason, from the
-        # alternatives' own traces - the class d14-2 found)
-        self.assertEqual(self.block(encounter_id), {'state': 'not_run', 'detail': '', 'codes_checked': 0,
-                                                    'passages': 0, 'sources': [], 'not_connected': NOT_CONNECTED})
+        # held and Corti selects nothing. Moved again by the completion repair (2026-11-06; directive item 3, builder
+        # Q1's retrieval patch): the participants' first-reading codes are proposals a member decides, so they are
+        # traced like Corti's - and with no service date established no dated CMS file applies, so the row says no
+        # code was checked, and why (round 7's class was an ALTERNATIVE's trace counted; no alternative is traced)
+        self.assertEqual(self.block(encounter_id), {
+            'state': 'not_verified', 'codes_checked': 0, 'passages': 0, 'sources': [], 'not_connected': NOT_CONNECTED,
+            'detail': 'No code was checked against the CMS reference files: no service date is established for this '
+                      'encounter, so no dated CMS reference file applies.'})
         listed = self.encounter(encounter_id).current_assessment.proposals.all()
         self.assertTrue(listed)
         # HARNESS.md P-ADMIT (2026-11-05): the participants' first-reading codes are admitted (I10), each held on the

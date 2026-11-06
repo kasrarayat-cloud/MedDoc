@@ -2458,8 +2458,14 @@ def _another_acts_doubt(reading: checks.Reading, found: reconcile.Match, code: s
     profile = reconcile.catalogue.code_profile(code) if code else None
     kinds = set(profile.covers) if profile is not None else {a.kind for a in found.acts}
     matched = {a.id for a in found.acts}
-    return any(a.kind in kinds and a.id not in matched and a.status != 'performed'
-               and any(overlaps(ev) for ev in a.evidence) for a in found.service.acts)
+    lesions = {a.lesion for a in found.acts}
+    # the other act must be told apart from every matched act by the reader itself: each on a lesion record of its own
+    # (a listing and its narrative, or a restatement, are one act the reader may record twice - the full suite measured
+    # 31 releases of genuine holds without this: a cut plan verb, a history item, a check box, a confirmation)
+    if '' in lesions:
+        return False
+    return any(a.kind in kinds and a.id not in matched and a.status != 'performed' and a.lesion
+               and a.lesion not in lesions and any(overlaps(ev) for ev in a.evidence) for a in found.service.acts)
 
 
 def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str,

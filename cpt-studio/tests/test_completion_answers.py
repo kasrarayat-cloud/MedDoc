@@ -252,18 +252,21 @@ class EngineAnswerTests(SimpleTestCase):
 
     def test_a_rival_answered_away_releases_the_competition_and_an_answer_to_the_hold_itself_never_does(self):
         text = CompetitionReleaseTests.EGD + CompetitionReleaseTests.DILATION + '\n'
-        codes = corti(('43248', span(text, CompetitionReleaseTests.DILATION)))
+        # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+        # dilation (reconcile.technique_fits); the rival is the other balloon code (43233), whose technique the
+        # document does not tell apart from 43249's, so what this pins is unchanged
+        codes = corti(('43233', span(text, CompetitionReleaseTests.DILATION)))
         participants = [read('astra', [code(text, '43249', CompetitionReleaseTests.DILATION)])]
         before = run(text, codes, participants)
         self.assertEqual(sorted(c.fact for c in by_code(before)['43249'].clarifications),
                          [engine.COMPETING_FACT, 'extent'])
-        after = run(text, codes, participants, member_answers=(given(before, text, '43248', 'extent'),))
+        after = run(text, codes, participants, member_answers=(given(before, text, '43233', 'extent'),))
         kept = by_code(after)['43249']
-        self.assertEqual((by_code(after)['43248'].bucket, kept.status, [c.fact for c in kept.clarifications]),
+        self.assertEqual((by_code(after)['43233'].bucket, kept.status, [c.fact for c in kept.clarifications]),
                          ('excluded', 'needs_clarification', ['extent']))
         self.assertIsNone(check(kept, engine.COMPETING_CHECK))
         on_hold = run(text, codes, participants,
-                      member_answers=(given(before, text, '43248', engine.COMPETING_FACT),))
+                      member_answers=(given(before, text, '43233', engine.COMPETING_FACT),))
         self.assertEqual(sorted(c.fact for c in by_code(on_hold)['43249'].clarifications),
                          [engine.COMPETING_FACT, 'extent'])
 

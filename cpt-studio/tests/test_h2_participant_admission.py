@@ -71,9 +71,12 @@ class AdmissionTests(SimpleTestCase):
         by one question naming the other; CPT Studio chooses neither (P-ADMIT had listed both as alternatives and left
         the service without a proposal)."""
         text = EGD_HEAD + DILATION + '\n'
+        # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+        # dilation (reconcile.technique_fits); the rival is the other balloon code (43233), whose technique the
+        # document does not tell apart from 43249's, so what this pins is unchanged
         result = run(text, corti(), [read('astra', [code(text, '43249', DILATION)]),
-                                     read('fable', [code(text, '43248', DILATION)])])
-        for value, rival in (('43249', '43248'), ('43248', '43249')):
+                                     read('fable', [code(text, '43233', DILATION)])])
+        for value, rival in (('43249', '43233'), ('43233', '43249')):
             item = proposal(result, value)
             self.assertEqual((item.bucket, item.status, origin(item)), ('selected', 'needs_clarification',
                                                                         'participant'), value)
@@ -91,12 +94,15 @@ class AdmissionTests(SimpleTestCase):
         43249 for the one dilation: both reach review, each held naming the other; Corti's code is held exactly as the
         participant's is, and the participant's is never preferred either."""
         text = EGD_HEAD + DILATION + '\n'
-        result = run(text, corti(('43248', span(text, DILATION))), [read('astra', [code(text, '43249', DILATION)])])
-        corti_code, astra_code = proposal(result, '43248'), proposal(result, '43249')
+        # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+        # dilation (reconcile.technique_fits); the rival is the other balloon code (43233), whose technique the
+        # document does not tell apart from 43249's, so what this pins is unchanged
+        result = run(text, corti(('43233', span(text, DILATION))), [read('astra', [code(text, '43249', DILATION)])])
+        corti_code, astra_code = proposal(result, '43233'), proposal(result, '43249')
         self.assertEqual((origin(astra_code), astra_code.bucket), ('participant', 'selected'))
-        for item, rival in ((corti_code, '43249'), (astra_code, '43248')):
+        for item, rival in ((corti_code, '43249'), (astra_code, '43233')):
             self.assertEqual((item.status, item.support['competes']), ('needs_clarification', [rival]))
-        alone = proposal(run(text, corti(('43248', span(text, DILATION)))), '43248')
+        alone = proposal(run(text, corti(('43233', span(text, DILATION)))), '43233')
         self.assertEqual(alone.status, 'ready')  # beside no participant's code, Corti's code reads as before
 
     def test_codes_for_different_acts_of_one_unproposed_service_never_compete(self):

@@ -3541,3 +3541,66 @@ The guard is mutation-proved: restoring the bare "bolus" fails 82 subtests.
 - **The document states the fact but a reader misses it:** that is a reader defect, repaired at the reader. Item 5
   forbids both an addendum that repeats existing documentation and a blanket override.
 - **Checklist 4.6 (a human-override confirmation)** stays the owner's decision.
+
+### Stages 2 to 5 (2026-11-06): the repair, built by five builders and integrated (C2 to C5)
+
+**Builders** (workflow `wf_33ae45a0-361`, each in its own worktree from `b452c6c4`, none pushed; integrated serially by
+the owner session in the order R1, R2, A, Q1, Q2, each merge re-measured before the next):
+
+| builder | what it repaired | new module |
+|---|---|---|
+| R1 | U2, U12: a labelled procedure paragraph is released as its family's part only when P1-P4 and N1-N3 hold; routing, the services reader, reconcile and the engine read one derived layout; `sections.layout()` unchanged | `studio/gi/structure.py` |
+| R2 | U3, U4, U12: a sub-act's failure is not the examination's; the instrument's own course is a family mention under eleven guards; one extent | `studio/gi/clauses.py` |
+| A | U1, U5, U6, U13, F1, F5: the bolus's antecedent and structural removal; placement never overrides outcome; dispositions; purpose time; coordinated anatomy | `studio/gi/purpose.py` |
+| Q1 | U8, U9, C3: equal eligibility; one code read over every proposer's passages; truthful reasons | - |
+| Q2 | U10, U11: truthful questions with passages; recompute after an answer; answers bound to their question | `studio/validation/questions.py`, migration 0013 |
+
+**Integration rules** (each a commit with its own measurement and mutation proof; `tests/test_completion_integration.py`):
+- **The dilation technique.** `catalogue.CodeProfile.technique`: 'balloon' for 43249, 43233, 43214, 43220, 44381,
+  45386, 44405, 45340, 43277; 'wire_bougie' for 43248, 43226. `reconcile.technique_fits` reads a documented dilation's
+  technique from its own evidence (or the service's other dilations'); a dilation of another technique is not the act a
+  one-technique code accounts for (act_missing, a truthful question) and the code claims none of it in competition. Found
+  because R2's routing made the Word walk's h2c document (a Savary-Gilliard dilation) route its EGD: 43249 READY there, a
+  base false READY class (measured on the base tree with a plain title).
+- **One evaluation in competition.** `engine._competition`: two codes the proposal provider alone selected for one act
+  compete as any other two do (harness repair 3 had kept them "as before": both READY).
+- **The another-act hold removed.** Q1's `_another_act_of_its_kind` held a code the document supports because the cited
+  passage stated another, not-done act of its kind (R2's pinned READY: 45385 citing a failed hot snare beside a cold snare
+  done). Its F4 purpose is the technique reading's; the corpus ledger is identical without it.
+- **One subject reading.** `services.predicate_subject`: R2's structural walk, unless A's attachment walk reads another
+  subject (then None: the base reading); the removal, disposition and purpose readers also need A's walk to read it. The
+  walks agree on 191 of 222 corpus calls; each alone misread shapes the other read (the overtube refuters; "impacted
+  before presentation").
+- **A dated history in the indication.** `detect.dated_earlier_occasions_only` and `structure._announced`: an indication
+  whose every mention of the family is dated before the service date by its own clause no longer holds the labelled
+  paragraph (the heading form read it today's; the labelled form was held). `_ANNOUNCE` reads "described next" and the
+  plural "follow" (never "follow-up"), which the exemption would otherwise have released.
+- **Another act's doubt.** `engine._another_acts_doubt`: a cited passage overlapping none of the matched acts' evidence
+  and stating another, not-done act of the code's kinds, on a lesion record of its own distinct from every matched act's,
+  does not hold the code through the second opinion. A clause-by-clause release for a passage that also states the
+  matched act was built and dropped before commit (the corpus invariant caught eight NEG-REL refuters turning READY); the
+  lesion condition was added after the first full suite on the integrated tree, which measured 31 genuine holds released
+  without it (a Procedure-line listing and its narrative line, a cut plan verb, a history item, a check box, a
+  confirmation: one act the reader records twice). With it the suite's held cases hold again and the failed attempt at
+  another polyp still does not hold today's polypectomy.
+- **The retrieval trace** covers every decidable code (Q1's patch); **the rollback hazard** of an assessment re-made with
+  an answer is stated (Q2's residual 3; `ops/install.py`, `ops/INSTALL.md`).
+- **Labels:** gi-routing@9 (@8 skipped: it names harness repair 3's dropped reader), gi-services@6,
+  cpt-studio-validation@9, gi-catalogue@2; gi-context@4 unchanged.
+
+**Measured on the integrated tree:** the completion corpus re-pinned once (627 entries; no FALSE READY beyond the
+installed baseline; FALSE READY 57 to 39, FALSE HOLD 81 to 51; `docs/cpt-harness/completion-20261106/corpus-repin.md`);
+the refutation tables re-pinned once with every moved row classified (`.../table-repin.md`; no participant row reads
+differently from Corti's selection); the freeze gate holds on the full corpus; the H4 battery's 10 movements are declared
+(`tests/fixtures/gi4/declarations/completion-integration.json`); the H1 replay differs by the labels alone; the 11
+Corti-only parity cases are byte-identical to harness repair 3's once the labels are set back; the four retained cases
+recompute as required (39f0ac49: 43239, 45380, 45385, 43247 READY; d44a77b3: 43239, 45385, 45381, 43247 READY;
+e888f9ce: 45385, 45380 READY with no incompleteness; 88d9db32: its six READY).
+
+**Recorded residuals** (reported, not claimed closed): 39 base false READYs (group B; among them a requested tattoo and a
+bolus pushed into the stomach, owner question Q1); 51 false holds on the safe side, 7 of them admission rows whose
+requirement conflicts with the truthful reading of a consent or a question (left for the owner); a site-less removal in
+one "Description of procedure" over two scopes (H2|PLAIN-43247); codes that share an act kind are told apart by technique
+for dilations only (not by anatomy, 43245 against 43249, nor by descriptor, 43236 against 43243); two dilation techniques
+on one stricture held for the reviewer (owner question Q2); a pronoun-subject denial beside a done tattoo in one quoted
+passage holds the tattoo code (the second opinion reads the passage whole).

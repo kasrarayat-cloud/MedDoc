@@ -98,10 +98,17 @@ class ReleasedReadingTests(SimpleTestCase):
                 part = next(p for p in gi_services.parts(text, service_date=DAY) if p.start <= pos < p.end)
                 self.assertEqual(part.kind, 'indication')
                 self.assertEqual(reconcile.held_section(text, pos, pos + len(act)), 'indication')
-                self.assertNotEqual(proposal(run(text, corti(('45385', span(text, act)))), '45385').status, 'ready')
-                listed = proposal(run(text, corti(('45378', span(text, 'The colonoscope was introduced'))),
-                                      [read('astra', [code(text, '45385', act)])]), '45385')
-                self.assertNotEqual(listed.status, 'ready')
+                # moved (integration, engine._another_acts_doubt): the paragraph's own "A 6 mm polyp in the sigmoid colon
+                # was removed with a cold snare." documents 45385 today, on a lesion record of its own, so the code is
+                # READY on that act and the cited Indications passage is recorded as about another act - never read as
+                # today's (the part and held_section above); without today's act the Indications' act is never READY
+                by_corti = proposal(run(text, corti(('45385', span(text, act)))), '45385')
+                self.assertEqual((by_corti.status, by_corti.support['unrelated']), ('ready', [0]))
+                alone = text.replace(SNARE, 'No polyps were found.')
+                for item in (proposal(run(alone, corti(('45385', span(alone, act)))), '45385'),
+                             proposal(run(alone, corti(('45378', span(alone, 'The colonoscope was introduced'))),
+                                          [read('astra', [code(alone, '45385', act)])]), '45385')):
+                    self.assertNotEqual(item.status, 'ready')
 
     def test_the_admissions_held_section_reads_the_same_layout(self):
         start = REPORT.index(EGD_BIOPSY)
