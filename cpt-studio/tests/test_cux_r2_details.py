@@ -421,36 +421,33 @@ class OneQuestionPerServiceFactTests(DetailsCase):
         self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=earlier).exists())  # kept as it was
         self.assertEqual(sorted(item['code'] for item in answers.saved_answers(assessment)), ['45380', '45385'])
 
-    def test_an_answer_saved_in_the_earlier_form_applies_to_its_own_words_only(self):
-        """Completion repair (2026-11-06, U11), as refutation cycle 1 decided: an answer recorded before answers carried
-        their question's fingerprint was given to the earlier form, a fixed prompt with no passage - the words of the
-        question its own assessment asked. Where the question asked now has exactly those words it binds and applies (an
-        install changes no record its answers settled); asked in other words, it is kept, listed as an earlier answer
-        and never applied."""
+    def test_an_answer_saved_in_the_earlier_form_binds_by_its_key(self):
+        """Completion repair (2026-11-06, U11), as refutation cycle 2 decided (answers W2, W4): an answer recorded before
+        answers carried their question's fingerprint was given to the installed release's fixed prompt for its (code,
+        family, fact) - no question, reason or passage reached the member - so it binds by that key, as the installed
+        release bound it: to the question its own assessment asked, and to the same key asked for another reason by a
+        later assessment of its revision (cycle 1 bound it by the engine's words, which this release rewords). Applied to
+        its code only, and kept as it was."""
         first = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
                             asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
         legacy = models.MemberAnswer.objects.create(
             encounter=self.s.encounter, revision=self.s.revision, assessment=first, fact='extent', family=COLON,
             code='45385', value='not_documented', answered_by=self.s.reviewer)
         self.assertEqual(legacy.question, '')
-        # the question its own assessment asked, word for word: applied, as a fingerprinted answer is - to its code only
         views = review.effective_view(first)
         self.assertEqual((views['sel:0'].reason, views['sel:1'].reason), (review.DETAIL_UNAVAILABLE, ''))
         self.assertEqual(answers.earlier_answers(self.s.encounter, first), [])
         (row,) = self.extent_rows()
         self.assertIsNone(row['saved'])  # 45380 has no answer: the row still asks it
-        # the same (code, family, fact) asked in other words (another reason): kept, listed as earlier, never applied
+        # the same (code, family, fact) asked for another reason: bound by its key, applied to 45385 alone
         second = self.assess(
             pf.proposal('sel:0', '45385', [pf.SNARE_PASSAGE], status='needs_clarification', clarifications=(
                 pf.clarification('extent', scope='proposal', family=COLON, proposal_key='sel:0',
                                  reason='The extent is asked for another reason.'),)),
             asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
         views = review.effective_view(second)
-        self.assertEqual({views[key].reason for key in ('sel:0', 'sel:1')}, {''})
-        (listed,) = answers.earlier_answers(self.s.encounter, second)
-        self.assertEqual((listed['answer_id'], listed['why'], listed['affects'], listed['value']),
-                         (str(legacy.pk), 'earlier_form', ['45385'], 'not_documented'))
-        self.assertIn('asked in other words', listed['why_text'])
+        self.assertEqual((views['sel:0'].reason, views['sel:1'].reason), (review.DETAIL_UNAVAILABLE, ''))
+        self.assertEqual(answers.earlier_answers(self.s.encounter, second), [])
         self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=legacy).exists())  # kept as it was
 
     def test_a_question_about_one_code_stays_that_codes_own(self):

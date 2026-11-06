@@ -810,10 +810,6 @@ class ProcedureLineTests(SimpleTestCase):
     def test_a_listing_the_report_does_not_contradict_stays_ready(self):
         head = self.HEAD.replace('A 9 mm pedunculated polyp in the sigmoid colon was seen.\n', '')
         for body in ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\nThe polyp was removed with a hot snare.',
-                     'A 9 mm pedunculated polyp in the sigmoid colon was seen.\n'
-                     'Plan: repeat colonoscopy with snare polypectomy in 3 years.',
-                     'A 9 mm pedunculated polyp in the sigmoid colon was seen.\n'
-                     'Surveillance colonoscopy with polypectomy as needed is recommended in 3 years.',
                      # round 2, over-7 and cost-3: a removal stated done; another polyp's removal planned for the next
                      # colonoscopy
                      'A 9 mm polyp in the sigmoid colon was removed and retrieved. A 4 cm mass in the cecum was not '
@@ -821,13 +817,25 @@ class ProcedureLineTests(SimpleTestCase):
                      'A 9 mm pedunculated polyp in the sigmoid colon was removed.\nA 3 mm flat polyp in the rectum was not '
                      'removed.',
                      'A 9 mm pedunculated polyp in the sigmoid colon was removed in one piece and retrieved.\nA second 3 mm '
-                     'polyp in the rectum will be removed at the next colonoscopy.',
+                     'polyp in the rectum will be removed at the next colonoscopy.'):
+            with self.subTest(body):
+                by_corti, _ = both(head + body + '\n', '45385', self.LINE, primary=[('45378', CECUM)])
+                self.assertEqual(by_corti, [READY])
+        # Refutation cycle 2 (acts A7, admission D3): the procedure line supplies a technique, never a performance - a
+        # listed removal stands only beside a lesion the report states removed today. A polyp only seen, beside a future
+        # polypectomy or another polyp's removal at the next colonoscopy, states none removed: held (recorded holds where
+        # the installed release read READY), never excluded
+        for body in ('A 9 mm pedunculated polyp in the sigmoid colon was seen.\n'
+                     'Plan: repeat colonoscopy with snare polypectomy in 3 years.',
+                     'A 9 mm pedunculated polyp in the sigmoid colon was seen.\n'
+                     'Surveillance colonoscopy with polypectomy as needed is recommended in 3 years.',
                      # cost-3 alone: no removal stated done, a removal planned for another occurrence of the service
                      'A 9 mm pedunculated polyp in the sigmoid colon was seen.\nA second 3 mm polyp in the rectum will be '
                      'removed at the next colonoscopy.'):
             with self.subTest(body):
                 by_corti, _ = both(head + body + '\n', '45385', self.LINE, primary=[('45378', CECUM)])
-                self.assertEqual(by_corti, [READY])
+                self.assertNotIn(READY, by_corti)
+                self.assertNotIn(('excluded', 'excluded'), by_corti)
 
 
 class RecordedResidualTests(SimpleTestCase):

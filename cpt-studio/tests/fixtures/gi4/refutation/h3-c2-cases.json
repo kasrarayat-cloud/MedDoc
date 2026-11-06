@@ -16,7 +16,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -34,7 +35,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -52,7 +54,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -70,7 +73,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -88,7 +92,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -106,7 +111,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -124,7 +130,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -142,7 +149,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -160,7 +168,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -178,7 +187,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -196,7 +206,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -214,7 +225,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -232,7 +244,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -250,7 +263,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -268,7 +282,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -286,7 +301,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -304,7 +320,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -322,7 +339,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -340,7 +358,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -358,7 +377,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -376,7 +396,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -394,7 +415,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -412,7 +434,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -430,7 +453,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -448,7 +472,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -458,15 +483,16 @@
    "quote": "Cold forceps biopsies of the ascending colon lesion were obtained, with EMR pending authorization.",
    "primary": [],
    "day": "2026-10-14",
-   "corti": "EXCL",
-   "participant": "EXCL",
+   "corti": "HELD",
+   "participant": "HELD",
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -484,7 +510,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -502,7 +529,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -520,7 +548,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -538,7 +567,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -556,7 +586,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -574,7 +605,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -592,7 +624,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -610,7 +643,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -628,7 +662,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -646,7 +681,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -664,7 +700,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -682,7 +719,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -700,7 +738,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -718,7 +757,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -736,7 +776,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -754,7 +795,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -772,7 +814,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -790,7 +833,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -808,7 +852,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -826,7 +871,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -844,7 +890,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -862,7 +909,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -880,7 +928,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -898,7 +947,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -916,7 +966,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -934,7 +985,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -952,7 +1004,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -970,7 +1023,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -988,7 +1042,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1006,7 +1061,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1024,7 +1080,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1042,7 +1099,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1060,7 +1118,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1078,7 +1137,8 @@
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1096,7 +1156,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
     "cycle 3": "EXCL/ALT",
-    "completion (integration)": "EXCL/EXCL"
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1114,7 +1175,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1132,7 +1194,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1150,7 +1213,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1168,7 +1232,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1186,7 +1251,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1204,7 +1270,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1222,7 +1289,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1240,7 +1308,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1258,7 +1327,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1276,7 +1346,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1294,7 +1365,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1312,7 +1384,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1330,7 +1403,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1348,7 +1422,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1366,7 +1441,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1384,7 +1460,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1402,7 +1479,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1420,7 +1498,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1438,7 +1517,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1456,7 +1536,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1474,7 +1555,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1492,7 +1574,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1510,7 +1593,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1528,7 +1612,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1546,7 +1631,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1564,7 +1650,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1582,7 +1669,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1600,7 +1688,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1618,7 +1707,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1636,7 +1726,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1654,7 +1745,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1672,7 +1764,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1690,7 +1783,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1708,7 +1802,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1726,7 +1821,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1744,7 +1840,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1762,7 +1859,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1780,7 +1878,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1798,7 +1897,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1816,7 +1916,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1834,7 +1935,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1852,7 +1954,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1870,7 +1973,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1888,7 +1992,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1906,7 +2011,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1924,7 +2030,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1942,7 +2049,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1960,7 +2068,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1978,7 +2087,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1996,7 +2106,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2014,7 +2125,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2032,7 +2144,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2050,7 +2163,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2068,7 +2182,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2086,7 +2201,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2104,7 +2220,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2122,7 +2239,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2140,7 +2258,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2158,7 +2277,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2176,7 +2296,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2194,7 +2315,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/HELD",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2212,7 +2334,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2230,7 +2353,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2248,7 +2372,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2266,7 +2391,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2284,7 +2410,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2302,7 +2429,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2320,7 +2448,8 @@
     "round 1": "EXCL/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2338,7 +2467,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2356,7 +2486,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2374,7 +2505,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2392,7 +2524,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2410,7 +2543,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2428,7 +2562,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2446,7 +2581,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2464,7 +2600,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2482,7 +2619,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2500,7 +2638,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2518,7 +2657,8 @@
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2536,7 +2676,8 @@
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2554,7 +2695,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -2572,7 +2714,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2590,7 +2733,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2608,7 +2752,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2626,7 +2771,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2644,7 +2790,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2662,7 +2809,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2680,7 +2828,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2698,7 +2847,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2716,7 +2866,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2734,7 +2885,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2752,7 +2904,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2770,7 +2923,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2788,7 +2942,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "READY/ALT",
     "cycle 3": "READY/ALT",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -2806,7 +2961,8 @@
     "round 1": "READY/ALT",
     "cycle 2": "READY/ALT",
     "cycle 3": "READY/ALT",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   }
  ]

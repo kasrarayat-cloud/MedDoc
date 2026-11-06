@@ -9001,19 +9001,23 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: HELD/ALT - false hold (Corti); false listing (participant) | cycle-3 tree 7e3924a3c: HELD/ALT - false hold (Corti); false listing (participant)",
    "lens_verdict": "FALSE HOLD",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
-      "complete_pending_review",
-      "complete_pending_review"
+      "incomplete",
+      "incomplete"
      ],
      "day": "2026-10-14"
     }
@@ -9038,19 +9042,23 @@
    "withdrawn_rule_reading": "MEASURED cycle-2 tree b32222c8f: HELD/ALT - false hold (Corti); false listing (participant) | cycle-3 tree 7e3924a3c: HELD/ALT - false hold (Corti); false listing (participant)",
    "lens_verdict": "FALSE HOLD",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
-      "complete_pending_review",
-      "complete_pending_review"
+      "incomplete",
+      "incomplete"
      ],
      "day": "2026-10-14"
     }
@@ -12317,15 +12325,19 @@
    "withdrawn_rule_reading": "none: a recorded residual of the installed base, not a withdrawn rule's",
    "lens_verdict": "FALSE READY",
    "pinned": {
-    "verdict": "FALSE READY",
+    "verdict": "matches",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
       "incomplete",
@@ -12359,15 +12371,19 @@
    "withdrawn_rule_reading": "none: a recorded residual of the installed base, not a withdrawn rule's",
    "lens_verdict": "FALSE READY",
    "pinned": {
-    "verdict": "FALSE READY",
+    "verdict": "matches",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
       "incomplete",
@@ -12896,15 +12912,19 @@
    "withdrawn_rule_reading": "none: a recorded residual of the installed base, not a withdrawn rule's",
    "lens_verdict": "FALSE READY",
    "pinned": {
-    "verdict": "FALSE READY",
+    "verdict": "safe side (held where listed is required)",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
       "incomplete",
@@ -12938,15 +12958,19 @@
    "withdrawn_rule_reading": "none: a recorded residual of the installed base, not a withdrawn rule's",
    "lens_verdict": "FALSE READY",
    "pinned": {
-    "verdict": "FALSE READY",
+    "verdict": "safe side (held where listed is required)",
     "reading": {
-     "corti": "READY",
-     "participant": "READY",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
       "incomplete",
@@ -25962,15 +25986,19 @@
    "withdrawn_rule_reading": "",
    "lens_verdict": "",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "safe side (held where listed is required)",
     "reading": {
-     "corti": "EXCL",
-     "participant": "EXCL",
+     "corti": "HELD",
+     "participant": "HELD",
      "corti_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "participant_facts": [
-      []
+      [
+       "performed_status"
+      ]
      ],
      "completeness": [
       "incomplete",
@@ -27294,18 +27322,20 @@
     "verdict": "matches"
    },
    "pinned": {
-    "verdict": "matches",
+    "verdict": "FALSE HOLD",
     "reading": {
      "outcome": {
       "45385": [
        [
-        "READY",
+        "HELD",
         false,
-        []
+        [
+         "performed_status"
+        ]
        ]
       ]
      },
-     "completeness": "complete_pending_review"
+     "completeness": "incomplete"
     }
    }
   },

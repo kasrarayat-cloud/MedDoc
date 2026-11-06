@@ -146,9 +146,10 @@ class QuestionIdentityTests(SimpleTestCase):
                     'question': 'f' * 64, **kw}
         bound, earlier = questions.bind([answer(), answer(question='e' * 64), answer(question=''),
                                          answer(code='45380'), answer(value='performed')], asked_now)
-        self.assertEqual(len(bound), 1)
-        self.assertEqual([why for _, why in earlier],
-                         [questions.ASKED_DIFFERENTLY, questions.EARLIER_FORM, questions.NO_LONGER_ASKED])
+        # refutation cycle 2 (answers W2, W4): an answer stored before the binding (question '') binds by its key, as the
+        # installed release bound it; a fingerprinted one by its fingerprint alone
+        self.assertEqual([a['question'] for a in bound], ['f' * 64, ''])
+        self.assertEqual([why for _, why in earlier], [questions.ASKED_DIFFERENTLY, questions.NO_LONGER_ASKED])
 
     def test_every_fact_a_question_asks_is_named_in_plain_words(self):
         from studio.gi.profiles import PROFILES
@@ -207,14 +208,18 @@ class EngineAnswerTests(SimpleTestCase):
         before = run(UNREACHED, codes)
         real = given(before, UNREACHED, '45385', 'extent')
         cases = [questions.MemberAnswerInput('45385', COLON, 'extent', 'not_documented', 'e' * 64, 'x1'),
-                 questions.MemberAnswerInput('45385', COLON, 'extent', 'not_documented', '', 'x2'),
                  questions.MemberAnswerInput('45390', COLON, 'extent', 'not_documented', real.question, 'x3')]
         after = run(UNREACHED, codes, member_answers=cases)
         self.assertEqual([p.fingerprint for p in after.proposals], [p.fingerprint for p in before.proposals])
         self.assertEqual(after.clarifications, before.clarifications)
         self.assertEqual([(e['answer'], e['why']) for e in after.completeness['member_answers']['earlier']],
-                         [('x1', questions.ASKED_DIFFERENTLY), ('x2', questions.EARLIER_FORM),
-                          ('x3', questions.NO_LONGER_ASKED)])
+                         [('x1', questions.ASKED_DIFFERENTLY), ('x3', questions.NO_LONGER_ASKED)])
+        # refutation cycle 2 (answers W2, W4): an answer stored before the binding (no fingerprint) binds by its key, as
+        # the installed release bound it - here the 45385 extent question, which it answers
+        legacy = questions.MemberAnswerInput('45385', COLON, 'extent', 'not_documented', '', 'x2')
+        applied = run(UNREACHED, codes, member_answers=[legacy])
+        self.assertEqual(next(p for p in applied.proposals if p.code == '45385').bucket, 'excluded')
+        self.assertEqual(applied.completeness['member_answers']['earlier'], [])
         # a reason reworded by the engine is a question asked differently: the answer to the old wording is not read
         reworded = dataclasses.replace(before, proposals=tuple(replace_reason(p) for p in before.proposals))
         self.assertNotEqual(asked(reworded, UNREACHED)[('45385', COLON, 'extent')], real.question)

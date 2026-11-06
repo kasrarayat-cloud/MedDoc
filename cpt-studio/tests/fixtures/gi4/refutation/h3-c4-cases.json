@@ -20,7 +20,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -43,7 +44,8 @@
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
     "completion A": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -65,7 +67,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -87,7 +90,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -109,7 +113,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -131,7 +136,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -153,7 +159,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -175,7 +182,8 @@
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -197,7 +205,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -219,7 +228,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -241,7 +251,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -263,7 +274,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -285,7 +297,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -307,7 +320,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -329,7 +343,8 @@
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -351,7 +366,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -373,7 +389,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -395,7 +412,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -417,7 +435,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -439,7 +458,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -461,7 +481,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -483,7 +504,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -505,7 +527,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -527,7 +550,8 @@
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
     "cycle 3": "READY/READY",
-    "completion (integration)": "READY/READY"
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -549,7 +573,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -571,7 +596,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -593,7 +619,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -615,7 +642,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -637,7 +665,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -659,7 +688,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -681,7 +711,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -703,7 +734,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -725,7 +757,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -747,7 +780,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -769,7 +803,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -791,7 +826,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -813,7 +849,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -835,7 +872,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -857,7 +895,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -879,7 +918,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -906,7 +946,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -928,7 +969,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -950,7 +992,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -972,7 +1015,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "READY/READY",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -994,7 +1038,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1016,7 +1061,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1038,7 +1084,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1060,7 +1107,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1082,7 +1130,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1104,7 +1153,8 @@
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1126,7 +1176,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1148,7 +1199,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1170,7 +1222,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1192,7 +1245,8 @@
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
     "cycle 3": "HELD/ALT",
-    "completion (integration)": "HELD/HELD"
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   }
  ],
@@ -1299,6 +1353,20 @@
      ]
     },
     "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43233": [
       [
        "HELD",
@@ -1428,6 +1496,20 @@
        true
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1533,6 +1615,20 @@
      ]
     },
     "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "44394": [
       [
        "HELD",
@@ -1662,6 +1758,20 @@
        true
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1767,6 +1877,20 @@
      ]
     },
     "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "44394": [
       [
        "HELD",
@@ -1896,6 +2020,20 @@
        true
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2001,6 +2139,20 @@
      ]
     },
     "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43233": [
       [
        "HELD",
@@ -2130,6 +2282,20 @@
        false
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2235,6 +2401,20 @@
      ]
     },
     "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43248": [
       [
        "HELD",
@@ -2364,6 +2544,20 @@
        false
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2481,6 +2675,20 @@
        false
       ]
      ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2586,6 +2794,20 @@
      ]
     },
     "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "44394": [
       [
        "HELD",

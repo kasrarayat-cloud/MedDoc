@@ -86,13 +86,20 @@ class PlacementNeverOverwritesOutcomeTests(SimpleTestCase):
         text = COLON_HEAD + line + '\nThe colonoscope was advanced to the cecum.\n'
         self.assertNotIn('performed', [status for status, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
 
-    def test_a_bare_listing_is_still_placed_as_performed(self):
-        # the control: a listing with no outcome of its own stands in for the performance statement, as before
+    def test_a_bare_listing_supplies_the_technique_of_a_stated_removal_only(self):
+        # Refutation cycle 2 (acts A7, D3): the listing supplies a technique, never a performance. Beside a polyp only
+        # seen it is withheld (45385 held: a recorded hold where the installed release read READY); beside the polyp's
+        # stated removal it stands and supplies the snare (READY), whether or not a field label opens the line
         listing = 'Colonoscopy with cold snare polypectomy'
         text = (COLON_HEAD + 'Procedure: ' + listing + '\nThe colonoscope was advanced to the cecum. A 6 mm polyp was '
                 'seen in the sigmoid colon.\n')
-        self.assertIn('performed', [status for status, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
-        self.assertEqual(outcome(text, '45385', listing)[0], ('selected', 'ready'))
+        self.assertNotIn('performed', [status for status, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
+        self.assertEqual(outcome(text, '45385', listing)[0], ('selected', 'needs_clarification'))
+        for line in ('A 6 mm polyp in the sigmoid colon was removed.', 'Findings: A 6 mm polyp in the sigmoid colon was removed.'):
+            with self.subTest(line):
+                text = COLON_HEAD + 'Procedure: ' + listing + '\nThe colonoscope was advanced to the cecum.\n' + line + '\n'
+                self.assertIn('performed', [status for status, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
+                self.assertEqual(outcome(text, '45385', listing)[0], ('selected', 'ready'))
 
     def test_the_failure_is_one_shared_test(self):
         self.assertTrue(gi_services._outcome_in_doubt(('uncertain: attempted',)))
@@ -208,8 +215,6 @@ class BolusAntecedentTests(SimpleTestCase):
                 (EGD_HEAD + 'The meat bolus was removed with a retrieval net.\n', 'The meat bolus was removed with a retrieval net.'),
                 (EGD_HEAD + 'A steak impaction was found in the distal esophagus. The impaction was removed with a Roth net.\n',
                  'The impaction was removed with a Roth net.'),
-                (EGD_HEAD + 'She could not swallow after a steak impaction at dinner. The bolus was removed with a Roth net.\n',
-                 'The bolus was removed with a Roth net.'),
                 (EGD_HEAD + 'A coin was seen in the stomach. The coin was removed with a Roth net.\n',
                  'The coin was removed with a Roth net.'),
                 (EGD_HEAD + 'A swallowed object was seen in the stomach. The object was removed with a Roth net.\n',
@@ -217,6 +222,13 @@ class BolusAntecedentTests(SimpleTestCase):
             with self.subTest(quote):
                 self.assertEqual([s for s, _ in removal_acts(text)], ['performed'])
                 self.assertEqual(outcome(text, '43247', quote)[0], ('selected', 'ready'))
+        # refutation cycle 2 (acts A3): the anaphor binds only to an antecedent that is a plain finding of today, recognized
+        # whole; "She could not swallow after a steak impaction at dinner." is not one, so "The bolus" binds nothing and
+        # 43247 is held - a recorded false hold (corpus C3|C3-1:c31-6:X2), as the installed release held it
+        text = EGD_HEAD + 'She could not swallow after a steak impaction at dinner. The bolus was removed with a Roth net.\n'
+        self.assertEqual(removal_acts(text), [])
+        self.assertEqual(outcome(text, '43247', 'The bolus was removed with a Roth net.')[0],
+                         ('selected', 'needs_clarification'))
 
     def test_no_food_or_foreign_antecedent_is_no_act(self):
         for text in (EGD_HEAD + 'A 50 mg bolus of propofol was given. The bolus was removed.\n',
@@ -338,15 +350,18 @@ class DispositionTests(SimpleTestCase):
         self.assertEqual(dispositions(text, 'gi.egd'), ['untreated'])
         self.assertEqual(outcome(text, '43251', 'Upper endoscopy with snare polypectomy')[0][1], 'needs_clarification')
 
-    def test_a_negative_quantifier_another_time_or_another_lesion_contradicts_nothing(self):
-        # "No polyps were removed." names no recorded lesion (the dropped kindless branch's shape, a recorded base
-        # residual); a past statement is no disposition today; a second lesion with nothing stated keeps the listing
+    def test_a_negative_quantifier_another_time_or_another_lesion_withholds_the_listing(self):
+        # Refutation cycle 2 (acts A7, admission D3): the procedure line supplies a technique, never a performance - a
+        # listed removal stands only beside a lesion the report states removed today. "No polyps were removed.", a past
+        # "left in place" and a second lesion only seen state none removed, so the listing is withheld and 45385 held
+        # (the first was an installed false READY; the others are recorded holds where the installed release read READY)
         for sentence in ('No polyps were removed.', 'Previously, the polyp was left in place.',
                          'The polyp was left in place. A 5 mm polyp in the cecum was seen.'):
             with self.subTest(sentence):
                 text = LISTED_HEAD + sentence + '\n'
-                self.assertNotIn('uncertain', [s for s, _ in acts_of(text, 'gi.colonoscopy', 'snare')])
-                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'ready'))
+                self.assertIn(gi_services.LISTED_CONTRADICTED_CUE,
+                              [c for _, cues in acts_of(text, 'gi.colonoscopy', 'snare') for c in cues])
+                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'needs_clarification'))
 
     def test_a_removal_done_beside_a_lesion_left_in_place(self):
         text = (LISTED_HEAD + 'The polyp was left in place.\n'
@@ -377,17 +392,20 @@ class DispositionTests(SimpleTestCase):
 
     def test_no_plain_form_states_no_disposition(self):
         # the refuter shapes: another occasion before the subject, a removal still to come today ("until"), an adverb
-        # in the auxiliary group, a later removal of the same lesion - each leaves the listing as the base reads it
-        for sentence in ('At the prior colonoscopy the polyp was not removed.',
-                         'The polyp was not removed until the end of the procedure.',
-                         'The polyp was initially not removed because of poor views, but was removed after irrigation.',
-                         'The polyp was not removed by the fellow; the attending completed the polypectomy.'):
+        # in the auxiliary group, a later removal of the same lesion - none states the lesion untreated. Refutation cycle
+        # 2 (acts A7, D3): the listing now stands only beside a lesion stated removed, so where the removal is phrased
+        # outside the readers' closed forms the listing is withheld and 45385 held - recorded holds where the installed
+        # release read READY; the attending's stated polypectomy is a body act of its own and stays READY
+        for sentence, expected in (('At the prior colonoscopy the polyp was not removed.', 'needs_clarification'),
+                                   ('The polyp was not removed until the end of the procedure.', 'needs_clarification'),
+                                   ('The polyp was initially not removed because of poor views, but was removed after '
+                                    'irrigation.', 'needs_clarification'),
+                                   ('The polyp was not removed by the fellow; the attending completed the polypectomy.',
+                                    'ready')):
             with self.subTest(sentence):
                 text = LISTED_HEAD + sentence + '\n'
                 self.assertNotIn('untreated', dispositions(text))
-                self.assertNotIn(gi_services.LISTED_CONTRADICTED_CUE,
-                                 [c for _, cues in acts_of(text, 'gi.colonoscopy', 'snare') for c in cues])
-                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', 'ready'))
+                self.assertEqual(outcome(text, '45385', LISTING)[0], ('selected', expected))
 
 
 MARK_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'

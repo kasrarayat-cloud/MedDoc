@@ -334,9 +334,14 @@ class DenialTiedToItsActTests(SimpleTestCase):
         text = SNARE_HEAD + CECUM + '\n' + SEEN + '\n' + stated + '\n'
         result = run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, stated))])
         self.assertEqual(proposal(result, '45385').status, 'ready')
-        # the plain procedure line cited alone, under no denial: ready as on the base
+        # the plain procedure line cited alone beside a polyp only seen: refutation cycle 2 (acts A7, admission D3) - the
+        # listing supplies a technique, never a performance, so with no lesion stated removed it is withheld and 45385
+        # held for the reviewer (the base read it READY: a recorded hold); with the polyp's removal stated it stands
         text = SNARE_HEAD + CECUM + '\n' + SEEN + '\n'
         line = 'Procedure: Colonoscopy with hot snare polypectomy'
+        result = run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, line))])
+        self.assertEqual(proposal(result, '45385').status, 'needs_clarification')
+        text = SNARE_HEAD + CECUM + '\n' + 'A 9 mm pedunculated polyp in the sigmoid colon was removed.' + '\n'
         result = run(text, [sel('45378', span(text, CECUM)), sel('45385', span(text, line))])
         self.assertEqual(proposal(result, '45385').status, 'ready')
 
