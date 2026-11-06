@@ -505,6 +505,7 @@ class PurposeTimeTests(SimpleTestCase):
 
 
 OCCASION_HEAD = MARK_HEAD + 'Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
+DAY_CAPSULE = DAY.replace(day=13)
 
 
 class IndicationAndReferralTests(SimpleTestCase):
@@ -549,6 +550,19 @@ class IndicationAndReferralTests(SimpleTestCase):
                  'stricture was dilated to 15 mm with a balloon.')):
             with self.subTest(quote):
                 self.assertNotIn('ready', statuses(text, value, quote))
+
+    def test_another_familys_own_report_is_not_the_occasions(self):
+        # full-suite repair (services corpus svc-37): the occasion is that of a service the indication's line names; a
+        # line of another family's own report that the layout runs into that indication (an unheaded "Transit
+        # landmarks" paragraph) is that report's, so the capsule study still reads complete
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+                'SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND REPORT\nDate of service: 2026-10-13\n'
+                'Indication: Iron deficiency anemia; upper endoscopy and colonoscopy on 2026-09-02 were unrevealing.\n'
+                'Transit landmarks\n- First cecal image: 04:44:51\n'
+                'The capsule reached the cecum within the recording period, so the small bowel was imaged in full.\n\n'
+                'Findings\n1. Two small angioectasias in the proximal jejunum.\n')
+        capsule = next(s for s in inventory(text, DAY_CAPSULE).services if s.family == 'gi.capsule')
+        self.assertEqual((capsule.status, capsule.completion), ('performed', 'complete'))
 
     def test_the_controls_stay_todays(self):
         # an indication naming no other occasion, or a preamble indication before today's narrative, keeps the line

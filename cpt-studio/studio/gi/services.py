@@ -2662,12 +2662,12 @@ OCCASION_INDICATION_CUE = ('uncertain: stated under an indication that names ano
 
 
 @functools.lru_cache(maxsize=16)
-def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tuple[int, int], ...]:
+def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tuple[int, int, frozenset], ...]:
     """F1 (completion repair, builder A): the bodies - from the end of the heading line to the section's end - of the
     layout's indication sections in a report whose procedure narrative has a procedure, findings or technique section of
     its own (before or after the indication), and whose own heading line names another occasion of a service: a service
-    name with a history word, another facility or source, or a date before the service date. One pass over the layout's
-    sections, cached per text."""
+    name with a history word, another facility or source, or a date before the service date; each with the families its
+    line names (_in_an_occasion_indication). One pass over the layout's sections, cached per text."""
     lay = _sections.layout(text)
     dates = gi_context.find_dates(text)
     date_starts = [d.start for d in dates]
@@ -2690,19 +2690,25 @@ def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tupl
         if line_end < 0:
             continue
         line = text[s.start:line_end]
-        if not any(pattern.search(line) for _, _, pattern in SERVICES):
+        named = frozenset(family for family, _, pattern in SERVICES if pattern.search(line))
+        if not named:
             continue
         dated = any(service_date is not None and gi_context.compare_to_service(d, service_date) < 0
                     for d in dates[bisect.bisect_left(date_starts, s.start):bisect.bisect_left(date_starts, line_end)])
         if dated or HISTORY_WORDS.search(line) or _other_source(line) is not None:
-            out.append((line_end, s.end))
+            out.append((line_end, s.end, named))
     return tuple(out)
 
 
-def _in_an_occasion_indication(text: str, pos: int, service_date: Optional[date]) -> bool:
+def _in_an_occasion_indication(text: str, pos: int, service_date: Optional[date], family: str = '') -> bool:
+    """Whether ``pos`` lies in an occasion indication's body (_occasion_indications), read in a report part of
+    ``family``. The occasion is that of a service its line names: a report part of another family is not about it, so
+    it is not read here (full-suite repair, svc-37: "The capsule reached the cecum within the recording period" in the
+    capsule study's own report, which the layout runs into an indication naming an earlier upper endoscopy and
+    colonoscopy, is today's capsule study's). A part of no family is read here."""
     spans = _occasion_indications(text, service_date)
-    i = bisect.bisect_right([a for a, _ in spans], pos) - 1
-    return i >= 0 and spans[i][0] <= pos < spans[i][1]
+    i = bisect.bisect_right([a for a, _, _ in spans], pos) - 1
+    return i >= 0 and spans[i][0] <= pos < spans[i][1] and (not family or family in spans[i][2])
 
 
 def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, end: int) -> bool:
@@ -3002,7 +3008,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
         # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
         return Reading('uncertain', (INDICATION_READING,))
-    if part.kind == 'report' and not section_today and _in_an_occasion_indication(text, pos, service_date):
+    if part.kind == 'report' and not section_today and _in_an_occasion_indication(text, pos, service_date,
+                                                                                 part.family):
         # F1 (completion repair, builder A): routing's layout and this reader disagree on the section - the layout
         # runs an indication over the line, this reader gives the line to today's report - and the indication's own line
         # names another occasion of a service ("Indication: Referred after an outside colonoscopy on 2026-09-01." then
