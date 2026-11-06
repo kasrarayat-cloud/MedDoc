@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106` at `61f732156` (the five builders integrated, the integration's own rules, and refutation cycle 1's repairs; not installed) |
-| current stage | 7: refutation cycle 1 over the integrated diff found 44 counterexamples (six lenses; the cost lens is pending), all reproduced and repaired fail-closed (`34b8d0c9e`, `95392c99f`); items 2 to 5 stay IN PROGRESS until cycle 2; item 6 re-measured PASS on the repaired tree (stage 1 PASS at `b452c6c4`) |
-| next action | the full suite on `61f732156`; then refutation cycle 2 (five lenses aimed at the cycle-1 repairs, briefs in `/home/claude/cpt-studio-completion-20261106/refute/briefs-c2/`), under the two-cycle rule: a mechanism refuted again is dropped to the base reading, never patched a third time. Then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
+| candidate | branch `fix/cpt-studio-completion-20261106` at `ae3b19b8b` (+ this record): the five builders, refutation cycle 1's repairs, and refutation cycle 2's change of approach integrated; not installed |
+| current stage | 7: refutation cycle 2 (37 findings, 20 false READYs) answered by the two-cycle rule - the refuted cycle-1 patches abandoned and the approach changed (layout parity, closed positive forms, the base reading), five builders and the integration; measured offline: corpus 0 new false READY (FALSE READY 39 to 35), parity holds, the four retained cases as required, the freeze gate holds, the battery and the replay as in cycle 1; items 2 to 5 stay IN PROGRESS until refutation cycle 3 |
+| next action | the full suite on this commit; refutation cycle 3 (six lenses at this head, briefs in `/home/claude/cpt-studio-completion-20261106/refute/briefs-c3/`: parity, closed forms, outcome, admission, answers, cost), whose findings only narrow or drop, never widen; then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -890,4 +890,23 @@ the progress log below.
     replay the labels alone; the four retained cases as required; the walk tool's new hard checks (expected codes, the
     member's answer, a conflict question) and the manifest builders for c1 and the blind c2 (the latter written from the
     schema the c2 author was given; c2 still unread).
+  - No provider request has been sent in this repair.
+- **2026-11-06T20:10Z Completion repair: refutation cycle 2, the two-cycle rule, and the change of approach.**
+  - Workflow `wf_3e6e5e6d-2f1`: five lenses over cycle 1's repairs returned 37 findings (structure 8, outcome 8, acts 8,
+    admission 7, answers 6), 20 of them false READYs; every structure, acts and admission finding reproduced exactly on
+    the three trees (`verify/refute3/`). The cycle-1 word readers had leaked and over-held at once.
+  - The owner's two-cycle rule applied: the refuted patches abandoned, the approach changed per mechanism, the requirement
+    kept (HARNESS.md "Refutation of the integrated diff, cycle 2"). Measured first: every structure false READY of both
+    cycles, and the instrument rule's O1/O3/O4, has a twin the installed release reads READY too (layout parity);
+    ablations showed which releases the corpus and the retained cases need.
+  - Five builders (`wf_f7121d1f-985`: parity, outcome, acts, admission, answers), each in its own worktree; the owner
+    session integrated them and added: the another-act release abandoned; the closed observation form for "not
+    performed"; units on the documented match; readiness held on a withdrawn answer; the removed-only form beside a
+    listing; two specific techniques as two instances; the listing rule judging only removable lesions (found by the
+    replay gate: h2-10).
+  - Measured on `ae3b19b8`: corpus re-pinned beside its declaration (8 moved; FALSE READY 39 to 35; 0 new false READY);
+    parity 65 pairs, one recorded exception (corpus 137's 43247, the heading form's own false hold); the retained cases as
+    required; freeze gate holds; battery 10 declared movements (0 undeclared); replay the labels alone. The first full
+    suite on the integrated head (`7a4c4c41`) failed 49 subtests, each classified and re-pinned (`d4f4ecff`), none a
+    regression.
   - No provider request has been sent in this repair.

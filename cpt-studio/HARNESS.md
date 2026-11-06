@@ -3658,3 +3658,98 @@ two READY codes; the installed site always configures them); an engine-applied a
 releases (the code stays excluded by the member's answer until it is withdrawn, which now takes effect at once); the
 earlier-answers wording during a date hold; "The cecum was identified as the site of the mass on the staging CT" read as
 the reach (the base's).
+
+### Refutation of the integrated diff, cycle 2 (2026-11-06): five lenses over cycle 1's repairs, and the two-cycle rule
+
+**The pass.** Workflow `wf_3e6e5e6d-2f1`: five lenses (structure, outcome, acts, admission, answers), each in a sealed,
+write-disabled sandbox at `cccc7122`, told to refute cycle 1's repairs (`179fdff9..cccc7122`) with concrete synthetic
+inputs measured on the repaired head, the pre-repair head and the base. They returned 37 findings (structure 8,
+outcome 8, acts 8, admission 7, answers 6): 20 false READYs, the rest false holds, untrue text and one cost path. The
+owner session reproduced every structure, acts and admission finding exactly on the three trees before deciding
+anything (`verify/refute3/`).
+
+**What the findings showed.** Cycle 1 had repaired with readers of words - deny-lists of announcements, hedges,
+cancellations, occasions and failures. Cycle 2 broke them in both directions at once: an unlisted phrasing leaked
+("Status: Abandoned", "Perhaps the colonoscope ...", "The next one was done in 2022.", "in that examination", "after two
+attempts; it was then aborted"), and the listed words over-held ordinary reports ("This is a 58-year-old man referred
+from an outside hospital.", "Pre-procedure assessment: ASA class II.", "History of adenomatous polyps on colonoscopy in
+2022; she is now due for surveillance.", "Aspirin was discontinued five days before the procedure."). That is the
+owner's two-cycle rule: "abandon that patch and change the approach. Do not abandon the underlying requirement or
+repeatedly ship the known failure as completion."
+
+**Measured before deciding.** Every structure false READY of both cycles (cycle 1's five, cycle 2's S1-S4) has a heading
+twin - the same text with each "Colonoscopy: <narrative>" line written "Procedure: Colonoscopy" over the narrative -
+that the installed release reads READY too; so do the family-named twins of the instrument rule's O1, O3 and O4. Those
+readings are the installed engine's own, carried into the new layouts; the cycle-1 readers had made the new layouts
+stricter than their twins and paid for it with the over-holds. Ablations on the corpus (11 s a run): without the
+instrument rule six required-READY entries become false holds, the retained e888f9ce among them; without the reach
+statement one does; dropping cycle 1's reason-lead skip moves nothing; withholding a listed removal unless the report
+states a lesion removed fixes four of the installed release's own false READYs and moves nothing else; dropping the
+another-act release moves one entry, the integration's own, and no retained case.
+
+**The change of approach, per mechanism** (five builders, `wf_f7121d1f-985`, each in its own worktree; then the owner
+session's integration):
+
+| approach | mechanisms |
+|---|---|
+| layout parity: a labelled paragraph reads as its heading twin; an instrument's course names its family as a heading names it; never more permissively than that twin (`tests/test_completion_parity.py`: every corpus text with a labelled paragraph, both cycles' structure inputs, the instrument inputs, a routing differential) | structure.py loses cycle 1's N3 widening, N2 summary dating and P4 first-summary rule; detect.py's I12/I13 word lists give way to I12, the twin's own qualification read by routing's heading-denial reader; a generic scope's frame registered like a named one's (S8) |
+| a closed positive form: the release fires only where its scope is recognised whole, so an unlisted phrasing costs a hold, never a READY | the reach statement (one grammar per sentence, memoised: O8's shape linear); a pronoun read through its antecedent's own attempt or failure predicate, the number agreeing (O2); a coordinated verb phrase's shared subject, a done auxiliary only (A2); the bolus anaphor's antecedent (A3); the nominal removal (A4); the purpose release, the marking kinds only, in both readers (A6); a listed removal only beside a lesion stated removed (A7, D3; the installed release's own false READYs fall 39 to 35); a "not performed" exclusion of a removal only beside lesions stated not removed or only observed (D4) |
+| the base reading | the reason-lead hedge skip (A1); the dilation deferral - two techniques named go back to the competition, the owner's Q2 (D2, D6); the another-act release - a doubt in the code's own passage holds it, whatever act it is about, for every proposer (D1, D5; builder D's repair of it still released doubts no reader binds to an act); the overlay reopen of a withdrawn answer (W1, W5, W6); answers stored before the binding bind by their key, as the installed release bound them (W2, W4) |
+| a widened hold (the safe side) | a lesion-less done act followed by its own abort (A5); an act word modifying a defect, specimen or site is no act (A8); one failure vocabulary for both readers, derived from one constant (O6); readiness holds while the stored assessment reads an answer that no longer stands (the window W1 measured: an approved export could omit the code); a marker assessment always counts as this revision's write at an undo (W3) |
+
+**Integrated and measured** (`dd7a4b3a..ae3b19b8`; builders merged as `60263289` O, `6c253203` D, `86ac8d37` W,
+`dd7a4b3a` P, `60e5922b` K; the owner session's integration rules `613998b3`, `7a4c4c41`, `27cc87a0`, `ae3b19b8`):
+- **The corpus** re-pinned once beside `tests/fixtures/gi4/declarations/completion-refutation-c2-corpus.json`: 8 entries
+  moved - four installed false READYs fixed by the listing rule (FALSE READY 39 to 35), X2 and X3 held by the closed
+  antecedent form and D|ARCH-D5a held, each as the installed release held it, and E|ANOTHER-failed-attempt held, the
+  declared cost of abandoning the another-act release. **No FALSE READY where the installed baseline had none: 0.**
+- **Layout parity** (`tests/test_completion_parity.py`, and the owner session's independent check over the same 65
+  pairs): a labelled or unnamed-family input READY only where its twin is READY on the same tree, the one exception
+  recorded - corpus text 137's 43247 (and S6, its one-sentence edit), READY as required where the heading twin holds it
+  (the documented-service reader drops the bolus under "Procedure: Upper endoscopy": the installed release's own heading
+  false hold). 30 of 65 pairs read exactly as their twins (22 on the cycle-1 head).
+- **Every cycle-2 finding** read as designed on the integrated head (`verify/refute3/c2int-cases.txt`): A1-A7, D1-D4,
+  D6, O2, O6 held; D2 the competition; S5-S7, A8, O7 and S8's generic scope released; S1-S4, O1, O3, O4 as their twins.
+- **The retained cases** as required: 39f0ac49 43239/45380/45385/43247 READY; d44a77b3 43239/45385/45381/43247 READY;
+  e888f9ce 45385/45380 READY; 88d9db32 its six READY.
+- **The gates**: the freeze gate holds (layout identical over 5,723 texts; NEW-SEND 0, NEW-TAKE 0; requests changed 0);
+  the H4 battery's 10 declared movements unchanged (0 undeclared, 0 new violations); the H1 replay identical to cycle 1's,
+  the labels alone - after the integration found it was not (h2-10's ERCP snare, withheld by the listing rule beside a
+  stricture: the rule now judges only lesions such a removal removes, `ae3b19b8`).
+- **What the integration added, each pinned** (`tests/test_completion_refutation_c2_integration.py`, the admission and
+  answers modules): the another-act release abandoned (`_matched_acts_plain`, `_another_acts_doubt` removed); a removal
+  excluded as not performed beside a lesion only observed, in a closed observation form (`engine._observed_only`; the
+  installed release's "polyp seen; snare polypectomy failed" exclusion kept, D4 held); units counted on the documented
+  match before any hold; readiness held while the stored assessment reads a withdrawn answer
+  (`review.STALE_ANSWER_BLOCKER`: builder W measured an approved export omitting the code in that window); a sentence that
+  is only a lesion's removal lets a listed removal stand (`services._removed_only`: the plain subject reading fails on "A
+  6 mm polyp in the ascending colon was removed."); two specific techniques of one kind are two instances
+  (`services._techniques_differ`); the listing rule judges only lesions such a removal removes; the shared not-removed
+  dispositions restored, the base-code label made true, a withheld listing counted unresolved in coding completeness.
+- **Superseded cycle-1 statements** in the section above, kept as the record: the overlay reopen of a withdrawn answer
+  (`review._reopened`) and "takes effect at once"; the earlier-form word binding (`questions.wording`,
+  `review.earlier_wordings`, `MemberAnswerInput.worded`); N3's deixis, present-occasion and attribution reads, N2's summary
+  dating, P4's first-summary rule; I12/I13 as word lists; the reason-lead skip; the dilation deferral; the another-act
+  release's window and word list.
+
+**Recorded, not repaired:**
+- the installed engine's own readings carried by parity (each twin READY on the installed release): an appended or pasted
+  prior report with its own skeleton (S1); an impression or narrative sentence that denies or dates the narrated act in
+  words routing does not read ("None of the above was performed today.", "removed two years ago", S2); an indication that
+  introduces the narrative as another person's or a dated occasion's in the past tense (S3); a pro-form announcement ("The
+  next one was done in 2022.", S4); a status line, a hedge or a back-reference about an unnamed family's course that
+  routing does not read for the named heading either ("Status: Abandoned", "Perhaps ...", "That was at her examination
+  three years ago.", O1, O3, O4); cycle 1's C1-S1 to C1-S4 and C1-S5(b);
+- a reach statement that a later sentence dates ("Cecal intubation was achieved. That was at her examination three years
+  ago.") reads complete where the installed release reads the extent incomplete (a false completeness: the code's READY
+  is the installed release's own);
+- the closed forms' false holds (the safe side): a reach with a tail the grammar does not admit ("at 10:32"); a dilation
+  "stopped at 15 mm"; "halted briefly ... then completed"; a cited failed attempt beside another removed polyp
+  (E|ANOTHER-failed-attempt); a diagnosis hedge after "for" ("biopsies for suspected celiac disease"); a listed removal beside a polyp only seen, or whose removal is phrased outside the closed forms ("not removed until the end of the procedure"); X2 and X3; "History of AS" opening a history part before the snare sentence;
+- D7 ("could not be removed endoscopically" + a failed technique) is held, not excluded: the services reader records no
+  lesion in that negated clause (the base's hold);
+- the withdrawal window: a withdrawn answer the stored assessment read stays in effect until its reassessment runs, and
+  readiness holds meanwhile;
+- the installed release's own false READYs seen and not moved: "was tried; it was unsuccessful", "was started, but it was
+  abandoned because of bleeding", Corti's 43249 alone on a balloon that failed beside wire-guided dilators, Corti's 43248
+  alone on "a CRE wire-guided balloon dilator".

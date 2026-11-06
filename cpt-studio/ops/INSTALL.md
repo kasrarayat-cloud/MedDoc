@@ -748,7 +748,11 @@ before the harness, 80df1831d168 included, on the last two:
   same revision), as this revision's review applies it. No revision
   before the core repair reads one: its page asks that question again and shows
   the code held, where this revision shows it Excluded with the answer and who
-  gave it. Named, never handed over; the answer row stays.
+  gave it. Named, never handed over; the answer row stays. An assessment this
+  revision's worker re-made with a member's answer (support 'answered') names
+  the hazard too, standing answer or not, and always counts as written since
+  the switch (completion repair, refutation cycle 2): only this revision makes
+  such an assessment, so the undo holds the old worker for it.
 - **modifier** (core repair 2026-11-03): a current decision of the current
   assessment carries the reviewer's chosen modifier (59 or XS). No revision
   before the core repair reads one: its page and both reports show that

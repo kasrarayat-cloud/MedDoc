@@ -452,9 +452,10 @@ class MemberAnswer(ImmutableModel):
     code = models.CharField(max_length=10, blank=True)
     value = models.CharField(max_length=20, choices=VALUES)
     # Completion repair (2026-11-06, U11): the fingerprint of the question answered (questions.fingerprint, 64 hex). ''
-    # for an answer recorded before answers carried one - given to the earlier form of the question, which showed no
-    # passage - which answers no question asked now (questions.EARLIER_FORM). The database default keeps a row an older
-    # release inserts valid (ops/install.py migration_verdict).
+    # for an answer recorded before answers carried one - given to the installed release's fixed prompt for its (code,
+    # family, fact), which showed no passage - which binds by that key, as that release bound it (questions.bind;
+    # refutation cycle 2). The database default keeps a row an older release inserts valid (ops/install.py
+    # migration_verdict).
     question = models.CharField(max_length=64, blank=True, default='', db_default='')
     answered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     answered_at = models.DateTimeField(auto_now_add=True)
