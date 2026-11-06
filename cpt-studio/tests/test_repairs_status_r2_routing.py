@@ -188,7 +188,12 @@ class Status0NoCascadeIntoExclusionTests(unittest.TestCase):
 
     def test_no_history_plan_or_past_negation_is_stamped_on_a_performed_passage(self):
         """A family named only as historical, planned or never done before: its unnamed performed
-        passage is held for clarification, never excluded as that other status."""
+        passage is held for clarification, never excluded as that other status.
+
+        Completion repair (2026-11-06, builder R2, U4): the colonoscope's own course under "Findings:" can be a mention of
+        today's colonoscopy (detect._instrument_mentions), but only in a document its head shows to be a procedure's own
+        report (I9). This head's only title is a banner ("SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT"), no procedure
+        title and no strong head, so the instrument does not count and every passage is held as before."""
         for lead, plan in (('Indication: Prior colonoscopy in 2020.\n', ''),
                            ('Indication: Screening. No prior colonoscopy.\n', ''),
                            ('', 'Plan: Repeat colonoscopy in 5 years.\n')):

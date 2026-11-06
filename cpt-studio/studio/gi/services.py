@@ -38,6 +38,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Optional, Sequence
 
+from studio.gi import clauses as _clauses
 from studio.gi import context as gi_context
 from studio.gi import cues as _cues
 from studio.gi import sections as _sections
@@ -2678,6 +2679,42 @@ def _infinitive_only(text: str, cs: int, ce: int) -> bool:
     return bool(words) and all(_governed_by_infinitive(text, max(cs, w - 40), w) for w in words)
 
 
+def statement_hold(text: str, said: str, whole: str, pos: int) -> Optional[str]:
+    """F-TIME P and the hedge, exactly as read_clause reads them for the mention at ``pos``: another facility, provider or
+    source in ``said`` (the clause with its fronted frame) or in its section's own heading; a named agent whom no
+    physician line of the report names; a hedge word in ``whole`` (the clause). The cue that holds the mention, or None.
+    Extracted unchanged from read_clause (completion repair, R2) so that routing's instrument rule
+    (detect._instrument_mentions) reads one instrument statement as this reader does. The heading is read from the
+    clinical layout (_clinical_layout: builder R1's released labelled paragraphs), as read_clause read it before the
+    extraction, so both readers read one section fact (integration of R1 and R2)."""
+    heading = _clinical_layout(text).section_at(pos).heading
+    source = _other_source(said) or (_other_source(heading.text) if heading is not None else None)
+    if source is not None:
+        return OTHER_SOURCE_CUE + ' '.join(source.group(0).split())  # F-TIME P
+    agent = AGENT_NAMED.search(said)
+    surname = [w for w in agent.group('name').split() if not CREDENTIAL.match(w)][-1:] if agent is not None else []
+    if surname and surname[0].lower() not in _report_physician_words(text):
+        return AGENT_CUE + 'Dr. ' + agent.group('name')  # F-TIME P, a named agent
+    hedge = HEDGE_WORDS.search(whole)
+    if hedge:
+        return 'uncertain: ' + hedge.group(0).lower()
+    return None
+
+
+def in_condition(text: str, cs: int, pos: int, end: int) -> bool:
+    """F-TIME C, exactly as read_clause reads it: the mention at [pos, end) of the clause starting at ``cs`` lies inside a
+    condition or an open question its clause opens (CONDITION_OPENER, with no clause mark between and no closing
+    predicate of its own; not an idiom), or an inverted condition at the clause's start. Extracted unchanged from
+    read_clause (completion repair, R2) for routing's instrument rule."""
+    opener = None
+    for opener in CONDITION_OPENER.finditer(text, cs, pos):
+        pass
+    return bool((opener is not None and not re.search(r'[,;:()]', text[opener.end():pos])
+                 and not CONDITION_IDIOM.match(text, opener.start())
+                 and not _condition_closed(text[opener.end():end]))
+                or (INVERTED_CONDITION.match(text, cs, pos) and not re.search(r'[,;:()]', text[cs:pos])))
+
+
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
@@ -2902,17 +2939,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # F-TIME P: the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1,
     # L1-4) - read after a history or plan section has dated the act, as a hedge is (the full suite after round 1: a
     # planned EGD "at the hospital endoscopy unit" was held, never planned)
-    heading = _clinical_layout(text).section_at(pos).heading
-    source = _other_source(said) or (_other_source(heading.text) if heading is not None else None)
-    if source is not None:
-        return Reading('uncertain', (OTHER_SOURCE_CUE + ' '.join(source.group(0).split()),))  # F-TIME P
-    agent = AGENT_NAMED.search(said)
-    surname = [w for w in agent.group('name').split() if not CREDENTIAL.match(w)][-1:] if agent is not None else []
-    if surname and surname[0].lower() not in _report_physician_words(text):
-        return Reading('uncertain', (AGENT_CUE + 'Dr. ' + agent.group('name'),))  # F-TIME P, a named agent
-    hedge = HEDGE_WORDS.search(whole)
-    if hedge:
-        return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
+    held = statement_hold(text, said, whole, pos)  # F-TIME P and the hedge (shared with routing's instrument rule)
+    if held is not None:
+        return Reading('uncertain', (held,))
     failed = _failed_act(text, cs, ce, pos, end)
     if failed:
         return Reading('uncertain', ('uncertain: ' + failed,))
@@ -2921,13 +2950,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
     # F-TIME C, read after the modal reading so a modal condition keeps its own cue ("If biopsies were taken, they
     # would be labelled by site.")
-    opener = None
-    for opener in CONDITION_OPENER.finditer(text, cs, pos):
-        pass
-    if (opener is not None and not re.search(r'[,;:()]', text[opener.end():pos])
-            and not CONDITION_IDIOM.match(text, opener.start())
-            and not _condition_closed(text[opener.end():end])) \
-            or (INVERTED_CONDITION.match(text, cs, pos) and not re.search(r'[,;:()]', text[cs:pos])):
+    if in_condition(text, cs, pos, end):
         return Reading('uncertain', (CONDITION_CUE,))  # F-TIME C
     if part.kind == 'indication' and not today:
         # An indication says why the patient came: a performance stated there and not said to be today's is not
@@ -4881,7 +4904,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if not fam or part.kind in ('history', 'plan'):
                 continue
             d = drafts[fam]
-            for cs, ce in clauses_of(ss, se):
+            sentence_clauses = clauses_of(ss, se)
+            for k, (cs, ce) in enumerate(sentence_clauses):
                 clause_text = text[cs:ce]
                 if HISTORY_WORDS.search(clause_text) or re.search(r'\b(?:if|unless|whether)\b', clause_text, FLAGS):
                     continue
@@ -4905,6 +4929,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
                         continue
+                    subject = _clauses.subject(text, cs, _clauses.predicate_start(text, cs, m.start()),
+                                               sentence_clauses[k - 1] if k else None)
+                    if _clauses.failure_of(text, subject) == _clauses.SUB_ACT:
+                        continue  # completion repair (R2): "The snare could not be passed", a sub-act's own failure
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
         # Pass 3: lesions and acts.
@@ -5983,7 +6011,14 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
             if routing_status == 'incomplete':
                 completion, status = 'incomplete', 'incomplete'
                 cues.append('incomplete: routing reads the examination as incomplete')
-                completion_spans = list(d.completion_neg) + (list(reach.evidence) if reach else [])
+                # completion repair (R2): the evidence of the incompleteness is what states it - this reader's own
+                # statements, routing's extent where it is short, and routing's mentions read incomplete by their own
+                # cue - never a reach sentence documenting the endpoint reached (e888f9ce had cited "The colonoscope was
+                # advanced to the terminal ileum." as its incompleteness)
+                short = reach is not None and str(reach.value).startswith('incomplete')
+                stated = [m.sentence for m in finding.mentions
+                          if m.status == 'incomplete' and m.cues and m.cues[0].startswith('incomplete:')]
+                completion_spans = list(d.completion_neg) + (list(reach.evidence) if short else []) + stated
             elif d.completion_pos:
                 completion, completion_spans = 'complete', list(d.completion_pos)
             elif reach is not None and not reach.value.startswith('incomplete'):
