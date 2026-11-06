@@ -1,5 +1,5 @@
 {
- "about": "Refutation cycle 3 of harness repair 3 (2026-11-06): every engine-level input of lenses C3-1 (F-ACTS and the fronted frame), C3-2 (the provider-neutral admission), C3-3 (competition by act identity) and C3-4 (the holding rules as cycle 2 repaired them), verbatim. single rows read one code on both paths through the pipeline's own date; multi rows read Corti's and the participants' codes together (bucket/status and whether a competition holds each); admission rows read Corti's base code alone and beside a participant's code for a not-done act. Each row's read gives the base 406843018, the stage commit 1974c8cb1, the round-1 tree 8b186df05 and the cycle-2 tree b32222c8f, measured before anything was decided. Synthetic documents only (tests/test_h3_refutation_c3.py).",
+ "about": "Refutation cycle 3 of harness repair 3 (2026-11-06): every engine-level input of lenses C3-1 (F-ACTS and the fronted frame), C3-2 (the provider-neutral admission), C3-3 (competition by act identity) and C3-4 (the holding rules as cycle 2 repaired them), verbatim. single rows read one code on both paths through the pipeline's own date; multi rows read Corti's and the participants' codes together (bucket/status and whether a competition holds each); admission rows read Corti's base code alone and beside a participant's code for a not-done act. Each row's read gives the base 406843018, the stage commit 1974c8cb1, the round-1 tree 8b186df05 the cycle-2 tree b32222c8f and the cycle-3 tree 7e3924a3c, measured before anything was decided. Synthetic documents only (tests/test_h3_refutation_c3.py).",
  "single": [
   {
    "id": "C3-1:c31-1:F1b",
@@ -23,7 +23,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -48,7 +49,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -73,7 +75,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -98,7 +101,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -123,7 +127,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -143,7 +148,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -163,7 +169,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -183,7 +190,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -203,7 +211,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -223,7 +232,8 @@
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -243,7 +253,8 @@
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -263,7 +274,8 @@
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -283,7 +295,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -294,16 +307,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -328,7 +342,8 @@
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -353,7 +368,8 @@
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -378,7 +394,8 @@
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -403,7 +420,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -428,7 +446,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -453,7 +472,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -478,7 +498,8 @@
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -503,7 +524,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -528,7 +550,8 @@
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -553,7 +576,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -578,7 +602,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -603,7 +628,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -623,7 +649,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -643,7 +670,8 @@
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -663,7 +691,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -683,7 +712,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -703,7 +733,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -714,16 +745,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -743,7 +775,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -763,7 +796,8 @@
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -783,7 +817,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -803,7 +838,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -814,16 +850,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -843,7 +880,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -854,16 +892,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -874,16 +913,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -894,16 +934,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -914,16 +955,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -943,7 +985,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -954,16 +997,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -974,16 +1018,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1003,7 +1048,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1023,7 +1069,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1043,7 +1090,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1063,7 +1111,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1083,7 +1132,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1103,7 +1153,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1123,7 +1174,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/HELD"
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1134,16 +1186,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1163,7 +1216,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1183,7 +1237,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1194,16 +1249,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1214,16 +1270,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1234,16 +1291,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1263,7 +1321,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1283,7 +1342,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1303,7 +1363,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1323,7 +1384,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1334,16 +1396,17 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "ALT"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1363,7 +1426,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1383,7 +1447,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1403,7 +1468,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1423,7 +1489,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1443,7 +1510,8 @@
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1463,7 +1531,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1483,7 +1552,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1503,7 +1573,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1523,7 +1594,8 @@
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1543,7 +1615,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1563,7 +1636,8 @@
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "READY/READY",
-    "cycle 2": "READY/READY"
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
    }
   },
   {
@@ -1583,7 +1657,8 @@
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "EXCL/ALT"
    }
   },
   {
@@ -1603,7 +1678,8 @@
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
-    "cycle 2": "EXCL/ALT"
+    "cycle 2": "EXCL/ALT",
+    "cycle 3": "HELD/ALT"
    }
   },
   {
@@ -1623,7 +1699,8 @@
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "HELD/ALT",
-    "cycle 2": "HELD/ALT"
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
    }
   }
  ],
@@ -1712,6 +1789,20 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -1803,6 +1894,20 @@
        false
       ]
      ]
+    },
+    "cycle 3": {
+     "43202": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43239": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1880,6 +1985,20 @@
      ]
     },
     "cycle 2": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
      "43233": [
       [
        "HELD",
@@ -1981,6 +2100,20 @@
        false
       ]
      ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2070,6 +2203,20 @@
        false
       ]
      ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2147,6 +2294,20 @@
      ]
     },
     "cycle 2": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
      "43245": [
       [
        "READY",
@@ -2248,6 +2409,20 @@
        true
       ]
      ]
+    },
+    "cycle 3": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2325,6 +2500,20 @@
      ]
     },
     "cycle 2": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
      "43245": [
       [
        "READY",
@@ -2426,6 +2615,20 @@
        true
       ]
      ]
+    },
+    "cycle 3": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2513,6 +2716,20 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -2604,6 +2821,20 @@
        false
       ]
      ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2691,6 +2922,20 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -2944,6 +3189,52 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -3192,6 +3483,52 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }
@@ -3442,6 +3779,52 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -3690,6 +4073,52 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }
@@ -3940,6 +4369,52 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -4188,6 +4663,52 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }
@@ -4438,6 +4959,52 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -4687,6 +5254,52 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -4824,6 +5437,30 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }
@@ -4963,6 +5600,30 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -5100,6 +5761,30 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }
@@ -5239,6 +5924,30 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -5377,6 +6086,30 @@
       ],
       "incomplete"
      ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
     ]
    }
   },
@@ -5514,6 +6247,30 @@
        "HELD"
       ],
       "incomplete"
+     ]
+    ],
+    "cycle 3": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
      ]
     ]
    }

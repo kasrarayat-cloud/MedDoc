@@ -451,7 +451,7 @@ def _open_items_covered(candidate: '_Selection', code: str, open_items: Sequence
         or (item[2] == '' and _includes_through(inventory, item[0], code, candidate.family)))]
 
 
-def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
+def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None, text: Optional[str] = None) -> set:
     """What an admissible participant code claims (HARNESS.md P-ADMIT): the documented acts it is read as accounting
     for - for an open item of one act kind, the service's acts of that kind; for a whole service left without a
     proposal, its match's acts - narrowed to those its own exact passages show (an act's evidence overlaps one of them),
@@ -490,20 +490,26 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
         own = [a for a in acts if shows(a)]
         undone = [a for a in pool if a.status != 'performed' and a.kind in kinds and shows(a)]
         backed = [a for a in acts if a.id in supported_by]
-        if not own and len(backed) == 1:
-            # a code the engine supports by one act its passages do not show claims that act (refutation cycle 3,
-            # C3-3-4: Corti's 43248 on "Possibly the ring was also dilated with a Savary bougie" is READY on the balloon
-            # dilation done, so it competes with a participant's code for that dilation). Support resting on several
-            # acts establishes none of them (L4-2: an Impression naming two strictures claims neither dilation)
+        if not own and backed:
+            # a code the engine supports by acts its passages do not show claims every act its support rests on
+            # (refutation cycle 3, C3-3-4; cycle 4, C4-2-3: Corti's 43248 on "Possibly the ring was also dilated with a
+            # Savary bougie" is READY on the balloon dilations done, so it competes with any code for one of them).
+            # On the safe side: two codes for one act are never both READY (an Impression naming two strictures holds
+            # both dilation codes, L4-2's first case, recorded)
             own = backed
         elif not own and not undone:
-            own = list(acts) if len(acts) == 1 else []
+            own = list(acts)
         narrative = [a for a in possible if not summary(a)]
         out = []
         for a in own:
             told = [b for b in narrative if b.kind == a.kind] if summary(a) else []
             out.extend(told or [a])
-        return {('act', a.service, a.kind, a.lesion, ','.join(a.anatomy), a.id, summary(a)) for a in out}
+        return {('act', a.service, a.kind, a.lesion, ','.join(a.anatomy), a.id, summary(a), marked_other(a)) for a in out}
+
+    def marked_other(a) -> bool:
+        # an act whose own statement opens with "a second", "another", "a separate" or "an additional" is another act of
+        # its kind, never a restatement (C2-4-3: "A second through-the-scope balloon was positioned across ...")
+        return text is not None and bool(a.evidence) and OTHER_ACT_OPENER.match(text, a.evidence[0].start) is not None
 
     claimed = set()
     for service, family, act, label in items:
@@ -611,9 +617,11 @@ def _in_doubt(act, service) -> bool:
     return act.status == 'performed' and service.status == 'uncertain'
 
 
-# Sections whose acts restate the report's own narrative account (_claimed): an Impression, an assessment
-# ("Diagnosis:", "Clinical impression:") and a findings summary
-RESTATING_SECTIONS = ('impression', 'assessment', 'findings')
+OTHER_ACT_OPENER = re.compile(r'\s*(?:a|an|the)?\s*(?:second|another|separate|additional|third|fourth)\b', re.IGNORECASE)
+# Sections whose acts restate the report's own narrative account (_claimed): an Impression and an assessment
+# ("Diagnosis:", "Clinical impression:"). A findings section is narrative - many reports state the acts there - and
+# its acts are read by _same_claim (refutation cycle 4, C4-2-1 and C4-2-2)
+RESTATING_SECTIONS = ('impression', 'assessment')
 
 
 def _shows_doubted_act(candidate: '_Selection', code: str) -> bool:
@@ -644,14 +652,14 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
     provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
     CPT Studio never chooses between codes, nor prefers one for its proposer."""
     lay = gi_sections.layout(text) if text is not None else None
-    claims_of: dict[str, set] = {code: _claimed(candidate, items, lay)
+    claims_of: dict[str, set] = {code: _claimed(candidate, items, lay, text)
                                  for code, (candidate, items, _) in admissible.items()}
     for selection in selections:
         if selection.evaluation is None or selection.excluded or selection.code in claims_of:
             continue
         items = (_open_items_covered(selection, selection.code, documented, inventory)
                  if inventory is not None else [])
-        claims_of[selection.code] = _claimed(selection, items, lay) if items else set()
+        claims_of[selection.code] = _claimed(selection, items, lay, text) if items else set()
     out: dict[str, tuple[str, ...]] = {}
     for code, claimed in claims_of.items():
         # one act claimed twice competes: the same act, an Impression's restatement of it (refutation round 1, L4-3;
@@ -666,23 +674,30 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
 
 
 def _same_claim(mine: tuple, theirs: tuple) -> bool:
-    """Whether two _claimed claims ('act', service, kind, lesion id, anatomy, act id, restated) are one act: the same act
-    (its id; a restatement is already read as the narrative act it restates); or two statements of one service's act
-    kind on one lesion record; or, where neither names a lesion record of its own, at one site, both sites stated and
-    one containing the other ("Biopsies of the esophagus" after "biopsies were obtained from the distal esophagus").
-    Two narrative acts on two lesion records, or whose site is unread or different, are two acts (refutation cycle 2,
-    C2-4-3; cycle 3, C3-3-3: lesion ids are compared whole, so S1-L1 is never S1-L10's)."""
+    """Whether two _claimed claims ('act', service, kind, lesion id, anatomy, act id, restated) may be one act, so that
+    two codes claiming them compete: always, for one service's act kind, unless the two are told apart - two lesion
+    records (compared whole: S1-L1 is never S1-L10's, C3-3-3), or two stated sites neither of which contains the other
+    (whole-word: "distal esophagus" contains "esophagus"). A statement whose site the reader leaves unread may restate
+    the other ("The dilation was performed without complication.", C4-2-4; a Findings line, C4-2-1), so it competes.
+
+    Refutation cycle 4: the act-identity reading failed in every cycle in one direction or the other, so it errs toward
+    competing - two codes for one documented act are never both READY, and the false holds this costs (two dilations
+    whose second site is unread, C2-4-3; a site-less Impression restating one of two, C3-3-2) are recorded."""
     if mine[0] != 'act' or theirs[0] != 'act':
         return mine == theirs
     if mine[1] != theirs[1] or mine[2] != theirs[2]:
         return False
     if mine[5] == theirs[5]:
         return True
+    if mine[7] or theirs[7]:
+        return False  # a statement that marks itself as another act of the kind ("A second ... balloon")
     if mine[3] and theirs[3]:
         return mine[3] == theirs[3]
     a = [part.strip() for part in mine[4].lower().split(',') if part.strip()]
     b = [part.strip() for part in theirs[4].lower().split(',') if part.strip()]
-    return bool(a) and bool(b) and any(_site_contains(x, y) or _site_contains(y, x) for x in a for y in b)
+    if a and b:
+        return any(_site_contains(x, y) or _site_contains(y, x) for x in a for y in b)
+    return True
 
 
 def _site_contains(outer: str, inner: str) -> bool:

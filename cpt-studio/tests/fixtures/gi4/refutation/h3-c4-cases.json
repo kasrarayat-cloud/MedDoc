@@ -1,0 +1,2382 @@
+{
+ "about": "Refutation cycle 4 of harness repair 3 (2026-11-06), the last: every engine-level input of lenses C4-1 (F-ACTS' removal binding and the fronted frame), C4-2 (competition and the narrowed admission) and C4-3 (the seven holding rules cycle 3 narrowed), verbatim. single rows read one code on both paths through the pipeline's own date; multi rows read Corti's and the participants' codes together. Each row's read gives the base 406843018, the stage commit 1974c8cb1, the round-1 tree 8b186df05, the cycle-2 tree b32222c8f and the cycle-3 tree 7e3924a3c, measured before anything was decided. Synthetic documents only (tests/test_h3_refutation_c4.py).",
+ "single": [
+  {
+   "id": "C4-1:ctl-C3-1-2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted while the scope was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted while the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:ctl-B6c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-because",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nBecause the meat bolus passed spontaneously the scope was removed.\n",
+   "code": "43247",
+   "quote": "Because the meat bolus passed spontaneously the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-after",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nAfter the meat bolus passed into the stomach the scope was removed.\n",
+   "code": "43247",
+   "quote": "After the meat bolus passed into the stomach the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-once",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nOnce the steak impaction cleared the overtube was removed.\n",
+   "code": "43247",
+   "quote": "Once the steak impaction cleared the overtube was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-when",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nWhen the impacted meat passed into the stomach the scope was removed.\n",
+   "code": "43247",
+   "quote": "When the impacted meat passed into the stomach the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-since",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nSince the steak impaction had already passed the overtube was removed.\n",
+   "code": "43247",
+   "quote": "Since the steak impaction had already passed the overtube was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:1-comma-ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nBecause the meat bolus passed spontaneously, the scope was removed.\n",
+   "code": "43247",
+   "quote": "Because the meat bolus passed spontaneously, the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "READY/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:1-plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus passed spontaneously.\n",
+   "code": "43247",
+   "quote": "The meat bolus passed spontaneously.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:2-yet",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted yet the overtube was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted yet the overtube was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:2-however",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted however the overtube was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted however the overtube was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:2-therefore",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted therefore the scope was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted therefore the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:2-thus",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe steak impaction remained in place thus the guidewire was removed.\n",
+   "code": "43247",
+   "quote": "The steak impaction remained in place thus the guidewire was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:2-whereupon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus passed whereupon the scope was removed.\n",
+   "code": "43247",
+   "quote": "The meat bolus passed whereupon the scope was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:2-plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus remained impacted.\n",
+   "code": "43247",
+   "quote": "The meat bolus remained impacted.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/ALT",
+    "round 1": "READY/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:3-missed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The Roth net that missed the bolus was removed.\n",
+   "code": "43247",
+   "quote": "The Roth net that missed the bolus was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:3-pushed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The scope that had pushed the bolus into the stomach was then removed.\n",
+   "code": "43247",
+   "quote": "The scope that had pushed the bolus into the stomach was then removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:3-pushed-named",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe scope that pushed the meat bolus was removed.\n",
+   "code": "43247",
+   "quote": "The scope that pushed the meat bolus was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:3-protecting",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nThe overtube protecting the meat bolus was removed.\n",
+   "code": "43247",
+   "quote": "The overtube protecting the meat bolus was removed.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-1:3-plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA large meat bolus was found at 34 cm. The bolus was pushed into the stomach.\n",
+   "code": "43247",
+   "quote": "The bolus was pushed into the stomach.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:4-six-weeks",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nA benign-appearing stricture was found in the distal esophagus. Today, six weeks after the previous session, the stricture was dilated to 18 mm with a through-the-scope balloon.\n",
+   "code": "43249",
+   "quote": "Today, six weeks after the previous session, the stricture was dilated to 18 mm with a through-the-scope balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:4-perforation",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nA benign-appearing stricture was found in the distal esophagus. Today, because of a prior perforation, the stricture was dilated with a 12 mm through-the-scope balloon.\n",
+   "code": "43249",
+   "quote": "Today, because of a prior perforation, the stricture was dilated with a 12 mm through-the-scope balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:4-resection",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nA 9 mm sessile polyp was found in the sigmoid colon. Today, in light of the previous incomplete resection, the polyp was removed with a hot snare.\n",
+   "code": "45385",
+   "quote": "Today, in light of the previous incomplete resection, the polyp was removed with a hot snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-1:4-plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nA benign-appearing stricture was found in the distal esophagus. The stricture was dilated with a 12 mm through-the-scope balloon.\n",
+   "code": "43249",
+   "quote": "The stricture was dilated with a 12 mm through-the-scope balloon.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "READY"
+   ],
+   "participant": [
+    "READY"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "READY/READY",
+    "cycle 2": "READY/READY",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-1a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe impacted meat bolus was retrieved into a Roth net; however, the impacted bolus could not be removed through the upper esophageal sphincter.\n",
+   "code": "43247",
+   "quote": "The impacted meat bolus was retrieved into a Roth net",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-1b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA cold snare was placed around the 6 mm polyp prior to withdrawal, but the 6 mm polyp could not be transected.\n",
+   "code": "45385",
+   "quote": "A cold snare was placed around the 6 mm polyp prior to withdrawal",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-1c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nPrior to withdrawal, a cold snare was placed around the 6 mm sigmoid polyp, but the sessile polyp could not be transected.\n",
+   "code": "45385",
+   "quote": "Prior to withdrawal, a cold snare was placed around the 6 mm sigmoid polyp",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-1ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe impacted meat bolus was retrieved into a Roth net; however, the bolus could not be removed through the upper esophageal sphincter.\n",
+   "code": "43247",
+   "quote": "The impacted meat bolus was retrieved into a Roth net",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-2a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus was removed with a Roth net elsewhere at Synthetic Valley Hospital.\n",
+   "code": "43247",
+   "quote": "The meat bolus was removed with a Roth net elsewhere at Synthetic Valley Hospital.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-2b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nElsewhere in Ohio, the meat bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "Elsewhere in Ohio, the meat bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-2c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe varices were banded elsewhere in Ohio prior to the dilation.\n",
+   "code": "43244",
+   "quote": "The varices were banded elsewhere in Ohio prior to the dilation.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-2d",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe lesion was tattooed elsewhere in Michigan prior to the resection.\n",
+   "code": "45381",
+   "quote": "The lesion was tattooed elsewhere in Michigan prior to the resection.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-3a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nPer the patient's wife, the meat bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "Per the patient's wife, the meat bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-3b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nAccording to the patient's husband, the steak impaction was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "According to the patient's husband, the steak impaction was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-3c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nAccording to the surgeon's operative note, the lesion was tattooed prior to the resection.\n",
+   "code": "45381",
+   "quote": "According to the surgeon's operative note, the lesion was tattooed prior to the resection.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-3ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nPer the patient, the meat bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "Per the patient, the meat bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-4a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe patient asked whether we found the polyp and removed it with a cold snare prior to withdrawal.\n",
+   "code": "45385",
+   "quote": "The patient asked whether we found the polyp and removed it with a cold snare prior to withdrawal.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-4b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThere is no record that the fellow identified the polyp and removed it with a cold snare prior to withdrawal.\n",
+   "code": "45385",
+   "quote": "There is no record that the fellow identified the polyp and removed it with a cold snare prior to withdrawal.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-4c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe patient asked whether we found it and confirmed the meat bolus was removed with a Roth net.\n",
+   "code": "43247",
+   "quote": "The patient asked whether we found it and confirmed the meat bolus was removed with a Roth net.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-4ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe patient asked whether the polyp was removed with a cold snare prior to withdrawal.\n",
+   "code": "45385",
+   "quote": "The patient asked whether the polyp was removed with a cold snare prior to withdrawal.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-5a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nBiopsy of the cecal polyp never obtained, as the polyp was removed with a hot snare prior to withdrawal.\n",
+   "code": "45380",
+   "quote": "Biopsy of the cecal polyp never obtained",
+   "primary": [
+    [
+     "45385",
+     "the polyp was removed with a hot snare prior to withdrawal"
+    ]
+   ],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-5b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nPrior to withdrawal, cold snare polypectomy of the 6 mm polyp not yet performed was discussed with the patient.\n",
+   "code": "45385",
+   "quote": "Prior to withdrawal, cold snare polypectomy of the 6 mm polyp not yet performed was discussed with the patient.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-6a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe impacted meat bolus was removed with a Roth net prior to today's transfer.\n",
+   "code": "43247",
+   "quote": "The impacted meat bolus was removed with a Roth net prior to today's transfer.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-6b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus was removed with a Roth net prior to today's admission.\n",
+   "code": "43247",
+   "quote": "The meat bolus was removed with a Roth net prior to today's admission.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "READY/READY"
+   }
+  },
+  {
+   "id": "C4-3-6ctl",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe meat bolus was removed with a Roth net prior to today.\n",
+   "code": "43247",
+   "quote": "The meat bolus was removed with a Roth net prior to today.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "HELD/ALT",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-7a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 6 mm polyp in the sigmoid colon was removed with a cold snare, but the mass could not be removed because of its size.\n",
+   "code": "45385",
+   "quote": "A 6 mm polyp in the sigmoid colon was removed with a cold snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-7b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 25 mm sessile polyp was removed with a hot snare; however, it could not be removed in one piece and was removed piecemeal.\n",
+   "code": "45385",
+   "quote": "The 25 mm sessile polyp was removed with a hot snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-7c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe 25 mm sessile polyp was removed with a hot snare; however, it could not be removed en-bloc and was removed piecemeal.\n",
+   "code": "45385",
+   "quote": "The 25 mm sessile polyp was removed with a hot snare",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "READY/READY",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-8a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained from the antrum and elsewhere.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained from the antrum and elsewhere.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-8b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nRandom biopsies were obtained elsewhere during withdrawal.\n",
+   "code": "45380",
+   "quote": "Random biopsies were obtained elsewhere during withdrawal.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "HELD/ALT",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-8c",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nAdditional biopsies were obtained elsewhere on withdrawal.\n",
+   "code": "45380",
+   "quote": "Additional biopsies were obtained elsewhere on withdrawal.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-9a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe lesion in the ascending colon was tattooed according to the surgeons' specifications.\n",
+   "code": "45381",
+   "quote": "The lesion in the ascending colon was tattooed according to the surgeons' specifications.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-9b",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nBiopsies were obtained according to the gastroenterologists' protocol for Barrett's surveillance.\n",
+   "code": "43239",
+   "quote": "Biopsies were obtained according to the gastroenterologists' protocol for Barrett's surveillance.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/HELD",
+    "cycle 3": "HELD/ALT"
+   }
+  },
+  {
+   "id": "C4-3-10a",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nWe assessed whether the polyps could be resected endoscopically and removed both with a cold snare.\n",
+   "code": "45385",
+   "quote": "We assessed whether the polyps could be resected endoscopically and removed both with a cold snare.",
+   "primary": [],
+   "day": "2026-10-14",
+   "corti": [
+    "HELD"
+   ],
+   "participant": [
+    "ALT"
+   ],
+   "read": {
+    "base": "READY/READY",
+    "stage": "HELD/ALT",
+    "round 1": "READY/READY",
+    "cycle 2": "HELD/ALT",
+    "cycle 3": "HELD/ALT"
+   }
+  }
+ ],
+ "multi": [
+  {
+   "id": "C4-2:C4-2-1a EGD: Findings narrative + site-less Impression (corti 43249 narrative, astra 43233 impression)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nFindings:\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nImpression: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Impression: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1a-rev same document (corti 43233 impression, astra 43249 narrative)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nFindings:\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nImpression: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43233",
+     "Impression: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1b colon: Findings narrative + \"One polyp\" Impression (corti 45385, astra 44394)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum.\nFindings:\nA 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.\nImpression: One polyp, removed by cold snare polypectomy.\n",
+   "primary": [
+    [
+     "45385",
+     "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "44394",
+     "Impression: One polyp, removed by cold snare polypectomy."
+    ]
+   ],
+   "outcome": {
+    "44394": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "45385": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "44394": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1c colon: FINDINGS/IMPRESSION headings, numbered impression (corti 45385, astra 44394)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nFINDINGS:\nA 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.\nThe remainder of the colon was normal.\nIMPRESSION:\n1. One polyp, removed by cold snare polypectomy.\n",
+   "primary": [
+    [
+     "45385",
+     "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "44394",
+     "1. One polyp, removed by cold snare polypectomy."
+    ]
+   ],
+   "outcome": {
+    "44394": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "45385": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "44394": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1c-control: same, narrative under Procedure (expect both HELD)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.\nIMPRESSION:\n1. One polyp, removed by cold snare polypectomy.\n",
+   "primary": [
+    [
+     "45385",
+     "A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "44394",
+     "1. One polyp, removed by cold snare polypectomy."
+    ]
+   ],
+   "outcome": {
+    "44394": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "45385": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "44394": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 3": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1d EGD: Findings narrative + procedure-line listing (corti 43249, astra 43233)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy with balloon dilation\nThe gastroscope was passed to the second portion of the duodenum.\nFindings:\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Procedure: Upper endoscopy with balloon dilation"
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-1e EGD: Findings narrative + Diagnosis line (corti 43249, astra 43233)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nFindings:\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nDiagnosis: Schatzki ring, dilated with a balloon to 18 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43233",
+     "Diagnosis: Schatzki ring, dilated with a balloon to 18 mm."
+    ]
+   ],
+   "outcome": {
+    "43233": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43233": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43233": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-2 EGD: esophageal dilation under Procedure, pyloric dilation under Findings (corti 43249, astra 43245)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm.\nFindings:\nA 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43245",
+     "A 10 mm stricture at the pylorus was dilated with a through-the-scope balloon to 15 mm."
+    ]
+   ],
+   "outcome": {
+    "43245": [
+     [
+      "READY",
+      false
+     ]
+    ],
+    "43249": [
+     [
+      "READY",
+      false
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43245": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-3 EGD: two balloon dilations + doubted Savary (corti 43248 on the doubt, astra 43249 ring)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization.\nA second through-the-scope balloon was positioned across the pyloric stricture and inflated to 15 mm under direct visualization.\nPossibly the ring was also dilated with a Savary bougie.\n",
+   "primary": [
+    [
+     "43248",
+     "Possibly the ring was also dilated with a Savary bougie."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-3-control (C3-3-4 pinned): one balloon dilation + doubted Savary (expect both HELD)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\nA through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization.\nPossibly the ring was also dilated with a Savary bougie.\n",
+   "primary": [
+    [
+     "43248",
+     "Possibly the ring was also dilated with a Savary bougie."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43249",
+     "A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct visualization."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "ALT",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-4a EGD: sited dilation + \"The dilation was performed without complication.\" (corti 43249, astra 43248)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Upper endoscopy\nThe gastroscope was passed to the second portion of the duodenum.\nThe Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm. The dilation was performed without complication.\n",
+   "primary": [
+    [
+     "43249",
+     "The Schatzki ring in the distal esophagus was dilated with a through-the-scope balloon to 18 mm."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "43248",
+     "The dilation was performed without complication."
+    ]
+   ],
+   "outcome": {
+    "43248": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "43249": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "43248": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "43248": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "43248": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "C4-2:C4-2-4b colon: \"One polyp was removed with a cold snare.\" + sited detail (corti 45385, astra 44394)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nOne polyp was removed with a cold snare. The 9 mm sessile polyp was in the sigmoid colon and was removed with a cold snare.\n",
+   "primary": [
+    [
+     "45385",
+     "The 9 mm sessile polyp was in the sigmoid colon and was removed with a cold snare."
+    ]
+   ],
+   "participants": [
+    [
+     "astra",
+     "44394",
+     "One polyp was removed with a cold snare."
+    ]
+   ],
+   "outcome": {
+    "44394": [
+     [
+      "HELD",
+      true
+     ]
+    ],
+    "45385": [
+     [
+      "HELD",
+      true
+     ]
+    ]
+   },
+   "read": {
+    "base": {
+     "44394": [
+      [
+       "ALT",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "stage": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "round 1": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "cycle 2": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "cycle 3": {
+     "44394": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "45385": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    }
+   }
+  }
+ ]
+}

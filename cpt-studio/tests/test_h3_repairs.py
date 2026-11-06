@@ -4,9 +4,10 @@ readers, no provider or database calls. The documents are synthetic, and the 39f
 structure (inline service labels, an impacted meat bolus removed by retrieval net), never the owner's upload.
 
 Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F-SECTIONS T and L under the two-cycle
-rule: the titles with an aside and the labelled paragraphs read as the base reads them, pinned below as recorded
-residuals. The admission cases therefore read a plain report (PLAIN), and the labelled one shows the provider-neutral
-hold: a participant's code for the act its own passage shows is held as Corti's code for it is."""
+rule, and cycle 4 dropped F-ACTS: the titles with an aside, the labelled paragraphs and "the bolus was removed" read as
+the base reads them, pinned below as recorded residuals - so 39f0ac49's 43247 has no documented act and is listed. The
+admission cases therefore read a plain report (PLAIN) and its documented biopsy, and the labelled one shows the
+provider-neutral hold: a participant's code for an act stated done in a doubted service is held as Corti's code is."""
 from datetime import date
 
 from django.test import SimpleTestCase
@@ -107,14 +108,26 @@ class InlineServiceLabelTests(SimpleTestCase):
         self.assertFalse([part for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'])
 
     def test_a_participants_code_is_held_as_cortis_code_for_the_same_act(self):
-        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
-        by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
+        # the biopsy is stated done inside the EGD the reading documents in doubt: a participant's 43239 is held exactly
+        # as Corti's is (the provider-neutral admission as refutation cycle 3 narrowed it)
+        codes = corti(('45385', span(LABELLED, SNARE)))
+        by_corti = proposal(run(LABELLED, codes + corti(('43239', span(LABELLED, EGD_BIOPSY)))), '43239')
         self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
         for name in ('astra', 'fable'):
             with self.subTest(name):
-                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
+                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43239', EGD_BIOPSY)])]), '43239')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
                                  ('selected', 'needs_clarification', 'participant', [name]))
+
+    def test_without_f_acts_39f0ac49s_bolus_removal_is_no_documented_act(self):
+        # F-ACTS was refuted in cycles 3 and 4 and is dropped (recorded residual): "the bolus was removed" names no
+        # foreign-body act, so Corti's 43247 on it is held by the service's doubt and a participant's is listed
+        codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
+        by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
+        listed = proposal(run(LABELLED, codes, [read('astra', [code(LABELLED, '43247', NET)])]), '43247')
+        self.assertEqual((listed.bucket, listed.status), ('alternative', 'informational'))
+        self.assertIn(engine.PARTICIPANT_NO_ACT, listed.exclusion_reason)
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -140,11 +153,12 @@ class InlineServiceLabelTests(SimpleTestCase):
 
 
 class ForeignBodyActTests(SimpleTestCase):
-    """F-ACTS as rebuilt in refutation cycle 2 (predicate-bound): a bolus named by its food, or the anaphor "the bolus",
-    is the foreign-body act only where its own clause states it removed, retrieved or extracted."""
+    """F-ACTS (a bolus named by its food, or "the bolus", read as the foreign-body act where its clause states it
+    removed) was refuted in refutation cycles 3 and 4 and is dropped under the two-cycle rule: the foreign-body act is
+    the base's "foreign body", "food bolus" and "food impaction" again. A recorded residual (39f0ac49's 43247)."""
 
-    def test_the_bolus_the_net_removed_is_the_upper_endoscopy_s_act(self):
-        self.assertIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
+    def test_the_bolus_the_net_removed_reads_as_the_base_reads_it(self):
+        self.assertNotIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
 
     def test_a_medication_bolus_a_finding_or_a_push_is_no_removal(self):
         egd = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\n'
@@ -163,10 +177,10 @@ class AdmissionCaseTests(SimpleTestCase):
     never promoted."""
 
     def test_only_astra_or_only_fable_proposes_the_supported_service(self):
-        codes = corti(('43239', span(PLAIN, EGD_BIOPSY)), ('45385', span(PLAIN, SNARE)))
+        codes = corti(('45385', span(PLAIN, SNARE)))
         for name in ('astra', 'fable'):
             with self.subTest(name):
-                item = proposal(run(PLAIN, codes, [read(name, [code(PLAIN, '43247', NET)])]), '43247')
+                item = proposal(run(PLAIN, codes, [read(name, [code(PLAIN, '43239', EGD_BIOPSY)])]), '43239')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
                                  ('selected', 'ready', 'participant', [name]))
 
@@ -197,12 +211,11 @@ class AdmissionCaseTests(SimpleTestCase):
                 self.assertTrue(any(after.startswith(reason) for reason in P_ADMIT_REASONS), after)
 
     def test_a_number_only_in_an_alternative_list_is_never_promoted(self):
-        codes = corti(('43239', span(PLAIN, EGD_BIOPSY)), ('45385', span(PLAIN, SNARE))) + [
-            engine.ProviderCode('candidate', 'cpt', '43247', '', ())]
-        result = run(PLAIN, codes, [read('astra', advised=[not_coded(PLAIN, '43247', NET)]),
-                                    read('fable', [code(PLAIN, '43239', EGD_BIOPSY)])])
-        self.assertFalse([p for p in result.proposals if p.code == '43247' and p.bucket == 'selected'])
-        self.assertIn(('S1', 'gi.egd', 'foreign_body', 'not_covered'),
+        codes = corti(('45385', span(PLAIN, SNARE))) + [engine.ProviderCode('candidate', 'cpt', '43239', '', ())]
+        result = run(PLAIN, codes, [read('astra', advised=[not_coded(PLAIN, '43239', EGD_BIOPSY)]),
+                                    read('fable', [code(PLAIN, '45385', SNARE)])])
+        self.assertFalse([p for p in result.proposals if p.code == '43239' and p.bucket == 'selected'])
+        self.assertIn(('S1', 'gi.egd', '', 'no_proposal'),
                       [(u['service'], u['family'], u['act'], u['reason'])
                        for u in result.completeness['unresolved_items']])
 

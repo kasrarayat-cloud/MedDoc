@@ -3277,3 +3277,92 @@ both directions, so word-list repairs are not chased.
 - the round-1 tables, regenerated: a participant's code for another source's or a doubted act is listed again;
 - the cycle-2 fixture: 5 rows, with a cycle-2 column added;
 - `tests/test_harness_engine.py` and `tests/test_harness_engine_confirmations.py`: back to their pre-cycle-2 pins.
+
+### Harness repair 3, refutation cycle 4 (2026-11-06): the last cycle, and what the release keeps
+
+Three lenses ran in sealed sandboxes at `7e3924a3c`, over cycle 3's changes:
+- C4-1: F-ACTS' removal binding and the fronted frame;
+- C4-2: competition and the narrowed admission;
+- C4-3: the seven narrowed holding rules.
+
+They reported 18 findings (C4-1 4, C4-2 4, C4-3 10), each reproduced on this tree. Every input is pinned in
+`tests/test_h3_refutation_c4.py` with `tests/fixtures/gi4/refutation/h3-c4-cases.json`: 54 single-code cases and 12
+multi-code cases, each with what the base, the stage, round 1, cycle 2 and cycle 3 read. The cycle-3 policy decided each
+finding.
+
+**Dropped under the two-cycle rule:**
+- ⚠️ **F-ACTS**, refuted in cycle 3 (C3-1-1, C3-1-2) and again in cycle 4 (C4-1-1 to C4-1-3). Three readings released a
+  removal the bolus never had:
+  - "Because the meat bolus passed spontaneously the scope was removed." (a subordinator before the bolus);
+  - "The meat bolus remained impacted yet the overtube was removed." (a clause word no list held);
+  - "The Roth net that missed the bolus was removed." (the bolus as a verb's object).
+
+  The foreign-body act is the base's again: "foreign body", "food bolus" and "food impaction" only.
+  - **Consequence:** 39f0ac49's "the bolus was removed through the mouth" names no act, so Astra's and Fable's 43247
+    has no documented act and is listed (PARTICIPANT_NO_ACT), as on the installed release. Corti's three codes stay held
+    by the service's doubt. Directive item 4's food-bolus act is **undelivered**.
+
+**Competition errs toward competing (C4-2-1 to C4-2-4):**
+- **The failures, all two approvable codes for one act or a false hold:**
+  - a narrative under a Findings heading was read as a restatement of itself;
+  - a Findings act at another site claimed the narrative's act;
+  - support resting on two dilations claimed neither;
+  - "The dilation was performed without complication." was read as a second act.
+
+  The act-identity reading failed in every cycle, in one direction or the other.
+- **The new rule:** two codes for one service's act kind compete unless their acts are told apart.
+  - **What tells them apart:** two lesion records, or two stated sites neither of which contains the other, or a
+    statement that opens with "a second", "another", "a separate" or "an additional" (`OTHER_ACT_OPENER`; C2-4-3's "A
+    second through-the-scope balloon ...").
+  - **Findings sections** are narrative again (`RESTATING_SECTIONS` is the impression and the assessment only).
+  - **A code supported by several acts** claims all of them.
+- **Recorded false hold:** L4-2's first case. Corti's 43249 on an Impression naming two strictures competes with the
+  pyloric dilation's code (the base reads 43249 READY).
+
+**Narrowings returned to their cycle-2 forms (C4-3-1 to C4-3-6):**
+- **Why:** the policy's premise was wrong where another rule of this diff had already changed the base's reading.
+  - Round 1's sequence reading ("prior to dilation" is inside today's procedure) and F-ACTS had removed the base's hold
+    on those shapes.
+  - So narrowing a cycle-2 rule there released a false READY that neither the base nor cycle 2 had. Examples: "The
+    varices were banded elsewhere in Ohio prior to the dilation."; "According to the surgeon's operative note, ...";
+    "The patient asked whether we found the polyp and removed it ..."; "Biopsy of the cecal polyp never obtained, as
+    the polyp was removed ...".
+- **Returned to the cycle-2 form:** the "elsewhere" lookahead, `NOT_A_REQUEST`, `CLOSING_PREDICATE` and the fragment's
+  predicate-follows release.
+- **Kept, because neither can release such a shape:**
+  - the later failure's other-lesion words (ordinals and contrast words only: "the second", "the other polyp");
+  - the fragment's act-kind check ("not retrieved" is the specimen's).
+- **The possessive "today's"** governs encounter nouns again ("prior to today's admission" or "transfer" is history),
+  while "prior to today's banding" stays today's.
+
+**Kept from cycle 3, refuted by no cycle-4 lens:**
+- the frame's today, with C4-1-4's repair: the frame's own today cancels the frame's own history words, never the
+  clause's ("Today, six weeks after the previous session, the stricture was dilated" is done today);
+- the frame's attributive history and its plan words;
+- the narrowed admission. C4-2 probed 39f0ac49-style documents and found Corti's statuses as on the base, no participant
+  code READY and the completeness unchanged.
+
+**Recorded as open (false holds on the safe side, each read by the base as READY):**
+- **Later failure:** "the cecal polyp" or "the 6 mm polyp" in a later failure, "could not be removed en bloc", "the mass
+  could not be removed".
+- **"elsewhere":** "elsewhere in colon", "elsewhere at 2 cm intervals", "elsewhere in a random fashion", and "elsewhere"
+  at a clause's end.
+- **Possessives:** "according to the surgeon's specifications", the plural possessive.
+- **A question's content:** "whether the lesion could be resected endoscopically and removed it", "... and removed
+  both".
+- **A fragment:** "varices not yet treated was performed".
+- **Competition:** the two-dilation and site-less-Impression competitions above.
+
+**Measured over every cycle's inputs on this tree** (214 round-1, 156 cycle-2, 103 cycle-3 and 66 cycle-4):
+- **Ready where the base is not:** exactly one input on either path, "Biopsies were obtained from the stricture prior to
+  dilation." (L3-9), done today.
+- **Two codes for one documented act:** never both READY.
+- **Admission:** every row lists the participant's code for an act read in doubt itself, and leaves Corti's base code and
+  the completeness as with Corti alone.
+
+**Pins moved, each saying so in place:**
+- `tests/test_h3_repairs.py`: F-ACTS' tests read the base. The admission cases use the plain report's biopsy, and the
+  labelled report's hold is shown on its biopsy.
+- `tests/test_h3_refutation_r1.py`: the tables are regenerated, and L4-2's first case is now the recorded hold.
+- The cycle-2 and cycle-3 fixtures carry a cycle-3 column.
+- The cycle-3 module's judged releases are now L3-9's only.

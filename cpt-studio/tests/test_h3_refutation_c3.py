@@ -22,11 +22,9 @@ from tests.test_harness_engine import code, corti, read, run, span
 
 CASES = json.loads((Path(__file__).parent / 'fixtures' / 'gi4' / 'refutation' / 'h3-c3-cases.json')
                    .read_text(encoding='utf-8'))
-# READY where the base is not, each read against the document: F-ACTS' anaphor bound to the named meat bolus removed by
-# net (the owner's 39f0ac49 shape), and biopsies taken "prior to dilation" - a point inside today's procedure (L3-9)
-JUDGED_RELEASES = {'C3-1:c31-2:B6c': 'the meat bolus found at 34 cm and removed with a Roth net is done today',
-                   'C3-1:c31-6:B6c': 'the same input in its second case file',
-                   'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today'}
+# READY where the base is not, read against the document: biopsies taken "prior to dilation" - a point inside today's
+# procedure (L3-9). (F-ACTS' meat-bolus release, judged correct in cycle 3, went with F-ACTS in cycle 4.)
+JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today'}
 # one documented act in each: a restatement or a doubted second statement of it
 ONE_ACT = ('C3-3:f1_two_ready:', 'C3-3:f4_doubted_ready:')
 

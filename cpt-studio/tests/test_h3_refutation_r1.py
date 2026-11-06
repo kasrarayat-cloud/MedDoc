@@ -12,7 +12,7 @@ nothing is sent. HARNESS.md, "Harness repair 3", "Refutation round 1".
 
 Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F-TIME R, F-SECTIONS T and L and F-ACTS'
 round-1 vocabulary under the two-cycle rule. Cycle 3 narrowed its provider-neutral admission to an act stated done inside
-a service documented in doubt. Every row is pinned as this tree reads it, with its round-1 reading in its comment where
+a service documented in doubt, and cycle 4 dropped the rebuilt F-ACTS. Every row is pinned as this tree reads it, with its round-1 reading in its comment where
 it moved: a participant's code held beside Corti's where the act is done in a doubted service, and the dropped rules'
 inputs read as the base reads them. Those that now read otherwise than their lens wanted are in RecordedResidualTests
 with their reasons."""
@@ -153,9 +153,9 @@ R1_L2_1 = [
     # stage HELD/ALT, base HELD/ALT
     ('ctl-1', EGD2 + 'At the referring facility, the meat bolus was removed with a retrieval net.\n',
      '43247', None, HELD, ALT),
-    # stage READY/READY, base HELD/ALT
+    # stage READY/READY, base HELD/ALT, round 1 READY/READY
     ('ctl-1t', EGD2 + 'The meat bolus was removed with a retrieval net.\n',
-     '43247', None, READY, READY),
+     '43247', None, HELD, ALT),
 ]
 R1_L2_2 = [
     # stage READY/READY, base READY/READY
@@ -1383,8 +1383,13 @@ class AdmissionAndCompetitionTests(SimpleTestCase):
         imp = 'Impression: Schatzki ring and pyloric stricture.'
         text = egd + eso + '\n' + pyl + '\n' + imp + '\n'
         result = run(text, corti(('43249', span(text, imp))), [read('astra', [code(text, '43245', pyl)])])
-        self.assertEqual(self.outcome(result), {'43249': ('selected', 'ready', [], 'primary', None),
-                                                '43245': ('selected', 'ready', [], 'participant', None)})
+        # refutation cycle 4 (C4-2-3): Corti's 43249 cites an Impression naming both strictures, so its support rests on
+        # both dilations and, on the safe side, it competes with the pyloric dilation's code - a recorded false hold
+        # (round 1 to cycle 3 read both READY); two codes for one act are never both READY
+        self.assertEqual(self.outcome(result), {'43249': ('selected', 'needs_clarification', ['competing_codes'],
+                                                          'primary', ['43245']),
+                                                '43245': ('selected', 'needs_clarification', ['competing_codes'],
+                                                          'participant', ['43249'])})
         # a code for a doubted act holds no code for the act that was done
         egd2 = egd.replace('Indications: Dysphagia and early satiety.\n', '')
         dil = ('A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct '
