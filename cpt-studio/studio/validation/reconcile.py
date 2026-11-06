@@ -144,28 +144,33 @@ def gi_services_name_only(act) -> bool:
 # act's own evidence: a balloon (any "balloon", TTS, CRE, through-the-scope, pneumatic); dilators passed over a guide wire
 # (Savary or Savary-Gilliard, American dilators, a wire-guided bougie or dilator, or a bougie or dilator with a guide wire
 # named and no balloon); an unguided bougie (Maloney, Hurst, or a bougie or dilator with no wire and no balloon named).
-# (refutation cycle 1, admission F3 and F5: an inflation names a balloon - "a 15 mm dilator advanced over a guide wire
-# and inflated to 6 atm", "a hydrostatic dilator", "controlled radial expansion"; and a generic "wire-guided ... dilator"
-# is a balloon's where a balloon is named in the same passage - "a CRE wire-guided balloon dilator" - while a named
-# bougie device, Savary or American, names its own technique whatever else the passage names)
+# (refutation cycle 1, admission F3: an inflation names a balloon - "a 15 mm dilator advanced over a guide wire and
+# inflated to 6 atm", "a hydrostatic dilator", "controlled radial expansion"; it only ever adds a technique.)
+# Refutation cycle 2 (admission D2, D6): cycle 1's deferral - a generic wire-guided dilator read as a balloon's wherever
+# a balloon is named in the same passage - is abandoned: it took a balloon that failed or was not used ("dilated with
+# wire-guided dilators to 15 mm after balloon dilation failed", "... instead of balloon dilation") for the device used.
+# A wire-guided dilator and a balloon named in one passage are two techniques, and the competition holds both codes for
+# the reviewer (owner question Q2). "Wire-guided dilation" and "over-the-wire dilation" name the wire technique.
 DILATION_BALLOON = re.compile(r'\bballoons?\b|\bCRE\b|\bTTS\b|\bthrough[- ]the[- ]scope\b|\bpneumatic\b|\binflat\w*'
                               r'|\b\d+(?:\.\d+)?\s*(?:atm|atmospheres?|psi)\b|\bhydrostatic\b'
                               r'|\bcontrolled\s+radial\s+expansion\b', re.I)
-DILATION_NAMED_BOUGIE = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b', re.I)
 DILATION_WIRE_GUIDED = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b'
-                                  r'|\bwire[- ]guided\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?)\b', re.I)
+                                  r'|\bwire[- ]guided\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?|dilations?)\b'
+                                  r'|\bover[- ]the[- ]wire\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?|dilations?)\b',
+                                  re.I)
 DILATION_BOUGIE = re.compile(r'\bbougie\w*\b|\bMaloney\b|\bHurst\b|\bdilators?\b', re.I)
 DILATION_WIRE = re.compile(r'\bguide[- ]?wires?\b|\bover\s+(?:the|a)\s+wire\b', re.I)
 
 
 def dilation_techniques(text: str) -> frozenset:
     """The dilation techniques ``text`` names: 'balloon', 'wire_bougie' (dilators over a guide wire) and 'bougie' (an
-    unguided bougie). A bougie or dilator word counts only where no balloon is named ("a CRE balloon dilator" is a
-    balloon); a guide wire alone names no technique (a balloon may be passed over one)."""
+    unguided bougie). A wire-guided dilator and a balloon named together are both techniques (refutation cycle 2, D2);
+    a bare bougie or dilator word counts only where no balloon is named ("a CRE balloon dilator" is a balloon); a guide
+    wire alone names no technique (a balloon may be passed over one)."""
     found = set()
     if DILATION_BALLOON.search(text):
         found.add(catalogue.BALLOON)
-    if DILATION_NAMED_BOUGIE.search(text) or (not found and DILATION_WIRE_GUIDED.search(text)):
+    if DILATION_WIRE_GUIDED.search(text):
         found.add(catalogue.WIRE_BOUGIE)
     elif not found and DILATION_BOUGIE.search(text):
         found.add(catalogue.WIRE_BOUGIE if DILATION_WIRE.search(text) else 'bougie')
@@ -279,7 +284,12 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         listed = '; '.join(describe_act(service, a) for a in done[:4])
         return Match(positive, service, done, 'service',
                      f'The {name} is documented as {service.status} with {listed}.')
-    if denied:
+    # refutation cycle 2 (admission D6): a dilation code is never excluded as not performed while the service documents a
+    # performed dilation, whatever its technique fit (``unfit``): "Balloon dilation to 15 mm was performed instead of
+    # bougie dilation." denies the bougie, never the dilation, so 43248 is asked the technique question below, never
+    # excluded (D6 itself, "Wire-guided dilation ... instead of balloon dilation.", reached here through the abandoned
+    # deferral, which read its performed dilation as a balloon's)
+    if denied and not unfit:
         return Match('not_performed', service, (), 'act_denied',
                      f'The {name} is documented as {service.status}, but the document states the {what} was not '
                      f'performed: {quote(denied[0].evidence[0])}.')
