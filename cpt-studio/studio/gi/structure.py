@@ -292,9 +292,13 @@ _REASON_AFTER = re.compile(r'(?:[ \t\n]*+(?:,|and|&|/|plus)[ \t\n]*+(?:(?:an?|th
                            r'exclude)|due[ \t\n]++to|because[ \t\n]++of)\b', FLAGS)
 _SOURCE_SIGNAL = re.compile(_SOURCE, FLAGS)
 # What announces the paragraph that follows as a copy, a summary or another record (N3).
-_ANNOUNCE = re.compile(r'\bas[ \t]++follows\b|\bfollows\b|\bbelow\b|\bthe[ \t]++following[ \t]*+:|\bhere(?:after|under|with)\b'
+_ANNOUNCE = re.compile(r'\bas[ \t]++follows\b|\bfollows?\b(?![- \t]*+up\b)|\bbelow\b|\bthe[ \t]++following[ \t]*+:|\bhere(?:after|under|with)\b'
                        r'|\b(?:attached|enclosed|appended|reproduced|copied|pasted|transcribed|excerpted|quoted)\b'
-                       r'|\bsummar(?:y|ies|ized|ised)\b', FLAGS)
+                       r'|\bsummar(?:y|ies|ized|ised)\b'
+                       # completion repair (integration): an account announced as coming next ("She had a colonoscopy in
+                       # 2020, described next"), which the dated-occasion exemption below must never release
+                       r'|\b(?:described|detailed|outlined|recounted|presented|reported|documented|listed|shown|given)'
+                       r'[ \t]++(?:next|here|later|hereafter)\b', FLAGS)
 _DETERMINERS = frozenset(('a', 'an', 'the', 'her', 'his', 'their', 'its', 'this', 'that', 'these', 'those', 'any', 'no',
                           'our', 'my', 'your', 'some', 'each', 'every', 'another'))
 # An examination noun: the examination itself, by a generic noun or by any service's name.
@@ -800,18 +804,29 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
     if _any_between(ix.announce, lo, hi):
         return True
     from studio.gi import detect  # local: detect imports this module
-    if section.kind == 'indication' and (_SOURCE_SIGNAL.search(text, lo, hi)
-                                         or _unlisted_family_mention(text, c.family, lo, hi, ix)):
-        return True  # a record, a report, a copy ... named in the indication, or the family named outside the allow-list
-    if section.kind == 'indication' and detect.named_as_another_occasion(text, c.family, lo, hi):
+    if section.kind == 'indication' and _SOURCE_SIGNAL.search(text, lo, hi):
+        return True  # a record, a report, a copy ... named in the indication
+    # Completion repair (integration, 2026-11-06): an indication whose every mention of the family is an earlier occasion
+    # its own clause dates before the service date ("Surveillance; history of adenomatous polyps on colonoscopy in
+    # 2022.", "Personal history of colon polyps (last colonoscopy 2022).") names that occasion as history, which by its
+    # date is not today's account; the labelled paragraph after it, with no other time, place, agent or back-reference
+    # of its own (N1, N2) and announced by nothing (the announcement, introducing-line and run-on checks below still
+    # apply), is read as it is read under a "Procedure:" heading - today's. The base read the heading form so; the
+    # labelled form was held. An undated mention ("Hx colonoscopy.", "Follow-up after colonoscopy.", "Review of
+    # colonoscopy.") still holds, as builder R1 pinned it.
+    dated_history = section.kind == 'indication' and detect.dated_earlier_occasions_only(text, c.family, lo, hi)
+    if section.kind == 'indication' and not dated_history and _unlisted_family_mention(text, c.family, lo, hi, ix):
+        return True  # the family named outside the allow-list
+    if section.kind == 'indication' and not dated_history and detect.named_as_another_occasion(text, c.family, lo, hi):
         # an indication naming another occasion of the family ("She had a colonoscopy", "the index colonoscopy", "Her
         # last colonoscopy", "underwent a colonoscopy"): its account may be that occasion's. A positive section's
         # procedure line naming the family is the report's declaration (P3 reads its other time, place, agent, source)
         return True
-    from studio.gi import detect  # local: detect imports this module
     if _any_between(ix.signalled.get('*', []), lo, hi):
         return True
     for k in range(bisect.bisect_left(ix.signalled.get(c.family, []), lo), len(ix.signalled.get(c.family, []))):
+        if dated_history:
+            break  # each of the family's signalled sentences here is one of those dated earlier occasions
         s = ix.signalled[c.family][k]
         if s >= hi:
             break

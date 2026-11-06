@@ -196,3 +196,48 @@ class ReferencePathTests(SimpleTestCase):
     def test_the_fixture_used_above_exists(self):
         from tests.test_participants_support import FIXTURES
         self.assertTrue(Path(FIXTURES / 'fable-walk' / 'h2c.context.txt').exists())
+
+
+class DatedHistoryInTheIndicationTests(SimpleTestCase):
+    """structure's N3 (integration): an indication whose every mention of the family is an earlier occasion dated
+    before the service date by its own clause names history, so the labelled paragraph after it reads as it reads under
+    a "Procedure:" heading. Undated, planned, announced or introduced occasions still hold it."""
+    HEAD = (SYN + 'Gastroenterology Procedure Report\nDate of service: 2026-10-14\n'
+            'Endoscopist: Synthetic Endoscopist, MD (fictional)\n')
+    SNARE = 'A 5 mm polyp in the transverse colon was removed with a cold snare.'
+
+    def snare(self, indication, label=True):
+        body = ('Colonoscopy: ' if label else 'Procedure: Colonoscopy\n') + 'The colonoscope was advanced to the cecum. '
+        text = self.HEAD + indication + '\n' + body + self.SNARE + '\n'
+        return statuses(text, [('45385', self.SNARE)])['45385']
+
+    def test_a_dated_earlier_occasion_reads_as_the_heading_form_does(self):
+        for indication in ('Indications: Surveillance; history of adenomatous polyps on colonoscopy in 2022.',
+                           'Indications: Personal history of colon polyps (last colonoscopy 2022).',
+                           'Indications: Prior colonoscopy in 2019 showed two adenomas; surveillance today.',
+                           'Indications: Surveillance after a colonoscopy at an outside hospital in 2023.',
+                           'Indications: Colonoscopy on 10/01/2026 showed a mass.'):
+            with self.subTest(indication):
+                self.assertEqual(self.snare(indication), 'ready')
+                self.assertEqual(self.snare(indication, label=False), 'ready')
+
+    def test_an_undated_planned_announced_or_introduced_occasion_still_holds(self):
+        for indication in ('Indications: Hx colonoscopy.', 'Indications: Follow-up after colonoscopy.',
+                           'Indications: Review of colonoscopy.', 'Indications: Colonoscopy planned for 12/01/2026.',
+                           'Indications: Colonoscopy images reviewed.',  # historical, but undated
+                           'Indications: Surveillance. She had a colonoscopy in 2020, described next.',
+                           'Indications: Surveillance; the findings of the colonoscopy in 2019 follow.',
+                           'Indications: Colonoscopy in 2019 at an outside hospital:',
+                           'Indications: Surveillance; the colonoscopy report from 2019 is attached.',
+                           'Indications: Colonoscopy in 2022; colonoscopy for surveillance after an outside'):
+            with self.subTest(indication):
+                self.assertNotEqual(self.snare(indication), 'ready')
+
+    def test_the_paragraphs_own_other_time_still_holds_after_a_dated_history(self):
+        text = (self.HEAD + 'Indications: Surveillance; history of polyps on colonoscopy in 2022.\n'
+                'Colonoscopy: The colonoscope was advanced to the cecum in 2022. ' + self.SNARE + '\n')
+        self.assertNotEqual(statuses(text, [('45385', self.SNARE)])['45385'], 'ready')
+
+    def test_follow_announces_and_follow_up_does_not(self):
+        self.assertNotEqual(self.snare('Indications: Surveillance; details of the colonoscopy in 2019 follow.'), 'ready')
+        self.assertEqual(self.snare('Indications: Follow-up colonoscopy after polypectomy in 2023.'), 'ready')

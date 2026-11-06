@@ -8975,6 +8975,24 @@ def named_as_another_occasion(text: str, family: str, start: int, end: int, skip
     return False
 
 
+def dated_earlier_occasions_only(text: str, family: str, start: int, end: int) -> bool:
+    """Whether every mention of ``family``'s name inside [start, end) - at least one - reads, by routing's own reading on
+    the frozen layout (_frozen_analysis, _generic_reading), as an occasion its own clause dates before the document's
+    service date ("history of adenomatous polyps on colonoscopy in 2022", "last colonoscopy 2022", "Prior colonoscopy in
+    2019 showed two adenomas"): an earlier occasion named as history, by a date - never an undated one ("Hx colonoscopy",
+    "Follow-up after colonoscopy", "the colonoscopy she had"), a planned one, or one only its section dates. For
+    studio.gi.structure's N3 (completion repair, integration). Bounded: the mentions inside the range, each read once."""
+    an = _frozen_analysis(text)
+    found = [m for m in an.services_in(start, end) if m.family == family]
+    if not found:
+        return False
+    for m in found:
+        reading = _generic_reading(an, m.start, m.end)
+        if reading.status != 'historical' or not any(c.endswith('is before the service date') for c in reading.cues):
+            return False
+    return True
+
+
 def past_negation_only(text: str, start: int, end: int) -> bool:
     """Whether every service mention inside [start, end) - at least one - reads as a past negation only ("no prior
     colonoscopy", "never had an EGD"): it denies another occasion of the service. Routing's own reading on the frozen
