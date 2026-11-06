@@ -188,10 +188,17 @@ class Status0NoCascadeIntoExclusionTests(unittest.TestCase):
 
     def test_no_history_plan_or_past_negation_is_stamped_on_a_performed_passage(self):
         """A family named only as historical, planned or never done before: its unnamed performed
-        passage is held for clarification, never excluded as that other status."""
-        for lead, plan in (('Indication: Prior colonoscopy in 2020.\n', ''),
-                           ('Indication: Screening. No prior colonoscopy.\n', ''),
-                           ('', 'Plan: Repeat colonoscopy in 5 years.\n')):
+        passage is never excluded as that other status.
+
+        Completion repair (2026-11-06, builder R2, U4): the colonoscope's own course under "Findings:" is now a mention of
+        today's colonoscopy (detect._instrument_mentions), so where the family is named only as never done before or as
+        a plan, the passage reads performed and 45385 is READY (moved from held: the narrative states today's
+        colonoscopy, and neither name says otherwise of today). The prior colonoscopy dated 2020 in the same block keeps
+        the instrument from counting (I5: a date its own clause binds to the same family may date the narrative), so
+        that passage is held as before."""
+        for lead, plan, ready in (('Indication: Prior colonoscopy in 2020.\n', '', False),
+                                  ('Indication: Screening. No prior colonoscopy.\n', '', True),
+                                  ('', 'Plan: Repeat colonoscopy in 5 years.\n', True)):
             text = (HEADER + lead + f'Findings: The colonoscope was advanced to the cecum. {POLYPS}\n' + plan)
             with self.subTest(lead=lead, plan=plan):
                 status, cues = read(text, POLYPS)
@@ -199,7 +206,10 @@ class Status0NoCascadeIntoExclusionTests(unittest.TestCase):
                 self.assertFalse(any(c.startswith(('planned:', 'historical:', 'negated:')) for c in cues[1:]), cues)
                 proposals, _ = run_engine(text, [('45385', POLYPS)])
                 self.assertEqual(proposals['45385'].bucket, 'selected', proposals['45385'].exclusion_reason)
-                self.assertNotEqual(proposals['45385'].status, 'ready')
+                if ready:
+                    self.assertEqual(proposals['45385'].status, 'ready')
+                else:
+                    self.assertNotEqual(proposals['45385'].status, 'ready')
 
     def test_a_negation_of_todays_service_still_negates(self):
         """The family is negated; the section-read line it denies is held, not rewritten as negated."""

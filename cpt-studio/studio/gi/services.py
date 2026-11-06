@@ -38,6 +38,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Optional, Sequence
 
+from studio.gi import clauses as _clauses
 from studio.gi import context as gi_context
 from studio.gi import cues as _cues
 from studio.gi import sections as _sections
@@ -4824,7 +4825,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if not fam or part.kind in ('history', 'plan'):
                 continue
             d = drafts[fam]
-            for cs, ce in clauses_of(ss, se):
+            sentence_clauses = clauses_of(ss, se)
+            for k, (cs, ce) in enumerate(sentence_clauses):
                 clause_text = text[cs:ce]
                 if HISTORY_WORDS.search(clause_text) or re.search(r'\b(?:if|unless|whether)\b', clause_text, FLAGS):
                     continue
@@ -4848,6 +4850,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
                         continue
+                    subject = _clauses.subject(text, cs, _clauses.predicate_start(text, cs, m.start()),
+                                               sentence_clauses[k - 1] if k else None)
+                    if _clauses.failure_of(text, subject) == _clauses.SUB_ACT:
+                        continue  # completion repair (R2): "The snare could not be passed", a sub-act's own failure
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
         # Pass 3: lesions and acts.
@@ -5920,7 +5926,14 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
             if routing_status == 'incomplete':
                 completion, status = 'incomplete', 'incomplete'
                 cues.append('incomplete: routing reads the examination as incomplete')
-                completion_spans = list(d.completion_neg) + (list(reach.evidence) if reach else [])
+                # completion repair (R2): the evidence of the incompleteness is what states it - this reader's own
+                # statements, routing's extent where it is short, and routing's mentions read incomplete by their own
+                # cue - never a reach sentence documenting the endpoint reached (e888f9ce had cited "The colonoscope was
+                # advanced to the terminal ileum." as its incompleteness)
+                short = reach is not None and str(reach.value).startswith('incomplete')
+                stated = [m.sentence for m in finding.mentions
+                          if m.status == 'incomplete' and m.cues and m.cues[0].startswith('incomplete:')]
+                completion_spans = list(d.completion_neg) + (list(reach.evidence) if short else []) + stated
             elif d.completion_pos:
                 completion, completion_spans = 'complete', list(d.completion_pos)
             elif reach is not None and not reach.value.startswith('incomplete'):

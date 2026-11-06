@@ -65,14 +65,20 @@ class TitleAsideTests(SimpleTestCase):
         return sections.layout(text).sections[0].kind if sections.layout(text).sections[0].start == 0 else None
 
     def test_an_aside_title_reads_as_the_base_reads_it(self):
-        for title, family in (('Colonoscopy Report (fictional)', 'gi.colonoscopy'),
-                              ('Colonoscopy Report (Final)', 'gi.colonoscopy'),
-                              ('Upper Endoscopy Report (amended)', 'gi.egd'),
-                              ('EGD Procedure Note (corrected)', 'gi.egd')):
+        # The layout is the base's for every title (the frozen request side). Completion repair (2026-11-06, builder R2,
+        # U4): the colonoscope's own course under the "Procedure" heading is now a mention of today's colonoscopy
+        # (detect._instrument_mentions), so under a title whose only addition is an aside about the document itself
+        # ("(fictional)", "(Final)") the colonoscopy reads performed - moved from uncertain. The counter-cases stay as
+        # the base reads them: a colonoscope's course under an upper endoscopy's title is no colonoscopy of a report that
+        # names another family (I6), and "(amended)" or "(corrected)" is outside the closed class of asides (I7).
+        for title, family, status in (('Colonoscopy Report (fictional)', 'gi.colonoscopy', 'performed'),
+                                      ('Colonoscopy Report (Final)', 'gi.colonoscopy', 'performed'),
+                                      ('Upper Endoscopy Report (amended)', 'gi.egd', 'uncertain'),
+                                      ('EGD Procedure Note (corrected)', 'gi.egd', 'uncertain')):
             text = f'{title}\nDate of service: 2026-10-14\nProcedure\nThe colonoscope was advanced to the cecum.\n'
             with self.subTest(title):
                 self.assertEqual(sections.layout(text).sections[0].kind, 'other')
-                self.assertEqual(families(text), {family: 'uncertain'})
+                self.assertEqual(families(text), {family: status})
         self.assertEqual(self.title_kind('Colonoscopy Report'), 'procedure')
 
     def test_an_aside_of_another_time_a_plan_a_doubt_or_a_denial_is_no_title(self):
@@ -83,11 +89,14 @@ class TitleAsideTests(SimpleTestCase):
                 self.assertNotEqual(self.title_kind(title), 'procedure')
 
     def test_the_walks_word_reports_read_as_the_base_reads_them(self):
-        # recorded residual: the Word walk's titles with an aside route their procedure as the base does (h2b
-        # historical, h2c uncertain), so neither is READY there
+        # Was a recorded residual (the Word walk's titles with an aside routed their procedure as the base does: h2b
+        # historical, h2c uncertain). Completion repair (2026-11-06, builder R2, U4): each report's instrument course
+        # under its "Procedure" heading ("The colonoscope was advanced to the cecum ...", "The gastroscope was passed to
+        # the second portion of the duodenum.") is today's procedure, so both read performed. The layout itself is
+        # unchanged (the title still opens no section).
         from tests.test_participants_support import FIXTURES
-        for name, day, family, status in (('h2b', date(2026, 10, 29), 'gi.colonoscopy', 'historical'),
-                                          ('h2c', date(2026, 10, 28), 'gi.egd', 'uncertain')):
+        for name, day, family, status in (('h2b', date(2026, 10, 29), 'gi.colonoscopy', 'performed'),
+                                          ('h2c', date(2026, 10, 28), 'gi.egd', 'performed')):
             text = (FIXTURES / 'fable-walk' / f'{name}.context.txt').read_text(encoding='utf-8')
             with self.subTest(name):
                 self.assertEqual(families(text, day)[family], status)
