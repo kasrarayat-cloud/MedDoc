@@ -139,9 +139,14 @@ _TIME_UNIT = (r'\b(?:days?|weeks?|months?|years?|decades?|fortnights?|visits?|oc
               r'encounters?|appointments?|hospitali[sz]ations?|stays?|dates?)\b')
 _PAST_WORD = (r'\b(?:previously|previous|prior|earlier|before|beforehand|ago|formerly|former|recently|recent|yesterday|'
               r'last|initially|initial|originally|original|index|remote|historically|historical|already|since|once)\b'
+              r'|\b(?:back|by|until|till|since|from)[ \t\n]++then\b|\bthen[ \t]*+[.;!?](?=\s|$)|\bat[ \t\n]++that[ \t\n]++time\b'
+              r'|\b(?:at|by)[ \t\n]++(?:the[ \t\n]++)?age[ \t\n]++(?:of[ \t\n]++)?\d{1,3}\b|\b\d{1,3}[ \t\n-]++years?[ \t\n-]++old\b'
+              r'|\bas[ \t\n]++an?[ \t\n]++(?:child|teenager|teen|young[ \t\n]++adult|student|baby|infant|adolescent)\b'
+              r'|\bwhen[ \t\n]++(?:she|he|they|the[ \t\n]++patient)[ \t\n]++(?:was|were|had|lived|moved|worked|visited|stayed)\b'
               r'|\bin[ \t]++the[ \t]++past\b|\bpast[ \t]++(?:history|procedures?|examinations?|exams?|stud(?:y|ies)|visits?|'
               r'years?|months?|weeks?)\b')
-_OTHER_PLACE = (r'\b(?:outside|elsewhere|referring|transferring|sending|outlying|external|offsite|off-site|OSH)\b'
+_OTHER_PLACE = (r'\b(?:outside|elsewhere|referring|transferring|sending|outlying|external|offsite|off-site|OSH|abroad|'
+                r'overseas)\b'
                 r'|\b(?:hospitals?|facilit(?:y|ies)|cent(?:er|re)s?|clinics?|institutions?|institutes?|practices?|'
                 r'offices?|departments?|infirmar(?:y|ies)|emergency[ \t]++(?:room|department)|ED|ER)\b')
 _AGENT = (r'\b(?:Dr|Drs|Doctor)\b|\bper[ \t]++|\baccording[ \t]++to\b|\breported(?:ly)?\b|\bdocumented[ \t]++by\b'
@@ -149,7 +154,12 @@ _AGENT = (r'\b(?:Dr|Drs|Doctor)\b|\bper[ \t]++|\baccording[ \t]++to\b|\breported
           r'providers?|teams?|anesthesiologists?|anaesthetists?|anesthetists?|crnas?|technicians?|nurses?)\b')
 _SOURCE = (r'\b(?:reports?|records?|cop(?:y|ies|ied)|pasted|reproduced|duplicat\w*|transcri\w*|scanned|faxed|received|'
            r'attached|enclosed|appended|imported|excerpt\w*|referrals?|summar(?:y|ies|ized|ised)|charts?|files?|'
-           r'documented|documentation)\b')
+           r'documented|documentation|examples?|templates?|hypothetical|simulated|illustrative)\b')
+# Another place, agent or occasion by its determiner ("at another site", "a different provider", "on another day").
+_ANOTHER = (r'\b(?:another|other|different|separate)[ \t\n]++(?:site|location|unit|campus|building|city|state|country|town|'
+            r'institution|cent(?:er|re)|hospital|facility|clinic|practice|provider|physician|doctor|surgeon|'
+            r'gastroenterologist|endoscopist|team|occasion|day|date|time|visit|encounter|admission|procedure|examination|'
+            r'exam|study|patient)s?\b')
 _LANDMARK_NAMES = '|'.join(f'(?:{p.pattern})' for _, _, p in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS)
 # "by" before a landmark identifies the landmark ("identified by the appendiceal orifice"); any other "by" names an
 # agent or a manner, and holds (the safe side).
@@ -157,10 +167,10 @@ _BY_AGENT = re.compile(r'\bby[ \t\n]++(?!(?:both[ \t\n]++)?(?:the[ \t\n]++)?(?:'
 # A proper name after a place preposition ("At Synthetic Valley Medical Center", "from Mercy"): read with case.
 _PROPER_PLACE = re.compile(r'\b(?:[Aa]t|[Ii]n|[Ff]rom|[Pp]er)[ \t\n]++(?:the[ \t\n]++)?[A-Z][a-z]{2,}', re.A)
 HOLD_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_YEAR, _WEEKDAY, _TIME_UNIT, _PAST_WORD, _OTHER_PLACE,
-                                                       _AGENT, _SOURCE)), FLAGS)
+                                                       _AGENT, _SOURCE, _ANOTHER)), FLAGS)
 _MONTH = re.compile(_MONTH_NAMES, re.A)
 # The same signals without the time ones (a plan section's or a future form's time is the plan's).
-_NOT_TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_OTHER_PLACE, _AGENT, _SOURCE)), FLAGS)
+_NOT_TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_OTHER_PLACE, _AGENT, _SOURCE, _ANOTHER)), FLAGS)
 _TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_YEAR, _WEEKDAY, _TIME_UNIT, _PAST_WORD)), FLAGS)
 # A time unit in a future form is the plan's ("in 3 years", "repeat in six weeks"), never another occasion's.
 _FUTURE_UNIT = re.compile(r'\b(?:in|within|after)[ \t]++(?:about[ \t]++|approximately[ \t]++)?(?:\d{1,3}(?:[ \t]*+-[ \t]*+\d{1,3})?'
@@ -169,6 +179,17 @@ _FUTURE_UNIT = re.compile(r'\b(?:in|within|after)[ \t]++(?:about[ \t]++|approxim
 _FUTURE_CLAUSE = re.compile(r'\b(?:will|shall)\b|\b(?:is|are)[ \t]++(?:to[ \t]++be|planned|scheduled|recommended)\b'
                             r'|\b(?:repeat|return|next|future|follow-?up|surveillance|recommend\w*|plan(?:ned|s)?|'
                             r'schedul\w*)\b', FLAGS)
+# N3: how an indication may name a labelled paragraph's family (an allow-list: any other mention holds) - in a sentence
+# of consent or discussion ("Risks and benefits of upper endoscopy and colonoscopy were discussed."), qualified by an
+# intent ("Screening colonoscopy"), or followed by its reason ("Colonoscopy for anemia", "... to evaluate ...").
+_CONSENT_SENTENCE = re.compile(r'\b(?:risks?|benefits?|alternatives?|consent\w*|explained|discussed|informed|agreed)\b',
+                               FLAGS)
+_INTENT_BEFORE = re.compile(r'\b(?:screening|surveillance|diagnostic|therapeutic|average[ -]risk|high[ -]risk|elective|'
+                            r'urgent|emergent|open[ -]access)[ \t\n]*+$', FLAGS)
+_REASON_AFTER = re.compile(r'(?:[ \t\n]*+(?:,|and|&|/|plus)[ \t\n]*+(?:(?:an?|the)[ \t\n]++)?(?:' + _SERVICE_NAMES + r'))*'
+                           r'[ \t\n]*+(?:,[ \t\n]*+)?(?:for|to[ \t\n]++(?:evaluate|assess|investigate|rule[ \t\n]++out|'
+                           r'exclude)|due[ \t\n]++to|because[ \t\n]++of)\b', FLAGS)
+_SOURCE_SIGNAL = re.compile(_SOURCE, FLAGS)
 # What announces the paragraph that follows as a copy, a summary or another record (N3).
 _ANNOUNCE = re.compile(r'\bas[ \t]++follows\b|\bfollows\b|\bbelow\b|\bthe[ \t]++following[ \t]*+:|\bhere(?:after|under|with)\b'
                        r'|\b(?:attached|enclosed|appended|reproduced|copied|pasted|transcribed|excerpted|quoted)\b'
@@ -192,7 +213,7 @@ _EXAM_PREDICATE_OK = re.compile(
     r'(?:monitored[ \t\n]++anesthesia[ \t\n]++care|mac|moderate[ \t\n]++sedation|conscious[ \t\n]++sedation|deep[ \t\n]++'
     r'sedation|general[ \t\n]++anesthesia|propofol(?:[ \t\n]++sedation)?|sedation)|with[ \t\n]++the[ \t\n]++patient[ \t\n]++'
     r'in[ \t\n]++the[ \t\n]++(?:left|right)[ \t\n]++lateral(?:[ \t\n]++decubitus)?[ \t\n]++position|without[ \t\n]++'
-    r'(?:complications?|difficulty|incident))\b)'
+    r'(?:complications?|difficulty|incident))[ \t\n]*+(?:$|[.;]))'
     r'|(?:will|shall)[ \t\n]++be\b|(?:is|are)[ \t\n]++(?:to[ \t\n]++be|planned|scheduled|recommended)\b'
     r'|(?:showed|revealed|demonstrated)\b)', FLAGS)
 # An examination named anywhere in a later sentence of the paragraph (its subject, its object): such a sentence may say
@@ -269,7 +290,7 @@ def _instruments_pattern() -> str:
 @functools.lru_cache(maxsize=1)
 def _course_start() -> re.Pattern:
     """P2's first-sentence shape (built once: the instrument names are the services reader's own)."""
-    return re.compile(r'(?:' + _FRAME + r')?(?:the|a|an)[ \t\n]++' + _INSTRUMENT_MODIFIER + r'(?P<instrument>'
+    return re.compile(r'(?P<frame>' + _FRAME + r')?(?:the|a|an)[ \t\n]++' + _INSTRUMENT_MODIFIER + r'(?P<instrument>'
                       + _instruments_pattern() + r')[ \t\n]++(?:was|were)[ \t\n]++' + _COURSE_ADVERB + _COURSE_VERB
                       + r'\b', FLAGS)
 
@@ -589,13 +610,24 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
     if _any_between(ix.announce, lo, hi):
         return True
     from studio.gi import detect  # local: detect imports this module
+    if section.kind == 'indication' and (_SOURCE_SIGNAL.search(text, lo, hi)
+                                         or _unlisted_family_mention(text, c.family, lo, hi, ix)):
+        return True  # a record, a report, a copy ... named in the indication, or the family named outside the allow-list
     if section.kind == 'indication' and detect.named_as_another_occasion(text, c.family, lo, hi):
         # an indication naming another occasion of the family ("She had a colonoscopy", "the index colonoscopy", "Her
         # last colonoscopy", "underwent a colonoscopy"): its account may be that occasion's. A positive section's
         # procedure line naming the family is the report's declaration (P3 reads its other time, place, agent, source)
         return True
-    if any(_any_between(ix.signalled.get(key, []), lo, hi) for key in (c.family, '*')):
+    from studio.gi import detect  # local: detect imports this module
+    if _any_between(ix.signalled.get('*', []), lo, hi):
         return True
+    for k in range(bisect.bisect_left(ix.signalled.get(c.family, []), lo), len(ix.signalled.get(c.family, []))):
+        s = ix.signalled[c.family][k]
+        if s >= hi:
+            break
+        e = ix.sentences[bisect.bisect_right(ix.sentence_starts, s) - 1][1]
+        if not detect.past_negation_only(text, s, e):
+            return True  # the family named with a hold signal ("prior", a year ...), never as "no prior colonoscopy"
     before = text[lo:hi].rstrip()
     if before.endswith(':'):
         return True  # a line that introduces what follows ("Reason for referral:", "Her 2019 study:")
@@ -610,6 +642,25 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
                 or (len(words) >= 2 and words[-2].lower() in _DETERMINERS) \
                 or _signals(line, 0, len(line)):
             return True
+    return False
+
+
+def _unlisted_family_mention(text: str, family: str, lo: int, hi: int, ix: _Index) -> bool:
+    """N3: whether the family's name occurs in [lo, hi) other than in a sentence of consent or discussion, qualified by
+    an intent, or followed by its reason (the allow-list above). Bounded: each mention's own sentence, at most 400
+    characters of it, and 40 characters before it."""
+    from studio.gi import detect  # local: detect imports this module
+    pattern = dict(cues.SERVICE_PATTERNS)[family]
+    for m in pattern.finditer(text, lo, hi):
+        k = bisect.bisect_right(ix.sentence_starts, m.start()) - 1
+        s, e = ix.sentences[k] if k >= 0 else (lo, hi)
+        if _CONSENT_SENTENCE.search(text, s, min(e, s + 400)):
+            continue
+        if detect.past_negation_only(text, m.start(), m.end()):
+            continue  # "no prior colonoscopy": it denies another occasion
+        if _INTENT_BEFORE.search(text, max(s, m.start() - 40), m.start()) or _REASON_AFTER.match(text, m.end(), e):
+            continue
+        return True
     return False
 
 
@@ -639,6 +690,53 @@ def _stray_mentions(text: str, lay: Layout, candidates: list) -> dict:
     for family in found:
         found[family].sort()
     return found
+
+
+def _frames(text: str, candidates: list, ix: _Index) -> tuple:
+    """The spans of the candidates' first-sentence frames of today's steps (P2's allow-list: "After the upper
+    endoscopy, the colonoscope ..."): a mention of another family there is today's sequence, never another occasion."""
+    spans = []
+    for c in candidates:
+        k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
+        if k < 0:
+            continue
+        m = _course_start().match(text, c.body, ix.sentences[k][1])
+        if m is not None and m.group('frame'):
+            spans.append((m.start('frame'), m.end('frame')))
+    return tuple(spans)
+
+
+def _frames_released(text: str, candidates: list, out: list, ix: _Index) -> list:
+    """P2, after the decisions: a released paragraph whose first-sentence frame names another family's procedure
+    ("After the upper endoscopy, the colonoscope ...") stays released only while that family's own labelled paragraph
+    is released too: the frame tells today's sequence only beside today's account of the procedure it names. Repeated
+    until nothing changes (each pass can only hold more; at most one pass per candidate)."""
+    named = {}
+    for n, c in enumerate(candidates):
+        k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
+        m = _course_start().match(text, c.body, ix.sentences[k][1]) if k >= 0 else None
+        if m is not None and m.group('frame'):
+            frame = m.group('frame')
+            named[n] = {f for f, pattern in cues.SERVICE_PATTERNS if pattern.search(frame)} - {c.family}
+    for _ in range(len(candidates)):
+        released_families = {c.family for c, (_, why) in zip(candidates, out) if not why}
+        changed = False
+        for n, families in named.items():
+            if not out[n][1] and families - released_families:
+                out[n] = (out[n][0], "P2: its frame names a procedure whose own paragraph is not released")
+                changed = True
+        if not changed:
+            break
+    return out
+
+
+def _later_occasion(text: str, c: _Candidate, frames: tuple) -> bool:
+    """N2: whether a later mention of the family, anywhere after the paragraph, reads as another occasion of it by
+    routing's own reading (detect.named_as_another_occasion: "Impression: No colonoscopy was performed today.", "The
+    colonoscopy above was done last year."), a later paragraph's frame of today's steps apart. One reading per mention,
+    memoised in the frozen analysis."""
+    from studio.gi import detect  # local: detect imports this module
+    return detect.named_as_another_occasion(text, c.family, c.end, len(text), skip=frames, doubt=True)
 
 
 def _heading_has_content(text: str, section: Section) -> bool:
@@ -671,6 +769,7 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
         per_family[c.family] = per_family.get(c.family, 0) + 1
     positive = set(_positive_bodies(text, lay))
     stray = _stray_mentions(text, lay, candidates)
+    frames = _frames(text, candidates, ix)
     out: list[tuple[LabelledParagraph, str]] = []
     previous: Optional[_Candidate] = None  # the candidate before this one, and whether it was released
     previous_released = False
@@ -702,12 +801,14 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
                 else 'P4: an empty indication heading introduces it'
         elif _paragraph_holds(text, c, ix):
             why = 'N1: the paragraph states another time, place, agent or source'
-        elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62):
+        elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
+                or _later_occasion(text, c, frames):
             why = 'N2: a later sentence refers back to it'
         elif _announced(text, lay, c, first_in_section[c.section], ix):
             why = 'N3: the containing section announces it'
         out.append((LabelledParagraph(c.start, c.end, c.family, c.label), why))
         previous, previous_released = c, not why
+    out = _frames_released(text, candidates, out, ix)
     kept = [c for c, (_, why) in zip(candidates, out) if not why]
     if kept and _tract_misfit(text, lay, kept, declared | head.title_families):
         out = [(p, why or 'P3: the report narrates a site no labelled or declared family reaches') for p, why in out]

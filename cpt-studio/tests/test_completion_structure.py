@@ -347,3 +347,96 @@ class CostTests(SimpleTestCase):
         a = self.timed(small + ' ')
         b = self.timed(large + ' ')
         self.assertLess(b, max(0.5, a * 3.0))
+
+
+class SelfRefutationTests(SimpleTestCase):
+    """The author's own refutation pass over the release (a differential battery read on this tree and on the base
+    b452c6c4): every wording that leaked a READY the base did not have is pinned held here by the rule that now holds
+    it, and every real-world shape that must keep releasing is pinned released."""
+
+    def assertHeldBy(self, text, condition):
+        reasons = why(text)
+        self.assertTrue(reasons and all(r.startswith(condition) for r in reasons), reasons)
+
+    def test_n1_other_times_by_an_age_a_past_then_or_a_life_event(self):
+        for later in ('All of this happened when she lived abroad.', 'Those polyps were removed then.',
+                      'He had this done at age 50.', 'The patient was 50 years old at the time.'):
+            with self.subTest(later):
+                self.assertHeldBy(colonoscopy(COL.rstrip('\n') + ' ' + later + '\n'), 'N1')
+        for first in ('Colonoscopy: The colonoscope was advanced to the cecum back then.',
+                      'Colonoscopy: The colonoscope was advanced to the cecum when she was 50.',
+                      'Colonoscopy: The colonoscope was advanced to the cecum at another site.'):
+            with self.subTest(first):
+                self.assertHeldBy(colonoscopy(first + ' ' + SNARE + '\n'), 'N1')
+        self.assertHeldBy(colonoscopy('Colonoscopy: The colonoscope was introduced through the anus and advanced to the '
+                                      'cecum. Back then, a 6 mm polyp in the sigmoid colon was removed with a cold '
+                                      'snare.\n'), 'N1')
+
+    def test_n1_a_performed_examination_says_nothing_after_its_allow_listed_manner(self):
+        self.assertHeldBy(colonoscopy(COL.rstrip('\n') + ' It was performed under general anesthesia in the ICU.\n'),
+                          'N1')
+        self.assertEqual(why(colonoscopy(COL.rstrip('\n') + ' The procedure was performed under monitored anesthesia '
+                                                            'care.\n')), [''])
+
+    def test_n2_a_later_denial_or_another_occasion_of_the_family(self):
+        for tail in ('Impression: No colonoscopy was performed today.\n', 'Impression: Colonoscopy aborted.\n',
+                     'Impression: Colonoscopy pending.\n', 'Impression: Colonoscopy deferred.\n',
+                     'Plan: The colonoscopy above was done last year.\n'):
+            with self.subTest(tail):
+                self.assertHeldBy(colonoscopy(COL, tail=tail), 'N2')
+
+    def test_n3_an_indication_that_reviews_discusses_or_records(self):
+        for ind in ('Indications: Review of colonoscopy.\n', 'Indications: Second opinion on her colonoscopy.\n',
+                    'Indications: To review the colonoscopy she had.\n', 'Indications: Discussion of colonoscopy '
+                    'results.\n', 'Indications: Records review.\n', 'Indications: Colonoscopy images reviewed.\n',
+                    'Indications: Hx colonoscopy.\n', 'Indications: Follow-up after colonoscopy.\n'):
+            with self.subTest(ind):
+                self.assertHeldBy(colonoscopy(COL, ind=ind), 'N3')
+
+    def test_the_indications_ordinary_shapes_still_release(self):
+        egd_and_tail = (EGD, 'Impression: Esophageal biopsies; sigmoid polyp removed.\n')
+        for ind, two in (('Indications: Screening colonoscopy.\n', False),
+                         ('Indications: Colonoscopy for iron deficiency anemia.\n', False),
+                         ('Indications: Diagnostic colonoscopy for hematochezia.\n', False),
+                         ('Indications: Screening; no prior colonoscopy.\n', False),
+                         ('Indications: Upper endoscopy and colonoscopy for anemia.\n', True),
+                         ('Indications: Anemia.\nInformed consent was obtained for upper endoscopy and colonoscopy.\n',
+                          True)):
+            with self.subTest(ind):
+                text = (HEAD + ind + egd_and_tail[0] + COL + egd_and_tail[1]) if two else colonoscopy(COL, ind=ind)
+                self.assertEqual(set(why(text)), {''})
+                self.assertEqual(proposal(run(text, corti(('45385', span(text, SNARE)))), '45385').status, 'ready')
+
+    def test_closing_sentences_and_a_wrapped_instrument_kind_still_release(self):
+        closing = colonoscopy(COL.rstrip('\n') + ' The quality of the bowel preparation was good. There were no '
+                              'complications from the procedure. The patient tolerated the procedure well.\n')
+        wrapped = colonoscopy('Colonoscopy: After repositioning, a pediatric\ncolonoscope was introduced through the '
+                              'anus and advanced to the cecum. ' + SNARE + '\n')
+        for text in (closing, wrapped):
+            with self.subTest(text[200:260]):
+                self.assertEqual(why(text), [''])
+                self.assertEqual(proposal(run(text, corti(('45385', span(text, SNARE)))), '45385').status, 'ready')
+
+    def test_an_eus_paragraph(self):
+        text = ('EUS Report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+                'Indications: Pancreatic cyst.\nEUS: The echoendoscope was advanced to the second portion of the '
+                'duodenum. Fine-needle aspiration of the pancreatic head cyst was performed.\n'
+                'Impression: Pancreatic head cyst sampled.\n')
+        self.assertEqual(why(text), [''])
+        quote = 'Fine-needle aspiration of the pancreatic head cyst was performed.'
+        self.assertEqual(proposal(run(text, corti(('43242', span(text, quote)))), '43242').status, 'ready')
+
+    def test_p2_a_frame_naming_a_procedure_whose_paragraph_is_not_released(self):
+        # "After the upper endoscopy," is today's sequence only beside today's EGD paragraph: with that paragraph held
+        # (N1, another place), the colonoscopy's frame lends the EGD nothing and is held too
+        frame = ('Colonoscopy: After the upper endoscopy, the colonoscope was introduced through the anus and advanced '
+                 'to the cecum. ' + SNARE + '\n')
+        both = HEAD + IND + EGD + frame + 'Impression: Esophageal biopsies; sigmoid polyp removed.\n'
+        self.assertEqual(why(both), ['', ''])
+        # the EGD paragraph held by its own P2 (a bare "endoscope" names no family), with no hold signal of its own
+        held_egd = EGD.replace('The gastroscope', 'The endoscope')
+        first = HEAD + IND + frame + held_egd + 'Impression: Esophageal biopsies; sigmoid polyp removed.\n'
+        reasons = why(first)
+        self.assertEqual([r[:2] for r in reasons], ['P2', 'P2'], reasons)
+        self.assertIn('its frame names a procedure', reasons[0])
+        self.assertEqual(structure.released(first), ())

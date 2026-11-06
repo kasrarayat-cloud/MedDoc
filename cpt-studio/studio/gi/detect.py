@@ -8402,25 +8402,37 @@ def _frozen_analysis(text: str) -> Analysis:
                     ctx.service_date_of(text), interventions)
 
 
-def named_as_another_occasion(text: str, family: str, start: int, end: int) -> bool:
+def named_as_another_occasion(text: str, family: str, start: int, end: int, skip: tuple = (),
+                              doubt: bool = False) -> bool:
     """Whether a mention of ``family``'s name inside [start, end) reads as another occasion of the family: historical,
     cancelled or incomplete; denied for today (a past negation, "no prior colonoscopy", denies another occasion and so
     does not count); a performance statement its section holds ("She underwent a colonoscopy"); another time or a date
     ("She had a colonoscopy", "the index colonoscopy", "Her last colonoscopy", "colonoscopy in 2019"). A hedge, a consent
     or a discussion ("Risks and benefits of upper endoscopy and colonoscopy were discussed.") and a plan are no other
-    occasion. Routing's own per-mention reading (_generic_reading) on the frozen layout, for the document's own date: a
-    pure function of the text, for studio.gi.structure's N3. Bounded: the mentions inside the range, each read once."""
+    occasion. ``doubt``: a doubt counts too ("Colonoscopy aborted.", "Colonoscopy pending."; for a later mention). Routing's
+    own per-mention reading (_generic_reading) on the frozen layout, for the document's own date: a pure function of the
+    text, for studio.gi.structure's N2 and N3. Bounded: the mentions inside the range, each read once."""
     an = _frozen_analysis(text)
     for m in an.services_in(start, end):
-        if m.family != family:
-            continue
+        if m.family != family or any(lo <= m.start < hi for lo, hi in skip):
+            continue  # ``skip``: spans the caller has read already (a labelled paragraph's frame of today's steps)
         reading = _generic_reading(an, m.start, m.end)
-        if reading.status in ('historical', 'cancelled', 'incomplete') \
+        if reading.status in ('historical', 'cancelled', 'incomplete') or (doubt and reading.doubt) \
                 or (reading.status == 'negated' and not reading.past_negation) \
                 or any(c.startswith(('performed:', 'historical:', 'incomplete:', 'cancelled:', ANOTHER_TIME_PREFIX))
                        or 'service date' in c for c in reading.cues):
             return True
     return False
+
+
+def past_negation_only(text: str, start: int, end: int) -> bool:
+    """Whether every service mention inside [start, end) - at least one - reads as a past negation only ("no prior
+    colonoscopy", "never had an EGD"): it denies another occasion of the service. Routing's own reading on the frozen
+    layout (_frozen_analysis), for studio.gi.structure's N3."""
+    an = _frozen_analysis(text)
+    found = an.services_in(start, end)
+    return bool(found) and all(_generic_reading(an, m.start, m.end).status == 'negated'
+                               and _generic_reading(an, m.start, m.end).past_negation for m in found)
 
 
 def _checked_date(service_date, caller):
