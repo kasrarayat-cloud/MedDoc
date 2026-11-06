@@ -53,8 +53,7 @@ base reading (the Indications' hold), which is the safe side.
 - P4, the containing section is an indication-type section whose heading line carries its own content (an empty heading
   directly introducing the paragraph makes the paragraph that heading's content), or a positive (procedure, findings,
   technique) section, or the paragraph directly follows a paragraph released here in the same section; a paragraph after
-  one that is not released is never released. A paragraph in a section after the report's first impression,
-  assessment or plan section is a later report's (an appended prior report) and is never released (refutation cycle 1).
+  one that is not released is never released.
 - N1, no sentence of the paragraph states another time (a date, a year, a month or weekday, a time unit outside a
   future form, a past-time word), another place (outside, referring, a facility noun, a proper name after at/in/from/per),
   another agent (Dr., a person noun, "by" anything but a landmark, per, according to, reportedly) or another source (a
@@ -69,23 +68,26 @@ base reading (the Indications' hold), which is the safe side.
 - N2, no later sentence that names the paragraph's family, an examination noun or "above" states another time (outside
   a plan section or a future form), place, agent or source ("Note: the colonoscopy above was performed in 2025 and is
   copied for reference."), and the family is named again nowhere after it but in the report's impression, assessment or
-  plan sections and other labelled paragraphs ("Note: this colonoscopy belongs to another patient."); and no impression
-  or assessment sentence dates a done act before the document's own date without naming it as history ("Impression:
-  Sigmoid polyp removed in 2022." holds; "Prior polypectomy in 2022." does not) - refutation cycle 1.
+  plan sections and other labelled paragraphs ("Note: this colonoscopy belongs to another patient.").
 - N3, the containing section's own text before its first labelled paragraph announces nothing (follows, below, as
   follows, attached, copied, a summary ...); names no examination noun or the family with a hold signal; in an
   indication, names no other occasion of the family by routing's own reading (detect.named_as_another_occasion: "She had
   a colonoscopy", "the index colonoscopy", "Her last colonoscopy"; a consent or a discussion of it is none); and does not
   end on a line that introduces what follows (a colon), nor on an unterminated line that may run on into the label (it
   ends on a function word or a determiner's phrase, or states a hold signal: "Surveillance after an outside").
-  Refutation cycle 1 widened N3: the section's own text before the first paragraph points at the document's own text
-  by no form (_DEIXIS: "the next paragraph", "this account", "reprinted", "carried forward", "for reference", "for
-  comparison", "below" ...) and states no other year, place or occasion in the present with a subject other than the
-  patient ("This is from another hospital."); no earlier paragraph of the section points at what follows by a form a
-  narrative never uses for its own anatomy (_DEIXIS_IN_NARRATIVE: "The paragraph that follows belongs to her
-  sister."); nothing before the paragraph in its section attributes an account to another person (_OTHER_PERSON); and
-  the dated-history exemption applies only where no sentence naming the family states it in the present ("Her
-  colonoscopy in 2022 is carried forward for reference." is no history).
+
+What the release promises is layout parity (refutation cycle 2, 2026-11-06; HARNESS.md "Completion repair"): a released
+paragraph reads no more permissively than its heading twin - the same text with "Colonoscopy: <narrative>" written
+"Procedure: Colonoscopy" and the narrative under it - and a held one keeps the stricter base reading. Every false READY
+both refutation cycles found here had a heading twin the installed release reads READY too, so cycle 1's readers that
+made the labelled layout stricter than its twin (N3's deixis, present-occasion and attribution reads, N2's summary
+dating, P4's first-summary rule) bought no safety over the heading form and held ordinary reports ("Pre-procedure
+assessment: ASA class II.", "This is a 58-year-old man referred from an outside hospital."); they are removed, and a
+generic scope's frame of today's steps is registered as a named scope's is (S8). The one difference measured is the
+documented-service reader's: a released paragraph is a report part of its label's family, so an act its heading twin
+drops for want of a part family (a food bolus with two families present and no site: stage 1's U1 binding) is bound to
+it, as its corpus entry requires; P2 and P3 make every act of a released paragraph its family's (the instrument, the
+tract). tests/test_completion_parity.py checks the parity over the corpus and both cycles' inputs.
 
 A paragraph runs from its label line to the next line that opens a layout section or another label line ("Word:" with
 content: sections._bare_label), whichever comes first; a blank line inside it is the narrative's own (its lines after
@@ -315,57 +317,9 @@ _ANNOUNCE = re.compile(r'\bas[ \t]++follows\b|\bfollows?\b(?![- \t]*+up\b)|\bbel
                        # 2020, described next"), which the dated-occasion exemption below must never release
                        r'|\b(?:described|detailed|outlined|recounted|presented|reported|documented|listed|shown|given)'
                        r'[ \t]++(?:next|here|later|hereafter)\b', FLAGS)
-# Completion repair, refutation cycle 1 (2026-11-06; HARNESS.md "Refutation of the integrated diff, cycle 1"): what
-# points at the document's own text, read before a labelled paragraph in its section (N3). Before the first paragraph
-# every form holds ("The next paragraph is from her 2023 visit at another hospital.", "In 2022 Dr. Former wrote this
-# account of her visit.", "Her colonoscopy in 2022 is reprinted here for reference.", "... is shown for comparison.");
-# inside an earlier released paragraph only the forms a narrative never uses for its own anatomy (no "below", "beneath",
-# "attached": "The mucosa beneath it was normal.") - "The paragraph that follows belongs to her sister." holds there.
-# (never an anatomical noun - part, portion, line, segment - nor findings: "the second portion of the duodenum", "These
-# findings are consistent with ..." are a narrative's own words)
-_DOC_NOUN = (r'(?:paragraphs?|sections?|notes?|narratives?|accounts?|reports?|records?|texts?|excerpts?|entr(?:y|ies)|'
-             r'documentation|transcripts?|cop(?:y|ies)|charts?|descriptions?|summar(?:y|ies)|labels?|pages?|'
-             r'sentences?|passages?|write-?ups?)')
-_DEIXIS_DOC = (r'\b(?:this|that|these|those|the[ \t\n]++(?:following|next|attached|enclosed|above|below|preceding|subsequent|'
-               r'second|third|later|other))[ \t\n]++(?:[A-Za-z0-9\'-]++[ \t\n]++){0,2}?' + _DOC_NOUN + r'\b'
-               r'|\b(?:reprinted|reproduced|copied|pasted|transcribed|excerpted|appended|faxed|restated|re-stated|'
-               r'carried[ \t\n]++(?:forward|over))\b'
-               r'|\bas[ \t\n]++follows\b|\bfollows?\b(?![- \t]*+up\b)|\bthe[ \t\n]++following\b(?![ \t\n]++(?:day|'
-               r'morning|afternoon|evening|night|week|month|year))'
-               r'|\b(?:comes?|appears?|is|are|was|were)[ \t\n]++(?:next|afterwards?)\b'
-               r'|\bfor[ \t\n]++(?:reference|comparison|completeness|context|the[ \t\n]++record)\b'
-               r'|\b(?:shown|given|set[ \t\n]++out|included|described|detailed|outlined|recounted|documented|listed|'
-               r'summari[sz]ed)[ \t\n]++(?:here|next|later|hereafter)\b')
-_DEIXIS_IN_NARRATIVE = re.compile(_DEIXIS_DOC, FLAGS)
-_DEIXIS = re.compile(_DEIXIS_DOC + r'|\b(?:attached|enclosed|quoted|imported|incorporated|scanned|below|beneath|'
-                     r'underneath|hereafter|herein|hereunder|herewith|hereinafter)\b', FLAGS)
-# Another person's account, by attribution: "belongs to her sister", "her twin's colonoscopy", "another patient"
-# (never a family history: "family history of colon cancer in her mother" attributes no account).
-_KIN = (r'(?:sister|brother|mother|father|son|daughter|husband|wife|spouse|partner|cousin|aunt|uncle|niece|nephew|'
-        r'grand(?:mother|father|son|daughter|parent|child)|twin|sibling|relative|roommate|friend|neighbou?r|'
-        r'step(?:mother|father|son|daughter))')
-_OTHER_PERSON = re.compile(
-    r'\b(?:belongs?|belonged|pertains?|pertained|relates?|related|refers?|referred)[ \t\n]++to[ \t\n]++(?:(?:her|his|their|'
-    r'the[ \t\n]++patient\'s|a|an|the)[ \t\n]++)?(?:[a-z]++[ \t\n]++)?' + _KIN + r's?\b'
-    r'|\b' + _KIN + r's?\'s?[ \t\n]++(?:[a-z]++[ \t\n]++)?(?:colonoscop(?:y|ies)|egds?|endoscop(?:y|ies)|sigmoidoscop(?:y|ies)|'
-    r'procedures?|examinations?|exams?|reports?|records?|charts?|notes?|narratives?|accounts?|visits?|stud(?:y|ies)|'
-    r'findings)\b'
-    r'|\b(?:another|other|different|second|a[ \t\n]++different)[ \t\n]++(?:patient|person|individual)s?\b|\bsomeone[ \t\n]++else\b',
-    FLAGS)
-# A sentence before the paragraph that states, in the present, another occasion's place, another year or another
-# occasion, with a subject other than the patient ("This is from another hospital.", "These are the 2022 findings."):
-# a present statement about the text, not the patient's history (N3).
-_PRESENT_COPULA = re.compile(r'\b(?:is|are|am)\b', FLAGS)
-_PATIENT_SUBJECT = re.compile(r'[ \t\n"\'(]*+(?:the[ \t\n]++)?(?:patient|pt|she|he|they|mr|mrs|ms|miss|mx|an?|\d)\b', FLAGS)
-_PRESENT_OCCASION = re.compile(_YEAR + r'|' + _ANOTHER + r'|\b(?:outside|elsewhere|referring|transferring|external|OSH)\b',
-                               FLAGS)
-# A summary sentence after the paragraph that dates a done act before the document's own date ("Impression: Sigmoid
-# polyp removed in 2022."), unless it names it as history ("Prior polypectomy in 2022.", "History of ..."): N2.
-_DONE_ACT = re.compile(r'\b(?:removed|resected|excised|biopsied|dilated|dilatated|ablated|retrieved|extracted|clipped|'
-                       r'injected|tattooed|placed|performed|done|completed|treated|cauteri[sz]ed|banded|ligated|'
-                       r'polypectom(?:y|ies)|dilations?|biops(?:y|ies))\b', FLAGS)
-_HISTORY_MARK = re.compile(r'\b(?:history|hx|prior|previous|previously|past|last|known|status[ \t\n]++post|s/p|remote|'
-                           r'former|formerly|earlier|before)\b', FLAGS)
+# A year or a date in a text (an ISO date, m/d/y, a bare year): no reader of this module's own (refutation cycle 2
+# removed cycle 1's summary dating, which read it); kept because services._earlier_date (acts, refutation cycle 1) reads
+# it, with _document_day below.
 _DATE_IN_TEXT = re.compile(r'\b(?P<y4>(?:19|20)\d{2})-(?P<m1>\d{1,2})-(?P<d1>\d{1,2})\b'
                            r'|\b(?P<m2>\d{1,2})/(?P<d2>\d{1,2})/(?P<y2>(?:19|20)?\d{2})\b'
                            r'|\b(?P<y>(?:19|20)\d{2})s?\b')
@@ -720,13 +674,6 @@ class _Index:
     announce: list  # starts of _ANNOUNCE matches
     signalled: dict  # family or '*' -> sorted starts of sentences that name it (or an examination noun) with a signal
     positive_families: dict  # family -> set of indexes of positive layout sections that name it or its instrument
-    # completion repair, refutation cycle 1: starts of _DEIXIS / _DEIXIS_IN_NARRATIVE / _OTHER_PERSON matches, of the
-    # sentences _present_occasion reads, and of the summary sentences that date a done act earlier (_dated_act)
-    deixis: list
-    deixis_narrative: list
-    persons: list
-    present_occasion: list
-    dated_acts: list
 
 
 def _index(text: str, lay: Layout) -> _Index:
@@ -767,62 +714,15 @@ def _index(text: str, lay: Layout) -> _Index:
             named = _instrument_family(m.group(0))
             if named:
                 positive_families.setdefault(named, set()).add(n)
-    deixis = [m.start() for m in _DEIXIS.finditer(text)]
-    deixis_narrative = [m.start() for m in _DEIXIS_IN_NARRATIVE.finditer(text)]
-    persons = [m.start() for m in _OTHER_PERSON.finditer(text)]
-    present_occasion, dated_acts = [], []
-    doc_day = _document_day(text)
-    for s, e in lay.sentences:
-        e = min(e, s + 400)  # a sentence is read in its first 400 characters (bounded work per sentence)
-        if _present_occasion(text, s, e):
-            present_occasion.append(s)
-        if lay.section_at(s).kind in ('impression', 'assessment') and _dated_act(text, s, e, doc_day):
-            dated_acts.append(s)
-    return _Index(sentence_starts, lay.sentences, clause_starts, lay.clauses, announce, signalled, positive_families,
-                  deixis, deixis_narrative, persons, present_occasion, dated_acts)
-
-
-_LEADING_LABEL = re.compile(r'[ \t\n]*+[A-Za-z][A-Za-z /&()-]{0,40}:[ \t]*+')
-
-
-def _present_occasion(text: str, s: int, e: int) -> bool:
-    """N3 (refutation cycle 1): the sentence [s, e) states in the present (is, are) another year, place or occasion, with a
-    subject other than the patient (a leading "Label:" set aside): "This is from another hospital.", "These are the 2022
-    findings." - a statement about the text that follows, never the patient's history (that is said in the past, or of
-    the patient: "Patient is a 60-year-old referred from an outside hospital.")."""
-    if not _PRESENT_COPULA.search(text, s, e) or not _PRESENT_OCCASION.search(text, s, e):
-        return False
-    label = _LEADING_LABEL.match(text, s, e)
-    return _PATIENT_SUBJECT.match(text, label.end() if label else s, e) is None
+    return _Index(sentence_starts, lay.sentences, clause_starts, lay.clauses, announce, signalled, positive_families)
 
 
 @functools.lru_cache(maxsize=16)
 def _document_day(text: str):
-    from studio.gi import context as gi_context  # local: the context reader is only needed for the summary dating
+    """The document's own date of service by the context reader. No reader of this module's own (refutation cycle 2
+    removed cycle 1's summary dating); kept for services._earlier_date (acts, refutation cycle 1)."""
+    from studio.gi import context as gi_context  # local: the context reader is only needed here
     return gi_context.service_date_of(text)
-
-
-def _dated_act(text: str, s: int, e: int, doc_day) -> bool:
-    """N2 (refutation cycle 1): the summary sentence [s, e) dates a done act before the document's own date - a year or a
-    date earlier than it (any, when the document states none: the safe side) - with no history word before the date
-    ("Sigmoid polyp removed in 2022." holds; "Prior polypectomy in 2022." and "Repeat colonoscopy in 2029." do not)."""
-    if not _DONE_ACT.search(text, s, e):
-        return False
-    for m in _DATE_IN_TEXT.finditer(text, s, e):
-        if m.group('y4'):
-            year, month, day = int(m.group('y4')), int(m.group('m1')), int(m.group('d1'))
-        elif m.group('m2'):
-            y = m.group('y2')
-            year, month, day = (int(y) if len(y) == 4 else 2000 + int(y)), int(m.group('m2')), int(m.group('d2'))
-        else:
-            year, month, day = int(m.group('y')), 0, 0
-        if doc_day is not None:
-            if year > doc_day.year or (year == doc_day.year and (not month or (month, day) >= (doc_day.month, doc_day.day))):
-                continue  # today's date or a later one: never another occasion's
-        if _HISTORY_MARK.search(text, s, m.start()):
-            continue  # named as history before its date
-        return True
-    return False
 
 
 def _positive_bodies(text: str, lay: Layout) -> dict:
@@ -974,12 +874,6 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
     lo, hi = section.start, first.start
     if _any_between(ix.announce, lo, hi):
         return True
-    # refutation cycle 1: the section's own text pointing at the document's text or stating another occasion in the
-    # present; an earlier paragraph of the section pointing at what follows ("The paragraph that follows belongs to her
-    # sister."); another person's account anywhere before this paragraph in its section
-    if _any_between(ix.deixis, lo, hi) or _any_between(ix.present_occasion, lo, hi) \
-            or _any_between(ix.deixis_narrative, hi, c.start) or _any_between(ix.persons, lo, c.start):
-        return True
     from studio.gi import detect  # local: detect imports this module
     if section.kind == 'indication' and _SOURCE_SIGNAL.search(text, lo, hi):
         return True  # a record, a report, a copy ... named in the indication
@@ -991,10 +885,7 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
     # apply), is read as it is read under a "Procedure:" heading - today's. The base read the heading form so; the
     # labelled form was held. An undated mention ("Hx colonoscopy.", "Follow-up after colonoscopy.", "Review of
     # colonoscopy.") still holds, as builder R1 pinned it.
-    # refutation cycle 1: and no sentence naming the family states it in the present ("Her colonoscopy in 2022 is carried
-    # forward for reference."): a dated occasion said to be something now is a statement about the text, never history
-    dated_history = section.kind == 'indication' and detect.dated_earlier_occasions_only(text, c.family, lo, hi) \
-        and not _family_stated_now(text, c.family, lo, hi, ix)
+    dated_history = section.kind == 'indication' and detect.dated_earlier_occasions_only(text, c.family, lo, hi)
     if section.kind == 'indication' and not dated_history and _unlisted_family_mention(text, c.family, lo, hi, ix):
         return True  # the family named outside the allow-list
     if section.kind == 'indication' and not dated_history and detect.named_as_another_occasion(text, c.family, lo, hi):
@@ -1027,22 +918,6 @@ def _announced(text: str, lay: Layout, c: _Candidate, first: _Candidate, ix: _In
                 or (len(words) >= 2 and words[-2].lower() in _DETERMINERS) \
                 or _signals(line, 0, len(line)):
             return True
-    return False
-
-
-def _family_stated_now(text: str, family: str, lo: int, hi: int, ix: _Index) -> bool:
-    """N3's exemption (refutation cycle 1): whether a sentence in [lo, hi) naming ``family`` states, in the present (is,
-    are) and with a subject other than the patient (_present_occasion's reading), what the family's occasion is now.
-    Bounded: each mention's own sentence, at most 400 characters of it."""
-    pattern = dict(cues.SERVICE_PATTERNS)[family]
-    for m in pattern.finditer(text, lo, hi):
-        k = bisect.bisect_right(ix.sentence_starts, m.start()) - 1
-        s, e = ix.sentences[k] if k >= 0 else (lo, hi)
-        e = min(e, s + 400)
-        if _PRESENT_COPULA.search(text, s, e):
-            label = _LEADING_LABEL.match(text, s, e)
-            if _PATIENT_SUBJECT.match(text, label.end() if label else s, e) is None:
-                return True
     return False
 
 
@@ -1093,6 +968,19 @@ def _stray_mentions(text: str, lay: Layout, candidates: list) -> dict:
     return found
 
 
+def _framed_course(text: str, c: _Candidate, e: int) -> Optional[re.Match]:
+    """The candidate's first-sentence course from its colon to ``e``, read for its frame of today's steps: the named
+    instrument's course shape (_course_start); else a generic instrument's course that P2 accepts by its tract
+    (refutation cycle 2, S8: "After the upper endoscopy, the scope was introduced through the anus ..." frames today's
+    sequence as "After the upper endoscopy, the colonoscope ..." does, and its heading twin reads so)."""
+    m = _course_start().match(text, c.body, e)
+    if m is None and _TRACT_OF.get(c.family):
+        g = _generic_course_start().match(text, c.body, e)
+        if g is not None and _course_tract(text, g.end(), e) == _TRACT_OF[c.family]:
+            return g
+    return m
+
+
 def _frames(text: str, candidates: list, ix: _Index) -> tuple:
     """The spans of the candidates' first-sentence frames of today's steps (P2's allow-list: "After the upper
     endoscopy, the colonoscope ..."): a mention of another family there is today's sequence, never another occasion."""
@@ -1101,7 +989,7 @@ def _frames(text: str, candidates: list, ix: _Index) -> tuple:
         k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
         if k < 0:
             continue
-        m = _course_start().match(text, c.body, ix.sentences[k][1])
+        m = _framed_course(text, c, ix.sentences[k][1])
         if m is not None and m.group('frame'):
             spans.append((m.start('frame'), m.end('frame')))
     return tuple(spans)
@@ -1115,7 +1003,7 @@ def _frames_released(text: str, candidates: list, out: list, ix: _Index) -> list
     named = {}
     for n, c in enumerate(candidates):
         k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
-        m = _course_start().match(text, c.body, ix.sentences[k][1]) if k >= 0 else None
+        m = _framed_course(text, c, ix.sentences[k][1]) if k >= 0 else None
         if m is not None and m.group('frame'):
             frame = m.group('frame')
             named[n] = {f for f, pattern in cues.SERVICE_PATTERNS if pattern.search(frame)} - {c.family}
@@ -1189,10 +1077,6 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
     stray = _stray_mentions(text, lay, candidates)
     frames = _frames(text, candidates, ix)
     candidate_starts = {c.start for c in candidates}
-    # refutation cycle 1: the first summary section (an impression, assessment or plan); a labelled paragraph in a section
-    # after it is a later report's - an appended prior report ("Plan: ..." then "Prior Colonoscopy Report 2022",
-    # "Indications: ...", "Colonoscopy: ...") - never today's narrative
-    first_summary = next((k for k, sec in enumerate(lay.sections) if sec.kind in _SUMMARY_KINDS), len(lay.sections))
     out: list[tuple[LabelledParagraph, str]] = []
     previous: Optional[_Candidate] = None  # the candidate before this one, and whether it was released
     previous_released = False
@@ -1218,8 +1102,6 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
             why = 'P3: the report has a procedure section of its own that no procedure line declares the family for'
         elif previous is not None and previous.section == c.section and not previous_released:
             why = 'P4: it follows a labelled paragraph that is not released'
-        elif c.section > first_summary:
-            why = 'P4: a summary section comes before it (a later report\'s)'
         elif section.kind not in gi_sections.POSITIVE_KINDS and not (
                 section.kind == 'indication' and (_heading_has_content(text, section) or (follows and previous_released))):
             why = f'P4: it stands in a {section.kind} section' if section.kind != 'indication' \
@@ -1227,7 +1109,6 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
         elif _paragraph_holds(text, c, ix, frames):
             why = 'N1: the paragraph states another time, place, agent or source'
         elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
-                or _any_between(ix.dated_acts, c.end, 1 << 62) \
                 or _later_occasion(text, c, frames) or not _structure_resumes(text, lay, c, candidate_starts):
             why = 'N2: a later sentence refers back to it'
         elif _announced(text, lay, c, first_in_section[c.section], ix):

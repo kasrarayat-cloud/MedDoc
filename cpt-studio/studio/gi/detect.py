@@ -8550,10 +8550,27 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 # - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back);
 # - I11 no act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
 #   (_procedure_line_doubt: its procedure-line promotion, U6, would make the failed or hedged act READY where the base
-#   held it for want of a performed mention).
+#   held it for want of a performed mention);
+# - I12 its heading twin is not qualified (_heading_twin_qualified). The instrument's course names its family as a
+#   procedure heading names it: the twin is the same text with the family's name on the heading line of the
+#   instrument's section ("Procedure: Colonoscopy" over "The colonoscope was advanced to the cecum."; with every family
+#   whose course stands there, "Procedure: EGD and colonoscopy" over both courses), and the
+#   instrument's mention is read no more permissively than that twin. Routing reads a family named on a positive
+#   section's heading line as performed by its section unless the text after it qualifies it (_silent_section,
+#   _later_denial: the first sentence under the heading denies it, or a status line, a typed or boxed "not performed"
+#   or a call-off stands within DENIAL_SENTENCES sentences of it - "Status: Cancelled - inadequate bowel preparation.",
+#   "Status: Refused by the patient.", "The patient refused the procedure."); I4 already reads the instrument word's
+#   own clause as that name's would be read, and I12 reads the rest with the same predicates over the twin's sentences,
+#   so where the twin's name is qualified the instrument adds no mention. What the twin itself reads as today's ("Status:
+#   Abandoned", a hedged or second-hand course, a course a later sentence dates) the instrument reads so too: those are
+#   the installed engine's own readings of the named form, never a release the named form does not give.
+#   (Refutation cycle 2, 2026-11-06: in place of cycle 1's I12 and I13 - word lists over the course's sentence and
+#   over the whole document - which leaked "Abandoned", "Perhaps" and "three years ago", held "Aspirin was discontinued
+#   five days before the procedure." and "inserted per rectum", and rescanned a sentence per match.)
 # Its reading is the section's ('section' basis), so a cancellation, a denial or a doubt about today's service still
-# contradicts it in _aggregate. Bounded: INSTRUMENT_READS instrument words in positive sections are examined, and
-# INSTRUMENT_MENTIONS kept per family (routing's mention bound, settings.MAX_SERVICE_MENTIONS, is untouched by them).
+# contradicts it in _aggregate. Bounded: INSTRUMENT_READS instrument words in positive sections are examined,
+# INSTRUMENT_MENTIONS kept per family (routing's mention bound, settings.MAX_SERVICE_MENTIONS, is untouched by them),
+# and I12 reads at most 4 * DENIAL_SENTENCES + 1 sentences per section.
 INSTRUMENT_COURSE = "performed: the instrument's own course in today's procedure narrative"
 INSTRUMENT_READS = 64
 INSTRUMENT_MENTIONS = 4
@@ -8834,63 +8851,70 @@ def _named_otherwise(an: Analysis, family: str) -> bool:
     return False
 
 
-# I13 (refutation cycle 1, outcome F1): a statement that the examination did not take place, anywhere in the document
-# and naming no sub-act ("Status: Cancelled - inadequate bowel preparation.", "The procedure was not performed."): the
-# instrument rule then reads nothing, and the base reading stands. A sentence naming a sub-act or an accessory and not
-# the examination or its scope ("Retroflexion was not performed.", "The polypectomy was aborted.") is that act's; one
-# naming the examination is the examination's whatever else it names ("The examination was aborted before the
-# polypectomy.").
-_EXAM_CANCELLED = re.compile(r'\b(?:cancel(?:l)?ed|cancell?ations?|abort(?:ed)?|terminated|discontinued|postponed|deferred|'
-                             r'rescheduled|called[ \t\n]++off|not[ \t\n]++(?:performed|done|started|attempted)|did[ \t\n]++not[ \t\n]++'
-                             r'(?:proceed|take[ \t\n]++place|occur))\b', re.I)
-_A_SUB_ACT_WORD = re.compile(r'\b(?:retroflexion|photo(?:graph)?s?|photodocumentation|' + '|'.join(
-    sorted((w for w in gi_clauses.SUB_ACTS | gi_clauses.ACCESSORIES if w.isalpha()), key=len, reverse=True)) + r')\b', re.I)
-
-
-def _examination_cancelled(an: Analysis) -> bool:
-    key = ('examination-cancelled',)
+def _heading_twin_qualified(an: Analysis, m: Mention, families: frozenset) -> bool:
+    """I12: whether the instrument's family, named on the heading line of the instrument's own section as its heading
+    twin names it ("Procedure: Colonoscopy" over the same narrative), would be qualified there as routing reads such a
+    name (_silent_section's _later_denial; see the comment block above): the first sentence after the heading denies
+    it, or a status line, a typed or boxed answer or a call-off within DENIAL_SENTENCES sentences after or before the
+    heading says it was not done. ``families``: every family whose instrument course stands in that section (``m``'s
+    among them), which the twin's heading names together ("Procedure: EGD and colonoscopy"). Memoised per section."""
+    section = an.lay.section_at(m.start)
+    key = ('heading-twin', section.start, families)
     if key not in an.memo:
-        an.memo[key] = False
-        for m in _EXAM_CANCELLED.finditer(an.text):
-            s, e = an.lay.sentence_for(m.start(), m.end())
-            if gi_clauses._EXAM_IN_SUBJECT.search(an.text, s, e) or not _A_SUB_ACT_WORD.search(an.text, s, e):
-                an.memo[key] = True
-                break
+        an.memo[key] = _heading_twin_denial(an, section, families) is not None
     return an.memo[key]
 
 
-def _course_sentence_doubted(an: Analysis, m: Mention) -> bool:
-    """I12 (refutation cycle 1, outcome F2): the instrument's own sentence states another time, place, agent or source,
-    a person's report, or a hedge (studio.gi.structure's narrative signals - the labelled paragraph's own reading - and the
-    services reader's hedge words): "... advanced to the cecum on a prior occasion", "The patient states that ...",
-    "Presumably, ...". A course so stated is not today's plain statement, and the base reading stands."""
-    from studio.gi import services as gi_services, structure as gi_structure  # local: both read routing lazily
-    s, e = an.lay.sentence_for(m.start, m.end)
-    sentence = an.text[s:e]
-    physicians = gi_services._report_physician_words(an.text)
-
-    def own(match):  # the report's own physician named as the agent is no other source (I4 reads it so)
-        surname = [w for w in match.group('name').split() if not gi_services.CREDENTIAL.match(w)][-1:]
-        return ' ' * len(match.group(0)) if surname and surname[0].lower() in physicians else match.group(0)
-    sentence = gi_services.AGENT_NAMED.sub(own, sentence)
-    return bool(gi_structure._signals(sentence, 0, len(sentence), narrative=True)
-                or gi_services.HEDGE_WORDS.search(sentence))
+def _heading_twin_denial(an: Analysis, section, families: frozenset) -> Optional[str]:
+    """The sentence that qualifies ``families`` named on ``section``'s heading line, or None. The twin's names are a bare
+    service line of their own right after the heading (the layout reads "Procedure:" and the names after it as two
+    sentences), so its next sentence is the first sentence that runs past the heading, read with routing's own test of
+    the sentence after a bare service line (_denies; _reschedules for one naming only those families); its walk is
+    _called_off_further's from that position - DENIAL_SENTENCES sentences read each way, within 2 * DENIAL_SENTENCES
+    positions, heading lines skipped, plans and histories and unselected options passed over, stopping at a sentence
+    naming the service of a family the line does not name and reading on through one naming only ``families`` (the
+    twin's line names them) - each sentence asked _calls_off. Bounded: at most 4 * DENIAL_SENTENCES + 1 sentences."""
+    sentences = an.lay.sentences
+    anchor = section.heading.end if section.heading is not None else section.start
+    first = bisect.bisect_right(sentences, anchor, key=lambda span: span[1])  # the first sentence running past it
+    if first < len(sentences) and an.lay.section_at(sentences[first][0]) is section:  # routing's same-section test
+        ns, ne = sentences[first]
+        named = {x.family for x in an.services_in(ns, ne)}
+        if (not named and _denies(an, ns, ne, bare=True)) or (named and named <= families and _reschedules(an, ns, ne)):
+            return an.text[ns:ne]
+    for step, start in ((1, first), (-1, first - 1)):
+        read, position = 0, start
+        while 0 <= position < len(sentences) and abs(position - start) < 2 * DENIAL_SENTENCES:
+            ks, ke = sentences[position]
+            position += step
+            heading = an.lay.section_at(ks).heading
+            if heading is not None and heading.start == ks and ke <= heading.end:
+                continue  # a heading line is structure, not a sentence about the service
+            read += 1
+            if read > DENIAL_SENTENCES or {x.family for x in an.services_in(ks, ke)} - families:
+                break
+            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS or _unchecked_option(an, ks, ke):
+                continue
+            if _calls_off(an, ks, ke):
+                return an.text[ks:ke]
+    return None
 
 
 def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mention]:
-    """The candidates that meet I4, I5, I8 and I11, at most INSTRUMENT_MENTIONS per family (see above). The candidates'
-    spans are in an.instrument_spans before any of them is read, so a sub-act's failure in its clause is never its own
-    (_examination_target). Refutation cycle 1: and I12 (_course_sentence_doubted) and I13 (_examination_cancelled)."""
+    """The candidates that meet I4, I5, I8, I11 and I12, at most INSTRUMENT_MENTIONS per family (see above). The
+    candidates' spans are in an.instrument_spans before any of them is read, so a sub-act's failure in its clause is
+    never its own (_examination_target)."""
     kept: dict[str, list[Mention]] = {}
     blocked: dict[str, bool] = {}
-    if candidates and _examination_cancelled(an):  # I13
-        return []
+    in_section: dict[int, set] = {}  # I12: per section, the families whose instrument course stands in it
+    for m in candidates:
+        in_section.setdefault(an.lay.section_at(m.start).start, set()).add(m.family)
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
             continue
         if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
             continue
-        if _course_sentence_doubted(an, m):  # I12
+        if _heading_twin_qualified(an, m, frozenset(in_section[an.lay.section_at(m.start).start])):  # I12
             continue
         if not in_todays_narrative(an.text, m.start, an.service_date, an.lay.sentence_for(m.start, m.end),
                                    excuse=lambda d, family=m.family: _another_familys_date(an, d, family)):  # I5
