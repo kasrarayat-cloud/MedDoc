@@ -142,6 +142,13 @@ class NoActIsNamedPipelineTests(r6m.MeaningCase):
                          {'proposal_id': item['id'], 'action': 'approve', 'acknowledgement': ACK,
                           'note': 'Synthetic review.'})
         self.assertEqual(made.status_code, 201, made.content)
+        # harness repair 3 (P-ADMIT2): Astra's own 45378 now reaches review, held by the base rule beside the
+        # therapeutic code - the reviewer decides it too (reject: the base is included) before the report is reviewed
+        for held in [p for p in r6m.proposals(self.detail(encounter_id)) if p['code'] == '45378'
+                     and p['bucket'] == 'selected']:
+            rejected = self.post(f'/api/encounters/{encounter_id}/decisions',
+                                 {'proposal_id': held['id'], 'action': 'reject', 'note': 'Synthetic review.'})
+            self.assertEqual(rejected.status_code, 201, rejected.content)
         self.assertTrue(self.detail(encounter_id)['readiness']['reviewed'])
         report = self.download(encounter_id, 'reviewed')
         self.assertIn(f'Astra reads a performed other GI service {r7.NOT_READ} (“{REMOVED}”)', report)

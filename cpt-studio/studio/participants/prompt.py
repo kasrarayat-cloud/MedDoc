@@ -12,6 +12,11 @@ Since anthropic-messages@cptstudio-harness-3 (HARNESS.md 12.8) Fable's request c
 its system prompt is these same instructions followed by schema_instruction(schema): one instruction and the schema
 itself. That suffix is Fable's alone and is named by Fable's adapter version; it changes no constant here, so Astra's
 requests and READING_VERSION (the reading's schema and instructions) are unchanged.
+
+Since anthropic-messages@cptstudio-harness-4 (HARNESS.md, "Harness repair 3", F-CONTRACT) that suffix ends with
+FIELDS_INSTRUCTION too: all three of Fable's fresh readings on 2026-11-05 added an empty field of its own to
+not_coded[0] ("code_note": "", "service_ids_note": null, "evidence_note": "" and "reason_detail": ""), and the schema
+refused each whole. It is Fable's alone as well, and READING_VERSION stays unchanged.
 """
 from __future__ import annotations
 
@@ -229,6 +234,10 @@ PEER_SCHEMA = _object({
 # compiled grammar is too large; measured 2026-11-02), so Fable's request carries no output format and its system
 # prompt gives the schema itself. Astra keeps its strict structured output and never carries this suffix.
 SCHEMA_INSTRUCTION = 'Answer with exactly one JSON object that matches this JSON Schema, and nothing else:'
+# harness-4 (HARNESS.md, "Harness repair 3", F-CONTRACT): the instruction after the schema. Each of Fable's three walk
+# readings of 2026-11-05 added an empty field of its own to its first not_coded item, which the schema does not allow.
+FIELDS_INSTRUCTION = ('Give every object exactly the fields this schema lists for it. Add no other field, not even an '
+                      'empty one or a note: an explanation belongs only in a field the schema has for it.')
 
 
 def schema_instruction(schema: dict) -> str:
@@ -240,6 +249,12 @@ def schema_instruction(schema: dict) -> str:
         raise TypeError('A schema must be a dict.')
     encoded = json.dumps(schema, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
     return f'\n{SCHEMA_INSTRUCTION}\n{encoded}\n'
+
+
+def fields_instruction() -> str:
+    """The line harness-4 adds after schema_instruction's (HARNESS.md, "Harness repair 3", F-CONTRACT):
+    FIELDS_INSTRUCTION, then a line end."""
+    return f'{FIELDS_INSTRUCTION}\n'
 
 
 # --- phase 2: what a peer review is shown (HARNESS.md 11.1) -----------------------------------------------------------

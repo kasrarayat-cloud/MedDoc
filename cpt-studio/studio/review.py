@@ -30,7 +30,7 @@ from . import audit, candidates, participants
 from .gi.context import charge_date_problem
 from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
-                     Proposal, ProviderRun, SourceRevision, ToolCall)
+                     Proposal, ProviderExchange, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
 
 log = logging.getLogger(__name__)
@@ -1752,6 +1752,26 @@ def _usd(value):
         return None
 
 
+def chain_usage(run):
+    """(usage, estimated cost in USD as text or None, the ids of the stopped runs it continues) of ``run``'s whole tool
+    loop: for a continuation (F-STOP) its chain's usage summed and each run's estimate added, so the exchanges a report
+    counts and the cost it prints describe the same loop (refutation round 1 of harness repair 3, L6-3); otherwise the
+    run's own. The report's entry and the API's participant row read it alike (refutation cycle 2, C2-5-8: the row had
+    read the continuation's own usage and cost)."""
+    from decimal import Decimal  # noqa: PLC0415 - only for a chain
+    from .jobs import loop_runs  # local import: jobs imports this module
+    from .participants.loop import summed_usage
+
+    if run is None:
+        return {}, None, []
+    chain = loop_runs(run) if not run.reused_from_id else [run]
+    if len(chain) < 2:
+        return (run.usage or {}), estimated_cost(run), []
+    costs = [estimated_cost(each) for each in chain]
+    cost = None if any(c is None for c in costs) else str(sum((Decimal(c) for c in costs), Decimal('0')))
+    return summed_usage([each.usage for each in chain if each.usage]), cost, [str(each.pk) for each in chain[:-1]]
+
+
 def estimated_cost(run):
     """The run's estimated cost in USD as text ('0.0412'), from studio.participants.pricing's fixed, dated rates
     (HARNESS.md 6: estimated from published rates, not reconciled to an invoice). A tool loop (HARNESS.md 11.2) is
@@ -1899,9 +1919,12 @@ def run_tool_calls(run):
     reuses (jobs.loop_run, HARNESS.md 12.1) - in exchange turn and call order; [] for a run with none."""
     from .jobs import loop_run  # local import: jobs imports this module
 
+    from .jobs import loop_runs  # local import: jobs imports this module
+
     if run is None:
         return []
-    return list(ToolCall.objects.filter(exchange__run=loop_run(run)).select_related('exchange')
+    # refutation round 1 of harness repair 3 (L6-3): a continuation's loop is its whole chain (jobs.loop_runs)
+    return list(ToolCall.objects.filter(exchange__run__in=loop_runs(run)).select_related('exchange')
                 .order_by('exchange__turn', 'id'))
 
 
@@ -1935,9 +1958,10 @@ def _delivered_turns(run):
     ends once CPT Studio has answered an exchange's tool calls, sending nothing more (the next exchange not sent, a
     member's Stop, a follow-up it could not build, the deadline), keeps the calls it answered on that exchange's record
     (studio.participants.loop), and their results never reached the participant."""
-    from .jobs import loop_run  # local import: jobs imports this module
+    from .jobs import loop_runs  # local import: jobs imports this module
 
-    states = dict(loop_run(run).exchanges.values_list('turn', 'state'))
+    # the whole chain's exchanges (L6-3): a continuation numbers its turns after the ones it carries
+    states = dict(ProviderExchange.objects.filter(run__in=loop_runs(run)).values_list('turn', 'state'))
     return {turn for turn in states if states.get(turn + 1) not in (None, ProviderRun.NOT_SENT)}
 
 

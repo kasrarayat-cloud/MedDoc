@@ -473,10 +473,11 @@ class SummarySentenceTests(r6m.MeaningCase):
                           and 'astra' in (p.get('proposed_by') or []) and p['bucket'] != 'alternative'])
         summary = self.summary(detail)
         self.assertTrue(summary.endswith(f' {r6m.NEVER_DECIDE}'), summary)
-        # the sentence of HARNESS.md P-ADMIT (2026-11-05): such a code is not added because it accounts for nothing the
-        # other proposals left unresolved (D14's sentence named "one its second review listed without adding")
-        self.assertIn('only where they read it as accounting for a documented service or act the other proposals left '
-                      'unresolved', summary)
+        # the sentence of HARNESS.md P-ADMIT2 (harness repair 3, the owner's second message of 2026-11-05): such a code
+        # is read whatever any other proposer did with it (the gap-filling sentence of P-ADMIT is withdrawn)
+        self.assertIn('whatever any other proposer did with it, and added as a proposal of its own where they read it as '
+                      'accounting for a documented service or act done on the date of service', summary)
+        self.assertNotIn('left unresolved', summary)
 
     def test_a_code_the_second_review_added_carries_the_participant_s_code(self):
         """The sentence's first clause, the other kind: the second review's 45385 accounts for the snare removal the

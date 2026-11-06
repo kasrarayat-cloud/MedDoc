@@ -236,7 +236,15 @@ def _participants_owed(revision, context):
     holds a member date conflict, while which nothing is sent - and so () when none is configured (I1)."""
     if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
         return ()
-    return tuple(name for name in participants.configured() if _participant_run(revision, name) is None)
+    return tuple(name for name in participants.configured()
+                 if _participant_run(revision, name) is None or _stopped_and_resumable(revision, name))
+
+
+def _stopped_and_resumable(revision, name) -> bool:
+    """Whether participant ``name``'s newest finished, sent first reading for ``revision`` is a loop a member's Stop
+    ended between exchanges (refutation round 1 of harness repair 3, L6-2): it is owed its turn, which continues it."""
+    return _resumable_stop(_newest_finished(revision.provider_runs.filter(
+        provider=name, purpose=models.ProviderRun.INDEPENDENT, sent=True)))
 
 
 # --- harness@2's peer review (HARNESS.md 11.1, 12.1) ------------------------------------------------------------------
@@ -381,10 +389,16 @@ def loop_run(run):
     return run.reused_from if run.reused_from_id else run
 
 
+def loop_runs(run) -> list:
+    """The runs whose exchanges make up ``run``'s whole tool loop: loop_run(run) and, for a continuation (F-STOP), the
+    stopped runs it continues, first run first (continued_runs)."""
+    return continued_runs(loop_run(run))
+
+
 def run_refs(run) -> frozenset:
-    """Every ref the tool calls of ``run``'s own loop (loop_run) returned to the participant: what its reading's
-    references_used is checked against (HARNESS.md 11.2)."""
-    found = models.ToolCall.objects.filter(exchange__run=loop_run(run)).values_list('refs', flat=True)
+    """Every ref the tool calls of ``run``'s own loop (loop_runs: a continuation's carried exchanges included, F-STOP)
+    returned to the participant: what its reading's references_used is checked against (HARNESS.md 11.2)."""
+    found = models.ToolCall.objects.filter(exchange__run__in=loop_runs(run)).values_list('refs', flat=True)
     return frozenset(ref for refs in found if isinstance(refs, list) for ref in refs if isinstance(ref, str))
 
 
@@ -599,6 +613,73 @@ def _failed_before(encounter, provider, request):
         encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.FAILED, sent=True)
         .order_by('-created_at').first())
+
+
+MAX_CONTINUED_RUNS = 8  # runs one continuation chain may hold (each adds an exchange; max_exchanges bounds it too)
+
+
+def _stopped_attempt(encounter, provider, request, purpose):
+    """The stopped run a member's Resume continues (HARNESS.md, "Harness repair 3", F-STOP), or None: this encounter's
+    newest finished run of ``request`` (the provider, the adapter version and the body's sha256, as _failed_before
+    compares them) for ``purpose``, when it is a loop a member's Stop ended between exchanges - failed, sent, and marked
+    'stopped_after_turn' by _finish_loop. Any other newest run (a success the stage reuses, a failure never sent again,
+    an unknown outcome, a later continuation of it) is no stopped attempt. Read after the unknown-outcome block and
+    before _failed_before, which a stopped run would otherwise answer: its request did not fail, it was paused."""
+    # refutation round 1 of harness repair 3 (L6-1): the newest finished run that was SENT - a hold or another
+    # not-sent run recorded after the Stop (an unknown outcome elsewhere, a refusal) never hides the stopped one
+    run = _newest_finished(models.ProviderRun.objects.filter(
+        encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, purpose=purpose, sent=True))
+    # refutation cycle 2 (C2-5, an edge): a replay adapter shares the live adapter's version, so the mode is compared
+    # too - a chain never mixes a live run and a replay one; a stopped run of the other mode is no attempt to continue
+    if run is not None and (run.scope or {}).get('mode', 'live') != getattr(provider, 'mode', 'live'):
+        return None
+    return run if _resumable_stop(run) else None
+
+
+def _resumable_stop(run) -> bool:
+    """Whether ``run`` is a loop a member's Stop ended between exchanges (failed, sent, and marked 'stopped_after_turn'
+    by _finish_loop): one a Resume continues from its record (F-STOP)."""
+    return (run is not None and run.state == models.ProviderRun.FAILED and run.sent
+            and isinstance((run.scope or {}).get('stopped_after_turn'), int))
+
+
+def continued_runs(run) -> list:
+    """``run`` and the stopped runs it continues (scope 'continues', F-STOP), first run first; [run] for a run that
+    continues none. A chain that loops, or is longer than MAX_CONTINUED_RUNS, is cut where it does."""
+    chain, seen = [run], {run.pk}
+    while len(chain) < MAX_CONTINUED_RUNS:
+        earlier = (chain[-1].scope or {}).get('continues')
+        if not isinstance(earlier, str):
+            break
+        previous = models.ProviderRun.objects.filter(pk=earlier, encounter_id=run.encounter_id,
+                                                     provider=run.provider).first()
+        if previous is None or previous.pk in seen:
+            break
+        chain.append(previous)
+        seen.add(previous.pk)
+    return list(reversed(chain))
+
+
+def _carried_exchanges(run) -> tuple:
+    """The exchanges a continuation of stopped run ``run`` carries (F-STOP): every recorded exchange of ``run`` and of
+    the runs it continues, in turn order, each with the tool calls it answered in the order they were recorded, exactly
+    as recorded. The loop proves each one before it sends anything (loop._resumed)."""
+    records = []
+    for each in continued_runs(run):
+        for exchange in each.exchanges.order_by('turn'):
+            calls = tuple(participant_loop.ToolCallRecord(
+                call_id=call.call_id, tool=call.tool, arguments=call.arguments, result=call.result,
+                result_sha256=call.result_sha256, refs=tuple(call.refs or ()), executed_at=call.executed_at)
+                for call in exchange.tool_calls.order_by('pk'))
+            records.append(participant_loop.ExchangeRecord(
+                turn=exchange.turn, request_body=exchange.request_body, request_sha256=exchange.request_sha256,
+                outcome=exchange.state, http_status=exchange.http_status, response_bytes=bytes(exchange.response_bytes),
+                response_sha256=exchange.response_sha256, latency_ms=exchange.latency_ms, usage=dict(exchange.usage),
+                provider_request_id=exchange.provider_request_id, response_id=exchange.response_id,
+                error=exchange.error, tool_calls=calls, started_at=exchange.started_at,
+                finished_at=exchange.finished_at))
+    return tuple(records)
 
 
 def _not_resent_run(job, encounter, revision, provider, request, service_date, failed, **recorded):
@@ -904,7 +985,7 @@ def stage_predict(job):
 
 
 def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None, original_bytes=None,
-          execute_tool=None):
+          execute_tool=None, continues=None):
     """One provider attempt under the send discipline (ARCHITECTURE 5.4): single-flight by advisory lock, the run
     written 'reserved' before any network I/O, a Stop observed before sending, no automatic retry, and the outcome -
     including an unknown one - recorded with the raw bytes and usage.
@@ -917,10 +998,18 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
     re-verified against the request and expanded at send time. Every exchange and tool call of the loop is recorded with
     the run's outcome (_finish_loop). A member's Stop is observed before every exchange of the loop, not only the first
     (refutation round 1, sends-3): one recorded while the loop runs ends it before its next exchange, the run records
-    the exchanges sent (failed, sent: it has no final answer, and its request is never sent again) and the stage ends
-    stopped. Corti's path is unchanged."""
+    the exchanges sent (failed, sent: it has no final answer) and the stage ends stopped. Since harness repair 3
+    (HARNESS.md, "Harness repair 3", F-STOP) such a run is marked resumable (scope 'stopped_after_turn'), and
+    ``continues`` - the stopped run a member's Resume continues (_stopped_attempt) - makes this attempt its
+    continuation: a run of its own, with its own identity and the same request, whose loop carries the stopped run's
+    exchanges (_carried_exchanges, never sent again) and sends from the next exchange on; its scope names the run it
+    continues. Corti's path is unchanged."""
     encounter, revision = job.encounter, job.revision
     independent = purpose in PARTICIPANT_PURPOSES
+    carried = ()
+    if continues is not None:
+        carried = _carried_exchanges(continues)
+        scope = {**(scope or {}), 'continues': str(continues.pk), 'continues_after_turn': len(carried)}
     if independent:
         _check_loop_time(job)  # before anything is reserved: a loop that could outrun the stage's deadline never starts
     with connection.cursor() as cursor:
@@ -955,11 +1044,14 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
             raise
         audit.record(encounter.workspace, 'provider.sending', encounter=encounter, run=str(run.pk),
                      provider=provider.name, mode=provider.mode, request_sha256=request.canonical_sha256,
-                     run_identity=str(run.run_identity), purpose=purpose)
+                     run_identity=str(run.run_identity), purpose=purpose,
+                     **({'continues': str(continues.pk), 'continues_after_turn': len(carried)}
+                        if continues is not None else {}))
         outcome = None
         if independent:
             tools = execute_tool or reference_tools.executor(encounter.workspace)
-            outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter))
+            outcome = _send_loop(provider, request, run, original_bytes, tools, lambda: _stop_requested(job, encounter),
+                                 carried=carried)
             _finish_loop(run, outcome)
         else:
             exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
@@ -1081,7 +1173,7 @@ def _holds_provider_lock():
         return bool(cursor.fetchone()[0])
 
 
-def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop):
+def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop, carried=()):
     """The participant's one tool loop (HARNESS.md 11.2): a loop.LoopOutcome. An adapter answers every run with one; one
     that raised instead, or answered with anything else, may have sent the request, so the outcome is unknown, with no
     exchange recorded but those recorded as they ended, and blocks every further send until a member reconciles it -
@@ -1113,7 +1205,8 @@ def _send_loop(provider, request, run, original_bytes, execute_tool, should_stop
         with participant_loop.recording(lambda record: _record_exchange(run, record)):
             outcome = provider.send_loop(request, deadline_s=settings.PARTICIPANT_LOOP_DEADLINE_SECONDS,
                                          client_request_id=str(run.run_identity), original_bytes=original_bytes,
-                                         execute_tool=execute_tool, should_stop=checked)
+                                         execute_tool=execute_tool, should_stop=checked,
+                                         **({'carried': carried} if carried else {}))
         if (not isinstance(outcome, participant_loop.LoopOutcome) or not isinstance(outcome.final, RawExchange)
                 or outcome.final.outcome not in LOOP_OUTCOMES or not isinstance(outcome.exchanges, tuple)
                 or not all(isinstance(item, participant_loop.ExchangeRecord) for item in outcome.exchanges)):
@@ -1141,6 +1234,11 @@ def _finish_loop(run, outcome):
     whatever its loop's final says (refutation round 4, sends-3: this fallback recorded a replayed run sent, with
     "what reached the vendor is not known")."""
     called = bool(run.endpoint)  # the reservation's: the endpoint its adapter calls, '' for a replay
+    if outcome.stopped and outcome.exchanges:
+        # F-STOP: a loop a member's Stop ended between exchanges - every exchange complete, nothing in flight - can be
+        # continued from its last turn by a later run (_stopped_attempt); a lost provider lock is never one (stopped is
+        # False there: _send_loop)
+        run.scope = {**(run.scope or {}), 'stopped_after_turn': outcome.exchanges[-1].turn}
     try:
         with transaction.atomic():
             _finish_run(run, outcome.final)
@@ -1401,7 +1499,10 @@ def stage_participant(job):
         held = _participant_not_sent(job, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                                      mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
         return _participant_done(job, held, 'blocked')
-    failed = _failed_before(encounter, participant, request)
+    # F-STOP: a member's Stop paused this request's loop between exchanges; its Resume continues it from the next
+    # exchange (a run of its own, linked to the stopped one), never sending an exchange again
+    stopped = _stopped_attempt(encounter, participant, request, models.ProviderRun.INDEPENDENT)
+    failed = None if stopped is not None else _failed_before(encounter, participant, request)
     if failed is not None:
         run = _not_resent_run(job, encounter, revision, participant, request, None, failed,
                               purpose=models.ProviderRun.INDEPENDENT, scope={'mode': participant.mode},
@@ -1425,7 +1526,7 @@ def stage_participant(job):
                                                                 PARTICIPANT_ORIGINAL_MESSAGE, mode=participant.mode))
     run = _send(job, participant, request, service_date=None, purpose=models.ProviderRun.INDEPENDENT,
                 scope={'mode': participant.mode}, original_bytes=original_bytes,
-                execute_tool=reference_tools.executor(encounter.workspace))
+                execute_tool=reference_tools.executor(encounter.workspace), continues=stopped)
     return _participant_done(job, run)
 
 
@@ -1524,7 +1625,8 @@ def stage_peer(job):
         held = _peer_not_sent(job, first, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                               mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
         return _peer_done(job, first, held, 'blocked')
-    failed = _failed_before(encounter, participant, request)
+    stopped = _stopped_attempt(encounter, participant, request, models.ProviderRun.PEER_REVIEW)  # F-STOP, as above
+    failed = None if stopped is not None else _failed_before(encounter, participant, request)
     if failed is not None:
         run = _not_resent_run(job, encounter, revision, participant, request, None, failed,
                               purpose=models.ProviderRun.PEER_REVIEW, scope={'mode': participant.mode, **scope},
@@ -1538,7 +1640,8 @@ def stage_peer(job):
     if job.idempotency_key.endswith(UPGRADE_MARK):
         raise StageCancelled(PEER_UPGRADE_MESSAGE.format(label=participants.LABELS.get(name, name)))
     run = _send(job, participant, request, service_date=None, purpose=models.ProviderRun.PEER_REVIEW,
-                scope={'mode': participant.mode, **scope}, execute_tool=reference_tools.executor(encounter.workspace))
+                scope={'mode': participant.mode, **scope}, execute_tool=reference_tools.executor(encounter.workspace),
+                continues=stopped)
     return _peer_done(job, first, run)
 
 
@@ -1806,7 +1909,7 @@ def _participant_record(name, state, run, reading, reason):
     for item in used.not_coded if used is not None else ():
         if item.code and item.code not in advised:
             advised[item.code] = {'code': item.code, 'reason': item.reason, 'quote': _first_located(item.evidence)}
-    source = loop_run(run) if run is not None else None
+    source = loop_runs(run) if run is not None else None  # a continuation's whole loop (F-STOP)
     return {'name': name, 'state': state, 'run': str(run.pk) if run is not None else None,
             'adapter_version': run.adapter_version if run is not None else '',
             'requested_model': run.requested_model if run is not None else '',
@@ -1815,8 +1918,9 @@ def _participant_record(name, state, run, reading, reason):
             'codes': [{'code': code, 'quote': quote} for code, quote in proposed.items()],
             'not_coded': list(advised.values()),
             'reading_sha256': answer_sha256(reading) if reading is not None else '',
-            'exchanges': source.exchanges.count() if source is not None else 0,
-            'tool_calls': models.ToolCall.objects.filter(exchange__run=source).count() if source is not None else 0}
+            'exchanges': (models.ProviderExchange.objects.filter(run__in=source).count()
+                          if source is not None else 0),
+            'tool_calls': models.ToolCall.objects.filter(exchange__run__in=source).count() if source is not None else 0}
 
 
 def not_configured_record(name):

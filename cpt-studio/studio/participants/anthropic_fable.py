@@ -34,10 +34,22 @@ is used only when that text, its surrounding whitespace stripped, is exactly one
 is then the reading (reading.py) or the peer review (peer.py), read exactly as before: strict JSON, CPT Studio's own
 schema validation, the bounds and the located quotes. Nothing is repaired or coerced.
 
+harness-4 (HARNESS.md, "Harness repair 3", F-CONTRACT): each of Fable's three walk readings of 2026-11-05 was refused
+whole by the schema check for one empty field of its own on not_coded[0] ("code_note": "", "service_ids_note": null,
+"evidence_note": "" and "reason_detail": ""). The request is harness-3's with one more line after the schema
+(prompt.fields_instruction): every object gets exactly the fields the schema lists, and no other, empty or not. The
+answer is read as harness-3's is, except that its fields outside the schema are set aside first (reading.set_aside),
+for the reading and the peer review alike. Each set-aside field is named in the problems (where it was, whether it was
+empty, its size; never its text), the raw response keeps it, and what remains is validated as strictly as before.
+Anthropic's output format stays unused: the grammar limit of 12.8 is unchanged.
+
 Every earlier version's stored runs are still read, each exactly as before, and a request of an earlier version is
-never sent (providers.base.verified_body refuses another version): ADAPTER_VERSION_2 names the harness@2 request (the
-reading schema as output_config.format, beside the tools; its answer's text is read as JSON as it stands, so a fence is
-refused there as it always was), ADAPTER_VERSION_1 the harness@1 request (no tools, no peer review).
+never sent (providers.base.verified_body refuses another version). The versions:
+- ADAPTER_VERSION_3: the harness-3 request (no output format, the schema in the system prompt). Its answer's fields
+  outside the schema still refuse it whole, as they did on the walk.
+- ADAPTER_VERSION_2: the harness@2 request (the reading schema as output_config.format, beside the tools). Its answer's
+  text is read as JSON as it stands, so a fence is refused there, as it always was.
+- ADAPTER_VERSION_1: the harness@1 request (no tools, no peer review).
 """
 from __future__ import annotations
 
@@ -54,10 +66,12 @@ from studio.providers.base import ProviderUnavailable, valid_deadline, verified_
 from studio.types import PageSpan, ParticipantReading, PeerReview, ProviderRequest, RawExchange
 
 NAME = 'fable'
-ADAPTER_VERSION = 'anthropic-messages@cptstudio-harness-3'  # @3: no output format; the schema is in the system prompt
+ADAPTER_VERSION = 'anthropic-messages@cptstudio-harness-4'  # @4: @3 with the fields line; extra fields set aside
+ADAPTER_VERSION_3 = 'anthropic-messages@cptstudio-harness-3'  # stored harness-3 runs: read as before, never sent
 ADAPTER_VERSION_2 = 'anthropic-messages@cptstudio-harness-2'  # stored harness@2 runs: read as before, never sent
 ADAPTER_VERSION_1 = 'anthropic-messages@cptstudio-harness-1'  # stored harness@1 runs: read as before, never sent
-READ_VERSIONS = (ADAPTER_VERSION, ADAPTER_VERSION_2, ADAPTER_VERSION_1)
+READ_VERSIONS = (ADAPTER_VERSION, ADAPTER_VERSION_3, ADAPTER_VERSION_2, ADAPTER_VERSION_1)
+UNCONSTRAINED_VERSIONS = (ADAPTER_VERSION, ADAPTER_VERSION_3)  # nothing at Anthropic constrained the answer (12.8)
 MODEL = 'claude-fable-5-1'
 ENDPOINT = 'https://api.anthropic.com/v1/messages'
 API_VERSION = '2026-10-21'
@@ -77,10 +91,16 @@ def tools() -> list:
              'input_schema': copy.deepcopy(tool['parameters']), 'strict': True} for tool in prompt.TOOLS]
 
 
-def system_prompt(instructions: str, schema: dict) -> str:
-    """harness-3's system prompt: ``instructions`` exactly as Astra is given them, then the schema its answer must match
-    (prompt.schema_instruction), because nothing at Anthropic constrains the answer (HARNESS.md 12.8)."""
-    return instructions + prompt.schema_instruction(schema)
+def system_prompt(instructions: str, schema: dict, version: str = ADAPTER_VERSION) -> str:
+    """The system prompt of ``version`` (harness-4's by default): ``instructions`` exactly as Astra is given them, then
+    the schema the answer must match (prompt.schema_instruction), because nothing at Anthropic constrains the answer
+    (HARNESS.md 12.8); harness-4 then adds prompt.fields_instruction (F-CONTRACT). harness-3's is the same without
+    it."""
+    if version == ADAPTER_VERSION_3:
+        return instructions + prompt.schema_instruction(schema)
+    if version != ADAPTER_VERSION:
+        raise ValueError(f'{version!r} has no system prompt of this kind.')
+    return instructions + prompt.schema_instruction(schema) + prompt.fields_instruction()
 
 
 def _body(instructions: str, content: list, schema: dict) -> dict:
@@ -180,11 +200,11 @@ class FableParticipant:
                           original_bytes=original_bytes)
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str,
-                  original_bytes: Optional[bytes], execute_tool, should_stop=None) -> loop.LoopOutcome:
+                  original_bytes: Optional[bytes], execute_tool, should_stop=None, carried=()) -> loop.LoopOutcome:
         """The run's tool loop (loop.run): at most max_exchanges exchanges within the loop deadline (``deadline_s``,
         never more than loop_deadline), each read within exchange_read_timeout clamped to the time left; a member's Stop
         (``should_stop``) is observed before every exchange after the first. ``client_request_id`` is not sent (see
-        send)."""
+        send). ``carried``: the exchanges of the stopped run this run continues (loop.run, F-STOP)."""
         def post(turn: int, body: dict, deadline: float) -> RawExchange:
             return self._post(body, deadline=deadline, read_timeout=self.exchange_read_timeout,
                               original_bytes=original_bytes)
@@ -192,7 +212,8 @@ class FableParticipant:
         return loop.run(self, request, post=post, parse_turn=parse_turn, follow_up=follow_up,
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
-                        max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS, should_stop=should_stop)
+                        max_request_bytes=self.max_request_bytes, body_keys=BODY_KEYS, should_stop=should_stop,
+                        carried=carried)
 
     def _post(self, body: dict, *, deadline: float, read_timeout: float, original_bytes) -> RawExchange:
         """One exchange of a verified stored body: the original re-verified and expanded, the credentials read, one
@@ -267,7 +288,7 @@ def read_response(request: ProviderRequest, response_bytes, refs_retrieved=froze
     if why:
         return reading.refusal(NAME, version, MODEL, returned, why)
     return reading.read(text, _source(request), provider=NAME, adapter_version=version, requested_model=MODEL,
-                        returned_model=returned, refs_retrieved=refs)
+                        returned_model=returned, refs_retrieved=refs, set_aside_unknown=version == ADAPTER_VERSION)
 
 
 def read_peer(request: ProviderRequest, response_bytes, refs_retrieved=frozenset()) -> PeerReview:
@@ -288,7 +309,8 @@ def read_peer(request: ProviderRequest, response_bytes, refs_retrieved=frozenset
     if why:
         return peer.refusal(NAME, version, MODEL, returned, why, frozen)
     return peer.read(text, _source(request), provider=NAME, adapter_version=version, requested_model=MODEL,
-                     returned_model=returned, question_ids=question_ids, frozen_inputs=frozen, refs_retrieved=refs)
+                     returned_model=returned, question_ids=question_ids, frozen_inputs=frozen, refs_retrieved=refs,
+                     set_aside_unknown=version == ADAPTER_VERSION)
 
 
 def _source(request: ProviderRequest):
@@ -299,6 +321,8 @@ def _source(request: ProviderRequest):
 # What a peer-review body of each version that has one carries besides its messages: (system, output_config).
 _PEER_SHAPES = {
     ADAPTER_VERSION: (system_prompt(prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA), {'effort': EFFORT}),
+    ADAPTER_VERSION_3: (system_prompt(prompt.PEER_INSTRUCTIONS, prompt.PEER_SCHEMA, ADAPTER_VERSION_3),
+                        {'effort': EFFORT}),
     ADAPTER_VERSION_2: (prompt.PEER_INSTRUCTIONS,
                         {'format': {'type': 'json_schema', 'schema': prompt.PEER_SCHEMA}, 'effort': EFFORT}),
 }
@@ -306,8 +330,8 @@ PEER_READ_VERSIONS = tuple(_PEER_SHAPES)  # harness@1 had no peer review
 
 
 def _peer_document(body, version: str = ADAPTER_VERSION) -> Optional[str]:
-    """The peer document of a peer-review body this adapter builds at ``version`` (harness-3's by default; harness@2's
-    exactly as before), or None for any other body."""
+    """The peer document of a peer-review body this adapter builds at ``version`` (harness-4's by default; harness-3's
+    and harness@2's exactly as before), or None for any other body."""
     system, output_config = _PEER_SHAPES[version]
     if not isinstance(body, dict) or set(body) != BODY_KEYS or body['model'] != MODEL or body['system'] != system:
         return None
@@ -322,11 +346,11 @@ def _peer_document(body, version: str = ADAPTER_VERSION) -> Optional[str]:
 
 
 def _answer_text(response_bytes, version: str) -> tuple[str, str, str]:
-    """_answer, then - for a harness-3 answer, which nothing at Anthropic constrained - the one JSON object it must be
-    (reading.sole_object, the one implementation both phases use; HARNESS.md 12.8). An earlier version's answer is
-    _answer's exactly, as it always was."""
+    """_answer, then - for a harness-3 or harness-4 answer, which nothing at Anthropic constrained - the one JSON object
+    it must be (reading.sole_object, the one implementation both phases use; HARNESS.md 12.8). An earlier version's
+    answer is _answer's exactly, as it always was."""
     text, returned, why = _answer(response_bytes)
-    if not why and version == ADAPTER_VERSION:
+    if not why and version in UNCONSTRAINED_VERSIONS:
         text, why = reading.sole_object(text)
     return text, returned, why
 

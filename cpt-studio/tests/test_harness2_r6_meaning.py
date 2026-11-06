@@ -41,14 +41,15 @@ D14_REASON = ("a quote found verbatim in the document does not by itself show th
 # checked for admission, and one that is not admitted says why in one of these reasons (engine._not_added_why and the
 # merge's own). Each assertion below that pinned D14's reason now pins that one of them is given and D14's sentence never
 # is; every other strict invariant of the meaning findings stands as it was (D14_REASON is kept as that record).
+# P-ADMIT2 (harness repair 3): the reasons say what CPT Studio's own reading leaves the code, never what another proposer
+# did with it, so the gap-filling reasons ("... the other proposals left unresolved") and the competing one (both codes
+# are now added and held) are gone
 P_ADMIT_REASONS = (engine.PARTICIPANT_PEER_ONLY, engine.PARTICIPANT_NOT_SHOWN, engine.PARTICIPANT_NOT_ESTABLISHED,
-                   engine.PARTICIPANT_UNREAD,
-                   'it accounts for no documented service or act the other proposals left unresolved',
-                   'the act it accounts for is not documented as done in the service left unresolved',
+                   engine.PARTICIPANT_UNREAD, engine.PARTICIPANT_NO_SERVICE, engine.PARTICIPANT_NO_ACT,
                    'the document states the act it accounts for both as done and as not done',
                    'the document reads what it accounts for as not performed on the date of service',
                    'the coverage catalogue does not establish which documented act it accounts for',
-                   'independent participants propose different codes for the same documented act')
+                   'the act it accounts for is part of another documented act, not a separate service')
 
 
 def not_added_reason(reason):
@@ -925,17 +926,22 @@ class SourceHighlightTitleTests(MeaningCase):
 # Studio used (it was "... selected, in scope and with an exact passage, or that its bounded second review added ...")
 # The sentence of HARNESS.md P-ADMIT (2026-11-05), written out so that a change of its wording is a change of this pin;
 # D14's, which it replaces, said that every other code "is listed as an alternative and never added as a proposal".
+# Moved by harness repair 3 (P-ADMIT2, the owner's second message of 2026-11-05): the gap-filling clause ("only where
+# they read it as accounting for a documented service or act the other proposals left unresolved, and not where another
+# participant proposes a different code for the same act") is withdrawn - a code is read whatever any other proposer did
+# with it, and codes of different proposers for one act each reach review, held by one question naming the others.
 NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's code that the "
                 'proposal provider selected, in scope and with an exact passage, in a response CPT Studio used, or that its '
                 "bounded second review added as a proposal, is recorded on that proposal, which CPT Studio's own readers "
                 "judge on the provider's passages alone; a code a participant's independent first reading proposes, "
-                "quoting the document verbatim, is read by those same readers from that reading's exact passages and "
-                'added as a proposal of its own only where they read it as accounting for a documented service or act the '
-                'other proposals left unresolved, and not where another participant proposes a different code for the '
-                'same act; it is then held or ready by those readers alone, and only a reviewer approves it; any other '
-                "code a participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is "
-                "listed as an alternative, and one in neither shape is counted and never listed; and a participant's "
-                'questions are notes that never block.')
+                "quoting the document verbatim, is read by those same readers from that reading's exact passages, "
+                'whatever any other proposer did with it, and added as a proposal of its own where they read it as '
+                'accounting for a documented service or act done on the date of service; codes of different proposers '
+                'for the same act each reach review, held by one question naming the others, and none is preferred; it '
+                'is then held or ready by those readers alone, and only a reviewer approves it; any other code a '
+                "participant gives in a CPT or HCPCS code's shape, including one it gives only in peer review, is listed "
+                "as an alternative, and one in neither shape is counted and never listed; and a participant's questions "
+                'are notes that never block.')
 SAME_RULES = "by the same rules as the proposal provider's"
 
 

@@ -202,14 +202,18 @@ class DifferentActsTests(SimpleTestCase):
         self.assertEqual(outcome(result, '43245'), [READY])
 
     def test_codes_for_one_act_still_compete_and_say_so_truly(self):
+        # harness repair 3 (P-ADMIT2; the owner's second message of 2026-11-05, interpretation (a)): the "neither is
+        # added" rule is withdrawn - both codes reach review, each held by one question naming the other, no proposer
+        # named and neither chosen
         text = EGD + self.D1 + '\n'
         result = run(text, corti(), [read('astra', [code(text, '43249', self.D1), code(text, '43245', self.D1)])])
-        for which in ('43249', '43245'):
+        for which, other in (('43249', '43245'), ('43245', '43249')):
             (item,) = [p for p in result.proposals if p.code == which]
-            self.assertEqual((item.bucket, item.status), ALTERNATIVE)
-            self.assertIn('independent readings propose different codes for the same documented act',
-                          item.exclusion_reason)
-            self.assertNotIn('participants propose', item.exclusion_reason)
+            self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+            (hold,) = [c for c in item.checks if c.id == engine.COMPETING_CHECK]
+            self.assertIn(other, hold.detail)
+            self.assertNotIn('astra', hold.detail.lower())
+            self.assertNotIn('participant', hold.detail.lower())
 
 
 class NegationReleaseTests(SimpleTestCase):
@@ -321,15 +325,22 @@ class MarkedShapeTests(SimpleTestCase):
     def test_a_marker_outside_the_packages_shape_is_held(self):
         for line in ('The lesion in the ascending colon was marked with 3 mL of India ink and not resected.',
                      'The lesion in the ascending colon was marked with three injections of tattoo ink and not resected.',
-                     'The lesion in the ascending colon was marked distally with tattoo ink and not resected.',
-                     # the package's own design: "marked" never dates an injection, so its "future" stays a plan here
-                     # (the package's test cites the injected sentence beside it, which stays ready)
-                     'The lesion in the ascending colon was marked with submucosal tattoo for future localization and not '
-                     'resected.'):
+                     'The lesion in the ascending colon was marked distally with tattoo ink and not resected.'):
             with self.subTest(line):
                 by_corti, by_astra = both(COLON + line + '\n', '45381', line)
                 self.assertNotIn(READY, by_corti)
                 self.assertNotIn(READY, by_astra)
+
+    def test_the_tattoo_with_its_future_purpose_and_the_resections_denial_reads_as_its_participle_form(self):
+        # harness repair 3's F-NEG S gives the denial to the resection; its F-TIME R is dropped (refutation cycle 2, two
+        # cycles refuted), so the purpose's "future" dates the marking as planned exactly as it dates the participle
+        # form "was tattooed for future localization" at main (D1): Corti's code excluded, a participant's listed. A
+        # recorded residual, a false exclusion where main held it - never READY
+        line = 'The lesion in the ascending colon was marked with submucosal tattoo for future localization and not resected.'
+        plain = 'The transverse colon lesion was tattooed for future localization.'
+        self.assertEqual(both(COLON + line + '\n', '45381', line), both(COLON + plain + '\n', '45381', plain))
+        self.assertEqual(both(COLON + line + '\n', '45381', line),
+                         ([('excluded', 'excluded')], [('alternative', 'informational')]))
 
 
 class MarkedAdverbTests(SimpleTestCase):
@@ -354,16 +365,19 @@ class MarkedAdverbTests(SimpleTestCase):
                     self.assertNotIn(READY, by_corti)
                     self.assertNotIn(READY, by_astra)
 
-    def test_the_packages_own_forms_read_as_main_reads_them(self):
-        # round 6: the package's coordinated rule is dropped; its own forms are held, as at main
+    def test_the_packages_own_forms_read_as_their_participle_form(self):
+        # round 6 dropped the package's coordinated rule. Harness repair 3 (F-NEG S) gives the "not" to the resection
+        # at the instrument shape only, so these read as "was tattooed and not resected" reads (READY); an adverb
+        # before the participle stays outside it, held on the safe side, as at main
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
-                     'The lesion in the ascending colon was also marked with tattoo and not resected.',
                      'Ascending colon lesion marked with tattoo and not resected.',
                      'Ascending colon polyp marked with India ink and not resected.'):
             with self.subTest(line):
-                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
-                self.assertNotIn(READY, by_corti)
-                self.assertNotIn(READY, by_astra)
+                self.assertEqual(both(COLON + line + '\n', '45381', line), ([READY], [READY]))
+        line = 'The lesion in the ascending colon was also marked with tattoo and not resected.'
+        by_corti, by_astra = both(COLON + line + '\n', '45381', line)
+        self.assertNotIn(READY, by_corti)
+        self.assertNotIn(READY, by_astra)
 
 
 class PackageSentenceTests(SimpleTestCase):
@@ -447,45 +461,55 @@ class PackageSentenceTests(SimpleTestCase):
                 for got in both(COLON + heading + '\n' + line + '\n', '45381', line):
                     self.assertNotIn(READY, got)
 
-    def test_the_packages_own_sentences_read_as_main_reads_them(self):
-        # round 6: both package rules are dropped (the whole-sentence form failed its second cycle, L6-1: a package
-        # sentence after "Indication: Referred after an outside colonoscopy ..." read READY where main holds it)
+    def test_the_packages_own_sentences_read_as_their_plain_forms(self):
+        # round 6 dropped both package rules (the whole-sentence form failed its second cycle, L6-1). Harness repair 3
+        # reads the same sentences by two narrower rules through every other reading. F-NEG S stands: the coordinated
+        # forms are READY as a completed marking today is. F-TIME R was refuted in two cycles and is dropped (HARNESS.md
+        # "Harness repair 3, refutation cycle 2"): the purpose forms read as main reads them - Corti's code excluded, a
+        # participant's listed, never READY (a recorded residual, a false exclusion)
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
-                     'The transverse colon lesion was marked with tattoo and not resected today.',
-                     'India ink was injected adjacent to the lesion in the ascending colon for future localization.',
+                     'The transverse colon lesion was marked with tattoo and not resected today.'):
+            with self.subTest(line):
+                self.assertEqual(both(COLON + line + '\n', '45381', line), ([READY], [READY]))
+        for line in ('India ink was injected adjacent to the lesion in the ascending colon for future localization.',
                      'Tattoo ink was injected into the transverse colon submucosa for future localization.',
                      'Tattoo ink injected into the transverse colon submucosa for future localization.',
                      # L6-1 and L6-2
                      'The transverse colon lesion was tattooed for future localization.'):
             with self.subTest(line):
-                by_corti, by_astra = both(COLON + line + '\n', '45381', line)
-                self.assertNotIn(READY, by_corti)
-                self.assertNotIn(READY, by_astra)
+                self.assertEqual(both(COLON + line + '\n', '45381', line),
+                                 ([('excluded', 'excluded')], [('alternative', 'informational')]))
+        # L6-1's bodies: never better than the participle form of the same sentence under the same heading (D1) -
+        # held where it is held ("Indication:" over the line, no "today"), READY only where it is READY
         for body in ('Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
                      'The transverse colon lesion was marked with tattoo and not resected.',
-                     'Indication:\nThe transverse colon lesion was marked with tattoo and not resected today.'):
+                     'Indication:\nThe transverse colon lesion was marked with tattoo and not resected today.',
+                     'Indication:\nThe transverse colon lesion was marked with tattoo and not resected.'):
             with self.subTest(body):
                 line = body.split('\n')[-1]
-                for got in both(COLON + body + '\n', '45381', line):
-                    self.assertNotIn(READY, got)
+                plain = line.replace('marked with tattoo', 'tattooed')
+                self.assertEqual(both(COLON + body + '\n', '45381', line),
+                                 both(COLON + body.replace(line, plain) + '\n', '45381', plain))
+        line = 'The transverse colon lesion was marked with tattoo and not resected.'
+        for got in both(COLON + 'Indication:\n' + line + '\n', '45381', line):
+            self.assertNotIn(READY, got)
 
-    def test_88d9db32s_shapes_read_as_main_reads_them(self):
+    def test_88d9db32s_shapes_read_as_done(self):
         # the encounter's own shapes: the injection stated in the findings, and the impression's coordinated form
-        # wrapped across a line ("... and\nnot resected today."). With the package's coordinated rule dropped (round
-        # 6) the impression's denial reaches its tattoo, which conflicts with the injection: 45381 is held, as at main
-        # and the live revision
+        # wrapped across a line ("... and\nnot resected today."). Round 6 had left the impression's denial on its tattoo,
+        # a false conflict with the injection that held 45381. Harness repair 3's F-NEG S gives the denial to the
+        # resection: no conflict, and 45381 is READY on both paths on the findings' injection. With F-TIME R dropped
+        # (refutation cycle 2) the impression's own tattoo reads planned by its "future", which contradicts nothing
         body = ('To facilitate subsequent\nlocalization, sterile carbon-based tattoo ink was injected into the submucosa '
                 'approximately 3 cm distal to this\ntransverse-colon abnormality, on the opposite wall.\nImpression\n'
                 'Distal rectal mucosal\nabnormality biopsied. Separate transverse-colon lesion marked with submucosal '
                 'tattoo for future localization and\nnot resected today.')
         quote = 'sterile carbon-based tattoo ink was injected into the submucosa'
-        by_corti, by_astra = both(COLON + body + '\n', '45381', quote)
-        self.assertEqual(by_corti, [('selected', 'needs_clarification')])
-        self.assertNotIn(READY, by_astra)
+        self.assertEqual(both(COLON + body + '\n', '45381', quote), ([READY], [READY]))
         from tests.test_advanced_gi_binding import colon, inventory
         inv = inventory(body)
-        self.assertEqual(len(inv.conflicts), 1, inv.conflicts)
-        self.assertTrue([a for a in colon(inv).acts if a.kind == 'tattoo' and a.status == 'negated'])
+        self.assertEqual(inv.conflicts, ())
+        self.assertEqual(sorted(a.status for a in colon(inv).acts if a.kind == 'tattoo'), ['performed', 'planned'])
 
 
 class ExcisedTests(SimpleTestCase):

@@ -92,9 +92,10 @@ class ReplayParticipant:
         return self._recorded(request.canonical_sha256)
 
     def send_loop(self, request: ProviderRequest, *, deadline_s: float, client_request_id: str, original_bytes,
-                  execute_tool, should_stop=None) -> loop.LoopOutcome:
+                  execute_tool, should_stop=None, carried=()) -> loop.LoopOutcome:
         """The live loop's exchanges, each replayed from the recording keyed by its own stored request's sha256; a
-        member's Stop (``should_stop``) is observed as the live loop observes it."""
+        member's Stop (``should_stop``) is observed as the live loop observes it, and a continuation (``carried``,
+        F-STOP) continues as the live loop's does."""
         def post(turn: int, body: dict, deadline: float) -> RawExchange:
             try:
                 http.check_shape(body, self.requested_model, self.live.BODY_KEYS)
@@ -107,7 +108,7 @@ class ReplayParticipant:
                         execute_tool=execute_tool, deadline_s=deadline_s, longest_s=self.loop_deadline,
                         max_exchanges=self.max_exchanges, max_tool_result_bytes=self.max_tool_result_bytes,
                         max_request_bytes=self.max_request_bytes, body_keys=self.live.BODY_KEYS,
-                        should_stop=should_stop)
+                        should_stop=should_stop, carried=carried)
 
     def _recorded(self, sha256: str) -> RawExchange:
         folder = self.replay_dir / self.name

@@ -2583,10 +2583,11 @@ PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement
                              'CPT Studio used, or that its bounded second review added as a proposal, is recorded on '
                              "that proposal, which CPT Studio's own readers judge on the provider's passages alone; a "
                              "code a participant's independent first reading proposes, quoting the document verbatim, is "
-                             "read by those same readers from that reading's exact passages and added as a proposal of "
-                             'its own only where they read it as accounting for a documented service or act the other '
-                             'proposals left unresolved, and not where another participant proposes a different code for '
-                             'the same act; it is then held or ready by those readers alone, and only a reviewer approves '
+                             "read by those same readers from that reading's exact passages, whatever any other proposer "
+                             'did with it, and added as a proposal of its own where they read it as accounting for a '
+                             'documented service or act done on the date of service; codes of different proposers for '
+                             'the same act each reach review, held by one question naming the others, and none is '
+                             'preferred; it is then held or ready by those readers alone, and only a reviewer approves '
                              "it; any other code a participant gives in a CPT or HCPCS code's shape, including one it "
                              'gives only in peer review, is listed as an alternative, and one in neither shape is counted '
                              "and never listed; and a participant's questions are notes that never block.")

@@ -923,5 +923,488 @@
    "D6's title branch in services._on_procedure_line (P1's): use it only for part.role == 'physician', as _studies_reported does.",
    "Re-pin at integration: tests/fixtures/gi4/pins (battery.json gains the 41 'R8 ' rows; replay.json, cues.json, freeze.json and tables.json do not move) and the one parity digest."
   ]
- }
+ },
+  "amendment_20261105_harness_repair_3_offers": {
+    "measured_after_code": true,
+    "why": "Harness repair 3 (F-TIME B: \"at the initial, original or index procedure\"): R8 D9's 45385 on the index colonoscopy is excluded as historical (its truth is not_done), so its offers move; every other row is copied unchanged from the latest offer battery.",
+    "moved_rows": [
+      "R8 D9 index colonoscopy prose"
+    ],
+    "offer_battery": {
+      "R8 D1 N1 hot snare polypectomy failed": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D1 N2 attempted, could not be removed": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D1 N3 biopsy attempted, no tissue": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D1 N4 ERCP stent placement failed": {
+        "empty": [
+          [
+            "gi.ercp",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D10 attached prior EGD report title": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ],
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D12 E/M control, h4-01 time-only twin": {
+        "empty": [
+          [
+            "gi.office_em",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D12 E/M not seen in person, exam, NBSP": {
+        "empty": [],
+        "own": []
+      },
+      "R8 D12 E/M not seen in person, exam, plain": {
+        "empty": [],
+        "own": []
+      },
+      "R8 D12 E/M not seen in person, history, NBSP": {
+        "empty": [],
+        "own": []
+      },
+      "R8 D12 E/M not seen in person, history, plain": {
+        "empty": [],
+        "own": []
+      },
+      "R8 D13 named EGD control, h4-03 as written": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D13 named EGD control, two passages": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D13 named EGD, stopped in the stomach, two passages": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D13 named EGD, we stopped in the stomach": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D15 EGD with EUS, base EGD coded": {
+        "empty": [
+          [
+            "gi.eus",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D2 N10 antral biopsy failed": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 N15 no polyps removed, snare header": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 N16 we did not remove it, snare header": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 N17 polyp was not removed, snare header": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 N9 considered but not performed": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 declared:1 period-ended row, No checked": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 negtime-0 biopsies not obtained (whether)": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 release-0 at no point": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 release-0 none was snared": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D3 release-0 without resection": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D4 F1 EGD snare line, colonoscopy normal": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ],
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D4 F7N EGD biopsy line, colonoscopy denies": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ],
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D5 F4B pathology specimen line": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D6 F4C pathology addendum heading": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D8 C1 indication line and the reach sentence cited": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D8 C1 indication line in a titled report": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 index colonoscopy prose": {
+        "own": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ]
+      },
+      "R8 D9 release-1 last spring": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 release-1 most recent colonoscopy": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 release-1 ordered by the referrer": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 release-1 to be removed tomorrow": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 time-1 last colonoscopy line": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 D9 time-2 last colonoscopy line, base cited": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 E1 history sentence cited, snare also done today": {
+        "empty": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": []
+      },
+      "R8 E2 EGD biopsy sentence cited for a colon snare": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ],
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ]
+        ]
+      },
+      "R8 E3 colon snare sentence cited for an EGD biopsy": {
+        "empty": [
+          [
+            "gi.egd",
+            "",
+            "no_proposal",
+            true
+          ],
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ],
+        "own": [
+          [
+            "gi.colonoscopy",
+            "",
+            "no_proposal",
+            true
+          ]
+        ]
+      }
+    }
+  }
 }

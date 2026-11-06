@@ -274,18 +274,23 @@ class MergeTests(SimpleTestCase):
         self.assertEqual(without_record(proposal(result, '45380', 'excluded')), proposal(alone, '45380'))
 
     def test_a_provider_candidate_is_no_proposal(self):
-        """A code the provider only listed (a candidate, never selected) carries nothing: a participant's code of the
-        same number is listed as its own alternative (it was judged as a proposal of its own until refutation round 6's
-        D14, R6-MEANING), and the provider's listing stays an alternative."""
+        """A code the provider only listed (a candidate, never selected) carries nothing, and never stops a
+        participant's explicit proposal of the same number (P-ADMIT2, the owner's second message of 2026-11-05: "even
+        when Corti ... listed that code only as an alternative"): the participant's code is read by the per-code path
+        and reaches review as a proposal of its own, held here by the base rule beside 45385; the provider's listing
+        stays an alternative."""
         candidate = ProviderCode('candidate', 'cpt', '45378', 'UNVERIFIED PROVIDER WORDING', (span(COLON, CECUM),))
         result = run(COLON, [*corti(('45385', span(COLON, SNARE))), candidate],
                      [read('astra', [code(COLON, '45378', CECUM)])])
-        # moved by refutation round 6 (R6-MEANING, the session's D14): the participant's code is its alternative beside
-        # the provider's, never a proposal (it was sel:1, selected)
+        # moved by P-ADMIT2: a proposal of its own (D14 and P-ADMIT had listed it as the participant's alternative)
         self.assertEqual([(p.key, p.bucket, p.support['proposed_by']) for p in result.proposals if p.code == '45378'],
-                         [('alt:0', 'alternative', []), ('altp:0', 'alternative', ['astra'])])
-        self.assertEqual(next(p for p in result.proposals if p.key == 'alt:0').support['participants']['astra']
-                         ['position'], 'proposed')
+                         [('sel:1', 'selected', ['astra']), ('alt:0', 'alternative', [])])
+        admitted = next(p for p in result.proposals if p.key == 'sel:1')
+        self.assertEqual((admitted.status, admitted.support['origin'], [q.fact for q in admitted.clarifications]),
+                         ('needs_clarification', 'participant', ['base_included']))
+        self.assertTrue(admitted.rationale.startswith('Proposed by Astra (independent participant); Corti listed this '
+                                                      'code as a candidate or an alternative, not selected'),
+                        admitted.rationale)
 
     def test_stated_values_outside_the_schema_are_counted_never_shown(self):
         odd = replace(code(COLON, '45380', BIOPSY, modifiers=('59', 'XS', f'{OWN_WORDS} modifier')),
@@ -451,7 +456,9 @@ class AgreementNeverPromotesTests(SimpleTestCase):
         alone leaves the act in doubt; and beside Fable's, read with it, it leaves the act not established as done, so the code is
         not admitted at all (never ready, never a held code that could cover the biopsy) - whichever proposer comes
         first: agreement never releases, and a doubt another proposer raises never makes the code more ready. (D14
-        listed it in all three; before D14 the pair held it.)"""
+        listed it in all three; before D14 the pair held it. Refutation cycle 2 held the hedged one beside Corti's,
+        and cycle 3 (C3-2-1 to C3-2-3) narrowed that admission to an act stated done inside a doubted service, so the
+        hedged act's code is listed again, as pinned here.)"""
         codes = corti(('45385', span(COLON_HEDGE, SNARE)))
         fable, astra = (read('fable', [code(COLON_HEDGE, '45380', BIOPSY)]),
                         read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
@@ -721,11 +728,14 @@ class DeterminismTests(SimpleTestCase):
         again = run(COLON, corti(('45385', span(COLON, SNARE))), list(reversed(participants)))
         self.assertEqual(first, again)
         self.assertEqual(sha256_json(first), sha256_json(again))
-        # HARNESS.md P-ADMIT (2026-11-05): 45380 is admitted (sel:1); G0105 is out of scope and 45378 accounts for
-        # nothing the proposals leave open, so both stay alternatives in the order they first appear (D14 had listed
-        # all three; before it 45380 and 45378 were sel:1 and sel:2)
+        # HARNESS.md P-ADMIT2 (harness repair 3): 45380 and 45378 are admitted, whatever Corti's codes cover (45378 is
+        # then held by the base rule beside them); G0105 is out of scope and stays an alternative. (P-ADMIT had listed
+        # 45378 too, as accounting for nothing the proposals left open; D14 had listed all three.)
         self.assertEqual([(p.key, p.code) for p in first.proposals],
-                         [('sel:0', '45385'), ('sel:1', '45380'), ('altp:0', 'G0105'), ('altp:1', '45378')])
+                         [('sel:0', '45385'), ('sel:1', '45380'), ('sel:2', '45378'), ('altp:0', 'G0105')])
+        base = next(p for p in first.proposals if p.code == '45378')
+        self.assertEqual((base.status, [q.fact for q in base.clarifications]), ('needs_clarification',
+                                                                                ['base_included']))
         self.assertEqual(len({p.key for p in first.proposals}), len(first.proposals))
 
 
@@ -1027,8 +1037,8 @@ class PeerReviewTests(SimpleTestCase):
         again = run(COLON, corti(('45385', span(COLON, SNARE))), list(reversed(participants)))
         self.assertEqual(first, again)
         self.assertEqual(sha256_json(first), sha256_json(again))
-        # HARNESS.md P-ADMIT (2026-11-05): Astra's first-reading 45380 is admitted (sel:1); Fable's 45378 accounts for
-        # nothing left open and G0105, given only in peer review, is out of scope: alternatives, first readings' first
-        # (D14 had listed all three; before it 45380 and 45378 were sel:1 and sel:2)
+        # HARNESS.md P-ADMIT2 (harness repair 3): Astra's first-reading 45380 and Fable's first-reading 45378 are
+        # admitted (45378 held by the base rule); G0105, given only in peer review, is out of scope: an alternative.
+        # (P-ADMIT had listed 45378 too; D14 had listed all three.)
         self.assertEqual([(p.key, p.code) for p in first.proposals],
-                         [('sel:0', '45385'), ('sel:1', '45380'), ('altp:0', '45378'), ('altp:1', 'G0105')])
+                         [('sel:0', '45385'), ('sel:1', '45380'), ('sel:2', '45378'), ('altp:0', 'G0105')])

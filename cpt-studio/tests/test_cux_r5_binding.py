@@ -69,6 +69,13 @@ READINGS = {tuple(key.split(' | ')): reading for key, reading in R5B['readings']
 # clip is never control of bleeding done): it governs wherever round 5b disagrees, on the R2 rows alone.
 H2R = DECLARATION['amendment_20261105_harness_repair']
 READINGS.update({tuple(key.split(' | ')): reading for key, reading in H2R['readings'].items()})
+# Harness repair 3's amendment (2026-11-05, measured after its code: F-TIME P reads X3's EGD as another provider's, F-TIME
+# B reads Y4's as before this procedure): it governs wherever the amendments above disagree, on those rows alone. Its two
+# movements are released costs of the hold class (round 5b's HELD [performed_status] named_only snare, truth done).
+H3R = DECLARATION['amendment_20261105_harness_repair_3']
+READINGS.update({tuple(key.split(' | ')): reading for key, reading in H3R['readings'].items()})
+RELEASED = {(name, code): (before, after) for name, code, before, after in H3R['battery']}
+DECLARED.update(RELEASED)
 PREFIX = 'R8 R5 '
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
@@ -245,7 +252,8 @@ class PlacementTests(SimpleTestCase):
     puts it (family, kind, status, lesion), and carries the cue exactly where the amendment says."""
 
     def test_every_act_is_where_main_puts_it_with_its_declared_cue(self):
-        declared = {**R5B['inventory_acts'], **H2R['inventory_acts']}  # H2R: the R2 rows' bleeding control in doubt
+        # H2R: the R2 rows' bleeding control in doubt; H3R: X3's and Y4's snare no longer named only (one family)
+        declared = {**R5B['inventory_acts'], **H2R['inventory_acts'], **H3R['inventory_acts']}
         texts = {name: text for name, (text, _) in battery.CASES.items() if name in declared}
         texts.update({name: text for name, (text, _) in battery.R5_RESIDUALS.items()})
         self.assertEqual(sorted(texts) + ['mara rev1'], sorted(declared))
@@ -419,11 +427,15 @@ class DeclaredCostTests(SimpleTestCase):
         # the realistic shapes the class names each have a row among its costs
         for shape in R5B['declared_costs']['hold_class']['realistic_shapes']:
             self.assertTrue(any(name.startswith(f'{PREFIX}{shape} ') for name, _, _, _ in costs), shape)
+        # harness repair 3 releases two of the costs (H3R): each was a declared cost, and each now reads READY
+        self.assertEqual(sorted(RELEASED), sorted((name, code) for name, code, _, _ in costs if (name, code) in RELEASED))
+        self.assertEqual(set(RELEASED.values()), {(HELD, READY)})
         for name, code, before, after in costs:
             with self.subTest(name, code=code):
                 self.assertEqual({c: t for c, _, t in battery.CASES[name][1]}[code], 'done')
                 self.assertEqual((before, after), (READY, HELD))
-                self.assertEqual(read(name)[code], (HELD, ['performed_status'], 'named_only', []))
+                self.assertEqual(read(name)[code], (READY, [], 'service', []) if (name, code) in RELEASED
+                                 else (HELD, ['performed_status'], 'named_only', []))
         for name, code, before, after in fixes:
             with self.subTest(name, code=code):
                 self.assertEqual({c: t for c, _, t in battery.CASES[name][1]}[code], 'not_done')
@@ -504,7 +516,10 @@ class SecondReviewAddsTheHeldCodeTests(SimpleTestCase):
     def test_every_declared_second_review_case_merges_as_declared(self):
         declared = R5B['second_review']['cases']
         self.assertEqual(len(declared), 21)
+        self.assertTrue(set(H3R['second_review_cases']) <= set(declared))
         for name, expected in declared.items():
+            # harness repair 3 (H3R): the X3 and Y4 cases' snare is added READY, its single family read
+            expected = H3R['second_review_cases'].get(name, expected)
             with self.subTest(name):
                 row, (primary, second) = second_review_case(name)
                 _, result = second_reviewed(row, primary, second)

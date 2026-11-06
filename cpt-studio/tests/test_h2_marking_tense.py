@@ -1,8 +1,9 @@
 """Harness repair 2026-11-05, refutation time-1: the repair package's purpose rule ("for future localization" is a
 completed marking's purpose, never its time) applies only to a marking stated as done. A bare participle an auxiliary
 or an infinitive marker governs ("to be injected", "is injected") states none, so its "future" stays a plan word and
-45381 is never READY on it - through Corti's selection or a participant's first reading. Real engine, no provider or
-database calls."""
+45381 is never READY on it - through Corti's selection or a participant's first reading. Harness repair 3's F-TIME R
+was refuted in two cycles and is dropped (HARNESS.md "Harness repair 3, refutation cycle 2"), so a completed marking
+with a future purpose reads as main reads it again. Real engine, no provider or database calls."""
 from django.test import SimpleTestCase
 
 from tests.test_harness_engine import code, corti, read, run, span
@@ -41,10 +42,10 @@ class MarkingTenseTests(SimpleTestCase):
                 self.assertNotIn(('selected', 'ready'), by_astra)
 
     def test_a_completed_marking_with_a_future_purpose_reads_as_main_reads_it(self):
-        # the package's purpose rule failed two refutation cycles of its whole-sentence form and is dropped (round 6):
-        # "for future localization" dates even a completed injection as planned, as at main and the live revision
+        # round 6 dropped the package's whole-sentence purpose rule, and refutation cycle 2 harness repair 3's F-TIME R
+        # (two cycles refuted): "for future localization" dates even a completed injection as planned, as at main and
+        # the live revision - Corti's code excluded, a participant's listed. A recorded residual (a false exclusion):
+        # directive item 4's "completed marking versus future localization" stays undelivered
         for line in DONE:
             with self.subTest(line):
-                by_corti, by_astra = outcomes(line)
-                self.assertNotIn(('selected', 'ready'), by_corti)
-                self.assertNotIn(('selected', 'ready'), by_astra)
+                self.assertEqual(outcomes(line), ([('excluded', 'excluded')], [('alternative', 'informational')]))

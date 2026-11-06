@@ -30,6 +30,11 @@ DECLARED = {(name, code): (before, after) for name, code, before, after in DECLA
 H2R = {(name, code): (before, after) for name, code, before, after in json.loads(
     (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'h2-repair-r1.json')
     .read_text(encoding='utf-8'))['battery']}
+# Harness repair 3's battery declaration (2026-11-05, measured after its code: F-TIME B reads "At the index colonoscopy,
+# ..." as an earlier occasion's): it governs the rows it moves, each movement starting from the state pinned before it.
+H3R = {(name, code): (before, after) for name, code, before, after in json.loads(
+    (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'harness-repair-3.json')
+    .read_text(encoding='utf-8'))['battery']}
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
 _MODULES = []
@@ -110,9 +115,10 @@ class RegisterRowsTests(SimpleTestCase):
             for code in result['proposals']:
                 with self.subTest(name, code=code):
                     pinned = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
-                    if (name, code) in H2R:
-                        self.assertEqual(H2R[(name, code)][0], pinned)  # it moves from where this file pinned it
-                        pinned = H2R[(name, code)][1]
+                    for later in (H2R, H3R):  # each repair moves a row from where the pins before it left it
+                        if (name, code) in later:
+                            self.assertEqual(later[(name, code)][0], pinned)
+                            pinned = later[(name, code)][1]
                     self.assertEqual(state(result, code), pinned)
                     self.assertEqual(result['proposals'][code]['violations'], [])
 
@@ -412,7 +418,10 @@ class AnotherTimeOnTheActTests(SimpleTestCase):
     addendum heading dated before the service date) or, for a code matched to a service with no act (a base code), the
     service's own statement (D10: an attached prior report's title). A clause cue never holds a passage its own clause
     states as today's ("... was removed with a hot snare today.": the inventory read its "today"). Held, never excluded;
-    an unrelated historical passage still never decides against a current service. The base companion is NOT coded
+    an unrelated historical passage still never decides against a current service. Harness repair 3 (F-TIME B): where
+    the inventory itself reads the act's own clause as an earlier occasion's ("At the index colonoscopy, a 9 mm polyp
+    was removed with a hot snare."), the act is historical and the code citing it is excluded as the act's reading,
+    never by this arm (harness-repair-3.json: the D9 index prose row's 45385, truth not_done). The base companion is NOT coded
     (cux-hold.json "stopped": it releases a base beside a hedged therapeutic code)."""
 
     def test_d9_rows(self):

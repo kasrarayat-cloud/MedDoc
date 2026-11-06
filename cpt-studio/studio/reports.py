@@ -397,6 +397,7 @@ CORTI_STATES = {ProviderRun.SUCCEEDED: 'answered; its codes were checked', Provi
 
 
 def _participant_entry(name, label, vendor, run, state, reason='', unverified=0, refused=False):
+    usage, cost, continues = review.chain_usage(run)
     return {'name': name, 'label': label, 'vendor': vendor, 'state': state, 'reason': str(reason or ''),
             'refused': refused,
             'run': str(run.pk) if run is not None else None, 'mode': review.run_mode(run) if run is not None else '',
@@ -406,9 +407,9 @@ def _participant_entry(name, label, vendor, run, state, reason='', unverified=0,
             'request_id': run.provider_request_id if run is not None else '',
             'response_id': run.response_id if run is not None else '',
             'reused': bool(run is not None and run.reused_from_id),
-            'usage': (run.usage or {}) if run is not None else {},
+            'usage': usage, 'continues': continues,
             'usage_basis': run.usage_basis if run is not None else '',
-            'estimated_cost_usd': review.estimated_cost(run), 'unverified_quotes': int(unverified or 0)}
+            'estimated_cost_usd': cost, 'unverified_quotes': int(unverified or 0)}
 
 
 def _participants(assessment):

@@ -68,7 +68,8 @@ FACT_WORDS = {'service_date': 'the date of service', 'setting': 'the place of se
               'completion': 'whether the examination was completed', 'em_basis': 'the basis for the visit level',
               'target': 'the structure examined', 'cannulation': 'whether cannulation was achieved',
               'performed_status': 'whether the service was performed', 'base_included': 'how the codes are reported',
-              'separate_em': 'a separate office visit'}
+              'separate_em': 'a separate office visit',
+              'competing_codes': 'which of the codes proposed for the same act the documentation supports'}
 LIMITATIONS = (
     'CPT descriptions are not shown: no licensed CPT descriptor is connected.',
     'CPT code-set membership for the date of service is not verified.',
@@ -453,6 +454,9 @@ def _exclusion_reason(proposal):
 
 
 QUESTION_WORDS = {
+    # refutation round 1 of harness repair 3 (L4-6): a competition hold says what settles it
+    'competing_codes': 'Another code is proposed for the same documented act: reject the one the documentation does '
+                       'not support, and this one is then ready for review.',
     'performed_status': 'The document does not establish that this was done on the date of service.',
     'extent': 'How far the examination reached is not documented.',
     'completion': 'Whether the examination was completed is not documented.',

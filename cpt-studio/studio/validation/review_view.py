@@ -69,6 +69,9 @@ ANSWER_WORDS = {'not_documented': 'not documented', 'cannot_confirm': 'cannot be
 _AFTER_BASE = ('facts.required', 'em.same_day_coverage', SAME_DAY_EM_GATE, 'em.same_day_procedure', DATE_CHECK,
                PRESENCE_CHECK, 'mue.units', ENDOSCOPIC_CHECK, 'cpt.membership', 'cpt.descriptor', 'ncci.ptp')
 MODIFIER_REVIEW = 'distinct_lesion'
+# P-ADMIT2 (harness repair 3): the hold of a code that claims one same documented act as others (engine.competing_hold),
+# released once a reviewer's decisions leave none of those others counted
+COMPETING_CHECK, COMPETING_FACT = engine.COMPETING_CHECK, engine.COMPETING_FACT
 # checks.reinstatement_check's wording of a date of service that is not established: the encounter's own date question
 # asks it of every code, so a reinstated code is not asked it again.
 DATE_WAIT = 'the date of service is not established for this encounter.'
@@ -605,6 +608,30 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
         elif active and counted_moved and _find(items, BASE_CHECK) is not None:
             stale.append(BASE_CHECK)  # the base rule reads the counted set
         base_added = bool(added)
+        # P-ADMIT2: a competing hold stands only while one of the codes it names is still counted (selected and not
+        # rejected, or reinstated): the same counted set every hold by presence reads, so a member's answer never lifts
+        # it; once a reviewer has rejected the others it is released, and the code reads as its other holds leave it
+        at = _find(items, COMPETING_CHECK) if active else None
+        if at is not None:
+            rivals = set((p.support or {}).get('competes') or ())
+            # refutation round 1 of harness repair 3 (L4-5): a rival a member's answer to one of its own questions left
+            # unavailable is no longer in review; an answer to the competing question itself never counts
+            live = sorted({q.code for q in candidates if q.key != p.key and q.code in rivals
+                           and unavailable.get(q.key, ('', ''))[0] in ('', COMPETING_FACT)})
+            if not live:
+                del items[at]
+                recomputed.append(COMPETING_CHECK)
+                released.append(COMPETING_FACT)
+                holds = [fact for fact in holds if fact != COMPETING_FACT]
+                questions = [q for q in questions if q.get('fact') != COMPETING_FACT]
+            elif len(live) < len(rivals):
+                check, spec = engine.competing_hold(p.code, p.family, p.key, live, service.get(p.key))
+                new = to_jsonable(check)
+                if items[at] != new:
+                    items[at] = new
+                    recomputed.append(COMPETING_CHECK)
+                    questions = [dict(q, question=spec.question, reason=spec.reason)
+                                 if q.get('fact') == COMPETING_FACT else q for q in questions]
         # a reinstated exclusion is asked what its stored gate says its approval waits for (refutation round 2, L3-8)
         waits = _reinstatement_waits(p) if p.bucket == EXCLUDED and active else ()
         for wait in waits:

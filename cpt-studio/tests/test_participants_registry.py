@@ -24,7 +24,8 @@ from tests.test_participants_support import (CLIENT_REQUEST_ID, NOTE, ORIGINAL, 
                                              fixture_bytes, write_file)
 
 ASTRA_VERSION = 'openai-responses@cptstudio-harness-2'
-FABLE_VERSION = 'anthropic-messages@cptstudio-harness-3'  # no output format; the schema in the system prompt (12.8)
+FABLE_VERSION = 'anthropic-messages@cptstudio-harness-4'  # harness-3 with the fields line; extras set aside (F-CONTRACT)
+FABLE_VERSION_3 = 'anthropic-messages@cptstudio-harness-3'  # no output format; the schema in the system prompt (12.8)
 ASTRA_VERSION_1 = 'openai-responses@cptstudio-harness-1'
 FABLE_VERSION_2 = 'anthropic-messages@cptstudio-harness-2'
 FABLE_VERSION_1 = 'anthropic-messages@cptstudio-harness-1'
@@ -119,12 +120,13 @@ class RegistryTests(OfflineTestCase):
                          (ASTRA_VERSION, FABLE_VERSION))
         # earlier versions' stored runs keep their reader; the reader reads each as the version that recorded it
         self.assertIs(registry.reader('astra', ASTRA_VERSION_1), openai_astra.read_response)
+        self.assertIs(registry.reader('fable', FABLE_VERSION_3), anthropic_fable.read_response)
         self.assertIs(registry.reader('fable', FABLE_VERSION_2), anthropic_fable.read_response)
         self.assertIs(registry.reader('fable', FABLE_VERSION_1), anthropic_fable.read_response)
         for provider, version in (('astra', FABLE_VERSION), ('fable', ASTRA_VERSION), ('astra', ASTRA_VERSION + '0'),
                                   ('astra', FABLE_VERSION_1), ('fable', ASTRA_VERSION_1), ('astra', FABLE_VERSION_2),
-                                  ('astra', 'openai-responses@cptstudio-harness-3'),
-                                  ('fable', 'anthropic-messages@cptstudio-harness-4'),
+                                  ('astra', FABLE_VERSION_3), ('astra', 'openai-responses@cptstudio-harness-3'),
+                                  ('fable', 'anthropic-messages@cptstudio-harness-5'),
                                   ('fable', 'anthropic-messages@cptstudio-harness-0'),
                                   ('corti', 'corti-coding-v2@cptstudio-1'), ('replay', ASTRA_VERSION),
                                   ('Astra', ASTRA_VERSION), ('astra', None), (None, None), (['astra'], ASTRA_VERSION)):
@@ -136,10 +138,11 @@ class RegistryTests(OfflineTestCase):
 
         self.assertIs(registry.peer_reader('astra', ASTRA_VERSION), openai_astra.read_peer)
         self.assertIs(registry.peer_reader('fable', FABLE_VERSION), anthropic_fable.read_peer)
+        self.assertIs(registry.peer_reader('fable', FABLE_VERSION_3), anthropic_fable.read_peer)  # read as before
         self.assertIs(registry.peer_reader('fable', FABLE_VERSION_2), anthropic_fable.read_peer)  # read as before
         self.assertIs(peer_reader_for('fable', FABLE_VERSION_2), anthropic_fable.read_peer)
         for provider, version in (('fable', FABLE_VERSION_1), ('astra', ASTRA_VERSION_1), ('astra', FABLE_VERSION),
-                                  ('fable', ASTRA_VERSION), ('fable', 'anthropic-messages@cptstudio-harness-4'),
+                                  ('fable', ASTRA_VERSION), ('fable', 'anthropic-messages@cptstudio-harness-5'),
                                   ('astra', 'openai-responses@cptstudio-harness-3'), ('fable', None)):
             with self.subTest(provider=provider, version=version), self.assertRaises(ProviderUnavailable):
                 registry.peer_reader(provider, version)

@@ -725,7 +725,8 @@ class BindingTests(SimpleTestCase):
     def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
         """Moved by refutation round 6 (R6-MEANING, the session's D14): Astra's reading, read after a reconcile,
         selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). It is listed
-        now, never selected, so it takes no key and no confirmation, and Corti's 45380 reads its own."""
+        now, never selected, so it takes no key and no confirmation, and Corti's 45380 reads its own. (Refutation cycle
+        2 had held it; cycle 3 lists a participant's code for an act read in doubt itself again.)"""
         fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
         early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
         codes = (('45380', UNCLEAR),)
