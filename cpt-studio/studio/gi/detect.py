@@ -5949,7 +5949,9 @@ def _failure_subject(an: Analysis, clause_start: int, pos: int) -> Optional[gi_c
     key = ('failure-subject', clause_start, pos)
     if key not in an.memo:
         predicate = gi_clauses.predicate_start(an.text, clause_start, pos)
-        an.memo[key] = gi_clauses.subject(an.text, clause_start, predicate, _clause_before(an, clause_start))
+        from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+        # the one subject reading (services.predicate_subject; integration of builders R2 and A)
+        an.memo[key] = gi_services.predicate_subject(an.text, clause_start, predicate, _clause_before(an, clause_start))
     return an.memo[key]
 
 
@@ -5999,7 +6001,9 @@ def _failed_acts(an: Analysis, s: int, e: int) -> tuple[list[int], list[int]]:
                     # phrase lacks ("the hot snare polypectomy" after "A cold snare polypectomy")
                     prior = _clause_before(an, cs)
                     predicate = gi_clauses.first_predicate(an.text, *prior) if prior else None
-                    earlier = gi_clauses.subject(an.text, prior[0], predicate) if predicate is not None else None
+                    from studio.gi import services as gi_services  # local, as above
+                    earlier = (gi_services.predicate_subject(an.text, prior[0], predicate) if predicate is not None
+                               else None)
                     said = set(re.findall(r'[a-z]+', an.text[earlier.phrase[0]:earlier.phrase[1]].lower())) \
                         if earlier is not None else set()
                     if earlier is not None and earlier.head.word == found.head.word \
@@ -8674,7 +8678,8 @@ def _instrument_course(an: Analysis, start: int, end: int) -> bool:
     hit = _INSTRUMENT_COURSE.search(an.text, end, min(ce, end + _INSTRUMENT_COURSE_REACH))
     if hit is None:
         return False
-    found = gi_clauses.subject(an.text, cs, hit.start())
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    found = gi_services.predicate_subject(an.text, cs, hit.start())  # the one subject reading
     return (found is not None and not found.pronoun and found.head.end == end and found.head.start >= start
             and not _NO_SUBJECT.match(an.text, found.phrase[0]))
 

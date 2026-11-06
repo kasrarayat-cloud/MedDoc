@@ -4115,13 +4115,14 @@ def _participle_word(word: str) -> bool:
                                                                           'caught', 'stuck', 'lodged'))
 
 
-def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
+def _attachment_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
     """The head of the noun phrase that is the subject of the predicate starting at ``predicate_start`` (its first
     auxiliary, or the participle itself for a reduced passive "Meat bolus removed ..."), read structurally within the
     clause starting at ``clause_start`` (CLAUSE_REACH characters at most): (start, end, head), where [start, end) is the
     RESOLVED head as written and ``head`` the grammatical head, lower-cased - the same unless a partitive or an attempt
     resolves to its complement ("Fragments of the bolus were removed": the span of "bolus", head 'fragments'). None when
-    no subject can be read. The contract of builder R2's clauses.subject_head; the integrator unifies the two.
+    no subject can be read. Builder A's attachment walk: read only through predicate_subject and _removal_subject
+    (the integration's one subject reading), never alone.
     - the nearest preceding noun phrase of the clause;
     - never a prepositional object: an "of/in/at/over/into ..." phrase is climbed to the phrase it modifies, and a
       participle it complements is passed over ("The overtube placed over the bolus" is the overtube);
@@ -4208,6 +4209,47 @@ def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Opti
         return toks[i][0], toks[i][1], head
     return None
 
+
+
+def predicate_subject(text: str, clause_start: int, predicate_start: int,
+                      antecedent: Optional[tuple[int, int]] = None) -> Optional[_clauses.Subject]:
+    """The one subject reading of a predicate (completion repair, integration of builders R2 and A): builder R2's
+    structural walk (clauses.subject), unless builder A's attachment walk (_attachment_subject) reads a different subject
+    - another resolved head, or another grammatical head - in which case neither is believed and None is returned, so
+    every caller keeps its base reading. Where the attachment walk reads nothing (a pronoun, "Two of the clips", a site
+    with an -ing adjective such as "in the ascending colon") the structural walk stands. Measured over every subject the
+    completion corpus asks for: the two walks agree on 191 of 222; of the rest, the structural walk alone misread "The
+    overtube protecting the meat bolus was removed" and "... passed after the overtube was removed" as the bolus's
+    removal, and the attachment walk alone read "The food bolus impacted before presentation was removed" as
+    presentation's. A pronoun is read through the clause before it (``antecedent``) by this same reading, one level."""
+    found = _clauses.subject(text, clause_start, predicate_start)
+    if found is None:
+        return None
+    other = _attachment_subject(text, clause_start, predicate_start)
+    if other is not None and other != (found.resolved.start, found.resolved.end, found.head.word):
+        return None
+    if not found.pronoun or antecedent is None:
+        return found
+    a0, a1 = antecedent
+    if not (0 <= a0 < a1 <= clause_start):
+        return found
+    first = _clauses.first_predicate(text, a0, a1)
+    prior = predicate_subject(text, a0, first) if first is not None else None
+    if prior is None or prior.pronoun or prior.resolved.word in _clauses.PERSONAL:
+        return found
+    return replace(found, resolved=prior.resolved, antecedent=prior, pronoun=False)
+
+
+def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
+    """The subject the removal, disposition and purpose readers take: (resolved start, resolved end, grammatical head) of
+    predicate_subject, and only where builder A's attachment walk reads that same subject too. A removal binds a bolus,
+    a disposition its lesion, and a purpose its act only on a subject both walks read - the removal reader's
+    fail-closed requirement (F-ACTS was refuted twice on removals bound to the wrong noun); None otherwise."""
+    found = predicate_subject(text, clause_start, predicate_start)
+    if found is None:
+        return None
+    triple = (found.resolved.start, found.resolved.end, found.head.word)
+    return triple if _attachment_subject(text, clause_start, predicate_start) == triple else None
 
 def _removal_object(text: str, after: int, limit: int) -> Optional[tuple[int, int, str]]:
     """The head of the noun phrase an active removal verb, or "removal of", takes as its object, starting at ``after``
@@ -5594,8 +5636,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         continue
                     if re.search(r'\b(?:lesion|polyp|mass|it)\b[^.;]{0,40}\bnot\s+removed\b', clause_text, FLAGS):
                         continue
-                    subject = _clauses.subject(text, cs, _clauses.predicate_start(text, cs, m.start()),
-                                               sentence_clauses[k - 1] if k else None)
+                    subject = predicate_subject(text, cs, _clauses.predicate_start(text, cs, m.start()),
+                                                sentence_clauses[k - 1] if k else None)
                     if _clauses.failure_of(text, subject) == _clauses.SUB_ACT:
                         continue  # completion repair (R2): "The snare could not be passed", a sub-act's own failure
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))

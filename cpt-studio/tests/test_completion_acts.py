@@ -148,9 +148,20 @@ class RemovalSubjectTests(SimpleTestCase):
             'A fentanyl bolus was given and the clip was then removed.': 'clip',
             'The scope having pushed the bolus was removed.': 'scope',
         }
+        # Integration (2026-11-06): _removal_subject is the one subject reading (services.predicate_subject) where builder
+        # A's attachment walk reads the same subject. For two refuters builder R2's structural walk reads the bolus (a
+        # participial modifier's object), so the two disagree and no subject is read: still never the bolus's removal,
+        # which is what each refuter pins (and the attachment walk alone still reads the other noun)
+        disagree = {'The overtube protecting the meat bolus was removed.', 'The scope having pushed the bolus was removed.'}
         for sentence, head in cases.items():
             with self.subTest(sentence):
-                self.assertEqual(subject(sentence), (head, head))
+                if sentence in disagree:
+                    self.assertIsNone(subject(sentence))
+                    m = __import__('re').search(r'\bwas\b', sentence)
+                    found = gi_services._attachment_subject(sentence, 0, m.start())
+                    self.assertEqual(found[2], head)
+                else:
+                    self.assertEqual(subject(sentence), (head, head))
 
     def test_the_boluss_own_removal(self):
         cases = {
