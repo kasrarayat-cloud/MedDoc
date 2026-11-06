@@ -260,6 +260,75 @@ class StatedNotDoneRefuterTests(SimpleTestCase):
                     self.assertEqual(coded(result, act), [HELD_STATUS])
                     self.assertEqual(coded(result, '45378'), [BASE_HELD])
 
+    # The rule's second review (measured on its first form, each read EXCLUDED with its base code released READY): the
+    # reader is silent on many statements that the act was done after all, and its silence is no statement, so the
+    # not-done statement must close what the document says about the act (engine._closes_its_paragraph, and every other
+    # mention of an act of the code's kinds in the service reading not done)
+    SUCCESS_AFTER_ALL = (
+        # a later clause or sentence of the paragraph, the act named again or not
+        ('Cold snare polypectomy was unsuccessful; hot snare polypectomy was then successful.', '45385', 'Cold snare '
+         'polypectomy was unsuccessful'),
+        ('Hot snare polypectomy failed initially; it was successful on the second attempt.', '45385', None),
+        ('Hot snare polypectomy failed. It succeeded on the second attempt.', '45385', 'Hot snare polypectomy failed.'),
+        ('Polypectomy failed. Polypectomy was then repeated with success.', '45385', 'Polypectomy failed.'),
+        ('Hot snare polypectomy failed. Hot snare polypectomy was repeated and succeeded.', '45385',
+         'Hot snare polypectomy failed.'),
+        ('Cold forceps biopsy failed; a second pass yielded tissue.', '45380', None),
+        # the failure word inside the sentence, never its predicate's end
+        ('The hot snare polypectomy that failed last year was successfully repeated today.', '45385', None),
+        ('Hot snare polypectomy: unsuccessful x1, successful x1.', '45385', None),
+        # another clause or the act done before it
+        ('Although the first attempt was successful, a second hot snare polypectomy failed.', '45385', None),
+        ('Hot snare polypectomy was successful. A second hot snare polypectomy failed.', '45385',
+         'A second hot snare polypectomy failed.'),
+        # another paragraph naming the act, silent
+        ('Hot snare polypectomy of the sigmoid polyp failed.\n\nThe rectal polyp: hot snare polypectomy, successful.',
+         '45385', 'Hot snare polypectomy of the sigmoid polyp failed.'),
+    )
+
+    def test_a_failure_the_document_says_more_about_keeps_the_hold(self):
+        for body, act, quote in self.SUCCESS_AFTER_ALL:
+            text = colon(body, 'Colonoscopy')
+            with self.subTest(body):
+                for result in (by_participant(text, act, quote or body), by_corti(text, act, quote or body)):
+                    self.assertEqual(coded(result, act), [HELD_STATUS])
+                    self.assertEqual(coded(result, '45378'), [BASE_HELD])
+
+    def test_another_gi_family_and_another_layout(self):
+        line = 'Band ligation of the varices was unsuccessful.'
+        for body in (line + ' Banding was then successful.', line + '\nFour bands were then placed.'):
+            text = egd('Large esophageal varices were seen in the distal esophagus.\n' + body)
+            with self.subTest(body):
+                result = by_participant(text, '43244', line, base='43235', base_quote=D2)
+                self.assertEqual([c[:2] for c in coded(result, '43244')], [HELD_STATUS[:2]])
+        # a blank line closes the paragraph, and a plan that says nothing of the act says nothing more
+        text = colon('Hot snare polypectomy failed.\n\nPlan: repeat colonoscopy in one year.', 'Colonoscopy')
+        result = by_participant(text, '45385', 'Hot snare polypectomy failed.')
+        self.assertEqual(coded(result, '45385'), [EXCLUDED])
+        self.assertEqual(coded(result, '45378'), [READY])
+        # held, the safe side: the paragraph goes on; a failure restated after a label ("Impression: ...") is a clause
+        # the rule does not read through
+        for body in ('Hot snare polypectomy failed.\nImpression: Sigmoid polyp, not removed.',
+                     'Hot snare polypectomy failed.\n\nImpression: Hot snare polypectomy unsuccessful.'):
+            text = colon(body, 'Colonoscopy')
+            with self.subTest(body):
+                self.assertEqual(coded(by_participant(text, '45385', 'Hot snare polypectomy failed.'), '45385'),
+                                 [HELD_STATUS])
+
+    def test_recorded_residual_a_success_with_no_act_word_or_predicate_in_another_sentence(self):
+        # the reader reads nothing in "On the second attempt it succeeded." or "The first polyp came off easily." (no
+        # act word, no act predicate), so a failure statement that closes its own paragraph is read as all the
+        # document says: excluded (reinstatable) and its base code released. Recorded, never chased by a word list
+        # of success words, whose failure mode (an unknown word) would be the unsafe side
+        for body, quote in (('Hot snare polypectomy failed.\n\nOn the second attempt it succeeded.',
+                             'Hot snare polypectomy failed.'),
+                            ('The first polyp came off easily.\n\nHot snare polypectomy of the second polyp failed.',
+                             'Hot snare polypectomy of the second polyp failed.')):
+            text = colon(body, 'Colonoscopy')
+            with self.subTest(body):
+                item = proposal(by_participant(text, '45385', quote), '45385')
+                self.assertEqual((item.bucket, item.reinstatable), ('excluded', True))
+
 
 class EvidenceReconciliationTests(SimpleTestCase):
     """Item 2: one code, read once over every proposer's exact passages."""

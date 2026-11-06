@@ -9,6 +9,7 @@ check says exactly why.
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -724,8 +725,10 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     acts = [a for a in service.acts if a.kind in kinds]
     if not acts or any(a.role not in reconcile.OWN_ROLES for a in acts):
         return ()
-    flow = None  # the reader's own reflowed view, only where a listing is read: its per-document frame (cached)
-    stated = []
+    # the reader's own reflowed view, its sentences and its act mentions: one index per document, date and pages
+    # (_reader_index) - never a rescan of the text per code
+    flow, sentences, starts, mentions, mention_starts = _reader_index(text, day, tuple(pages or ()))
+    stated, listing = [], []
     for act in acts:
         if _states_not_done(act.status, act.cues):
             stated += [(act.status, act.cues[0] if act.cues else '', ev) for ev in act.evidence]
@@ -733,22 +736,45 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
         if not (act.status == 'uncertain' and gi_services.LISTED_CUE in act.cues
                 and gi_services.LISTED_WITHHELD_CUE in act.cues):
             return ()
-        if flow is None:
-            # services._act_frame: the one reflow passage_readings itself reads, computed once per document, date and
-            # pages - never a rescan of the text per code
-            flow = gi_services._act_frame(text, day, tuple(pages or ()))[0]
         for ev in act.evidence:
             readings = _mention_readings(text, flow, ev, act.kind, day, pages)
             if readings is None:
                 return ()
             said = [r for r in readings if not _says_nothing(r.status, r.cues)]
             if not said:
+                listing.append(ev)
                 continue  # the procedure line itself, or a bare name: it names the act and states nothing either way
             if not all(_states_not_done(r.status, r.cues) for r in said):
                 return ()
             stated.append((said[0].status, said[0].cues[0] if said[0].cues else '', ev))
     if not stated:
         return ()
+    # Second review of the rule (builder Q1, measured before it shipped): the reader is silent on many statements that
+    # the act was done after all - "... was then successful", "repeated with success", "it was successful on the second
+    # attempt", "a second pass yielded tissue", a failure in a relative clause ("that failed last year was successfully
+    # repeated today"), "unsuccessful x1, successful x1" - and its silence is no statement. Each read the code EXCLUDED
+    # and released its base code READY. So the statement must close what the document says: it ends its sentence (and,
+    # for a failure, the sentence ends with the reader's own failure word, cues.FAILED_ACT); its sentence ends its
+    # paragraph (a blank line or the document's end follows); no other mention of an act of the code's kinds in the
+    # service, before or after it, reads anything but not done (a silent one included); and nothing read after it says
+    # anything was done or is in doubt.
+    texts = [ev for _s, _c, ev in stated]
+    for status, cue, ev in stated:
+        failure = status == 'uncertain' and (cue in STATED_FAILURE_CUES or cue.startswith(gi_services.LATER_FAILURE_CUE))
+        if not _closes_its_paragraph(flow, sentences, starts, mentions, mention_starts, kinds, ev, failure):
+            return ()
+    lo = min([service.scope_start] + [ev.start for ev in texts])
+    hi = max([service.scope_end] + [ev.end for ev in texts])
+    first = bisect.bisect_left(mention_starts, lo)
+    last = bisect.bisect_left(mention_starts, hi)
+    if last - first > gi_services.PASSAGE_READS:
+        return ()  # too many mentions to read through: what they say is not established
+    for kind, ms, me in mentions[first:last]:
+        if kind not in kinds or any(ev.start <= ms and me <= ev.end for ev in texts + listing):
+            continue
+        readings = gi_services.passage_readings(text, ms, me, day, pages)
+        if not readings or not all(_states_not_done(r.status, r.cues, own=False) for r, _clause in readings):
+            return ()  # another mention of the act - silent, done, in doubt, or unread - keeps the hold
     for _status, _cue, ev in stated:
         end = service.scope_end if service.scope_end > ev.end else len(text)
         rest = gi_services.passage_readings(text, ev.start, end, day, pages)
@@ -756,6 +782,54 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
                                for r, _clause in rest):
             return ()
     return tuple(stated)
+
+
+@functools.lru_cache(maxsize=1)
+def _reader_index(text: str, day: Optional[date], pages: tuple) -> tuple:
+    """(flow, sentences, their starts, act mentions (kind, start, end), their starts): the documented-service reader's
+    own reflowed view and sentences (services._act_frame, which passage_readings reads) and its act mentions
+    (services._acts_in over the whole view), computed once per document, date and pages and searched by bisection."""
+    flow, _dates, _plist, _starts, sentences = gi_services._act_frame(text, day, pages)
+    mentions = tuple(gi_services._acts_in(flow, 0, len(flow)))
+    return flow, tuple(sentences), tuple(s for s, _ in sentences), mentions, tuple(m[1] for m in mentions)
+
+
+_WORD = re.compile(r'[^\W\d_]+')
+_BLANK_LINE = re.compile(r'\n[ \t]*\n')
+_CLAUSE_MARK = re.compile(r'[,;:()\[\]\u2013\u2014]|\s-\s')  # what opens another clause or an aside before the act
+
+
+def _closes_its_paragraph(flow: str, sentences: Sequence[tuple], starts: Sequence[int], mentions: Sequence[tuple],
+                          mention_starts: Sequence[int], kinds, ev, failure: bool) -> bool:
+    """Whether the not-done statement ``ev`` is the whole end of what its paragraph says: nothing but punctuation
+    follows it in its sentence (the reader's own sentences); a failure's sentence ends with the reader's own failure
+    word (cues.FAILED_ACT: "Hot snare polypectomy failed.", "Polypectomy: unsuccessful.") and nothing before its first
+    mention of the act opens another clause - no comma, semicolon, colon, dash or bracket, and no act predicate of the
+    reader's (ACT_VERB, BARE_PARTICIPLE): never "failed initially; it was successful ...", "failed last year was
+    successfully repeated today", "Although the first attempt was successful, a second ... failed." or "Despite the polyp
+    being removed ..."; and a blank line or the document's end follows the sentence. Any other shape keeps the hold."""
+    i = bisect.bisect_right(starts, max(ev.start, ev.end - 1)) - 1
+    if i < 0:
+        return False
+    ss, se = sentences[i]
+    if not ss <= max(ev.start, ev.end - 1) < se or _WORD.search(flow, ev.end, max(ev.end, se)):
+        return False
+    if failure:
+        words = _WORD.findall(flow, ss, se)
+        if not words or not gi_cues.FAILED_ACT.fullmatch(words[-1]):
+            return False
+        first = None
+        for kind, ms, _me in mentions[bisect.bisect_left(mention_starts, ss):]:
+            if ms >= se:
+                break
+            if kind in kinds:
+                first = ms
+                break
+        if first is None or _CLAUSE_MARK.search(flow, ss, first) or gi_services.ACT_VERB.search(flow, ss, first) \
+                or gi_services.BARE_PARTICIPLE.search(flow, ss, first):
+            return False
+    nxt = sentences[i + 1][0] if i + 1 < len(sentences) else len(flow)
+    return not _WORD.search(flow, se, nxt) and (nxt >= len(flow) or bool(_BLANK_LINE.search(flow, se, nxt + 1)))
 
 
 def _not_done_match(code: str, found: reconcile.Match, stated: Sequence[tuple]) -> reconcile.Match:
