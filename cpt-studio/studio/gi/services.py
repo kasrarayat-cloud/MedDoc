@@ -4037,6 +4037,12 @@ def _comparison_objects(text: str, start: int, end: int) -> list[tuple[int, int]
 _SPECIFIC_TECHNIQUES = frozenset(('cold forceps', 'hot forceps', 'cold snare', 'hot snare', 'balloon', 'guidewire'))
 
 
+# Lesion nouns no snare, EMR, ESD or hot biopsy removes (the listing rule, integration of refutation cycle 2).
+_NEVER_REMOVED_BY_SNARE = frozenset(('stricture', 'ring', 'varix', 'varices', 'ulcer', 'ulcers', 'erosion', 'erosions',
+                                     'angioectasia', 'angioectasiae', 'avm', 'avms', 'cyst', 'cysts', 'plaque',
+                                     'plaques', 'patch', 'patches'))
+
+
 def _techniques_differ(one: str, other: str) -> bool:
     """Whether two acts of a kind state specific techniques that differ (another instance of the kind)."""
     return one in _SPECIFIC_TECHNIQUES and other in _SPECIFIC_TECHNIQUES and one != other
@@ -6560,7 +6566,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # resected with a hot snare after a saline lift." under a listed EMR)
             removed = removed_lesions | {a.lesion for a in d.acts
                                          if a.lesion and a.status == 'performed' and a.kind in REMOVAL_KINDS}
-            contradicted = bool(d.lesions) and not any(lesion.id in removed for lesion in d.lesions)
+            # integration of refutation cycle 2: only a lesion such a removal removes is judged - a stricture, ring,
+            # varix, ulcer, erosion, angioectasia, cyst, plaque or patch is never one (_NEVER_REMOVED_BY_SNARE): an
+            # ERCP's snare that retrieves a stent beside its stricture is not withheld for want of the stricture's
+            # removal (h2-10). Any other noun is judged (the safe side).
+            removable = [lesion for lesion in d.lesions if lesion.noun.lower() not in _NEVER_REMOVED_BY_SNARE]
+            contradicted = bool(removable) and not any(lesion.id in removed for lesion in removable)
             for i, a in enumerate(d.acts):
                 if a.status != 'performed' or LISTED_CUE not in a.cues or a.kind in body_done:
                     continue

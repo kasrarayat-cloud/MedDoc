@@ -91,3 +91,16 @@ class SameActTechniqueTests(SimpleTestCase):
         self.assertFalse(gi_services._techniques_differ('snare', 'cold snare'))
         self.assertFalse(gi_services._techniques_differ('', 'balloon'))
         self.assertFalse(gi_services._techniques_differ('balloon', 'balloon'))
+
+
+class ListingScopeTests(SimpleTestCase):
+    """The listing rule judges only lesions a snare, EMR, ESD or hot biopsy removes (services._NEVER_REMOVED_BY_SNARE)."""
+
+    def test_a_stricture_beside_a_listed_snare_is_not_judged(self):
+        self.assertIn('stricture', gi_services._NEVER_REMOVED_BY_SNARE)
+        self.assertNotIn('polyp', gi_services._NEVER_REMOVED_BY_SNARE)
+        # a polyp only seen beside the listing is judged: withheld (held); a stricture alone is not: the listing stands
+        self.assertEqual(status(LISTED + 'A 6 mm polyp in the ascending colon was seen.\n', '45385', LISTING),
+                         ('selected', 'needs_clarification'))
+        self.assertEqual(status(LISTED + 'A benign-appearing stricture was seen in the sigmoid colon.\n', '45385', LISTING),
+                         ('selected', 'ready'))
