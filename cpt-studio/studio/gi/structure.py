@@ -191,16 +191,17 @@ _TODAYS_STEP = re.compile(
     r'advancing|retroflexing|suctioning|irrigating|scope|colonoscope|gastroscope|endoscope|sigmoidoscope|instrument|'
     + r'(?:' + '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVICE_PATTERNS) + r'))\b', FLAGS)
 # N1's place reading (the paragraph's own narrative only; summary, plan and indication sentences are read by the classes
-# above and by routing's own occasion reading). A place preposition ("in", "on", "at", "aboard", "near") in today's
-# account takes a clinical object: an anatomical site or landmark (services.ANATOMY, cues' landmark tables) or a lesion, possibly behind
+# above and by routing's own occasion reading). A place preposition ("in", "on", "at", "from", "into", "within" ...) in
+# today's account takes a clinical object: an anatomical site or landmark (services.ANATOMY, cues' landmark tables) or a lesion, possibly behind
 # position words ("in the mid and distal esophagus", "at the base of the polyp"); a handling, view, position, condition
 # or measurement noun ("in two pieces", "on retroflexed view", "in stable condition", "at 30 cm"); one of today's rooms
 # or sites behind a clinical word ("in the endoscopy suite", "at the polypectomy site"); or an idiom ("in place", "in
-# addition", "in the setting of"). These are allow-lists: any other object - "on the cruise ship", "in her twenties",
+# addition", "in order to"). These are allow-lists: any other object - "on the cruise ship", "in her twenties",
 # "at home", "at the edge of the city", "in the area where she was traveling" - may be another place or time, and holds.
 # A time phrase is the time reader's, which reads the same span: a temporal adjunct ("at the time of", "at the end of")
 # or a time word heading the object ("in 3 to 5 years", "at that time", "in 2019").
-_PLACE_PREP = re.compile(r'\b(?:in|on|at|aboard|near)[ \t\n]++', FLAGS)
+_PLACE_PREP = re.compile(r'\b(?:in|on|at|aboard|near|from|into|onto|inside|within|throughout|beside|behind|along|'
+                         r'across|toward|towards)[ \t\n]++', FLAGS)
 _PP_CLAUSE_MARK = re.compile(r'[,;:()]|\.(?!\d)')
 _PP_NUMWORD = r'(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
 _PP_NUMBER = (r'(?:\d+(?:\.\d+)?(?:[ \t]*+(?:-|to|or)[ \t]*+\d+(?:\.\d+)?)?|' + _PP_NUMWORD + r'(?:[ \t]++(?:to|or)[ \t]++'
@@ -208,7 +209,8 @@ _PP_NUMBER = (r'(?:\d+(?:\.\d+)?(?:[ \t]*+(?:-|to|or)[ \t]*+\d+(?:\.\d+)?)?|' + 
 _PP_MOD = (r'(?:the|a|an|this|these|those|that|its|each|every|both|several|multiple|many|few|separate|direct|standard|'
            r'usual|routine|similar|stable|good|fair|poor|satisfactory|excellent|adequate|left|right|lateral|decubitus|'
            r'supine|prone|opposite|same|piecemeal|first|second|third|all|either|retroflexed|retroflex|forward|white|'
-           r'narrow-band|narrow|band|close|careful|maximal|maximum|greatest|largest|single|digital|rectal|and|or|&|'
+           r'narrow-band|narrow|band|close|careful|maximal|maximum|greatest|largest|single|digital|rectal|random|'
+           r'various|and|or|&|'
            + _PP_NUMBER + r')')
 _PP_SPECIFIC = (r'(?:pieces?|fragments?|jars?|containers?|bottles?|cups?|specimens?|formalin|views?|positions?|fashion|'
                 r'manner|sequence|order|levels?|tips?|imaging|light|nbi|chromoendoscopy|proximity|segments?|'
@@ -223,7 +225,13 @@ _PP_LESION = (r'(?:polyps?|polypoid|lesions?|mass(?:es)?|ulcers?|ulcerations?|er
               r'staples?|mucosa|vessels?|stool|fluid|debris|blood|clots?|bleeding|hernias?|anastomos[ie]s|pouch|stoma|'
               r'verge|lines?|bulb|remnant|(?:ge|g-e|gastro-?(?:o)?esophageal|esophagogastric|squamocolumnar|ileocecal|'
               r'ileocolic|anorectal|dentate|pectinate|z)[ \t\n-]*+(?:junction|line|valve)|incisors|teeth|hiatus|'
-              r'(?:diaphragmatic[ \t\n]++)?pinch|flexure|incisura|angularis|orifice|sphincter)')
+              r'(?:diaphragmatic[ \t\n]++)?pinch|flexure|incisura|angularis|orifice|sphincter|submucosa|submucosal|'
+              r'muscularis|serosa|mucosal)')
+# Today's instruments and accessories as an object ("in the trap", "into the channel", "in a retrieval net"), with up to
+# two words of their own before them ("a Roth net", "the suction trap").
+_PP_DEVICE = (r'(?:snares?|nets?|baskets?|traps?|forceps|channels?|scopes?|endoscopes?|colonoscopes?|gastroscopes?|'
+              r'catheters?|caps?|hoods?|balloons?|wires?|guidewires?|needles?|probes?|devices?|instruments?|tubes?|'
+              r'overtubes?|syringes?|loops?|bags?)')
 _PP_GENERIC = r'(?:sites?|areas?|regions?|locations?|rooms?|suites?|units?|bays?|labs?|laborator(?:y|ies))'
 _PP_CLINICAL_MOD = (r'(?:polypectomy|biopsy|biopsies|resection|mucosectomy|emr|esd|injection|tattoo|tattooed|clip|'
                     r'clipped|cautery|cauterized|ablation|ablated|treated|dilation|dilatation|dilated|anastomotic|'
@@ -236,16 +244,16 @@ _PP_END_GENERIC = r'\b(?![\'’]|[ \t\n]++(?:of|where|which|that|who|when)\b)'
 _PP_OBJECT_OK = re.compile(
     r'(?:' + _PP_MOD + r'[ \t\n,-]++){0,6}(?:(?:' + _PP_SPECIFIC + r'|' + _PP_LESION + r')' + _PP_END + r'|(?:'
     + _PP_CLINICAL_MOD + r'[ \t\n-]++){1,2}' + _PP_GENERIC + _PP_END_GENERIC + r')'
-    + r'|(?:the|this|that|each|both)[ \t\n]++(?:same[ \t\n]++)?(?:sites?|areas?|regions?|locations?)' + _PP_END_GENERIC
-    + r'|(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:fashion|manner)' + _PP_END, FLAGS)
+    + r'|(?:' + _PP_MOD + r'[ \t\n,-]++){1,6}(?:sites?|areas?|regions?|locations?)' + _PP_END_GENERIC
+    + r'|(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:fashion|manner|' + _PP_DEVICE + r')' + _PP_END, FLAGS)
 # A clock time is the paragraph's own timing ("The cecum was reached at 10:05").
 _PP_CLOCK = re.compile(r'\d{1,2}:\d{2}(?:[ \t]*+(?:am|pm|a\.m\.|p\.m\.))?(?!\d)|\d{3,4}[ \t]*+(?:hours|hrs|h)\b', FLAGS)
 _PP_IDIOM = re.compile(
     r'(?:place|situ|total|addition|order|turn|tandem|part|full|general|particular|summary|brief|least|most|once|all|'
     r'first|times|rest|view|sequence)\b(?![ \t\n]++of\b)'
-    r'|(?:the[ \t\n]++)?(?:setting|context)[ \t\n]++of\b|(?:view|light|terms|favou?r|spite|lieu|case)[ \t\n]++of\b'
     r'|keeping[ \t\n]++with\b|order[ \t\n]++to\b|preparation[ \t\n]++for\b|addition[ \t\n]++to\b'
-    r'|(?:combination|conjunction|comparison|contrast)[ \t\n]++(?:with|to)\b|response[ \t\n]++to\b', FLAGS)
+    r'|(?:combination|conjunction|comparison|contrast)[ \t\n]++(?:with|to)\b|response[ \t\n]++to\b'
+    r'|normal[ \t\n]++limits\b|(?:proximal|distal)[ \t\n]++to[ \t\n]++(?:proximal|distal)\b', FLAGS)
 # The words that may stand before an anatomical, landmark or lesion anchor: the modifiers above, a possessive, "of", and
 # position words ("the base of the polyp", "the rest of the colon", "her sigmoid colon").
 _PP_LEAD = re.compile(
@@ -416,11 +424,44 @@ def _signals(text: str, start: int, end: int, time: bool = True, narrative: bool
     return False
 
 
+# A determiner-led noun phrase coordinated after an allowed object, before the clause mark, is read as an object of the
+# same preposition ("in the sigmoid colon and the basement", "in the colon wall and her home"); a finite verb after the
+# coordinator makes it a clause of its own ("and the remainder of the examination was normal"), whose own prepositions
+# are read where they stand.
+_PP_COORD = re.compile(r'[ \t\n]++(?:and|or|&|as[ \t\n]++well[ \t\n]++as|plus)[ \t\n]++(?=(?:the|a|an|her|his|their|our|this|'
+                       r'that|these|those|its)\b)', FLAGS)
+_PP_FINITE = re.compile(r'\b(?:was|were|is|are|be|been|being|had|has|have|did|does|do|could|would|will|can|may|might|'
+                        r'should|shall|must|appeared|appears|showed|shows|revealed|reveals|demonstrated|demonstrates)\b',
+                        FLAGS)
+
+
+def _object_end(text: str, pos: int, stop: int, anchors: list, anchor_starts: list) -> Optional[int]:
+    """Where the allowed object that starts at ``pos`` ends (``stop`` for an idiom), or None when the allow-lists above
+    do not anchor it. ``anchors`` are the paragraph's anatomical and landmark matches (start, end), sorted, read once
+    per paragraph; ``anchor_starts`` their starts (bisection)."""
+    if _PP_IDIOM.match(text, pos, stop):
+        return stop
+    ok = _PP_OBJECT_OK.match(text, pos, stop)
+    if ok is not None:
+        return ok.end()
+    lead = _PP_LEAD.match(text, pos, stop).end()
+    lesion = _PP_LESION_AT.match(text, lead, stop)
+    if lesion is not None:
+        return lesion.end()  # "at the base of the polyp", "on the stalk of the polyp"
+    k = bisect.bisect_left(anchor_starts, pos)
+    if k < len(anchors) and anchors[k][0] <= lead:
+        return anchors[k][1]  # "in the sigmoid colon", "in the mid and distal esophagus", "in the rest of the colon"
+    return None
+
+
 def _unanchored_place(text: str, start: int, end: int) -> bool:
-    """Whether a place preposition in [start, end) takes an object the allow-lists above do not anchor (N1). The object
-    is read up to a clause mark, at most 60 characters and the end of the word there (40 more at most); one anatomy
-    pass per preposition over that window (bounded)."""
+    """Whether a place preposition in [start, end) takes an object the allow-lists above do not anchor (N1), or a
+    coordinated object they do not anchor. The object is read up to a clause mark, at most 60 characters and the end of
+    the word there (40 more at most); one pass of the anatomy and landmark tables over the paragraph, bisection per
+    object (linear)."""
     from studio.gi import services as gi_services
+    anchors: Optional[list] = None
+    anchor_starts: list = []
     for m in _PLACE_PREP.finditer(text, start, end):
         if _TEMPORAL_LEAD.match(text, m.start(), end) or _PP_CLOCK.match(text, m.end(), end):
             continue  # "at the time of the examination", "at the end of the procedure": the time reader's; "at 10:05"
@@ -437,16 +478,19 @@ def _unanchored_place(text: str, start: int, end: int) -> bool:
         if any(m.start() <= t.start() < max(head, m.end() + 1)
                for t in itertools.chain(_TIME_SIGNALS.finditer(text, m.start(), stop), _MONTH.finditer(text, m.start(), stop))):
             continue  # "in 3 to 5 years", "at that time", "in 2019", "on Monday": a time heads the object (the time reader's)
-        if _PP_IDIOM.match(text, m.end(), stop) or _PP_OBJECT_OK.match(text, m.end(), stop):
-            continue
-        if _PP_LESION_AT.match(text, lead, stop):
-            continue  # "at the base of the polyp", "on the stalk of the polyp"
-        if any(m.end() <= a[2] <= lead for a in gi_services._anatomy_in(text, m.end(), stop)):
-            continue  # "in the sigmoid colon", "in the mid and distal esophagus", "in the rest of the colon"
-        if any(h is not None and h.start() <= lead
-               for h in (p.search(text, m.end(), stop) for _, _, p in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS)):
-            continue
-        return True
+        if anchors is None:
+            anchors = sorted((h.start(), -h.end()) for _, _, p in gi_services.ANATOMY + cues.UPPER_LANDMARKS
+                             + cues.LOWER_LANDMARKS for h in p.finditer(text, start, end))
+            anchors = [(a, -b) for a, b in anchors]  # by start, the longest first
+            anchor_starts = [a for a, _ in anchors]
+        at = _object_end(text, m.end(), stop, anchors, anchor_starts)
+        while at is not None and at < stop:
+            coordinated = _PP_COORD.search(text, at, stop)
+            if coordinated is None or _PP_FINITE.search(text, coordinated.end(), stop):
+                break
+            at = _object_end(text, coordinated.end(), stop, anchors, anchor_starts)
+        if at is None:
+            return True
     return False
 
 

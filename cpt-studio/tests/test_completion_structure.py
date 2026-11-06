@@ -508,7 +508,11 @@ class NarrativePlaceTests(SimpleTestCase):
                      'in her twenties from the sigmoid colon', 'in the endoscopy suite of the ship', 'at the bedside',
                      'at that point', 'on the way to the airport', 'at the site where she works',
                      # the object is read to a word's end, never a cut word ("base|ment" is not "base")
-                     'in the satisfactory satisfactory satisfactory satisfactory basement'):
+                     'in the satisfactory satisfactory satisfactory satisfactory basement',
+                     # other place prepositions, a coordinated object, and an idiom's own object
+                     'from her home', 'inside the ambulance', 'into the ICU', 'within her house', 'toward the airport',
+                     'in the sigmoid colon and the basement', 'in the sigmoid colon wall and her home',
+                     'in the endoscopy suite and the cruise ship', 'in the context of her vacation'):
             with self.subTest(tail):
                 self.assertHeldBy(self.paragraph('A 6 mm polyp was removed with a cold snare ' + tail + '.'), 'N1')
         for sentence in ('A 6 mm polyp in the sigmoid colon was removed with a cold snare, as she recalls.',
@@ -531,7 +535,12 @@ class NarrativePlaceTests(SimpleTestCase):
                          'Surveillance is recommended in 3 to 5 years.',
                          'The cecum was identified by the appendiceal orifice, at this time, on NBI.',
                          'On careful inspection, biopsies were taken in a random fashion; clips were placed at the site.',
-                         'The cecum was reached at 10:05 and the lesion was removed en bloc in a single piece.'):
+                         'The cecum was reached at 10:05 and the lesion was removed en bloc in a single piece.',
+                         'Saline was injected into the submucosa and the polyp was retrieved from the suction trap.',
+                         'The polyp was captured in a Roth net; biopsies were taken from multiple sites.',
+                         'The mucosa was within normal limits from the rectum to the cecum.',
+                         'Polyps were removed in the sigmoid colon and the remainder of the colon was normal.',
+                         'Two polyps were removed in the cecum and the ascending colon in order to clear the colon.'):
             with self.subTest(sentence):
                 self.assertEqual(why(self.paragraph(sentence)), [''])
 
