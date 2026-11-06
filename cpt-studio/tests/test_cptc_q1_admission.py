@@ -386,6 +386,28 @@ class EvidenceReconciliationTests(SimpleTestCase):
         result = run(text, corti(('45385', span(text, snare))), [late])
         self.assertEqual(without_record(proposal(result, '45385')), proposal(alone, '45385'))
 
+    def test_the_union_reads_as_corti_citing_every_passage(self):
+        """The union is equal eligibility too: Corti's passage about a plan or another occasion and a participant's
+        passage showing the act done today read exactly as Corti's own selection of both passages - READY where another
+        polyp was removed today (the evidence hold was about another act). Recorded: where both statements name "the
+        polyp", it is the readers' act identity that reads the plan or the earlier occasion as another act - READY, as
+        Corti citing both was READY at the base (b452c6c4), where the participant's passage was not read with it."""
+        for plan, done in (('Hot snare polypectomy of the 2 cm transverse polyp will be performed at a later date.',
+                            'A 6 mm sigmoid polyp was removed with a hot snare.'),
+                           ('Hot snare polypectomy will be performed at a later date.',
+                            'The polyp was removed with a hot snare.'),
+                           ('The polyp was removed with a hot snare at the last colonoscopy.',
+                            'The polyp was removed with a hot snare.')):
+            text = colon(plan + '\n' + done, 'Colonoscopy').replace(SEEN + '\n', '')
+            with self.subTest(plan):
+                union = run(text, corti(('45378', span(text, CECUM)), ('45385', span(text, plan))),
+                            [read('astra', [code(text, '45385', done)])])
+                both = run(text, corti(('45378', span(text, CECUM)))
+                           + [ProviderCode('selected', 'cpt', '45385', 'UNVERIFIED PROVIDER WORDING',
+                                           (span(text, plan), span(text, done)))])
+                self.assertEqual(coded(union, '45385'), coded(both, '45385'))
+                self.assertEqual(coded(union, '45385'), [READY])
+
 
 class TruthfulReasonTests(SimpleTestCase):
     """U9: no reason says "not documented" from a reader's silence."""

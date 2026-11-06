@@ -156,7 +156,7 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # The cue that made it uncertain: routing's reading of the family when that decided it (services._finish adds it
         # after the statement of performance it overrides), else the service's own first doubt.
         cue = next((c for c in service.cues if c.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE))),
-                   service.cues[0] if service.cues else 'its documentation does not establish it')
+                   service.cues[0] if service.cues else 'CPT Studio read no statement of it')
         return Match('uncertain', service, (), 'service_uncertain',
                      f'CPT Studio could not confirm the {name} as performed on the date of service ({cue}).',
                      question=f'Confirm whether the {name} was performed on the date of service.')

@@ -1587,7 +1587,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # the layout's reading, not the passage's (round 4 PA's "one cause"; a numbered "3. Upcoming procedures"
             # item makes today's "4. 6 mm sigmoid polyp removed with cold snare." planned: test_repairs_r4_sections)
             own_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE and not _section_time(r)}
-            elsewhere = _passages_elsewhere(kept, own_time, found, inventory, code)
+            elsewhere = _passages_elsewhere(kept, own_time, found, inventory, code, text)
             if elsewhere:
                 found = replace(found, state='uncertain', reason='readings_disagree', question=(
                     f'Confirm whether {code} is supported: none of the passages it cites shows what was done on the date '
@@ -1610,7 +1610,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
 
 
 def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory,
-                        code: str = '') -> str:
+                        code: str = '', text: str = '') -> str:
     """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
     than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
     another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
@@ -1629,7 +1629,7 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
         if (span.start, span.end) in another_time:
             why.append(f'{reconcile.quote(span, 80)} reads as another time or a denial')
             continue
-        other_act = _another_act_of_its_kind(span, found, code)
+        other_act = _another_act_of_its_kind(span, found, code, text)
         if other_act is not None:
             why.append(f'{reconcile.quote(span, 80)} states another {reconcile.act_label(other_act.kind)}, which the '
                        f'document does not give as done ({other_act.status})')
@@ -1647,14 +1647,15 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
     return '; '.join(why) + '.'
 
 
-def _another_act_of_its_kind(span, found: reconcile.Match, code: str):
+def _another_act_of_its_kind(span, found: reconcile.Match, code: str, text: str = ''):
     """Completion repair (builder Q1; F4, refutation cycle 3 C3-3-4 and cycle 4 C4-2-3): the act of a kind ``code``
     accounts for that the passage ``span`` states and the documented-service reader reads NOT done - failed, in doubt,
     planned, another provider's ("Possibly the ring was also dilated with a Savary bougie.", "Dilation with a Savary bougie
     failed.") - where the passage shows no act of those kinds done; else None. Such a passage is about another act of its
     kind than the one the matched service documents as done, so a code it alone cites is held by the evidence hold, never
-    READY on the done act it does not show (the base read Corti's 43248 READY there, and once a participant's code of the
-    same passages reached review, both dilation codes were held as competing for the one balloon dilation)."""
+    READY on the done act it does not show (the base read Corti's bougie-dilation code READY there, and once a
+    participant's code of the same passages reached review, both dilation codes were held as competing for the one
+    balloon dilation)."""
     profile = reconcile.catalogue.code_profile(code) if code else None
     if profile is None or not profile.covers:
         return None
@@ -1666,11 +1667,26 @@ def _another_act_of_its_kind(span, found: reconcile.Match, code: str):
     acts = [a for a in found.service.acts if a.kind in kinds and shows(a)]
     if any(a.status == 'performed' for a in acts):
         return None
-    # only an act its own clause states otherwise: never one named and nothing said of it, one read in an indication,
-    # or one whose time is its section's alone (_time_from_section - engine @4's time_plan triage keeps the procedure line's
-    # act READY there)
+    # only an act its own sentence states otherwise: never one named and nothing said of it, one read in an indication,
+    # one whose time is its section's alone (_time_from_section - engine @4's time_plan triage keeps the procedure line's
+    # act READY there), a form's field or box reading ("Biopsy taken:   Yes   No" printed with no mark beside the
+    # field's own "Biopsy taken: Yes"), or an act listed on the procedure line ("Procedure: Colonoscopy with cold snare
+    # polypectomy for a positive FIT last month.", whose time is the test's: routing:0) - each measured holding a code
+    # the base read READY (tests/test_repairs_r3_forms_pdf.py, tests/test_repairs_r3_time.py)
     return next((a for a in acts if a.role in reconcile.OWN_ROLES and not _says_nothing(a.status, a.cues)
-                 and not _time_from_section(a.cues) and (a.cues[:1] != (gi_services.INDICATION_READING,))), None)
+                 and not _time_from_section(a.cues) and (a.cues[:1] != (gi_services.INDICATION_READING,))
+                 and not (a.cues and a.cues[0].startswith(('field:', 'box:')))
+                 and not any(_on_a_procedure_line(text, ev.start) for ev in a.evidence)), None)
+
+
+def _on_a_procedure_line(text: str, pos: int) -> bool:
+    """Whether ``pos`` lies on a procedure field line ("Procedure: ...", services.PROCEDURE_FIELD): the line that lists
+    what the report's procedure was. With no text, never."""
+    if not text:
+        return False
+    start = text.rfind('\n', 0, pos) + 1
+    end = text.find('\n', pos)
+    return bool(gi_services.PROCEDURE_FIELD.match(text[start:end if end >= 0 else len(text)]))
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
@@ -3663,7 +3679,8 @@ PARTICIPANT_UNREAD = ('the documented-service reading was not available, so no p
 # P-ADMIT2 (harness repair 3): what CPT Studio's own reading left a participant's code that accounted for nothing it
 # read done. RETIRED by the completion repair (owner directive 2026-11-06, items 3 and 5; builder Q1): an explicit code
 # is admitted and read by the shared per-code path, so none of these is produced any more - before, they listed a code
-# "not documented as done" from a reader's silence (U9: 39f0ac49's and d44a77b3's 43247 for "the bolus was removed").
+# "not documented as done" from a reader's silence (U9: the retained cases' participant codes for "the bolus was
+# removed").
 # Kept, in CPT Studio's own "could not find" words, for the earlier releases' records and their tests.
 PARTICIPANT_NO_SERVICE = 'CPT Studio could not find a service of its family documented as done on the date of service'
 PARTICIPANT_NO_ACT = 'CPT Studio could not find the act it accounts for documented as done on the date of service'
@@ -4129,9 +4146,10 @@ class _Harness:
         passage (reinstatable) where the path excludes it. No rule of the admission's own decides it any more: before,
         a code that accounted for no documented item, or whose own passages did not show the act, was an alternative
         "not documented as done", never reinstatable, where Corti's selection of the same passages was held (U8, U9;
-        the participants' 43247 for "the bolus was removed" on 39f0ac49 and d44a77b3). Corti selecting, omitting or
-        listing the code changes nothing. Only a genuine non-proposal stays an alternative: out of scope, no quote found
-        verbatim, no exact span, proposed only in peer review, or no documented-service reading to read it by.
+        the participants' foreign-body removal code for "the bolus was removed" on two retained cases). Corti
+        selecting, omitting or listing the code changes nothing. Only a genuine non-proposal stays an alternative: out
+        of scope, no quote found verbatim, no exact span, proposed only in peer review, or no documented-service reading
+        to read it by.
 
         A code a decidable proposal carries that a participant's first reading also proposed is read ONCE, over every
         proposer's exact passages (_select's ``extra``; item 2, evidence-based reconciliation): so it is never held by
