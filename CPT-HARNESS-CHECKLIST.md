@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | none yet: branch `fix/cpt-studio-completion-20261106` from main `eb7c9a77` |
-| current stage | 2 to 5, the repair: IN PROGRESS (stage 1 PASS, VERIFIED OFFLINE, commit `b452c6c4` at 2026-11-06T08:18:43Z) |
-| next action | five bounded builders (workflow `wf_33ae45a0-361`, launched at about 2026-11-06T08:36Z by its script file's time) implement the repair from `b452c6c4` in their own worktrees. R1 labelled procedure paragraphs and one section fact; R2 an examination's outcome against a sub-act's, the instrument's course, one extent fact; A the act frames (antecedent, removal binding, placement against outcome, dispositions, purpose time, F-NEG S); Q1 equal eligibility, evidence-based reconciliation and truthful reasons; Q2 truthful questions, recompute after an answer, answer binding. Then the owner integrates them serially, re-measures, and runs refutation over the integrated diff |
+| candidate | branch `fix/cpt-studio-completion-20261106` at `89fe6328f38d` (the five builders integrated, with the integration's own rules; not installed) |
+| current stage | 6 and 7: items 2 to 5 IMPLEMENTED and VERIFIED OFFLINE on the integrated tree, item 6 PASS (VERIFIED OFFLINE); refutation over the integrated diff next (stage 1 PASS at `b452c6c4`) |
+| next action | the refutation workflow: seven lenses (structure, outcome, acts, admission, answers, cost, consistency), each in a write-disabled lens sandbox at the head, told to refute the integrated diff `b452c6c4..` with concrete inputs; every finding verified by the owner session before it is believed; repairs under the two-cycle rule. CI on the draft PR alongside. Then the install and the walk of the sealed sets c1 and c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -254,11 +254,11 @@ the progress log below.
 | | Item | Status | Kind | Revision | Evidence | Next |
 |---|---|---|---|---|---|---|
 | [x] | 1. Establish the exact remaining failures (C1) | PASS | VERIFIED OFFLINE | `fd8040d71e44` (branch `studio/` identical) | `docs/cpt-harness/completion-20261106/stage1-trace.md`; `tests/test_completion_corpus.py` | - |
-| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | - | - | - | design over the fact map; bounded implementation |
-| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | - | - | - | with item 2 |
-| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | - | - | - | with item 2, measured on the corpus |
-| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | - | - | - | with item 2 |
-| [ ] | 6. Prove the repair against retained evidence first (C6) | NOT RUN | - | - | - | after items 2 to 5 |
+| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `cpt-studio/HARNESS.md` "Stages 2 to 5"; `docs/cpt-harness/completion-20261106/corpus-repin.md` | refutation over the integrated diff |
+| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `docs/cpt-harness/completion-20261106/table-repin.md` (no participant row reads differently from Corti's selection) | refutation |
+| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | corpus: no FALSE READY beyond the installed baseline; FALSE READY 57 to 39, FALSE HOLD 81 to 51 | refutation |
+| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `tests/test_completion_answers.py` (the chain, the binding, D7 unchanged) | refutation; the walk |
+| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED OFFLINE | `89fe6328f38d` | the four retained cases recomputed in memory on a migrated throwaway copy (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY with no incompleteness; 88d9db32 its six READY); the gates (`tests/fixtures/gi4/declarations/completion-integration.json`) | re-run after any refutation repair (reopened if disproved) |
 | [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
 | [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
 | [ ] | 9. Close with evidence of the result (C9) | NOT RUN | - | - | - | last |
@@ -271,7 +271,12 @@ the progress log below.
   - `tests.test_completion_corpus`: 3 tests OK in 7.4 s; mutation-proved (bare "bolus": 82 failures, the file
     restored byte-identical);
   - the export traced with the report's own snapshot, read-only.
-- **Tests on the candidate:** none yet.
+- **Tests on the candidate (`89fe6328f38d`, VERIFIED OFFLINE):**
+  - the full CI-like suite: 6,229 Django tests OK in three chunks, ops 524 OK, verification 43 OK, the node suites 131, 65 and 135 passing, check and makemigrations clean (second run, 2026-11-06T14:33:40Z to 14:50:18Z);
+  - the completion corpus re-pinned (627 entries; no FALSE READY beyond the installed baseline), the refutation
+    tables re-pinned with every moved row classified, the freeze gate on the full corpus (holds), the H4 battery
+    (10 declared movements, 0 new violations), the H1 replay (the labels alone), the Corti-only parity (byte-identical
+    to harness repair 3's pins once the labels are set back), the installer suites (350 OK).
 - **Provider runs and usage in this repair:** none sent.
 - **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
 
@@ -852,3 +857,21 @@ the progress log below.
   - The expectations are the session's provisional reading, supported per code by the stored CMS references
     (PFS RVU26D, MUE 2026-Q4). They are not a coder's adjudication. NCCI is not connected.
   - The builders' briefs do not name the set, and no code reads it before the walk.
+- **2026-11-06T14:50:46Z Completion repair: the five builders integrated, measured, and the full suite green on `89fe6328f38d`.**
+  - Builders (workflow `wf_33ae45a0-361`, finished 2026-11-06T12:25Z): R1 structure, R2 outcome, A acts, Q1 admission,
+    Q2 answers; merged serially into `fix/cpt-studio-completion-20261106` (R1 `7d42e2cd`, R2 `3815eaa6`, A `22e79e5c`,
+    Q1 `cc38fb1d`, Q2 `2a46a267`), each merge re-measured before the next.
+  - The integration's own rules, each committed with its measurement: the dilation technique (43249 READY on a Savary
+    dilation was a base false READY made reachable on the walk's h2c document), one evaluation in competition, the
+    another-act hold removed, one subject reading, a dated history in the indication, another act's doubt (narrowed to
+    a distinct lesion record after the first full suite measured 31 genuine holds released), the retrieval trace for
+    admitted codes, the rollback hazard's wording, the labels (gi-routing@9, gi-services@6, cpt-studio-validation@9,
+    gi-catalogue@2).
+  - The first full suite on the integrated tree (`3bb8b723`) failed 41 and errored 4: attributed rule by rule in memory
+    and repaired (`f4b34778`, `89fe6328`); the second (6,229 Django tests OK in three chunks, ops 524 OK, verification 43 OK, the node suites 131, 65 and 135 passing, check and makemigrations clean (second run, 2026-11-06T14:33:40Z to 14:50:18Z)).
+  - An independent acceptance set c2 was written by an agent blind to the repair and sealed at 2026-11-06T14:11:22Z
+    (mode 0400, directory 0500) in `/home/claude/cpt-studio-completion-20261106/acceptance/sealed-c2/`, sha256
+    prefixes: c2a.txt `358e42f28f26a4e1` (PDF), c2b.txt `811efefbb15f9518` (PDF), c2c.txt `2c884ef1a2d1462b` (Word),
+    expectations-c2.json `7174de3cdfb579c5`. Its author returned only these hashes; no one has read it. The session
+    wrote set c1 itself and knows its content, so c2 is the independent acceptance evidence and c1 is walked beside it.
+  - No provider request has been sent in this repair.
