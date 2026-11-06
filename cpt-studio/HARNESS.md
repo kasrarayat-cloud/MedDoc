@@ -3609,8 +3609,8 @@ passage holds the tattoo code (the second opinion reads the passage whole).
 
 **The pass.** Workflow `wf_5ea89702-382`: seven lenses (structure, outcome, acts, admission, answers, cost, consistency),
 each in a sealed, write-disabled sandbox at `179fdff9`, told to refute `b452c6c4..179fdff9` with concrete synthetic
-inputs measured on the head and the base. Six returned 44 findings (structure 8, admission 8, outcome 8, acts 8, answers 7,
-consistency 5); the cost lens is recorded with cycle 2. **Every finding was reproduced by the owner session on both trees
+inputs measured on the head and the base. They returned 45 findings (structure 8, admission 8, outcome 8, acts 8,
+answers 7, consistency 5, cost 1). **Every finding was reproduced by the owner session on both trees
 before any repair** (`verify/refute1/`), and each repair fails closed: a rule that releases a hold needs positive
 structural evidence, and what it does not recognise keeps the base reading. Pinned in
 `tests/test_completion_refutation_c1.py` (20 tests; a mutant of one repair fails its pin).
@@ -3622,6 +3622,12 @@ structural evidence, and what it does not recognise keeps the base reading. Pinn
 | acts | a listed act "aborted"; "EMR referral placed for future resection"; "Removal of the bolus was impossible ..."; an anaphor of a 2023 impaction or another person's coin; a coin's site from another clause | "aborted", "terminated", "discontinued" as act failures (one vocabulary with R2); the purpose release frees only what the done predicate is said of, routing's rule subtracting a non-material modifier; a nominal removal needs a done predicate or none; an anaphor inherits its antecedent's other year, place or person, and takes its own clause's site |
 | admission | another lesion's failure releasing a doubted act (order-dependent); a participant's code on the procedure line while its passage says the polyp was left in place; an inflated dilator read as a wire bougie | every doubtful reading must be another act's, beside a matched act its own sentence states plainly; a coordinated verb phrase shares its subject, an observed-then-left lesion is a plain disposition, a purpose tail states it too; an inflation names a balloon |
 | answers | an aborted biopsy (found outside the lens) | a later failure of the same act on the same lesion, or of the only act of its kind, doubts it |
+
+**Cost** (the one superlinear path the cost lens found): the labelled paragraphs' tract check reads a whole section's
+sites through `services._anatomy_in`, which tested each match against every site taken so far; a released paragraph
+beside a long run of site names overran the analyze child's 60 s deadline at 400k characters (the base: 11.8 s). The taken
+spans are now sorted and each overlap is one bisection (`fa9d7020`): output identical on all 548 corpus texts, the lens's
+shape at 384k characters 2.4 s for the release and 12.5 s for routing, linear.
 
 **False holds and surfaces repaired:** a "Colonoscopy Report" title (the occasion indication reads the clinical layout); a
 generic instrument naming its tract (P2: "The endoscope was inserted through the mouth ... to the second part of the
