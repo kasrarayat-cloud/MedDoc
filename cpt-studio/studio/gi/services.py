@@ -4032,6 +4032,16 @@ def _comparison_objects(text: str, start: int, end: int) -> list[tuple[int, int]
     return [m.span() for m in COMPARISON_OBJECT.finditer(text, start, end)]
 
 
+# The specific techniques two acts of one kind can be told apart by (integration of refutation cycle 2, the same-act
+# failure rule): a generic "snare" or "forceps", or no technique, tells nothing.
+_SPECIFIC_TECHNIQUES = frozenset(('cold forceps', 'hot forceps', 'cold snare', 'hot snare', 'balloon', 'guidewire'))
+
+
+def _techniques_differ(one: str, other: str) -> bool:
+    """Whether two acts of a kind state specific techniques that differ (another instance of the kind)."""
+    return one in _SPECIFIC_TECHNIQUES and other in _SPECIFIC_TECHNIQUES and one != other
+
+
 def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> str:
     """The technique named in [start, end); with ``near``, the one closest to that position ("cold snare polypectomy
     and cold forceps biopsy": the snare's technique is the cold snare)."""
@@ -4777,6 +4787,38 @@ def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: t
 # second auxiliary, a clause mark other than a comma before the coordinator) is not.
 _OBSERVED_AND = _rx(r'[ \t\n]+(?:was|were)[ \t\n]+(?:also[ \t\n]+)?(?:found|seen|noted|identified|visualized|visualised|'
                     r'observed|located|detected)\b[^.;:]{0,80}?(?:,[ \t\n]*)?\b(?:and|but)[ \t\n]+')
+
+
+# A sentence that is only a lesion's removal (integration of refutation cycle 2; the listing rule's positive side): an
+# optional field label, the lesion's noun phrase, "was|were" and at most two adverbs of a closed class, removed|resected|
+# excised, then only phrases of a closed class - the technique or instrument (with|by|using a ... snare|forceps|...),
+# en bloc, piecemeal, completely, in N pieces - and "and retrieved" or "and sent to pathology", then the sentence's end.
+# Closed: anything else (another time, another lesion, a negation, a second predicate) is no match.
+_REMOVED_ONLY = re.compile(
+    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++(?:was|were)[ \t\n]++'
+    r'(?:(?:then|also|successfully|completely|entirely)[ \t\n]++){0,2}(?P<verb>removed|resected|excised)'
+    r'(?:[ \t\n]++(?:(?:with|by|using|via)[ \t\n]++(?:(?:an?|the)[ \t\n]++)?(?:[A-Za-z-]++[ \t\n]++){0,3}?'
+    r'(?:snare|forceps|loop|technique|polypectomy|resection)|en[ \t\n-]bloc|piecemeal|completely|entirely|'
+    r'in[ \t\n]++(?:one|a[ \t\n]++single|two|three|several|multiple)[ \t\n]++(?:piece|fragment)s?))*'
+    r'(?:,?[ \t\n]++and[ \t\n]++(?:(?:was|were)[ \t\n]++)?(?:retrieved|recovered|sent[ \t\n]++(?:to|for)[ \t\n]++'
+    r'(?:pathology|histology)))?[ \t]*+[.;]?[ \t\n]*+', re.I)
+_REMOVED_NP_DOUBT = re.compile(r'\b(?:no|not|never|none|without|previously|prior|history|earlier|last|another|other|'
+                               r'(?:19|20)\d{2}|was|were|is|are|been|being|has|have|had|that|which|who|whose|when|'
+                               r'after|before|while|because|and|but|or)\b', re.I)  # one noun phrase: no clause, no verb
+
+
+def _removed_only(text: str, ss: int, se: int, cls, *, service_date, dates, part) -> bool:
+    """Whether the sentence [ss, se) is only a lesion's removal (_REMOVED_ONLY) whose predicate the clause reader reads
+    performed today, its noun phrase naming no negation, other time or other lesion. Bounded: one match per sentence."""
+    if se - ss > 260:
+        return False
+    m = _REMOVED_ONLY.fullmatch(text, ss, se)
+    if m is None or _REMOVED_NP_DOUBT.search(m.group('np')):
+        return False
+    clause = _clause_for(cls, m.start('verb'))
+    reading = read_clause(text, clause, m.start('verb'), m.end('verb'), service_date=service_date, dates=dates,
+                          part=part, in_today_report=part.kind == 'report')
+    return reading.status == 'performed'
 
 
 def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service_date, dates,
@@ -6156,6 +6198,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         removed_lesions.add(lesion.id)
                         continue
                     dispositions.setdefault(lesion.id, disposition)
+                # integration of refutation cycle 2: a sentence that is only the lesion's removal, recognized whole
+                # (_removed_only: "A 6 mm polyp in the ascending colon was removed.", "Findings: ... was resected
+                # piecemeal and retrieved."), states it removed today where its predicate reads performed - the plain
+                # subject reading above needs both subject walks to agree, which a locative after the head defeats, and
+                # the listing rule below withholds a listed removal unless a lesion is stated removed
+                for lesion in {lesion.id: lesion for _a, _b, lesion in bound_nouns}.values():
+                    if lesion.id not in removed_lesions and _removed_only(text, ss, read_end, cls, service_date=service_date,
+                                                                         dates=dates, part=part):
+                        removed_lesions.add(lesion.id)
             # an act's lesion is at one known place only when every lesion its sentence names is at the same places
             # (_lesion_for picks one of several by position)
             one_place = len({placements.lesions.get(lesion.id) for lesion in sentence_lesions}) == 1
@@ -6463,7 +6514,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             # mucosal biopsies: "Cold forceps biopsies were obtained from the second portion of the duodenum." then "The
             # biopsy was aborted due to bleeding and no tissue was obtained."), keyed by kind, unless the two acts' sites
             # conflict (both stated, and none shared): a widened hold, the safe side
-            failed_after = [(a.kind, a.lesion, frozenset(a.anatomy), min((ev.start for ev in a.evidence), default=-1))
+            failed_after = [(a.kind, a.lesion, frozenset(a.anatomy), min((ev.start for ev in a.evidence), default=-1),
+                             a.technique)
                             for a in d.acts if a.status == 'uncertain' and a.cues and a.cues[0].startswith(FAILURE_CUES)
                             and (a.lesion or not any(ANOTHER_ACT_WORDS.search(ev.text) for ev in a.evidence))]
             # one act of a kind per recorded lesion (or passage, where it has none): two mentions of one statement
@@ -6486,11 +6538,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if a.status != 'performed' or LISTED_CUE in a.cues:
                     continue
                 first = min((ev.start for ev in a.evidence), default=-1)
-                if any(kind == a.kind and at > first and ((a.lesion and lesion == a.lesion) or (
-                        not lesion and done_of_kind[kind] == 1
-                        and not (sites and a.anatomy and not sites & set(a.anatomy))
-                        and nearest_before(kind, at) == first))
-                       for kind, lesion, sites, at in failed_after):
+                # integration of refutation cycle 2: never a failure stated with another specific technique of the kind
+                # (_SPECIFIC_TECHNIQUES: a failed Savary dilation beside a done balloon dilation, a failed hot snare beside
+                # a done cold snare) - another instance; a generic or unnamed technique keeps the hold (the safe side)
+                if any(kind == a.kind and at > first and not _techniques_differ(technique, a.technique)
+                       and ((a.lesion and lesion == a.lesion) or (
+                           not lesion and done_of_kind[kind] == 1
+                           and not (sites and a.anatomy and not sites & set(a.anatomy))
+                           and nearest_before(kind, at) == first))
+                       for kind, lesion, sites, at, technique in failed_after):
                     d.acts[i] = replace(a, status='uncertain', cues=a.cues + (SAME_ACT_FAILED_CUE,))
             body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}
             # U6 (completion repair, builder A), replaced in refutation cycle 2 (acts A7, admission D3): the procedure

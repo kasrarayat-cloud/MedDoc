@@ -361,13 +361,13 @@ class PresupposingHeadTests(SimpleTestCase):
     def test_the_held_shapes(self):
         """Cycle 2, acts A8: recorded readings on the safe side. "Specimen retrieval after the polypectomy failed." stays
         held - the act word is the object of "after", not a modifier of a closed head, so rule 6b does not reach it (a
-        recorded false hold the spec asked READY); another polyp's failed snare and a failed first pass stay held, and
-        "Biopsy specimens were obtained" reads no biopsy act (the rule's own cost)."""
-        for tail in ('Specimen retrieval after the polypectomy failed.',
-                     'Hot snare polypectomy of a large pedunculated polyp failed.'):
-            with self.subTest(tail):
-                text = colon(self.DONE + '.\n' + tail + '\n')
-                self.assertEqual(outcome(text, [('45385', self.DONE)])['45385'], ('selected', 'needs_clarification'))
+        recorded false hold the spec asked READY); a failed first pass stays held, and "Biopsy specimens were obtained"
+        reads no biopsy act (the rule's own cost). Another polyp's failed HOT snare beside the done COLD snare is READY
+        since the integration: two specific techniques that differ are two instances (services._techniques_differ)."""
+        text = colon(self.DONE + '.\nSpecimen retrieval after the polypectomy failed.\n')
+        self.assertEqual(outcome(text, [('45385', self.DONE)])['45385'], ('selected', 'needs_clarification'))
+        text = colon(self.DONE + '.\nHot snare polypectomy of a large pedunculated polyp failed.\n')
+        self.assertEqual(outcome(text, [('45385', self.DONE)])['45385'], ('selected', 'ready'))
         quote = 'A 5 mm polyp in the ascending colon was biopsied with cold forceps.'
         text = colon(quote + '\nThe first biopsy pass was unsuccessful, but tissue was obtained on the next pass.\n')
         self.assertEqual(outcome(text, [('45380', quote)])['45380'], ('selected', 'needs_clarification'))
