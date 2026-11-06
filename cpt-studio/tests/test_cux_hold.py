@@ -35,6 +35,11 @@ H2R = {(name, code): (before, after) for name, code, before, after in json.loads
 H3R = {(name, code): (before, after) for name, code, before, after in json.loads(
     (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'harness-repair-3.json')
     .read_text(encoding='utf-8'))['battery']}
+# The completion repair's R1 declaration (2026-11-06, measured after its code: a released labelled procedure paragraph is
+# its family's report part, so D4's EGD acts in the "EGD:" paragraph bind to the EGD): it governs the rows it moves.
+C1R = {(name, code): (before, after) for name, code, before, after in json.loads(
+    (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'completion-r1-structure.json')
+    .read_text(encoding='utf-8'))['battery']}
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
 _MODULES = []
@@ -115,7 +120,7 @@ class RegisterRowsTests(SimpleTestCase):
             for code in result['proposals']:
                 with self.subTest(name, code=code):
                     pinned = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
-                    for later in (H2R, H3R):  # each repair moves a row from where the pins before it left it
+                    for later in (H2R, H3R, C1R):  # each repair moves a row from where the pins before it left it
                         if (name, code) in later:
                             self.assertEqual(later[(name, code)][0], pinned)
                             pinned = later[(name, code)][1]

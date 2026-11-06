@@ -71,9 +71,9 @@ base reading (the Indications' hold), which is the safe side.
   end on a line that introduces what follows (a colon), nor on an unterminated line that may run on into the label (it
   ends on a function word or a determiner's phrase, or states a hold signal: "Surveillance after an outside").
 
-A paragraph runs from its label line to the next line that opens a layout section, another label line ("Word:" with
-content: sections._bare_label) or a blank line, whichever comes first (the blank line is stricter than the label rule
-alone: a paragraph only ever ends earlier, and what follows it keeps the base reading). The released set is a pure function of the text:
+A paragraph runs from its label line to the next line that opens a layout section or another label line ("Word:" with
+content: sections._bare_label), whichever comes first; a blank line inside it is the narrative's own (its lines after
+it are read by N1 and the tract rule like the rest), and what follows its end must be the report's own structure (N2). The released set is a pure function of the text:
 it never reads the service date.
 
 Cost: one pass over the lines; every per-paragraph question is answered by bisection over positions found once per
@@ -132,12 +132,13 @@ _COURSE_VERB = r'(?P<verb>introduced|advanced|inserted|passed)'
 _COURSE_ADVERB = r'(?:(?:then|carefully|gently|subsequently|easily|successfully|readily)[ \t\n]++)?'
 
 # --- N1, N2, N3: another time, place, agent or source (each a hold signal; any one blocks) ---------------------------
-_YEAR = r'\b(?:19|20)\d{2}\b'
+_YEAR = r'\b(?:19|20)\d{2}s?\b|\B\'\d{2}s\b'
 _MONTH_NAMES = (r'\b(?:January|February|March|April|June|July|August|September|October|November|December|Jan|Feb|Mar|'
                 r'Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?|\bMay\b(?![ \t]++(?:be|have|need|require|also)\b)')
 _WEEKDAY = r'\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b'
 _TIME_UNIT = (r'\b(?:days?|weeks?|months?|years?|decades?|fortnights?|visits?|occasions?|sessions?|admissions?|'
-              r'encounters?|appointments?|hospitali[sz]ations?|stays?|dates?)\b')
+              r'encounters?|appointments?|hospitali[sz]ations?|stays?|dates?|childhood|youth|adolescence|infancy|'
+              r'pregnanc(?:y|ies)|lifetime|era)\b')
 _PAST_WORD = (r'\b(?:previously|previous|prior|earlier|before|beforehand|ago|formerly|former|recently|recent|yesterday|'
               r'last|initially|initial|originally|original|index|remote|historically|historical|already|since|once)\b'
               r'|\b(?:back|by|until|till|since|from)[ \t\n]++then\b|\bthen[ \t]*+[.;!?](?=\s|$)|\bat[ \t\n]++that[ \t\n]++time\b'
@@ -173,6 +174,22 @@ _MONTH = re.compile(_MONTH_NAMES, re.A)
 # The same signals without the time ones (a plan section's or a future form's time is the plan's).
 _NOT_TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_OTHER_PLACE, _AGENT, _SOURCE, _ANOTHER)), FLAGS)
 _TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_YEAR, _WEEKDAY, _TIME_UNIT, _PAST_WORD)), FLAGS)
+# A temporal adjunct ("during ...", "while ...", "after ...", "following ...", "upon ...", "at the time of ...") tells
+# another time unless it anchors to one of today's procedure steps, the scope, or the examination itself (an allow-list:
+# "after lavage", "during withdrawal", "following the upper endoscopy", "at the time of the procedure"); anything else -
+# "during her pregnancy", "after her surgery", "while traveling" - holds. ("When she was ..." is _PAST_WORD's; a bare
+# "when" opens today's steps too - "When the cecum was reached, ..." - and is not read here.)
+_TEMPORAL_LEAD = re.compile(r'\b(?:during|while|after|following|upon|at[ \t\n]++the[ \t\n]++time[ \t\n]++of)'
+                            r'[ \t\n]++', FLAGS)
+_TODAYS_STEP = re.compile(
+    r'(?:(?:the|this|its|each|both|further|careful|gentle|scope|initial[ \t\n]++scope|complete|completion[ \t\n]++of[ \t\n]++the|'
+    r'endoscopic|balloon|snare)[ \t\n]++){0,3}(?:withdrawal|insertion|intubation|retroflexion|lavage|irrigation|suction(?:ing)?|'
+    r'clearance|repositioning|dilation|dilatation|injection|resection|polypectomy|biops(?:y|ies)|deflation|inflation|'
+    r'retrieval|removal|cleaning|washing|advancement|passage|entry|extubation|sedation|induction|insufflation|'
+    r'decompression|examination|exam|procedure|procedures|endoscopy|inspection|evaluation|clipping|tattooing|'
+    r'cannulation|sphincterotomy|aspiration|traversal|reinsertion|reintroduction|time-?out|withdrawing|inserting|'
+    r'advancing|retroflexing|suctioning|irrigating|scope|colonoscope|gastroscope|endoscope|sigmoidoscope|instrument|'
+    + r'(?:' + '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVICE_PATTERNS) + r'))\b', FLAGS)
 # A time unit in a future form is the plan's ("in 3 years", "repeat in six weeks"), never another occasion's.
 _FUTURE_UNIT = re.compile(r'\b(?:in|within|after)[ \t]++(?:about[ \t]++|approximately[ \t]++)?(?:\d{1,3}(?:[ \t]*+-[ \t]*+\d{1,3})?'
                           r'|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|a[ \t]++few|few|several)[ \t]++'
@@ -198,11 +215,13 @@ _ANNOUNCE = re.compile(r'\bas[ \t]++follows\b|\bfollows\b|\bbelow\b|\bthe[ \t]++
 _DETERMINERS = frozenset(('a', 'an', 'the', 'her', 'his', 'their', 'its', 'this', 'that', 'these', 'those', 'any', 'no',
                           'our', 'my', 'your', 'some', 'each', 'every', 'another'))
 # An examination noun: the examination itself, by a generic noun or by any service's name.
-_EXAM_NOUN = (r'(?:examinations?|exams?|procedures?|stud(?:y|ies)|tests?|cases?|endoscop(?:y|ies)|' + _SERVICE_NAMES + ')')
+_EXAM_NOUN = (r'(?:examinations?|exams?|procedures?|stud(?:y|ies)|tests?|cases?|endoscop(?:y|ies)|narratives?|accounts?|'
+              r'descriptions?|' + _SERVICE_NAMES + ')')
 _EXAM_SUBJECT = re.compile(r'[ \t\n]*+(?:(?:the|this|that|these|those|today\'?s|said|same|present|current|above|both|each|'
                            r'either|neither|her|his|their|its)[ \t\n]++)?(?:(?:entire|whole|upper|lower|diagnostic|'
                            r'screening|surveillance)[ \t\n]++)?' + _EXAM_NOUN + r'\b(?![ \t\n]*+(?:-|of\b))', FLAGS)
-_PRONOUN_SUBJECT = re.compile(r'[ \t\n]*+(?:it|this|that)[ \t\n]++(?=(?:was|were|is|are|had|has|took|occurred|happened|'
+_PRONOUN_SUBJECT = re.compile(r'[ \t\n]*+(?:it|this|that|the[ \t\n]++(?:above|foregoing|aforementioned|preceding)|all[ \t\n]++'
+                              r'(?:of[ \t\n]++)?(?:this|the[ \t\n]++above))[ \t\n]++(?=(?:was|were|is|are|had|has|took|occurred|happened|'
                               r'showed|revealed|demonstrated)\b)', FLAGS)
 # What an examination subject may say in today's own narrative (an allow-list; any other predicate holds).
 _EXAM_PREDICATE_OK = re.compile(
@@ -307,6 +326,9 @@ def _signals(text: str, start: int, end: int, time: bool = True) -> bool:
     from studio.gi import context as gi_context  # local: the date reader's own date mentions (read only)
     if gi_context.find_dates(text[start:end]) or _MONTH.search(text, start, end):
         return True
+    for m in _TEMPORAL_LEAD.finditer(text, start, end):
+        if _TODAYS_STEP.match(text, m.end(), end) is None:
+            return True  # "during her pregnancy", "after her surgery": a time no step of today's procedure anchors
     future = _FUTURE_CLAUSE.search(text, start, end) is not None
     for m in _TIME_SIGNALS.finditer(text, start, end):
         if future and not re.fullmatch(_PAST_WORD, m.group(0), FLAGS):
@@ -331,10 +353,6 @@ def _exam_subject_holds(text: str, s: int, e: int, sentence_start: bool) -> bool
             return (_EXAM_PREDICATE_OK.match(text, p.end() - 1, e) is None
                     and _PRONOUN_PREDICATE_OK.match(text, p.end(), e) is None)
     return False
-
-
-def _line_index(starts: list[int], pos: int) -> int:
-    return bisect.bisect_right(starts, pos) - 1
 
 
 @dataclass(frozen=True)
@@ -405,7 +423,7 @@ def _candidates(text: str, lay: Layout) -> list[_Candidate]:
         line = text[ls:min(le, ls + LABEL_READ + 200)]  # a label's line is read in its first characters only
         stripped = line.strip()
         label = _label_at(line) if stripped else None
-        ends.append(not stripped or ls in section_starts
+        ends.append(ls in section_starts
                     or (label is not None and len(label[0]) <= 60 and gi_sections._bare_label(label[0])))
         if label is None or len(label[0]) > 70 or gi_sections._heading(text, ls, le) is not None:
             continue
@@ -750,6 +768,23 @@ def _later_occasion(text: str, c: _Candidate, frames: tuple) -> bool:
     return detect.named_as_another_occasion(text, c.family, c.end, len(text), skip=frames, doubt=True)
 
 
+def _structure_resumes(text: str, lay: Layout, c: _Candidate, candidate_starts: set) -> bool:
+    """N2: whether the report's own structure resumes where the paragraph ends - its next non-blank line opens a layout
+    section with a heading ("Impression:", "Findings:"), is another labelled paragraph's label line, is one of the
+    report's own fields (the layout's closed list, sections._S2_REPORT_FIELD: "Withdrawal time:", "Extent:", "BBPS:"),
+    or there is no further text. A free line after it ("Note: not from this visit.", a comment, a signature) may speak of it, so the
+    paragraph is held."""
+    m = re.compile(r'\S').search(text, c.end)
+    if m is None:
+        return True
+    line_start = text.rfind('\n', 0, m.start()) + 1
+    section = lay.section_at(line_start)
+    line_end = text.find('\n', line_start)
+    line = text[line_start:len(text) if line_end < 0 else min(line_end, line_start + 200)]
+    return line_start in candidate_starts or (section.start == line_start and section.heading is not None) \
+        or bool(gi_sections._S2_REPORT_FIELD.match(line))  # the report's own field ("Withdrawal time: 8 minutes.")
+
+
 def _heading_has_content(text: str, section: Section) -> bool:
     if section.heading is None:
         return False
@@ -781,6 +816,7 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
     positive = set(_positive_bodies(text, lay))
     stray = _stray_mentions(text, lay, candidates)
     frames = _frames(text, candidates, ix)
+    candidate_starts = {c.start for c in candidates}
     out: list[tuple[LabelledParagraph, str]] = []
     previous: Optional[_Candidate] = None  # the candidate before this one, and whether it was released
     previous_released = False
@@ -813,7 +849,7 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
         elif _paragraph_holds(text, c, ix, frames):
             why = 'N1: the paragraph states another time, place, agent or source'
         elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
-                or _later_occasion(text, c, frames):
+                or _later_occasion(text, c, frames) or not _structure_resumes(text, lay, c, candidate_starts):
             why = 'N2: a later sentence refers back to it'
         elif _announced(text, lay, c, first_in_section[c.section], ix):
             why = 'N3: the containing section announces it'

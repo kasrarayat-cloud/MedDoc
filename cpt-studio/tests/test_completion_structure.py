@@ -449,3 +449,41 @@ class SelfRefutationTests(SimpleTestCase):
         self.assertEqual([r[:2] for r in reasons], ['P2', 'P2'], reasons)
         self.assertIn('its frame names a procedure', reasons[0])
         self.assertEqual(structure.released(first), ())
+
+
+class TodaysStepsAndStructureTests(SimpleTestCase):
+    """Patch 4 of the author's own pass: a temporal adjunct anchors to today's procedure steps, decades and life stages
+    are other times, and the report's own structure resumes where a released paragraph ends."""
+
+    def assertHeldBy(self, text, condition):
+        reasons = why(text)
+        self.assertTrue(reasons and all(r.startswith(condition) for r in reasons), reasons)
+
+    def test_a_temporal_adjunct_no_step_of_today_anchors_holds(self):
+        for adjunct in ('during her pregnancy', 'after her surgery', 'while traveling', 'following her transplant',
+                        'upon her arrival from abroad', 'at the time of her diagnosis', 'in the 1990s', 'in childhood'):
+            with self.subTest(adjunct):
+                self.assertHeldBy(colonoscopy('Colonoscopy: The colonoscope was advanced to the cecum ' + adjunct + '. '
+                                              + SNARE + '\n'), 'N1')
+
+    def test_a_temporal_adjunct_of_todays_own_steps_still_releases(self):
+        for later in ('The cecum was photographed after lavage.', 'A second polyp was seen during withdrawal.',
+                      'Retroflexion was performed upon withdrawal of the scope.',
+                      'The mucosa was inspected after the polypectomy.'):
+            with self.subTest(later):
+                text = colonoscopy(COL.rstrip('\n') + ' ' + later + '\n')
+                self.assertEqual(why(text), [''])
+
+    def test_the_reports_structure_resumes_after_the_paragraph(self):
+        # a free line right after the paragraph may speak of it: held; a heading, a label or the end: released
+        # the paragraph runs to the next layout section or label line, a blank line included: what lies after a blank
+        # line is the paragraph's own text, read by N1 ("The above is not mine.": a back-reference subject)
+        self.assertHeldBy(colonoscopy(COL + 'Not from this visit.\n'), 'N1')
+        self.assertHeldBy(colonoscopy(COL + '\nThe above is not mine.\n'), 'N1')
+        # a label line ends it, and the report's structure does not resume there
+        self.assertHeldBy(colonoscopy(COL + 'Note: not from this visit.\n'), 'N2')
+        self.assertHeldBy(colonoscopy(COL + 'Comment: copied.\n'), 'N2')
+        self.assertEqual(why(colonoscopy(COL, tail='')), [''])
+        self.assertEqual(why(colonoscopy(COL, tail='Withdrawal time: 8 minutes.\nImpression: Polyp removed.\n')), [''])
+        self.assertHeldBy(colonoscopy(COL, tail='Prior colonoscopy: 2019, adenomas.\nImpression: Polyp removed.\n'), 'N2')
+        self.assertEqual(why(colonoscopy(COL, tail='\n\nImpression: Polyp removed.\n')), [''])
