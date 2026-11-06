@@ -7,14 +7,16 @@ does, and never more permissively than the installed engine reads that twin.
 
 - A labelled paragraph's heading twin is the same text with each label line "Colonoscopy: <narrative>" written
   "Procedure: Colonoscopy" and the narrative on the line under it (heading_twin).
-- An unnamed family's twin (the instrument rule) is the same text with its "Procedure: <narrative>" line written
-  "Procedure: Colonoscopy" and the narrative under it (named_twin).
+- An unnamed family's twin (the instrument rule) is the same text with its "Procedure: <narrative>" line (or the
+  instrument's other positive heading) written "Procedure: Colonoscopy" - every family whose course stands there:
+  "Procedure: EGD and colonoscopy" - and the narrative under it (named_twin).
 
 Each check runs the engine as the website reads it (tests.test_harness_engine.run with Corti's picks; the document's own
 date where a corpus entry is measured so) on the text and on its twin, and asserts that a code READY on the text is
 READY on the twin: (a) over every corpus text with a labelled paragraph candidate, (b) over both refutation cycles'
-structure inputs, (c) over the instrument rule's unnamed-family inputs. Where this change releases an input, the
-converse is pinned too (it reads exactly as its twin), so a later re-tightening is visible.
+structure inputs, (c) over the instrument rule's unnamed-family inputs; (b) and (c) also over this builder's own layouts
+(L1 to L9). Where this change releases an input, the converse is pinned too (it reads exactly as its twin), so a later
+re-tightening is visible.
 
 One recorded exception, measured on this tree and on the installed release alike: the H2|LABELLED acceptance shape (a
 food-bolus EGD paragraph beside a colonoscopy paragraph, corpus text 137) reads 43247 READY, as its corpus entry
@@ -105,11 +107,11 @@ def twin_quote(text: str, quote: str) -> str:
     return quote
 
 
-def named_twin(text: str, name: str) -> str:
-    """The instrument rule's twin: the text's one "Procedure: <narrative>" line written "Procedure: <name>" and the
-    narrative under it."""
-    assert text.count('\nProcedure: ') == 1, text
-    return text.replace('\nProcedure: ', f'\nProcedure: {name}\n')
+def named_twin(text: str, name: str, heading: str = 'Procedure') -> str:
+    """The instrument rule's twin: the text's one "<heading>: <narrative>" line written "<heading>: <name>" (every family
+    whose course stands in that section) and the narrative under it."""
+    assert text.count(f'\n{heading}: ') == 1, text
+    return text.replace(f'\n{heading}: ', f'\n{heading}: {name}\n')
 
 
 def outcome(text: str, picks, *, dated: bool = False, member_day: bool = False) -> dict:
@@ -158,7 +160,7 @@ class CorpusParityTests(SimpleTestCase):
     installed release reads READY; this is the check that the release never reads more than its twin."""
 
     # Measured on this tree, 2026-11-06: 46 of the 548 corpus texts have a labelled paragraph candidate, 13 of them a
-    # released one (52 entries compared). A reader change that stops finding or releasing labelled paragraphs fails here.
+    # released one (53 entries compared). A reader change that stops finding or releasing labelled paragraphs fails here.
     TEXTS_WITH_A_CANDIDATE = 46
     TEXTS_WITH_A_RELEASE = 13
 
@@ -292,6 +294,10 @@ def _structure_inputs() -> list:
         add(f'S8 {scope}', REPORT_HEAD + 'Indications: Dysphagia and surveillance after adenomas.\n' + EGD
             + f'\nColonoscopy: After the upper endoscopy, {scope} was introduced through the anus and advanced to the '
             'cecum. ' + SN + BOTH_IMP, BOTH, required={'43239'})
+    # this builder's own layout: a status line after a labelled paragraph (the label names the family, so routing's own
+    # reading of a named heading qualifies it, as it does the twin's)
+    add('L7 a status line after the paragraph', REPORT_HEAD + 'Indications: Screening.\nColonoscopy: ' + COURSE
+        + '\nStatus: Cancelled - inadequate bowel preparation.\nImpression: Normal colon.\n', [('45378', COURSE)])
     # the owner session's own sentences
     for ind in ('This is a 60-year-old woman referred from an outside GI clinic for surveillance.',
                 'Screening, for the following reasons: average risk and age 50.'):
@@ -366,6 +372,13 @@ class StructureInputParityTests(SimpleTestCase):
         self.assertIn('43239', ready(_pair('S8 the scope')[0]))
         self.assertNotEqual(generic, named)
 
+    def test_a_status_line_after_a_labelled_paragraph_holds_it_as_its_twin(self):
+        """This builder's own layout (no finding): "Status: Cancelled - inadequate bowel preparation." after a released
+        colonoscopy paragraph holds 45378 exactly as it holds the heading twin's."""
+        here, there = _pair('L7 a status line after the paragraph')
+        self.assertEqual(here, there)
+        self.assertEqual(ready(here), set())
+
     def test_the_kept_rules_still_hold_more_than_the_twin(self):
         """Cycle 1, structure C1-S5 (N1's negative quantifier, kept: "None of this was done today." inside the paragraph
         holds it) and C1-S7 (a report field line inside the narrative, cycle 1's recorded residual and the base's hold:
@@ -392,12 +405,13 @@ def _head(title: str) -> str:
 
 
 def _instrument_inputs() -> list:
-    """(label, unnamed text, family name, picks) for cycle 1's outcome F1/F2 inputs and cycle 2's O1, O3, O4, O7 with
-    the variants their lenses listed."""
+    """(label, unnamed text, family name, picks, heading) for cycle 1's outcome F1/F2 inputs and cycle 2's O1, O3, O4, O7
+    with the variants their lenses listed, and this builder's own layouts (L1 to L9)."""
     cases = []
 
-    def add(label, ind, procedure, after, pick, title='Colonoscopy', name='Colonoscopy'):
-        cases.append((label, _head(title) + ind + 'Procedure: ' + procedure + '\n' + after, name, [pick]))
+    def add(label, ind, procedure, after, picks, title='Colonoscopy', name='Colonoscopy', heading='Procedure'):
+        picks = picks if isinstance(picks, list) else [picks]
+        cases.append((label, _head(title) + ind + f'{heading}: ' + procedure + '\n' + after, name, picks, heading))
 
     col = ('45378', COURSE_COL)
     up = ('43235', COURSE_UP)
@@ -453,6 +467,28 @@ def _instrument_inputs() -> list:
     for tail in (', as documented by photographs of the appendiceal orifice.', ' after abdominal pressure was applied.',
                  ' and the previous polypectomy site in the ascending colon was examined.'):
         add(f'O7{tail[:30]}', 'Indications: Screening.\n', COURSE_COL + tail, '', col)
+    # this builder's own layouts (no finding): another positive heading; a course deep in its section; a status line
+    # beyond a sentence naming the family, before the heading or after it; the walk's edge; two families in one section,
+    # with a sentence naming either between the heading and the status line; a typed answer; a bare line
+    status = 'Status: Cancelled - inadequate bowel preparation.\n'
+    add('L1 a findings heading', 'Indications: Screening.\n', COURSE_COL + '.', status, col, heading='Findings')
+    add('L2 a course deep in its section', 'Indications: Screening.\n', 'Moderate sedation was given. The patient was '
+        'placed in the left lateral position. ' + COURSE_COL + '.', status, col)
+    add('L3 a status line before a sentence naming the family', status + 'Indications: Screening colonoscopy.\n',
+        COURSE_COL + '.', '', col)
+    add('L4 a sentence naming the family, then a status line', 'Indications: Screening.\n', COURSE_COL + '.',
+        'Comments: Colonoscopy note.\n' + status, col)
+    add('L5 a status line past the walk', 'Indications: Screening.\n', COURSE_COL + '. '
+        + ' '.join(f'Segment {i} was normal.' for i in range(1, 7)), status, col)
+    both = [up, col]
+    for label, between in (('L6 two families', '. '), ('L6b two families, an EGD sentence', '. EGD findings were normal. ')):
+        add(label, 'Indications: Screening.\n', COURSE_UP + between + COURSE_COL + '.', status, both,
+            title='EGD and colonoscopy', name='EGD and colonoscopy')
+    add('L6c two families, a colonoscopy sentence', 'Indications: Screening.\n', COURSE_UP + '. ' + COURSE_COL
+        + '. Colonoscopy findings were normal.', status, both, title='EGD and colonoscopy', name='EGD and colonoscopy')
+    add('L8 a typed answer before the heading', 'Procedure performed: No (patient refused).\nIndications: Screening.\n',
+        COURSE_COL + '.', '', col)
+    add('L9 a bare line after the course', 'Indications: Screening.\n', COURSE_COL + '.', 'Not performed.\n', col)
     return cases
 
 
@@ -460,8 +496,8 @@ INSTRUMENT_INPUTS = _instrument_inputs()
 
 
 def _instrument_pair(label: str) -> tuple:
-    _, text, name, picks = next(case for case in INSTRUMENT_INPUTS if case[0] == label)
-    return outcome(text, picks), outcome(named_twin(text, name), picks)
+    _, text, name, picks, heading = next(case for case in INSTRUMENT_INPUTS if case[0] == label)
+    return outcome(text, picks), outcome(named_twin(text, name, heading), picks)
 
 
 class InstrumentRuleParityTests(SimpleTestCase):
@@ -469,8 +505,8 @@ class InstrumentRuleParityTests(SimpleTestCase):
     and an unnamed family is read no more permissively than that named twin."""
 
     def test_every_unnamed_input_reads_no_more_than_its_named_twin(self):
-        """Cycle 1, outcome F1 and F2; cycle 2, outcome O1, O3, O4 and O7 with their variants."""
-        for label, text, name, picks in INSTRUMENT_INPUTS:
+        """Cycle 1, outcome F1 and F2; cycle 2, outcome O1, O3, O4 and O7 with their variants; the layouts L1 to L9."""
+        for label, *_ in INSTRUMENT_INPUTS:
             with self.subTest(label):
                 here, there = (ready(reading) for reading in _instrument_pair(label))
                 self.assertLessEqual(here, there)
@@ -510,22 +546,35 @@ class InstrumentRuleParityTests(SimpleTestCase):
         here, there = _instrument_pair('O4 control dated')
         self.assertEqual((ready(here), ready(there)), (set(), {'45378'}))
 
+    def test_the_other_layouts_read_exactly_as_their_named_twins(self):
+        """This builder's own layouts L1 to L9 (no finding): a Findings heading, a course deep in its section, a status
+        line beyond a sentence naming the family on either side, a status line past the walk, two families in one
+        section (the twin's heading names both: "Procedure: EGD and colonoscopy"), a typed answer, a bare line."""
+        layouts = [label for label, *_ in INSTRUMENT_INPUTS if label.startswith('L')]
+        self.assertEqual(len(layouts), 10)
+        for label in layouts:
+            with self.subTest(label):
+                here, there = _instrument_pair(label)
+                self.assertEqual(here, there)
+
     def test_the_heading_twin_reading_is_routings_own_reading_of_the_named_heading(self):
-        """I12 against routing itself: for every input, the instrument's heading twin is qualified exactly where routing,
-        reading the named twin, qualifies the family's name on the procedure heading ("uncertain: section silent: the
-        text after it (...) qualifies it"). I12 reads routing's sentences with routing's predicates; this catches the
-        two drifting apart."""
-        for label, text, name, _ in INSTRUMENT_INPUTS:
+        """I12 against routing itself: for every input and every family whose instrument course it reads, the heading
+        twin is qualified exactly where routing, reading the named twin, qualifies that family's name on the heading
+        ("uncertain: section silent: the text after it (...) qualifies it"). I12 reads routing's sentences with
+        routing's predicates; this catches the two drifting apart."""
+        for label, text, name, _, heading in INSTRUMENT_INPUTS:
             with self.subTest(label):
                 an, _ = detect._analysis(text, DAY)
                 candidates = detect._instrument_candidates(an)
                 self.assertTrue(candidates)
-                mine = {detect._heading_twin_qualified(an, m) for m in candidates}
-                self.assertEqual(len(mine), 1)
-                twin = named_twin(text, name)
-                heading = [m for f in detect.route(twin, DAY).findings for m in f.mentions
-                           if m.section == 'procedure' and m.span.text == name]
-                self.assertEqual(len(heading), 1, heading)
-                routing_qualifies = any(cue.startswith(detect.SILENT_SECTION_PREFIX + ' the text after it')
-                                        for cue in heading[0].cues)
-                self.assertEqual(mine.pop(), routing_qualifies)
+                families = frozenset(m.family for m in candidates)
+                twin = named_twin(text, name, heading)
+                at = twin.index(f'\n{heading}: {name}\n') + len(heading) + 3
+                named = [m for f in detect.route(twin, DAY).findings for m in f.mentions
+                         if at <= m.span.start < at + len(name)]
+                self.assertEqual({m.family for m in named}, set(families))
+                for m in candidates:
+                    (mention,) = [x for x in named if x.family == m.family]
+                    routing_qualifies = any(cue.startswith(detect.SILENT_SECTION_PREFIX + ' the text after it')
+                                            for cue in mention.cues)
+                    self.assertEqual(detect._heading_twin_qualified(an, m, families), routing_qualifies, m.family)
