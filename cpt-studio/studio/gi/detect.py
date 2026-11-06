@@ -8973,12 +8973,13 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
             continue
-        # refutation cycle 3 (parity C3-6): the rule reads a narrative that names NO family - a section whose own text
-        # names a service ("Procedure: Upper endoscopy" over "The colonoscope was then introduced. A 6 mm sessile polyp
-        # was removed ...") is read by that name alone, as its named twin is; its other family's course is no mention
+        # refutation cycle 3 (parity C3-6): the rule reads a narrative under a heading that names NO family - a section
+        # whose heading line names a service ("Procedure: Upper endoscopy" over "The colonoscope was then introduced. A 6
+        # mm sessile polyp was removed ...") is read by that name alone, as its named twin is; its other family's course
+        # is no mention (_heading_line_names_a_service)
         section = an.lay.section_at(m.start)
         if section.start not in named_sections:
-            named_sections[section.start] = bool(an.services_in(section.start, section.end))
+            named_sections[section.start] = _heading_line_names_a_service(an, section)
         if named_sections[section.start]:
             continue
         if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
@@ -8996,6 +8997,19 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
             return []
         kept.setdefault(m.family, []).append(m)
     return [m for family in kept.values() for m in family]
+
+
+_FINITE_VERB = re.compile(r'\b(?:was|were|is|are|been|had|has|have)\b', re.A | re.I)
+
+
+def _heading_line_names_a_service(an: Analysis, section) -> bool:
+    """Whether ``section``'s heading line - from the section's start to the line's end - names a service as a heading
+    names it: a service name with no finite verb on the line ("Procedure: Upper endoscopy", "UPPER ENDOSCOPY:"). A
+    narrative sentence on the heading's line that mentions a service in passing ("Procedure: The colonoscope was advanced
+    to the cecum. This was done on the same day as her upper endoscopy.") names no family (refutation cycle 3)."""
+    line_end = an.text.find('\n', section.start, section.end)
+    line_end = section.end if line_end < 0 else line_end
+    return bool(an.services_in(section.start, line_end)) and not _FINITE_VERB.search(an.text, section.start, line_end)
 
 
 def _another_familys_date(an: Analysis, d, family: str) -> bool:

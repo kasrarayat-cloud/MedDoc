@@ -155,7 +155,7 @@ def instrument_of(text: str, participle_end: int, mention_start: int) -> bool:
 # was placed for future evaluation", "A tattoo was placed at her first colonoscopy" each read a marking done today.
 # Here every slot is a closed class - nothing a word list leaves out can release:
 #   [a field label:] <the marking material> [was|were] injected|placed|applied|administered|performed
-#   | <the lesion> was|were tattooed|marked|inked [with <the marking material>]
+#   | <the lesion> [was|were] tattooed|marked|inked [with <the marking material>]
 #   | <a tattoo placement or injection> was|were performed|completed|done
 #   then at most three places of a closed class (adjacent/proximal/distal/opposite to the lesion or site; in, into,
 #   within, at or around an anatomical site, the submucosa, the lesion or the site; in N quadrants; N cm proximal or
@@ -165,12 +165,12 @@ def instrument_of(text: str, participle_end: int, mention_start: int) -> bool:
 # "requested"), another place ("on the tray", "at her first colonoscopy"), another purpose ("evaluation", "EMR",
 # "polypectomy") or anything after the purpose - keeps the purpose's future: the base reading.
 _W = r'[ \t\n]+'  # words are parted by spaces, tabs or a soft line break (a wrapped sentence reads as one)
-_ANATOMY = (r'(?:(?:proximal|distal|mid)' + _W + r')?(?:(?:ascending|descending|transverse|sigmoid|right|left)' + _W
-            + r'colon|c(?:a)?ecum|rectum|rectosigmoid(?:' + _W + r'junction)?|hepatic' + _W + r'flexure|splenic' + _W
+_ANATOMY = (r'(?:(?:proximal|distal|mid)' + _W + r')?(?:(?:ascending|descending|transverse|sigmoid|right|left)'
+            r'[ \t\n-]+colon|c(?:a)?ecum|rectum|rectosigmoid(?:' + _W + r'junction)?|hepatic' + _W + r'flexure|splenic' + _W
             + r'flexure|terminal' + _W + r'ileum|colon|esophagus|stomach|gastric' + _W + r'antrum|antrum|duodenum)')
 _MATERIAL = (r'(?:(?:the|a|an)' + _W + r')?(?:(?:sterile|submucosal|black|purified|carbon(?:-based)?)' + _W + r')?'
              r'(?:India' + _W + r'ink|tattoo' + _W + r'ink|carbon' + _W + r'particle' + _W + r'suspension|SPOT(?:' + _W
-             + r'ink)?|ink|tattoo)(?:' + _W + r'\(SPOT\))?')
+             + r'ink)?|ink|tattoo)(?:' + _W + r'(?:mark|marking))?(?:' + _W + r'\(SPOT\))?')
 _LESION_WORD = (r'(?:flat|sessile|large|laterally' + _W + r'spreading|depressed|ulcerated|suspicious|non-lifting|'
                 r'separate|second|third|additional)')
 _LESION = (r'(?:(?:the|a|an|this)' + _W + r')?(?:' + _LESION_WORD + _W + r'){0,2}(?:\d+(?:\.\d+)?[ \t]*(?:mm|cm)' + _W
@@ -189,7 +189,7 @@ MARKING_STATEMENT = re.compile(
     + r')?procedure)?|technique|comments?|colonoscopy)[ \t]*:[ \t\n]*)?'
     r'(?:' + _MATERIAL + _W + r'(?:(?:was|were)' + _W + r')?(?:(?:then|also|successfully)' + _W + r')?'
     r'(?:injected|placed|applied|administered|performed)'
-    r'|' + _LESION + _W + r'(?:was|were)' + _W + r'(?:(?:then|also)' + _W + r')?(?:tattooed|marked|inked)'
+    r'|' + _LESION + _W + r'(?:(?:was|were)' + _W + r')?(?:(?:then|also)' + _W + r')?(?:tattooed|marked|inked)'
     r'(?:' + _W + r'with' + _W + _MATERIAL + r')?'
     r'|(?:(?:a|the)' + _W + r')?(?:submucosal' + _W + r')?(?:tattoo|India' + _W + r'ink' + _W + r'tattoo)' + _W
     + r'(?:placement|injection)' + _W + r'(?:was|were)' + _W + r'(?:performed|completed|done))'

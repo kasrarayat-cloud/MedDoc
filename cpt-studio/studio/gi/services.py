@@ -661,6 +661,27 @@ def _outcome_in_doubt(cues) -> bool:
     return _attempt_or_failure(cues) or _hedged(cues) or _outcome_stated_otherwise(cues)
 
 
+_REASON_HEDGE_BEFORE = _rx(r'\bfor[ \t\n]+(?:(?:a|an|the)[ \t\n]+)?$')
+_PHRASE_END = re.compile(r'[,;:()\n.]')
+
+
+def _reason_hedges_only(text: str, cs: int, ce: int) -> bool:
+    """Refutation cycle 3 (closed C3-5): whether every hedge word of the clause [cs, ce) heads a reason phrase - "for"
+    (an article at most) right before it, and its noun phrase, to the clause's end or its next mark, naming no act of
+    this reader's (_acts_in): "for possible adenoma", "for suspected eosinophilic esophagitis". Such a hedge doubts the
+    reason's diagnosis, not the listed act. Any other hedge - "was possibly performed", "for possible polypectomy",
+    "for attempted polypectomy" - doubts the act, and so does a clause with no hedge word found (the safe side)."""
+    found = False
+    for m in HEDGE_WORDS.finditer(text, cs, ce):
+        found = True
+        if not _REASON_HEDGE_BEFORE.search(text, max(cs, m.start() - 12), m.start()):
+            return False
+        stop = _PHRASE_END.search(text, m.end(), ce)
+        if _acts_in(text, m.end(), stop.start() if stop else ce):
+            return False
+    return found
+
+
 def _outcome_stated_otherwise(cues) -> bool:
     """_outcome_in_doubt without the hedge: an attempt or a failure, a condition or an open question, an infinitive, or a
     later clause's failure of the same act - what the procedure line's placement never overrides (refutation cycle 3)."""
@@ -4691,14 +4712,25 @@ _OBSERVED_AND = _rx(r'[ \t\n]+(?:was|were)[ \t\n]+(?:also[ \t\n]+)?(?:found|seen
 # excised, then only phrases of a closed class - the technique or instrument (with|by|using a ... snare|forceps|...),
 # en bloc, piecemeal, completely, in N pieces - and "and retrieved" or "and sent to pathology", then the sentence's end.
 # Closed: anything else (another time, another lesion, a negation, a second predicate) is no match.
-_REMOVED_ONLY = re.compile(
-    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++(?:was|were)[ \t\n]++'
-    r'(?:(?:then|also|successfully|completely|entirely)[ \t\n]++){0,2}(?P<verb>removed|resected|excised)'
+_REMOVAL_TAIL = (
+    r'(?P<verb>removed|resected|excised)'
     r'(?:[ \t\n]++(?:(?:with|by|using|via)[ \t\n]++(?:(?:an?|the)[ \t\n]++)?(?:[A-Za-z-]++[ \t\n]++){0,3}?'
     r'(?:snare|forceps|loop|technique|polypectomy|resection)|en[ \t\n-]bloc|piecemeal|completely|entirely|'
     r'in[ \t\n]++(?:one|a[ \t\n]++single|two|three|several|multiple)[ \t\n]++(?:piece|fragment)s?))*'
     r'(?:,?[ \t\n]++and[ \t\n]++(?:(?:was|were)[ \t\n]++)?(?:retrieved|recovered|sent[ \t\n]++(?:to|for)[ \t\n]++'
-    r'(?:pathology|histology)))?[ \t]*+[.;]?[ \t\n]*+', re.I)
+    r'(?:pathology|histology)))?[ \t]*+[.;]?[ \t\n]*+')
+_REMOVED_ONLY = re.compile(
+    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++(?:was|were)[ \t\n]++'
+    r'(?:(?:then|also|successfully|completely|entirely)[ \t\n]++){0,2}' + _REMOVAL_TAIL, re.I)
+# Refutation cycle 3 (the listing beside a coordinated removal): the observation then the removal of the same noun
+# phrase, recognized whole - "A 25 mm sessile polyp was found in the cecum and was removed piecemeal." - its place
+# phrase an anatomical site and nothing else (checked by _removed_only). The shared subject is abandoned, so the
+# listing rule needs this one closed sentence to see the lesion removed.
+_OBSERVED_THEN_REMOVED = re.compile(
+    r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++(?:was|were)[ \t\n]++'
+    r'(?:found|seen|noted|identified|visuali[sz]ed)(?:[ \t\n]++(?:in|at|within)[ \t\n]++the[ \t\n]++'
+    r'(?P<loc>[a-z -]{1,40}?))?,?[ \t\n]++and[ \t\n]++(?:was|were)[ \t\n]++'
+    r'(?:(?:then|also|successfully|completely|entirely)[ \t\n]++){0,2}' + _REMOVAL_TAIL, re.I)
 _REMOVED_NP_DOUBT = re.compile(r'\b(?:no|not|never|none|without|previously|prior|history|earlier|last|another|other|'
                                r'(?:19|20)\d{2}|was|were|is|are|been|being|has|have|had|that|which|who|whose|when|'
                                r'after|before|while|because|and|but|or)\b', re.I)  # one noun phrase: no clause, no verb
@@ -4709,8 +4741,19 @@ def _removed_only(text: str, ss: int, se: int, cls, *, service_date, dates, part
     performed today, its noun phrase naming no negation, other time or other lesion. Bounded: one match per sentence."""
     if se - ss > 260:
         return False
-    m = _REMOVED_ONLY.fullmatch(text, ss, se)
-    if m is None or _REMOVED_NP_DOUBT.search(m.group('np')):
+    m = None
+    for form in (_REMOVED_ONLY, _OBSERVED_THEN_REMOVED):  # each form on its own: the first's open noun phrase may match
+        found = form.fullmatch(text, ss, se)              # the second's sentence and then fail its own check
+        if found is None or _REMOVED_NP_DOUBT.search(found.group('np')):
+            continue
+        loc = found.groupdict().get('loc')
+        if loc is not None and (_REMOVED_NP_DOUBT.search(loc)
+                                or sum(b - a for _n, _s, a, b in _anatomy_in(text, found.start('loc'), found.end('loc')))
+                                < len(loc.strip())):
+            continue  # its place phrase is an anatomical site and nothing else
+        m = found
+        break
+    if m is None:
         return False
     clause = _clause_for(cls, m.start('verb'))
     reading = read_clause(text, clause, m.start('verb'), m.end('verb'), service_date=service_date, dates=dates,
@@ -4755,9 +4798,21 @@ def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service
 # Refutation cycle 3 (closed C3-1): cycle 2's rule 6b - an act noun before a head of a closed class ("polypectomy
 # defect", "biopsy specimens", "biopsy tissue") dropped unless its reading was not today's - is abandoned. It dropped a
 # failed or doubted act written that way ("Biopsy tissue acquisition failed.", "It is unclear whether biopsy specimens
-# were obtained."), the only statement against a listed act, so the listing alone read the code READY. Every such
-# mention keeps its own reading, the base reading; "Clip closure of the polypectomy defect failed." reading against the
-# polypectomy again is a recorded safe-side hold (ACCURACY-RESIDUALS.md, cycle 3).
+# were obtained."), the only statement against a listed act, so the listing alone read the code READY. In its place one
+# closed form (_governed_by_another_act): the act noun is the object of ANOTHER act's noun and modifies what that act
+# left - "<closure|clip closure|retrieval|injection|...> of the <act noun> <defect|site|specimen|...>" - so a failure
+# stated there is the governing act's ("Clip closure of the polypectomy defect failed.", "Retrieval of the polypectomy
+# specimen was unsuccessful."), never the polypectomy's. Every other such mention keeps its own reading.
+_GOVERNING_ACT_BEFORE = _rx(r'\b(?:(?:clip|endoclip|hemoclip)[ \t]+)?(?:closure|clipping|retrieval|recovery|injection|'
+                            r'irrigation|coagulation|cauterization|cautery|treatment|tattooing)[ \t]+of[ \t]+'
+                            r'(?:the|this|that|a|an)[ \t]+$')
+_LEFT_HEAD_AFTER = _rx(r'[ \t]+(?:defect|site|specimen|bed|base|margin|scar|ulcer|area)s?\b')
+
+
+def _governed_by_another_act(text: str, ms: int, me: int) -> bool:
+    """Whether the act mention at [ms, me) is the object of another act's noun and modifies what the act left (above)."""
+    return _GOVERNING_ACT_BEFORE.search(text, max(0, ms - 40), ms) is not None \
+        and _LEFT_HEAD_AFTER.match(text, me) is not None
 
 
 def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -> list[tuple[str, int, int]]:
@@ -6248,12 +6303,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # ("Procedure: Colonoscopy. ... Hot snare polypectomy ... was attempted, but the polypectomy was
                 # unsuccessful": D|RT-f1, D|RT-f3, D|ARCH-D3a had read that failed attempt as performed, a false READY).
                 # The act keeps its own reading (in doubt: held, never READY on its placement).
-                # Refutation cycle 3 (closed C3-5): a hedge is no stated outcome here - the installed release promotes a
-                # hedged listing ("Colonoscopy with hot snare polypectomy for possible adenoma": the hedge is the
-                # reason's diagnosis), and refusing it had held a very common procedure line the base reads READY.
-                # Attempts, failures, conditions, infinitives and a later failure still keep the act's own reading.
+                # Refutation cycle 3 (closed C3-5): a hedge that only heads a reason phrase naming no act ("Colonoscopy
+                # with hot snare polypectomy for possible adenoma", "... biopsies for suspected celiac disease":
+                # _reason_hedges_only) is the reason's diagnosis, never the act's outcome - refusing it had held a very
+                # common procedure line the base reads READY; any other hedge ("was possibly performed", "for possible
+                # polypectomy"), an attempt, a failure, a condition, an infinitive or a later failure keeps the act's own
+                # reading.
                 if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
-                        and not _outcome_stated_otherwise(reading.cues) and _on_procedure_line(text, ms, part):
+                        and not _outcome_stated_otherwise(reading.cues) \
+                        and (not _hedged(reading.cues) or _reason_hedges_only(text, bc[0], bc[1])) \
+                        and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS \
                         and fam in performed_families \
@@ -6282,6 +6341,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 reading = held_under_denial(text, ms, reading, service_date)
                 if ms in doubtful_at and reading.status not in ('negated', 'cancelled'):
                     continue  # R2a: a doubtful compound stands only as a denial, never as an act done
+                if _governed_by_another_act(text, ms, me):
+                    continue  # refutation cycle 3: "Clip closure of the polypectomy defect failed." is the closure's
                 combined_denial = part.combined and part.kind == 'report' and reading.status in ('negated', 'cancelled')
                 # R4a (reader-bind round 2, refutation F02): a combined report's prose denial is kept whatever date or
                 # history word its clause carries - read_clause has read its time ("No biopsies were taken on

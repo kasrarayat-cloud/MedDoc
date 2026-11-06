@@ -767,9 +767,21 @@ def _removal_said_elsewhere(text: str, acts) -> bool:
     anywhere (a later plan, the impression) costs only the exclusion. One pass over the text."""
     spans = sorted((ev.start, ev.end) for a in acts for ev in a.evidence)
     for m in _REMOVAL_IN_NP.finditer(text):
-        if not any(s <= m.start() and m.end() <= e for s, e in spans):
-            return True
+        if any(s <= m.start() and m.end() <= e for s, e in spans):
+            continue
+        if _NEGATED_BEFORE.search(text, max(0, m.start() - 40), m.start()):
+            continue  # "The polyp could not be removed.", "was not removed": a statement that it was NOT removed
+        if _PURPOSE_BEFORE.search(text, max(0, m.start() - 40), m.start()):
+            continue  # "left in place for surgical resection", "referred for polypectomy": what it is for, not done
+        return True
     return False
+
+
+# The two shapes _removal_said_elsewhere passes over, each anchored right before the word (never a window of words):
+# its participle's own negated verb group, and a purpose "for" with at most two modifiers before the noun.
+_NEGATED_BEFORE = re.compile(r"\b(?:not|never|cannot|n['’]t)[ \t\n]+(?:(?:be|been)[ \t\n]+)?(?:(?!only\b)[a-z]+ly[ \t\n]+)?$",
+                             re.I)
+_PURPOSE_BEFORE = re.compile(r"\bfor[ \t\n]+(?:[a-z-]+[ \t\n]+){0,2}$", re.I)
 
 
 def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Reading], text: str,
