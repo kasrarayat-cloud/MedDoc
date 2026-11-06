@@ -436,11 +436,17 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         self.assertEqual(migrations['baseline'], '0005')
         # the core repair's three additive migrations (2026-11-03: decision modifiers, operator grants and report
         # audience, member answers and the upload key), each read safe by the same gate (the last assertion)
+        # completion repair (2026-11-06, U11): 0013 binds a member's answer to the question it answered and closes a
+        # question with its answer - a column with a database default and a nullable foreign key, read safe
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
-                                                                '0012_cux_worker_beat'])
+                                                                '0012_cux_worker_beat',
+                                                                '0013_completion_answer_binding'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
+        self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
+                         {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',
+                                                'clarification.answer: nullable']})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
     def test_0008_adds_no_column_to_an_existing_table(self):
