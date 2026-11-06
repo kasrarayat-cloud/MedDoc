@@ -26,7 +26,8 @@ from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
                                  HYPOTHETICAL_CUE, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
                                  DocumentedService,
-                                 ServiceInventory, _sentences, act_regions, examined_regions, listed_in_doubt, reflow)
+                                 ServiceInventory, _sentences, act_regions, examined_regions, listed_contradicted,
+                                 listed_in_doubt, reflow)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
@@ -840,7 +841,8 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              'attempted or in doubt: no code profile of this service accounts for it',
                                              act.evidence[:2], 'unsupported'))
                 continue
-            if listed_in_doubt(act) and act.role in OWN_ROLES and act.kind in entry.acts \
+            withheld = listed_contradicted(act)  # integration of cycle 2: a listed removal the report does not bear out
+            if (listed_in_doubt(act) or withheld) and act.role in OWN_ROLES and act.kind in entry.acts \
                     and act.kind not in covers and not (act.kind in ('tattoo', 'injection')
                                                         and covers & {'tattoo', 'injection'}):
                 # Completion repair (2026-11-06, F5; builder A): an act the procedure line lists and the report states
@@ -848,9 +850,13 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                 # done is open, so coding completeness stays open while no selected code accounts for it - never
                 # complete on the doubt. Its own reason: no paid second review is asked for it (jobs.SECOND_REVIEW_REASONS)
                 # and no participant's code is admitted on it (engine's documented items read no_proposal/not_covered)
+                # integration of refutation cycle 2: so is a listed removal none of whose lesions the report states removed
+                # today (services.listed_contradicted, widened by the cycle): open, never complete on the listing alone
                 unresolved.append(Unresolved(service.id, service.family, act.kind,
                                              f'{describe_act(service, act)} in the {service_label(service)}: listed on '
-                                             'the procedure line, and the report states it only in doubt',
+                                             + ('the procedure line, and the report states none of its lesions removed today'
+                                                if withheld and not listed_in_doubt(act) else
+                                                'the procedure line, and the report states it only in doubt'),
                                              act.evidence[:2], 'in_doubt'))
                 continue
             if act.status != 'performed' or act.role not in OWN_ROLES:

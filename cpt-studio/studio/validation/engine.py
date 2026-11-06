@@ -3013,7 +3013,7 @@ def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
             bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}
                                                        | {reconcile.act_label(a.kind) + (' (stated in doubt)'
                                                                                          if gi_services.listed_in_doubt(a)
-                                                                                         else ' (listed, stated not done)')
+                                                                                         else ' (listed, not stated done)')
                                                           for a in doubted}))))
     return tuple(bases)
 

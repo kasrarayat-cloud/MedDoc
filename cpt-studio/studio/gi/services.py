@@ -4733,6 +4733,8 @@ def _plain_finding(text: str, clause: tuple[int, int], start: int, end: int) -> 
 LEFT_IN_PLACE = _rx(r'\bleft[ \t\n]+(?:in[ \t\n]+(?:place|situ)|untreated|alone)\b')
 LESION_REMOVAL = _rx(r'\b(?:removed|resected|excised)\b')
 REMOVAL_KINDS = frozenset(('snare', 'emr', 'esd', 'hot_biopsy'))
+# the dispositions that state a recorded lesion not removed today (engine._stated_not_done reads them)
+NOT_REMOVED = frozenset(('untreated', 'scheduled'))
 LISTED_CONTRADICTED_CUE = ('uncertain: the procedure line lists the removal, and the report states none of the '
                            "service's lesions removed today")
 # Full-suite repair (builder A, 2026-11-06): a disposition is read from its plain form only. The auxiliary group before
