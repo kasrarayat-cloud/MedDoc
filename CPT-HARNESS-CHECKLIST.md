@@ -837,3 +837,18 @@ the progress log below.
   - this checkpoint's commit at 08:36:20Z;
   - the clock read 08:39:35Z when the error was found.
   The checkpoint table now carries the read times. Later entries use the clock.
+- **2026-11-06T08:41Z Completion repair: the fresh acceptance set is written and sealed, before any code read it and
+  before the repair's code existed.**
+  - Sealed (mode 0400, directory 0500) in `/home/claude/cpt-studio-completion-20261106/acceptance/sealed/`, with these
+    sha256 prefixes:
+    - c1a-procedure-report.txt `976be07404d0fe93` (PDF): labelled EGD and colonoscopy paragraphs after an Indications
+      line, the bolus's antecedent, a completed marking for a later resection, an outside history sentence;
+    - c1b-colonoscopy.txt `477dbbd5679ac420` (Word): a title with an aside, a failed hot snare attempt whose polyp was
+      left in place, a repeat colonoscopy in the Plan, an outside EGD in the history, Stop and Resume;
+    - c1c-flexible-sigmoidoscopy.txt `2e59f3a1c00fa967` (PDF): a labelled colonoscopy paragraph of another occasion
+      (negative), and a genuinely missing extent, answered "Not documented" and recomputed, then confirmed by a
+      physician's addendum on a new revision;
+    - expectations-c1.json `f131fd2a0bce250a`.
+  - The expectations are the session's provisional reading, supported per code by the stored CMS references
+    (PFS RVU26D, MUE 2026-Q4). They are not a coder's adjudication. NCCI is not connected.
+  - The builders' briefs do not name the set, and no code reads it before the walk.
