@@ -62,12 +62,20 @@ class EmrComponentsTests(SimpleTestCase):
                 self.assertNotIn(READY, by_astra)
 
     def test_two_participants_never_add_the_snare_beside_the_emr(self):
+        # moved by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): Fable's
+        # explicit 45385 is read by the per-code path and is exactly what Corti's own selection of both codes on the line
+        # is - held, its question asking whether a snare removal apart from the EMR was done - never READY beside the
+        # EMR (it was listed as an alternative)
         line = self.FORMS[0]
         text = COLON + line + '\n'
         result = run(text, corti(), [read('astra', [code(text, '45390', line)]),
                                      read('fable', [code(text, '45385', line)])])
+        by_corti = run(text, corti(('45390', span(text, line)), ('45385', span(text, line))))
         self.assertEqual(outcome(result, '45390'), [READY])
-        self.assertEqual(outcome(result, '45385'), [ALTERNATIVE])
+        self.assertEqual(outcome(result, '45385'), [('selected', 'needs_clarification')])
+        self.assertEqual(outcome(result, '45385'), outcome(by_corti, '45385'))
+        (snare,) = [p for p in result.proposals if p.code == '45385']
+        self.assertIn('is part of another procedure documented with it', snare.clarifications[0].question)
 
     def test_a_snare_at_another_lesion_or_site_keeps_its_code(self):
         emr = 'A 25 mm flat lesion in the ascending colon was removed by endoscopic mucosal resection.'
@@ -180,13 +188,15 @@ class ProphylacticClipTests(SimpleTestCase):
 
     def test_control_the_inventory_reads_no_act_of_is_read_by_the_codes_own_passage(self):
         # the inventory reads no act ("controlled" and "stopped" are not act predicates; the same at main): Corti's
-        # code stands on the routing-era reading of its own passage, and a participant's fills no open item (recorded)
+        # code stands on the routing-era reading of its own passage. Moved by the completion repair (owner directive
+        # 2026-11-06, item 3: equal eligibility; builder Q1): a participant's explicit code is read by the same per-code
+        # path, so it stands on the same reading - READY, as Corti's is (it was listed: it filled no open item)
         for clip in ('Active bleeding was controlled with two hemostatic clips.', 'Bleeding was stopped with two clips.'):
             with self.subTest(clip):
                 text = COLON + self.EMR + '\n' + clip + '\n'
                 by_corti, by_astra = both(text, '45382', clip, primary=[('45390', self.EMR)])
                 self.assertEqual(by_corti, [READY])
-                self.assertEqual(by_astra, [ALTERNATIVE])
+                self.assertEqual(by_astra, by_corti)
 
 
 class DifferentActsTests(SimpleTestCase):
@@ -336,11 +346,14 @@ class MarkedShapeTests(SimpleTestCase):
         # cycles refuted), so the purpose's "future" dates the marking as planned exactly as it dates the participle
         # form "was tattooed for future localization" at main (D1): Corti's code excluded, a participant's listed. A
         # recorded residual, a false exclusion where main held it - never READY
+        # Moved by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): a
+        # participant's explicit code reads exactly as Corti's does - excluded with the passage, reinstatable - where it
+        # was listed. The false exclusion itself is the readers' (U5, "for future localization" read as a plan)
         line = 'The lesion in the ascending colon was marked with submucosal tattoo for future localization and not resected.'
         plain = 'The transverse colon lesion was tattooed for future localization.'
         self.assertEqual(both(COLON + line + '\n', '45381', line), both(COLON + plain + '\n', '45381', plain))
         self.assertEqual(both(COLON + line + '\n', '45381', line),
-                         ([('excluded', 'excluded')], [('alternative', 'informational')]))
+                         ([('excluded', 'excluded')], [('excluded', 'excluded')]))
 
 
 class MarkedAdverbTests(SimpleTestCase):
@@ -465,8 +478,10 @@ class PackageSentenceTests(SimpleTestCase):
         # round 6 dropped both package rules (the whole-sentence form failed its second cycle, L6-1). Harness repair 3
         # reads the same sentences by two narrower rules through every other reading. F-NEG S stands: the coordinated
         # forms are READY as a completed marking today is. F-TIME R was refuted in two cycles and is dropped (HARNESS.md
-        # "Harness repair 3, refutation cycle 2"): the purpose forms read as main reads them - Corti's code excluded, a
-        # participant's listed, never READY (a recorded residual, a false exclusion)
+        # "Harness repair 3, refutation cycle 2"): the purpose forms read as main reads them - Corti's code excluded,
+        # never READY (a recorded residual, a false exclusion: the readers' U5). Moved by the completion repair (owner
+        # directive 2026-11-06, item 3: equal eligibility; builder Q1): a participant's explicit code reads as Corti's
+        # does, excluded with the passage and reinstatable, where it was listed
         for line in ('The lesion in the ascending colon was marked with tattoo and not resected.',
                      'The transverse colon lesion was marked with tattoo and not resected today.'):
             with self.subTest(line):
@@ -478,7 +493,7 @@ class PackageSentenceTests(SimpleTestCase):
                      'The transverse colon lesion was tattooed for future localization.'):
             with self.subTest(line):
                 self.assertEqual(both(COLON + line + '\n', '45381', line),
-                                 ([('excluded', 'excluded')], [('alternative', 'informational')]))
+                                 ([('excluded', 'excluded')], [('excluded', 'excluded')]))
         # L6-1's bodies: never better than the participle form of the same sentence under the same heading (D1) -
         # held where it is held ("Indication:" over the line, no "today"), READY only where it is READY
         for body in ('Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
@@ -610,10 +625,18 @@ class OtherRoleTests(SimpleTestCase):
                 _, by_astra = both(COLON + body, which, quote)
                 self.assertNotIn(READY, by_astra)
 
-    def test_the_physicians_own_impression_after_a_pathology_line_stays_ready(self):
+    def test_the_physicians_own_impression_after_a_pathology_line_is_held_on_both_paths(self):
+        # moved by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): the role
+        # rule is one per-code rule now, applied whoever proposed the code (engine._another_roles_hold), so Corti's
+        # selection of an act documented only in another role's entry is held with the question naming that entry, as a
+        # participant's is - it fixes the base's false READY on a pathology addendum (corpus R1|L5-2). Its cost is this
+        # input: the role reader still reads an Impression after "Pathology results: pending." as the pathology entry
+        # (over-6, a reader's residual), so the physician's own polypectomy is held on both paths, where Corti's was
+        # READY - a false hold, the safe side, recorded (it is held, never excluded, for exactly this reason)
         line = 'Impression: A 6 mm polyp in the sigmoid colon was removed with a cold snare.'
-        by_corti, _ = both(COLON + 'Pathology results: pending.\n' + line + '\n', '45385', line)
-        self.assertEqual(by_corti, [READY])
+        by_corti, by_astra = both(COLON + 'Pathology results: pending.\n' + line + '\n', '45385', line)
+        self.assertEqual(by_corti, [('selected', 'needs_clarification')])
+        self.assertEqual(by_astra, by_corti)
 
 
 class InjectionTests(SimpleTestCase):

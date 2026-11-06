@@ -160,9 +160,12 @@ class SecondReviewRetrievalTests(r6m.MeaningCase):
 
     def test_retrieval_3_a_participant_s_copy_of_a_second_review_alternative(self):
         """retrieval-3 (b): Astra's 43239, the code the second review selected and CPT Studio did not add, has no
-        retrieval on its card, and neither has the second review's own alternative."""
+        retrieval on its card, and neither has the second review's own alternative. Moved by the completion repair
+        (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): a first reading's 43239 is admitted now - a
+        proposal held as Corti's own selection of the passage is, which accounts for the upper endoscopy, so no second
+        review is offered beside it - so Astra's alternative copy is a peer review's addition."""
         encounter_id, detail = self.second(COMBINED, [('45378', r6m.CECUM)], [('43239', GASTRO)],
-                                           astra=hp.reading(codes=[('43239', GASTRO)]))
+                                           astra_peer=hp.peer_answer(codes=[('43239', GASTRO)]))
         rows = sorted((kind(p), p['code'], p['bucket'], p['retrieval']) for p in r6m.proposals(detail)
                       if p['code'] == '43239')
         self.assertEqual(rows, [('alt2', '43239', 'alternative', []), ('altp', '43239', 'alternative', [])])
@@ -430,8 +433,11 @@ class ParticipantsOnlyWordingTests(r6m.MeaningCase):
         selects 45385; Stop is pressed before the assessment that would read it. The blocker on every surface says
         who gave the code and that the second review is unread, never "not the provider"."""
         from studio import jobs  # noqa: PLC0415 - the test steps the queue itself
+        # moved by the completion repair (builder Q1, equal eligibility): a first reading's 45385 on the failed
+        # polypectomy is admitted and excluded with that passage now (a code a member decides), so the participants-only
+        # state is reached by a peer review's addition, which stays an alternative
         encounter_id = self.scenario(r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED), [],
-                                     astra=hp.reading(codes=[('45385', r6m.FAILED)]))
+                                     astra_peer=hp.peer_answer(codes=[('45385', r6m.FAILED)]))
         self.corti.selections = [('45385', r6m.FAILED)]
         reply = self.client.post(f'/api/encounters/{encounter_id}/second-review')
         self.assertEqual(reply.status_code, 201, reply.content)
@@ -463,9 +469,12 @@ class SummarySentenceTests(r6m.MeaningCase):
 
     def test_a_code_the_second_review_listed_without_adding(self):
         """wording-4: the second review selects 45381, which accounts for nothing left unresolved, so it is not added
-        (alt2) - and Astra's 45381 is listed as an alternative of its own, never recorded on a proposal."""
-        encounter_id = self.scenario(he.COLON, [('45378', he.CECUM)],
-                                     astra=hp.reading(codes=[('45378', he.CECUM), ('45381', he.BIOPSY)]))
+        (alt2) - and Astra's 45381 is listed as an alternative of its own, never recorded on a proposal. Moved by the
+        completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): a first reading's 45381
+        is admitted now (held, as Corti's own selection of the biopsy sentence is), so Astra gives it in peer review,
+        which is never admitted."""
+        encounter_id = self.scenario(he.COLON, [('45378', he.CECUM)], astra=hp.reading(codes=[('45378', he.CECUM)]),
+                                     astra_peer=hp.peer_answer(codes=[('45381', he.BIOPSY)]))
         detail = self.ask_second(encounter_id, [('45381', he.BIOPSY)])
         rows = sorted((kind(p), p['code'], p['bucket']) for p in r6m.proposals(detail) if p['code'] == '45381')
         self.assertEqual(rows, [('alt2', '45381', 'alternative'), ('altp', '45381', 'alternative')])

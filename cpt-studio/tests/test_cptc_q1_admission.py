@@ -20,10 +20,14 @@ C3 and C5; builder Q1): equal proposal eligibility, evidence-based reconciliatio
 Real readers and engine, synthetic documents, nothing sent. Expected outcomes are written here, outside the coding
 input.
 """
+from unittest import expectedFailure
+
 from django.test import SimpleTestCase
 
 from studio.types import ProviderCode
 from studio.validation import engine
+from tests import test_harness2_pipeline as hp
+from tests import test_harness2_r6_meaning as r6m
 from tests.test_harness_engine import code, corti, decision, peer, proposal, read, reviewed, run, span, without_record
 from tests.test_h3_repairs import EGD_BIOPSY, LABELLED, NET, PLAIN, SNARE
 
@@ -433,3 +437,51 @@ class CompetitionTests(SimpleTestCase):
         for value in ('43249', '43233'):
             self.assertEqual([c[:2] for c in coded(result, value)], [('selected', 'needs_clarification')])
             self.assertIn(engine.COMPETING_FACT, coded(result, value)[0][2])
+
+
+# --- through the pipeline: an admitted code is a proposal a member decides, as Corti's own selection is ---------------
+
+SNARED = 'The polyp was removed with a hot snare.'
+
+
+class AdmittedCodePipelineTests(r6m.MeaningCase):
+    """Corti's 45378 and Astra's first-reading 45385 on the snare sentence, against Corti selecting both on the same
+    document (another request, a trailing blank line: an identical Corti request reuses the workspace's retained
+    result). The real pipeline offline, nothing sent."""
+
+    def pair(self):
+        text = r6m.doc(r6m.COLON, r6m.SEEN, SNARED)
+        mine = self.detail(self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45385', SNARED)])))
+        theirs = self.corti_alone(text + '\n', [('45378', r6m.CECUM), ('45385', SNARED)])
+        return mine, theirs
+
+    def test_an_admitted_code_is_decided_as_corti_s_selection_is(self):
+        """Its bucket, status, reinstatability, allowed actions and questions are those of Corti's own selection of the
+        passage, and so are Corti's base code's."""
+        mine, theirs = self.pair()
+
+        def read_as(view):
+            asked = {}
+            for question in view['clarifications']:
+                asked.setdefault(question['proposal_id'], []).append(question['question'])
+            return sorted((p['code'], p['bucket'], p['status'], p['reinstatable'], tuple(p['allowed_actions']),
+                           tuple(sorted(asked.get(p['id'], ())))) for p in r6m.proposals(view))
+        self.assertEqual(read_as(mine), read_as(theirs))
+        (item,) = [p for p in r6m.proposals(mine) if p['code'] == '45385']
+        self.assertEqual(((item.get('support') or {}).get('origin'), item['bucket'], item['status']),
+                         ('participant', 'selected', 'ready'))
+
+    @expectedFailure
+    def test_an_admitted_code_is_traced_as_corti_s_selection_is(self):
+        """RECORDED CROSS-FILE DEPENDENCY, failing on this branch by design. The assess stage traces the CMS references
+        only for the decidable codes among the provider's own selections (jobs._retrieval's ``& set(provider_codes)``,
+        jobs.py:2187, builder Q2's file), so an admitted participant code is untraced and reference validation reads
+        'not_run' ("No proposal was checked against the CMS references for this revision.") beside Corti's checked
+        45378. With every decidable proposal's code traced, whoever proposed it - review.decidable already keeps every
+        alternative out - this passes: remove the decorator then (an unexpected success fails the suite)."""
+        mine, theirs = self.pair()
+        block = mine['harness']['reference_validation']
+        other = theirs['harness']['reference_validation']
+        self.assertEqual((block['state'], block['codes_checked']), (other['state'], other['codes_checked']))
+        self.assertEqual({p['code']: p['retrieval'] for p in r6m.proposals(mine)},
+                         {p['code']: p['retrieval'] for p in r6m.proposals(theirs)})
