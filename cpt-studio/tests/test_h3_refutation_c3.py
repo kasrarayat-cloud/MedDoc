@@ -24,7 +24,18 @@ CASES = json.loads((Path(__file__).parent / 'fixtures' / 'gi4' / 'refutation' / 
                    .read_text(encoding='utf-8'))
 # READY where the base is not, read against the document: biopsies taken "prior to dilation" - a point inside today's
 # procedure (L3-9). (F-ACTS' meat-bolus release, judged correct in cycle 3, went with F-ACTS in cycle 4.)
-JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today'}
+# Completion repair (2026-11-06, U1; builder A): the meat-bolus removals are READY again, by a different mechanism - a
+# bolus whose documented antecedent is a food, as the structural subject of its removal (services._removal_subject,
+# _bolus_index), and a site-less act bound by its antecedent's site - and they are the corpus's required READYs
+# (tests/fixtures/gi4/completion/corpus.json, group C). Each row's "completion A" column records the reading.
+JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today',
+                   'C3-1:c31-1:F1a': "the coin seen in the transverse colon is the colonoscopy's foreign body, removed "
+                                     'today (45379)',
+                   'C3-1:c31-2:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
+                   'C3-1:c31-6:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
+                   'C3-1:c31-6:X1': 'the meat bolus impacted at 34 cm is the bolus the Roth net removed today',
+                   'C3-1:c31-6:X2': 'the steak impaction is the bolus the Roth net removed today',
+                   'C3-1:c31-6:X3': 'the impacted meat bolus grasped with the net is the bolus removed today'}
 # one documented act in each: a restatement or a doubted second statement of it
 ONE_ACT = ('C3-3:f1_two_ready:', 'C3-3:f4_doubted_ready:')
 

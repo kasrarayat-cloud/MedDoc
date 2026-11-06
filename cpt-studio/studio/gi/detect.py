@@ -44,6 +44,7 @@ from typing import Optional
 from studio.gi import context as ctx
 from studio.gi import cues
 from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
+from studio.gi import purpose
 from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
@@ -1852,6 +1853,30 @@ def _told_at_another_time(an: Analysis, start: int, end: int) -> bool:
     return any(owner == 'service' and _tells_history(an, name, m) for name, m, owner in _attached_times(an, start, end))
 
 
+def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> bool:
+    """Completion repair (2026-11-06, U5; builder A): whether a planned cue is a purpose phrase's time word that is no
+    time of the target [ts, te) - the one reading the documented-service reader takes (studio.gi.purpose): the cue is
+    the time word of a purpose phrase (read to the end of its sentence, as the layout segments it); the target starts
+    before the phrase's opener; nothing inside the phrase is a service or an intervention (an act named there keeps the
+    purpose's future, and a passage that mixes it with the done act keeps it too); and the clause's main predicate before
+    the opener states an act done and is the target's - the target starts before its participle ends (a passage, the
+    predicate's subject or participle) or is its instrument ("was marked with submucosal tattoo"). Anything else reads
+    as before."""
+    text = an.text
+    _ss, se = an.lay.sentence_for(cue.start, cue.end)
+    phrase = purpose.phrase_at(text, cue.start, se)
+    if phrase is None or ts >= phrase[0]:
+        return False
+    if an.services_in(phrase[0], phrase[2]) or an.interventions_in(phrase[0], phrase[2]):
+        return False
+    clause_start = an.lay.clauses_for(cue.start, cue.end)[0][0]
+    # bounded: the main predicate is read within CLAUSE_REACH characters before the opener (further, none is read)
+    predicate = purpose.main_predicate_done(text, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), phrase[0])
+    if predicate is None:
+        return False
+    return ts < predicate[2] or purpose.instrument_of(text, predicate[2], ts)
+
+
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
                          em: bool = False) -> list[tuple[str, str, bool, bool]]:
     """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
@@ -1869,6 +1894,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
     for cue in clause_cues:
         status, doubt = cue.status, False
+        if cue.status == 'planned' and _purpose_is_not_the_targets(an, cue, ts, te):
+            continue  # U5: a purpose phrase's future is the purpose's, never the done act's (studio.gi.purpose)
         if cue.name == 'aborted':
             status, doubt = _abort_status(an, cue)
         if cue.name in ('terminated', 'stopped') and cues.MEDICATION.search(words):

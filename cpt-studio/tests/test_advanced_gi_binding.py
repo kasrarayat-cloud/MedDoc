@@ -53,11 +53,12 @@ class TattooPredicateTests(SimpleTestCase):
         body = 'Tattoo ink was injected into the transverse colon submucosa for future localization.'
         tattoo = [a for a in colon(inventory(body)).acts if a.kind == 'tattoo']
         self.assertTrue(tattoo)
-        # main's reading (F-TIME R dropped in refutation cycle 2): "future" dates the act as planned, and the code is
-        # excluded - a recorded residual (a false exclusion)
-        self.assertEqual({a.status for a in tattoo}, {'planned'})
+        # main's reading (F-TIME R dropped in refutation cycle 2) had "future" date the act as planned - a recorded
+        # residual (a false exclusion). Completion repair (2026-11-06, U5; builder A): the purpose's "future" is never
+        # the time of the act its main predicate states done (studio.gi.purpose), so the injection is today's
+        self.assertEqual({a.status for a in tattoo}, {'performed'})
         result = assess_body(body, [('45381', body)])
-        self.assertNotEqual(proposal(result, '45381').status, 'ready')
+        self.assertEqual(proposal(result, '45381').status, 'ready')
 
     def test_noun_tattoo_does_not_inherit_a_tissue_resection_denial(self):
         body = 'The transverse colon lesion was marked with tattoo and not resected today.'

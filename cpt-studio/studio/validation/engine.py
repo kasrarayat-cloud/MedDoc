@@ -2611,8 +2611,15 @@ def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
         entry = reconcile.catalogue.entry(family)
         reportable = [a for a in service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
                       and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
-        if others or reportable:
-            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
+        # Completion repair (2026-11-06, F5; builder A): an intervention the procedure line lists and the report states
+        # only in doubt ("It is unknown whether hot snare polypectomy was performed.") may have been done, and then this
+        # base code is included in it: held beside it, never final alone (never excluded either)
+        doubted = [a for a in service.acts if gi_services.listed_in_doubt(a) and a.role in ('physician', 'unknown')
+                   and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
+        if others or reportable or doubted:
+            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}
+                                                       | {reconcile.act_label(a.kind) + ' (stated in doubt)'
+                                                          for a in doubted}))))
     return tuple(bases)
 
 

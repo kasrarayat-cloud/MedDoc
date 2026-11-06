@@ -339,6 +339,222 @@ class DispositionTests(SimpleTestCase):
         self.assertEqual(dispositions(text), ['removed', 'untreated'])
 
 
+MARK_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+             'Date of service: 2026-10-14\nProcedure: Colonoscopy\n'
+             'The colonoscope was advanced to the cecum and the examination was completed.\n')
+EGD_MARK_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
+                 'Date of service: 2026-10-14\nProcedure: Upper endoscopy\n'
+                 'The gastroscope was passed to the second portion of the duodenum.\n')
+
+
+def statuses(text, value, quote):
+    return tuple(path[1] for path in outcome(text, value, quote))
+
+
+class PurposeTimeTests(SimpleTestCase):
+    """U5 (d44a77b3; F-TIME R's requirement, rebuilt): a purpose phrase never dates the act its clause's main predicate
+    states done, and an act named inside the phrase keeps the purpose's future (studio.gi.purpose, read by routing and
+    the documented-service reader alike)."""
+
+    def test_a_completed_marking_for_future_localization_is_todays(self):
+        for sentence in ('The lesion in the ascending colon was marked with submucosal tattoo for future localization and '
+                         'not resected.',
+                         'India ink was injected adjacent to the lesion in the ascending colon for future localization.',
+                         'Tattoo ink injected into the transverse colon submucosa for future localization.',
+                         'The transverse colon lesion was tattooed for future localization.',
+                         'Spot tattoo was placed distal to the lesion in the ascending colon to facilitate later '
+                         'identification.',
+                         'The lesion in the transverse colon was tattooed for subsequent surveillance.'):
+            with self.subTest(sentence):
+                self.assertEqual(statuses(MARK_HEAD + sentence + '\n', '45381', sentence), ('ready', 'ready'))
+
+    def test_an_act_inside_the_purpose_keeps_its_future(self):
+        # F-TIME R's refuters: the purpose runs to its sentence's end - a decimal, a parenthesis, a colon, "Dr.", "e.g."
+        # or a comma list never ends it early - and the act named there is the purpose's
+        cases = (
+            ('India ink was injected distal to the lesion in the ascending colon for future localization at the time of '
+             'EMR.', '45390'),
+            ('The lesion in the ascending colon was tattooed for future surgery or EMR.', '45390'),
+            ('The lesion in the ascending colon was tattooed for future removal by snare polypectomy.', '45385'),
+            ('Tattoo was placed for future resection of the 1.5 cm cecal polyp by EMR.', '45390'),
+            ('India ink was injected 3 cm distal to the lesion for future removal of this 2.5 cm adenoma with a hot '
+             'snare.', '45385'),
+            ('The lesion in the ascending colon was tattooed for future resection (EMR).', '45390'),
+            ('The lesion in the ascending colon was tattooed for future treatment: EMR.', '45390'),
+            ('The lesion in the ascending colon was tattooed for future resection by Dr. Smith with EMR.', '45390'),
+            ('The lesion in the ascending colon was tattooed for future surgical resection, EMR or ESD.', '45390'),
+            ('Spot tattoo was placed distal to the lesion for future identification, e.g. at surgery or EMR.', '45390'),
+            ('The lesion in the ascending colon was tattooed for future localization, biopsy and snare resection.',
+             '45380'),
+            ('The lesion in the ascending colon was tattooed for future localization and biopsy.', '45380'),
+            ('Cold forceps biopsies of the ascending colon lesion were obtained, with EMR for future resection after '
+             'pathology review.', '45390'),
+        )
+        for sentence, value in cases:
+            with self.subTest(sentence):
+                self.assertNotIn('ready', statuses(MARK_HEAD + sentence + '\n', value, sentence))
+        for sentence, value in (('The gastric antral lesion was biopsied for future treatment (APC).', '43270'),
+                                ('Duodenal biopsies were obtained for future comparison at colonoscopy to the cecum.',
+                                 '45378')):
+            with self.subTest(sentence):
+                self.assertNotIn('ready', statuses(EGD_MARK_HEAD + sentence + '\n', value, sentence))
+
+    def test_no_done_predicate_no_release(self):
+        for sentence in ('India ink tattoo was requested for future localization.', 'Tattoo needed for future localization.',
+                         'Tattoo ink needs to get injected into the ascending colon for future localization.',
+                         'India ink to get injected into the ascending colon for future localization at surgery.',
+                         'Tattoo ink could get injected into the ascending colon for future localization.',
+                         'The lesion that was biopsied needs tattooing for future localization.',
+                         'Ink not yet injected into the ascending colon for future localization.',
+                         'The patient was counseled about India ink tattoo for future localization.',
+                         # the subject's complement is no subject: the vial, the syringe or the diagram was marked
+                         'The vial of tattoo ink was marked with the transverse colon specimen label for future '
+                         'identification.',
+                         'The syringe of tattoo ink was marked with the transverse colon specimen label for future '
+                         'identification.',
+                         'The transverse colon diagram was marked with the injection site for future identification.'):
+            with self.subTest(sentence):
+                self.assertNotIn('ready', statuses(MARK_HEAD + sentence + '\n', '45381', sentence))
+
+    def test_another_source_time_or_condition_still_holds(self):
+        for sentence in ('At the referring facility, India ink was injected adjacent to the lesion in the ascending colon '
+                         'for future localization.',
+                         'Before this procedure, the lesion in the ascending colon was tattooed for future localization '
+                         'and not resected.',
+                         'If India ink was injected adjacent to the lesion in the ascending colon for future '
+                         'localization, surgery is easier.',
+                         'Per Dr. Smith tattoo ink was injected into the transverse colon submucosa for future '
+                         'localization.'):
+            with self.subTest(sentence):
+                self.assertNotIn('ready', statuses(MARK_HEAD + sentence + '\n', '45381', sentence))
+
+    def test_routing_reads_the_same(self):
+        day = DAY
+        done = 'A separate 25 mm flat lesion in the transverse colon was marked with submucosal tattoo for future localization.'
+        text = MARK_HEAD + done + '\n'
+        start = text.index(done)
+        self.assertNotEqual(detect.status_for_span(text, start, start + len(done), day)[0], 'planned')
+        inside = 'India ink was injected distal to the lesion in the ascending colon for future localization at the time of EMR.'
+        text = MARK_HEAD + inside + '\n'
+        start = text.index(inside)
+        self.assertEqual(detect.status_for_span(text, start, start + len(inside), day)[0], 'planned')
+        emr = text.index('EMR.')
+        self.assertEqual(detect.status_for_span(text, emr, emr + 3, day)[0], 'planned')
+        requested = 'India ink tattoo was requested for future localization.'
+        text = MARK_HEAD + requested + '\n'
+        start = text.index(requested)
+        self.assertEqual(detect.status_for_span(text, start, start + len(requested), day)[0], 'planned')
+
+    def test_the_shared_primitives(self):
+        from studio.gi import purpose
+        sentence = 'Tattoo was placed for future resection of the 1.5 cm cecal polyp by Dr. Smith (EMR): soon.'
+        phrase = purpose.phrase_at(sentence, sentence.index('future'), len(sentence))
+        self.assertEqual(sentence[phrase[0]:phrase[2]], 'for future resection of the 1.5 cm cecal polyp by Dr. Smith (EMR): soon.')
+        stop = 'was marked with tattoo for future localization and not resected today'
+        phrase = purpose.phrase_at(stop, stop.index('future'), len(stop))
+        self.assertEqual(stop[phrase[0]:phrase[2]], 'for future localization')
+        self.assertIsNone(purpose.phrase_at('in the future', 7, 13))
+        for clause, done in (('India ink was injected adjacent to the lesion ', True),
+                             ('Tattoo ink has been injected ', True), ('Tattoo ink had been injected ', False),
+                             ('India ink tattoo was requested ', False), ('Tattoo ink is to be injected ', False),
+                             ('Tattoo ink injected into the submucosa ', True), ('Ink not yet injected ', False),
+                             ('The lesion that was biopsied needs tattooing ', False),
+                             ('Biopsies were obtained, with EMR ', False)):
+            with self.subTest(clause):
+                self.assertEqual(purpose.main_predicate_done(clause, 0, len(clause)) is not None, done)
+
+
+OCCASION_HEAD = MARK_HEAD + 'Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
+
+
+class IndicationAndReferralTests(SimpleTestCase):
+    """F1: F-NEG S (kept) gives "and not resected" its own "not", so three of the earlier repair's counterexamples read
+    READY where the base had held them by misreading the negation - and their participle siblings were the base's own
+    false READYs. The structural causes: a coordinated predicate's "today" was read as the act's (the indication hold
+    skipped), a line under an indication that names another occasion was read as today's report, and a referral letter
+    was no other source."""
+
+    def test_after_an_indication_naming_another_occasion(self):
+        for sentence in ('The transverse colon lesion was marked with tattoo and not resected.',
+                         'The transverse colon lesion was tattooed and not resected.',
+                         'The transverse colon lesion was tattooed for future localization.'):
+            with self.subTest(sentence):
+                self.assertEqual(outcome(OCCASION_HEAD + sentence + '\n', '45381', sentence)[0],
+                                 ('selected', 'needs_clarification'))
+
+    def test_a_coordinated_predicates_today_is_not_the_acts(self):
+        for sentence in ('The transverse colon lesion was marked with tattoo and not resected today.',
+                         'The transverse colon lesion was tattooed and not resected today.'):
+            with self.subTest(sentence):
+                text = MARK_HEAD + 'Indication:\n' + sentence + '\n'
+                self.assertEqual(outcome(text, '45381', sentence)[0], ('selected', 'needs_clarification'))
+
+    def test_a_referral_document_is_another_source(self):
+        for text, value, quote in (
+                (MARK_HEAD + 'Referral letter:\nThe lesion in the ascending colon was marked with tattoo and not resected.\n',
+                 '45381', 'The lesion in the ascending colon was marked with tattoo and not resected.'),
+                (MARK_HEAD + 'Referral letter:\nIndia ink was injected adjacent to the lesion in the ascending colon.\n',
+                 '45381', 'India ink was injected adjacent to the lesion in the ascending colon.'),
+                (EGD_MARK_HEAD + "According to the referring physician's referral letter, the stricture was dilated to "
+                 '15 mm with a balloon.\n', '43249', "According to the referring physician's referral letter, the "
+                 'stricture was dilated to 15 mm with a balloon.')):
+            with self.subTest(quote):
+                self.assertNotIn('ready', statuses(text, value, quote))
+
+    def test_the_controls_stay_todays(self):
+        # an indication naming no other occasion, or a preamble indication before today's narrative, keeps the line
+        # today's as before; a "today" of the act's own predicate still says today
+        sentence = 'The transverse colon lesion was tattooed and not resected.'
+        for text in (MARK_HEAD + 'Indication: Screening.\n' + sentence + '\n',
+                     'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
+                     'Date of service: 2026-10-14\nIndication: Surveillance after a colonoscopy in 2021.\n'
+                     'Procedure: Colonoscopy\n'
+                     'The colonoscope was advanced to the cecum and the examination was completed.\n' + sentence + '\n',
+                     MARK_HEAD + 'Indication:\nThe transverse colon lesion was tattooed today.\n'):
+            with self.subTest(text.split('\n')[-2]):
+                quote = text.rstrip('\n').split('\n')[-1]
+                self.assertEqual(outcome(text, '45381', quote)[0], ('selected', 'ready'))
+
+
+DOUBT_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\n'
+              'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+              'Procedure: Colonoscopy with hot snare polypectomy\n'
+              'The colonoscope was advanced to the cecum and the examination was completed.\n'
+              'A 9 mm pedunculated polyp in the sigmoid colon was seen.\n')
+CECUM = 'The colonoscope was advanced to the cecum and the examination was completed.'
+
+
+class ListedActInDoubtTests(SimpleTestCase):
+    """F5: "It is unknown whether hot snare polypectomy was performed." under the polypectomy listing withheld the
+    listed act (uncertain), and completeness skipped it, so Corti's 45378 was READY and coding complete. A listing the
+    report states only in doubt leaves completeness open and holds the base code beside it (base_included); an attempt,
+    a failure or a plan does not (the base code is the examination's, as before)."""
+
+    def test_an_open_question_or_a_hedge_holds_the_base_and_completeness(self):
+        for sentence in ('It is unknown whether hot snare polypectomy was performed.',
+                         'Hot snare polypectomy of the polyp was possibly performed.'):
+            with self.subTest(sentence):
+                text = DOUBT_HEAD + sentence + '\n'
+                result = run(text, corti(('45378', span(text, CECUM))))
+                base = proposal(result, '45378')
+                self.assertEqual(base.status, 'needs_clarification')
+                self.assertIn('base_included', [c.fact for c in base.clarifications])
+                self.assertEqual(result.completeness['state'], 'incomplete')
+                self.assertIn('in_doubt', [u.get('reason') for u in result.completeness.get('unresolved_items', [])])
+                participant = proposal(run(text, corti(('45378', span(text, CECUM))),
+                                           [read('astra', [code(text, '45385', sentence)])]), '45385')
+                self.assertNotEqual(participant.status, 'ready')
+
+    def test_an_attempt_a_failure_or_a_plan_leaves_the_base_ready(self):
+        for sentence in ('Hot snare polypectomy failed.', 'Hot snare polypectomy was unsuccessful.',
+                         'Hot snare polypectomy was attempted but the polyp could not be removed.',
+                         'Hot snare polypectomy will be performed at a later date.',
+                         'Hot snare polypectomy is to be performed at a later date.'):
+            with self.subTest(sentence):
+                text = DOUBT_HEAD + sentence + '\n'
+                self.assertEqual(proposal(run(text, corti(('45378', span(text, CECUM)))), '45378').status, 'ready')
+
+
 class CoordinatedAnatomyTests(SimpleTestCase):
     """U13: "from the right and left colon" had read the descending colon only (the left colon) - the coordinated
     modifier shares the site's head."""

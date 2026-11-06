@@ -333,14 +333,13 @@ class MarkedShapeTests(SimpleTestCase):
 
     def test_the_tattoo_with_its_future_purpose_and_the_resections_denial_reads_as_its_participle_form(self):
         # harness repair 3's F-NEG S gives the denial to the resection; its F-TIME R is dropped (refutation cycle 2, two
-        # cycles refuted), so the purpose's "future" dates the marking as planned exactly as it dates the participle
-        # form "was tattooed for future localization" at main (D1): Corti's code excluded, a participant's listed. A
-        # recorded residual, a false exclusion where main held it - never READY
+        # cycles refuted). Completion repair (2026-11-06, U5; builder A) closes the recorded residual (a false exclusion)
+        # by another mechanism: a purpose phrase's "future" never dates the act its clause's main predicate states done
+        # (studio.gi.purpose), so both forms read as the completed marking today they are - still equal (D1)
         line = 'The lesion in the ascending colon was marked with submucosal tattoo for future localization and not resected.'
         plain = 'The transverse colon lesion was tattooed for future localization.'
         self.assertEqual(both(COLON + line + '\n', '45381', line), both(COLON + plain + '\n', '45381', plain))
-        self.assertEqual(both(COLON + line + '\n', '45381', line),
-                         ([('excluded', 'excluded')], [('alternative', 'informational')]))
+        self.assertEqual(both(COLON + line + '\n', '45381', line), ([READY], [READY]))
 
 
 class MarkedAdverbTests(SimpleTestCase):
@@ -471,14 +470,16 @@ class PackageSentenceTests(SimpleTestCase):
                      'The transverse colon lesion was marked with tattoo and not resected today.'):
             with self.subTest(line):
                 self.assertEqual(both(COLON + line + '\n', '45381', line), ([READY], [READY]))
+        # Completion repair (2026-11-06, U5; builder A): the purpose forms are completed markings today (the recorded
+        # residual closed by studio.gi.purpose: the purpose's "future" is never the done act's time) - READY as the
+        # coordinated forms above, never better
         for line in ('India ink was injected adjacent to the lesion in the ascending colon for future localization.',
                      'Tattoo ink was injected into the transverse colon submucosa for future localization.',
                      'Tattoo ink injected into the transverse colon submucosa for future localization.',
                      # L6-1 and L6-2
                      'The transverse colon lesion was tattooed for future localization.'):
             with self.subTest(line):
-                self.assertEqual(both(COLON + line + '\n', '45381', line),
-                                 ([('excluded', 'excluded')], [('alternative', 'informational')]))
+                self.assertEqual(both(COLON + line + '\n', '45381', line), ([READY], [READY]))
         # L6-1's bodies: never better than the participle form of the same sentence under the same heading (D1) -
         # held where it is held ("Indication:" over the line, no "today"), READY only where it is READY
         for body in ('Indication: Referred after an outside colonoscopy on 2026-09-01.\n'
@@ -509,7 +510,12 @@ class PackageSentenceTests(SimpleTestCase):
         from tests.test_advanced_gi_binding import colon, inventory
         inv = inventory(body)
         self.assertEqual(inv.conflicts, ())
-        self.assertEqual(sorted(a.status for a in colon(inv).acts if a.kind == 'tattoo'), ['performed', 'planned'])
+        # Completion repair (2026-11-06, U5; builder A): the impression's marking "for future localization" is the
+        # completed marking it restates, read performed by its own predicate (studio.gi.purpose), no longer planned -
+        # so it merges into the findings' act (one act, both passages)
+        tattoos = [a for a in colon(inv).acts if a.kind == 'tattoo']
+        self.assertEqual([a.status for a in tattoos], ['performed'])
+        self.assertTrue(any('marked with submucosal' in ev.text for ev in tattoos[0].evidence))
 
 
 class ExcisedTests(SimpleTestCase):

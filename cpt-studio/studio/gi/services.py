@@ -40,6 +40,7 @@ from typing import Optional, Sequence
 
 from studio.gi import context as gi_context
 from studio.gi import cues as _cues
+from studio.gi import purpose as _purpose
 from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
@@ -279,6 +280,14 @@ BLEEDING_CONTROL = dict(ACTS)['bleeding_control']
 LISTED_CUE = 'performed: listed on the procedure line'
 LISTED_WITHHELD_CUE = ('uncertain: the report states the act its procedure line lists as not done, failed, planned or '
                        'in doubt')
+# F5 (completion repair, builder A): the withheld listing whose only statement in the report is a doubt (a hedge or an
+# open question): read by the reconciliation (an unresolved act, completeness open) and the base rule (held beside it)
+LISTED_DOUBTED_CUE = 'uncertain: the report states the act its procedure line lists only in doubt'
+
+
+def listed_in_doubt(act) -> bool:
+    """Whether an act is its procedure line's listing that the report states only in doubt (LISTED_DOUBTED_CUE)."""
+    return act.status == 'uncertain' and LISTED_DOUBTED_CUE in act.cues
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
                         'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
@@ -2502,14 +2511,24 @@ SOURCE_REQUEST_AFTER = _rx(r"(?:\s+[\w-]+){0,2}?\s*['\u2019]?s?\s+(?:request|req
 
 
 def _other_source(said: str):
-    """The first OTHER_SOURCE match in ``said`` that names the act's own place or source (F-TIME P), or None."""
-    for m in OTHER_SOURCE.finditer(said):
-        if SOURCE_NOT_THE_ACTS.search(said, max(0, m.start() - 40), m.start()) or SOURCE_REQUEST_AFTER.match(said, m.end()):
-            continue
-        if SOURCE_REVIEWED.search(said, max(0, m.start() - 40), min(len(said), m.end() + 60)):
-            continue  # "outside results and an outside note were reviewed": reviewing records is today's work
-        return m
+    """The first OTHER_SOURCE match in ``said`` that names the act's own place or source (F-TIME P), or None. A referral
+    document (REFERRAL_DOCUMENT) is one too: the referring provider's account (completion repair, F1)."""
+    for pattern in (OTHER_SOURCE, REFERRAL_DOCUMENT):
+        for m in pattern.finditer(said):
+            if SOURCE_NOT_THE_ACTS.search(said, max(0, m.start() - 40), m.start()) \
+                    or SOURCE_REQUEST_AFTER.match(said, m.end()):
+                continue
+            if SOURCE_REVIEWED.search(said, max(0, m.start() - 40), min(len(said), m.end() + 60)):
+                continue  # "outside results and an outside note were reviewed": reviewing records is today's work
+            return m
     return None
+
+
+# Completion repair (2026-11-06, F1; builder A): a referral letter, note or record is the referring provider's account
+# of what was done ("Referral letter:" over a marked lesion; "According to the referring physician's referral letter,
+# the stricture was dilated ...": C3-4-4) - another source, held as OTHER_SOURCE holds an outside report. Hold-only.
+REFERRAL_DOCUMENT = _rx(r'\breferral[ \t]+(?:letters?|notes?|records?|reports?|documentation|correspondence|summary|'
+                        r'summaries|forms?)\b')
 # P, a named agent: "by Dr. Synthetic Surgeon" in the act's clause, where no physician line of the report names that
 # person by the surname ("Endoscopist: Synthetic Endoscopist, MD"): who did it is not established as this report's
 # physician. The report's own physician named as the agent ("by Dr. Smith" under "Endoscopist: John Smith, MD") is not.
@@ -2629,6 +2648,73 @@ def _infinitive_only(text: str, cs: int, ce: int) -> bool:
     words = [m.start() for m in ACT_PARTICIPLE_WORD.finditer(text, cs, ce)]
     words += [m.start() for m in BARE_PARTICIPLE.finditer(text, cs, ce)]
     return bool(words) and all(_governed_by_infinitive(text, max(cs, w - 40), w) for w in words)
+
+
+OCCASION_INDICATION_CUE = ('uncertain: stated under an indication that names another occasion of the service, after '
+                           "today's procedure section: not established as today's")
+
+
+@functools.lru_cache(maxsize=16)
+def _occasion_indications(text: str, service_date: Optional[date]) -> tuple[tuple[int, int], ...]:
+    """F1 (completion repair, builder A): the bodies - from the end of the heading line to the section's end - of the
+    layout's indication sections that come after a procedure, findings or technique section of today's report and whose
+    own heading line names another occasion of a service: a service name with a history word, another facility or
+    source, or a date before the service date. One pass over the layout's sections, cached per text."""
+    lay = _sections.layout(text)
+    dates = gi_context.find_dates(text)
+    date_starts = [d.start for d in dates]
+    out = []
+    after_procedure = False
+    for s in lay.sections:
+        if s.kind in ('procedure', 'findings', 'technique'):
+            after_procedure = True
+            continue
+        if s.kind != 'indication' or not after_procedure or s.heading is None:
+            continue
+        line_end = text.find('\n', s.start, s.end)
+        if line_end < 0:
+            continue
+        line = text[s.start:line_end]
+        if not any(pattern.search(line) for _, _, pattern in SERVICES):
+            continue
+        dated = any(service_date is not None and gi_context.compare_to_service(d, service_date) < 0
+                    for d in dates[bisect.bisect_left(date_starts, s.start):bisect.bisect_left(date_starts, line_end)])
+        if dated or HISTORY_WORDS.search(line) or _other_source(line) is not None:
+            out.append((line_end, s.end))
+    return tuple(out)
+
+
+def _in_an_occasion_indication(text: str, pos: int, service_date: Optional[date]) -> bool:
+    spans = _occasion_indications(text, service_date)
+    i = bisect.bisect_right([a for a, _ in spans], pos) - 1
+    return i >= 0 and spans[i][0] <= pos < spans[i][1]
+
+
+def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, end: int) -> bool:
+    """Whether the purpose phrase whose time word starts at ``word_start`` (studio.gi.purpose) is no time of the act
+    mentioned at [pos, end) in its clause [cs, ce): the mention lies before the phrase's opener, and the clause's main
+    predicate before the opener states an act done (purpose.main_predicate_done) and is said of the mention - the
+    mention is its participle ("was tattooed"), its subject's head ("India ink was injected") or its instrument ("was
+    marked with submucosal tattoo"). Never a word inside the subject's complement ("The vial of tattoo ink was marked
+    with the specimen label for future identification": the vial was marked, test_advanced_gi_binding). A mention
+    inside or after the opener keeps the purpose's time; any other doubt keeps the base reading."""
+    phrase = _purpose.phrase_at(text, word_start, ce)
+    if phrase is None or end > phrase[0]:
+        return False
+    predicate = _purpose.main_predicate_done(text, cs, phrase[0])
+    if predicate is None:
+        return False
+    start, participle_start, participle_end = predicate
+    if pos < participle_end and participle_start < end:
+        return True
+    if _purpose.instrument_of(text, participle_end, pos):
+        return True
+    subject = _removal_subject(text, cs, start)
+    if subject is None:
+        return False
+    # the mention lies inside the subject noun phrase, from its first modifier to its head ("Tattoo ink", "India ink",
+    # "sterile carbon-based tattoo ink") - never after its head, in a complement ("The vial of tattoo ink")
+    return _np_phrase_start(text, cs, subject[0]) <= pos and end <= subject[1] or pos <= subject[0] < end
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -2796,6 +2882,16 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         frame_today = _today_reading(frame)[0]
         today = _today_reading(own_said)[0]
     act_said = bool(ACT_VERB.search(said))
+    # F1 (completion repair, builder A): a section's own time (history, plan, indication) is cancelled only by a today
+    # word of the act's own predicate - never by one an independent or coordinated predicate after the mention carries
+    # ("The transverse colon lesion was marked with tattoo and not resected today." under "Indication:": the "today" is
+    # the resection's, H2|PKG-L6-1; studio.gi.purpose.STOP is where such a predicate begins)
+    section_today = today
+    if today:
+        later = _purpose.STOP.search(text, end, ce)
+        if later is not None:
+            lo = _bounded_clause(text, joined, pos, end)[0] if joined else cs
+            section_today = _today_reading(text[lo:later.start()])[0]
     other_time = ''
     for d in _dates_in(dates, tcs, ce):
         owner = _date_owner(text, d, tcs, pos, ce)
@@ -2837,8 +2933,12 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # The fronted frame is read for its history, today and source words only: a plan word in it ("To mark the site for
     # future surveillance, the colon wall ... was tattooed") is a purpose's or another occasion's, never the clause's
     # time, as the base never read the frame at all (the full suite after refutation cycle 2: svc-21's tattoo)
+    # U5 (completion repair, builder A): a purpose phrase's time word is the purpose's, never the time of the act the
+    # clause's main predicate states done ("was marked with submucosal tattoo for future localization"); an act named
+    # inside the phrase keeps it ("... for future localization at the time of EMR"): studio.gi.purpose, one reading
     plan = next((m for m in PLAN_WORDS.finditer(twhole) if tcs + m.start() not in elsewhere and tcs + m.start() >= cs
-                 and not any(a <= m.start() < b for a, b in manner)), None)
+                 and not any(a <= m.start() < b for a, b in manner)
+                 and not _purpose_releases(text, tcs + m.start(), cs, ce, pos, end)), None)
     if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
     skipped = next((tcs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(twhole)
@@ -2848,9 +2948,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
     # still planned ("1. Dysphagia, likely peptic stricture - upper endoscopy with dilation at the hospital"), never a
     # doubt about a service done today.
-    if part.kind == 'history' and not today:
+    if part.kind == 'history' and not section_today:
         return Reading('historical', ('historical: in a history section',))
-    if part.kind == 'plan' and not today:
+    if part.kind == 'plan' and not section_today:
         return Reading('planned', ('planned: in a plan section',))
     # F-TIME P: the clause, its fronted frame, and its section's own heading ("Outside report:"; refutation round 1,
     # L1-4) - read after a history or plan section has dated the act, as a hedge is (the full suite after round 1: a
@@ -2882,11 +2982,18 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             and not _condition_closed(text[opener.end():end])) \
             or (INVERTED_CONDITION.match(text, cs, pos) and not re.search(r'[,;:()]', text[cs:pos])):
         return Reading('uncertain', (CONDITION_CUE,))  # F-TIME C
-    if part.kind == 'indication' and not today:
+    if part.kind == 'indication' and not section_today:
         # An indication says why the patient came: a performance stated there and not said to be today's is not
         # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
         # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
         return Reading('uncertain', (INDICATION_READING,))
+    if part.kind == 'report' and not section_today and _in_an_occasion_indication(text, pos, service_date):
+        # F1 (completion repair, builder A): routing's layout and this reader disagree on the section - the layout
+        # runs an indication over the line, this reader gives the line to today's report - and the indication's own line
+        # names another occasion of a service ("Indication: Referred after an outside colonoscopy on 2026-09-01." then
+        # "The transverse colon lesion was marked with tattoo and not resected."): the act may be that occasion's, so it
+        # is not established as today's (held; H2|PKG-L6-0 and its siblings)
+        return Reading('uncertain', (OCCASION_INDICATION_CUE,))
     # A form field on its own line ("Biopsy taken: No", "Tattoo placed: None"): once its time is today's (no date,
     # history or plan word, section, hedge or indication said otherwise), its answer - never a participle in its label
     # - states the item.
@@ -3870,6 +3977,21 @@ def _np_start(toks: Sequence[tuple[int, int, str]], i: int) -> Optional[int]:
     return j
 
 
+def _np_phrase_start(text: str, lo: int, head_start: int) -> int:
+    """Where the noun phrase whose head starts at ``head_start`` begins: its modifiers read leftward as _np_start reads
+    them (a determiner included), within [lo, head_start)."""
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, max(lo, head_start - 120), head_start)]
+    start = head_start
+    for k in range(len(toks) - 1, max(-1, len(toks) - 8), -1):
+        word = toks[k][2]
+        if word.lower() in _DETERMINERS:
+            return toks[k][0]
+        if not _content_word(word):
+            break
+        start = toks[k][0]
+    return start
+
+
 def _np_determiner(text: str, lo: int, head_start: int) -> str:
     """The determiner of the noun phrase whose head starts at ``head_start`` (lower-cased), or '' when it has none:
     its modifiers read leftward as _np_start reads them, within [lo, head_start)."""
@@ -4063,15 +4185,22 @@ def _bolus_class(word: str) -> str:
     return 'bolus'
 
 
-def _bolus_sites(text: str, clause: tuple[int, int], sentence: tuple[int, int]) -> tuple:
+def _bolus_sites(text: str, clause: tuple[int, int], sentence: tuple[int, int], cache: Optional[dict] = None) -> tuple:
     """The sites a bolus is stated at: its clause's anatomy, or a distance from the incisors (an esophageal site), else
-    its sentence's."""
-    for lo, hi in (clause, sentence):
-        found = _anatomy_in(text, lo, hi)
-        found += [('esophagus', 'esophagus', m.start(), m.end()) for m in INCISOR_DISTANCE.finditer(text, lo, hi)
-                  if not any(a < m.end() and m.start() < b for _, _, a, b in found)]
+    its sentence's. ``cache`` (a dict, one per text): each span is read once, however many bolus phrases it holds."""
+    for span in (clause, sentence):
+        if cache is not None and span in cache:
+            found = cache[span]
+        else:
+            lo, hi = span
+            found = _anatomy_in(text, lo, hi)
+            found += [('esophagus', 'esophagus', m.start(), m.end()) for m in INCISOR_DISTANCE.finditer(text, lo, hi)
+                      if not any(a < m.end() and m.start() < b for _, _, a, b in found)]
+            found = tuple(sorted(found, key=lambda x: x[2]))
+            if cache is not None:
+                cache[span] = found
         if found:
-            return tuple(sorted(found, key=lambda x: x[2]))
+            return found
     return ()
 
 
@@ -4086,6 +4215,7 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
     denial ("No food impaction was seen") is no antecedent. One pass: (mentions, their head starts)."""
     out: list[_BolusMention] = []
     last: dict[tuple[int, str], _BolusMention] = {}  # (part start, head class) -> the last phrase of that class there
+    site_cache: dict = {}  # each clause and sentence read for its sites once (_bolus_sites)
     for m in BOLUS_HEAD.finditer(text):
         s, e = m.span()
         si = bisect.bisect_right(sentence_starts, s) - 1
@@ -4123,7 +4253,7 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         negated = det in _NEGATIVE_DET or lead in _NEGATIVE_DET
         part = _part_at(plist, starts, s)
         clause = _clause_for(clauses_of(ss, read_end), s)
-        own_sites = _bolus_sites(text, clause, (ss, read_end))
+        own_sites = _bolus_sites(text, tuple(clause), (ss, read_end), site_cache)
         # a definite or bare phrase with no modifier of its own refers to its antecedent: what it is, and where
         bare = not mods and not comp_words and (det in _DEFINITE or not det)
         antecedent = last.get((part.start, head)) if bare else None
@@ -5842,10 +5972,15 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # uncertain for want of a performance statement (svc-42), a form question ("Was the FNA performed?"),
                 # a plan section or label reading of a performed item (engine @4's time_plan ruling), or a future
                 # service ("repeat colonoscopy with snare polypectomy in 3 years")
-                stated = any(b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)
-                             for b in d.acts)
+                stated = [b for b in d.acts if b.kind == a.kind and LISTED_CUE not in b.cues and _against_listing(text, b)]
                 if stated:
-                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,))
+                    # F5 (completion repair, builder A): where the report states the listed act only in doubt - a hedge
+                    # or an open question ("It is unknown whether hot snare polypectomy was performed."), never an
+                    # attempt, a failure or a plan - whether the coded act was done is open (listed_in_doubt)
+                    doubted = all(b.status == 'uncertain' and not _attempt_or_failure(b.cues) and (_hedged(b.cues) or (
+                        bool(b.cues) and b.cues[0].startswith(CONDITION_CUE))) for b in stated)
+                    d.acts[i] = replace(a, status='uncertain', cues=a.cues + (LISTED_WITHHELD_CUE,)
+                                        + ((LISTED_DOUBTED_CUE,) if doubted else ()))
                 elif contradicted and a.kind in REMOVAL_KINDS:
                     # "Procedure: Colonoscopy with hot snare polypectomy ... The polyp was left in place.": the listed
                     # removal of the only lesion the report records, which the report says was not removed today

@@ -30,17 +30,18 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY"
    }
   },
   {
