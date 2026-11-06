@@ -724,7 +724,7 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     acts = [a for a in service.acts if a.kind in kinds]
     if not acts or any(a.role not in reconcile.OWN_ROLES for a in acts):
         return ()
-    flow = gi_services.reflow(text, pages)
+    flow = None  # the reader's own reflowed view, only where a listing is read: its per-document frame (cached)
     stated = []
     for act in acts:
         if _states_not_done(act.status, act.cues):
@@ -733,6 +733,10 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
         if not (act.status == 'uncertain' and gi_services.LISTED_CUE in act.cues
                 and gi_services.LISTED_WITHHELD_CUE in act.cues):
             return ()
+        if flow is None:
+            # services._act_frame: the one reflow passage_readings itself reads, computed once per document, date and
+            # pages - never a rescan of the text per code
+            flow = gi_services._act_frame(text, day, tuple(pages or ()))[0]
         for ev in act.evidence:
             readings = _mention_readings(text, flow, ev, act.kind, day, pages)
             if readings is None:
