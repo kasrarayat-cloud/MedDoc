@@ -490,9 +490,10 @@ class TodaysStepsAndStructureTests(SimpleTestCase):
 
 
 class NarrativePlaceTests(SimpleTestCase):
-    """Patch 5 of the author's own pass (N1): a labelled paragraph's place adjuncts anchor to today's anatomy, lesions
-    or handling, and nobody's reported speech is in it. Read in the paragraph only: an indication, impression or plan
-    keeps its own readers ("in a patient with", "follow up in clinic", "at the time of examination")."""
+    """Patches 5 to 7 of the author's own pass (N1, N2): a labelled paragraph's place adjuncts anchor to today's
+    anatomy, lesions or handling, and nobody's reported speech is in it; an impression or assessment sentence about the
+    procedure is read the same way. An indication or a plan keeps its own readers ("at the time of examination
+    planning", "resume diet at home")."""
 
     def assertHeldBy(self, text, condition):
         reasons = why(text)
@@ -544,17 +545,30 @@ class NarrativePlaceTests(SimpleTestCase):
             with self.subTest(sentence):
                 self.assertEqual(why(self.paragraph(sentence)), [''])
 
-    def test_the_indication_impression_and_plan_keep_their_own_readers(self):
-        # the retained shapes paraphrased: an indication timing the request to the examination, a patient on a drug in
-        # the impression, home in the plan; none of them is the paragraph's own account, and each would hold inside it
+    def test_the_indication_and_plan_keep_their_own_readers(self):
+        # the retained shapes paraphrased: an indication timing the request to the examination, home in the plan; neither
+        # is the paragraph's own account (N3's allow-lists read the indication, a plan's places are the plan's), and
+        # each would hold inside it
         text = colonoscopy(COL, ind='Indications: Iron deficiency anemia noted at the time of examination planning, '
-                                    'in a patient with a family history.\n',
-                           tail='Impression: Normal colonoscopy in a patient on aspirin; polyp removed.\n'
-                                'Plan: Resume diet at home after the procedure.\n')
+                                    'in a patient on aspirin.\n',
+                           tail='Impression: Polyp removed.\nPlan: Resume diet at home after the procedure.\n')
         self.assertEqual(why(text), [''])
         for inside in ('in a patient on aspirin', 'at home'):
             with self.subTest(inside):
                 self.assertHeldBy(self.paragraph('A 6 mm polyp was removed with a cold snare ' + inside + '.'), 'N1')
+
+    def test_an_impression_or_assessment_naming_the_procedure_reads_its_places(self):
+        # N2: a summary sentence about the procedure is read like the paragraph's own narrative
+        for kind in ('Impression', 'Assessment'):
+            for sentence in ('Polyp removed during the procedure on the cruise ship.', 'The procedure was done at her home.',
+                             'Screening colonoscopy in a patient on aspirin.'):  # the last: the safe side, pinned
+                with self.subTest(kind=kind, sentence=sentence):
+                    self.assertHeldBy(colonoscopy(COL, tail=kind + ': ' + sentence + '\n'), 'N2')
+            for sentence in ('Normal colonoscopy in an average-risk patient; polyp removed in two pieces.',
+                             'Colonoscopy to the cecum with cold snare polypectomy in the sigmoid colon.',
+                             'The patient tolerated the procedure well.'):
+                with self.subTest(kind=kind, sentence=sentence):
+                    self.assertEqual(why(colonoscopy(COL, tail=kind + ': ' + sentence + '\n')), [''])
 
     def test_the_time_reader_still_reads_a_time_heading_the_object(self):
         for tail in ('in 2019', 'at that time', 'in March', 'in the past'):

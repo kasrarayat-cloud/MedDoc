@@ -190,8 +190,9 @@ _TODAYS_STEP = re.compile(
     r'cannulation|sphincterotomy|aspiration|traversal|reinsertion|reintroduction|time-?out|withdrawing|inserting|'
     r'advancing|retroflexing|suctioning|irrigating|scope|colonoscope|gastroscope|endoscope|sigmoidoscope|instrument|'
     + r'(?:' + '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVICE_PATTERNS) + r'))\b', FLAGS)
-# N1's place reading (the paragraph's own narrative only; summary, plan and indication sentences are read by the classes
-# above and by routing's own occasion reading). A place preposition ("in", "on", "at", "from", "into", "within" ...) in
+# N1's place reading (the paragraph's own narrative, and N2's for an impression, assessment or findings sentence about
+# the procedure; plan and indication sentences are read by the classes above, N3's allow-lists and routing's own
+# occasion reading). A place preposition ("in", "on", "at", "from", "into", "within" ...) in
 # today's account takes a clinical object: an anatomical site or landmark (services.ANATOMY, cues' landmark tables) or a lesion, possibly behind
 # position words ("in the mid and distal esophagus", "at the base of the polyp"); a handling, view, position, condition
 # or measurement noun ("in two pieces", "on retroflexed view", "in stable condition", "at 30 cm"); one of today's rooms
@@ -245,7 +246,10 @@ _PP_OBJECT_OK = re.compile(
     r'(?:' + _PP_MOD + r'[ \t\n,-]++){0,6}(?:(?:' + _PP_SPECIFIC + r'|' + _PP_LESION + r')' + _PP_END + r'|(?:'
     + _PP_CLINICAL_MOD + r'[ \t\n-]++){1,2}' + _PP_GENERIC + _PP_END_GENERIC + r')'
     + r'|(?:' + _PP_MOD + r'[ \t\n,-]++){1,6}(?:sites?|areas?|regions?|locations?)' + _PP_END_GENERIC
-    + r'|(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:fashion|manner|' + _PP_DEVICE + r')' + _PP_END, FLAGS)
+    + r'|(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:fashion|manner|' + _PP_DEVICE + r')' + _PP_END
+    + r'|(?:the|a|an|this|our)[ \t\n]++(?:(?!(?:where|when|which|that|who|whom|whose)\b)[\w-]++[ \t\n]++){0,3}?'
+    + r'(?:patients?|wom[ae]n|m[ae]n|gentlem[ae]n|lad(?:y|ies)|males?|females?|individuals?|persons?|adults?)'
+    + _PP_END_GENERIC, FLAGS)
 # A clock time is the paragraph's own timing ("The cecum was reached at 10:05").
 _PP_CLOCK = re.compile(r'\d{1,2}:\d{2}(?:[ \t]*+(?:am|pm|a\.m\.|p\.m\.))?(?!\d)|\d{3,4}[ \t]*+(?:hours|hrs|h)\b', FLAGS)
 _PP_IDIOM = re.compile(
@@ -397,8 +401,8 @@ def _course_start() -> re.Pattern:
 def _signals(text: str, start: int, end: int, time: bool = True, narrative: bool = False) -> bool:
     """Whether [start, end) states another time (``time``), place, agent or source (the hold signals above); a time
     unit in a future form, or any time in a future clause, is the plan's and does not count. ``narrative`` reads a
-    labelled paragraph's own account (N1): every place adjunct anchors to today's anatomy or handling, and no person's
-    reported speech."""
+    labelled paragraph's own account (N1), or a summary sentence about the procedure (N2): every place adjunct anchors
+    to today's anatomy or handling, and no person's reported speech."""
     if _NOT_TIME_SIGNALS.search(text, start, end) or _BY_AGENT.search(text, start, end) \
             or _PROPER_PLACE.search(text, start, end):
         return True
@@ -629,8 +633,12 @@ def _index(text: str, lay: Layout) -> _Index:
         if not s <= pos < e:
             continue
         e = min(e, s + 400)  # a sentence is read in its first 400 characters (bounded work per sentence)
-        plan = lay.section_at(s).kind == 'plan'
-        if _signals(text, s, e, time=not plan):
+        kind = lay.section_at(s).kind
+        plan = kind == 'plan'
+        # an impression, assessment or findings sentence about the procedure is read as the paragraph's own narrative
+        # ("Polyp removed during the procedure on the cruise ship."); a plan's places are the plan's, an indication's
+        # are read by N3's own allow-lists
+        if _signals(text, s, e, time=not plan, narrative=kind in ('impression', 'assessment', 'findings')):
             signalled.setdefault(family, []).append(s)
     for family in signalled:
         signalled[family].sort()
