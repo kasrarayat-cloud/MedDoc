@@ -224,8 +224,8 @@ the progress log below.
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
 | candidate | none yet: branch `fix/cpt-studio-completion-20261106` from main `eb7c9a77` |
-| current stage | 2 to 5, the repair: IN PROGRESS (stage 1 PASS, VERIFIED OFFLINE, 2026-11-06T08:30Z) |
-| next action | five bounded builders (workflow `wf_33ae45a0-361`, launched 2026-11-06T08:50Z) implement the repair from `b452c6c4` in their own worktrees. R1 labelled procedure paragraphs and one section fact; R2 an examination's outcome against a sub-act's, the instrument's course, one extent fact; A the act frames (antecedent, removal binding, placement against outcome, dispositions, purpose time, F-NEG S); Q1 equal eligibility, evidence-based reconciliation and truthful reasons; Q2 truthful questions, recompute after an answer, answer binding. Then the owner integrates them serially, re-measures, and runs refutation over the integrated diff |
+| current stage | 2 to 5, the repair: IN PROGRESS (stage 1 PASS, VERIFIED OFFLINE, commit `b452c6c4` at 2026-11-06T08:18:43Z) |
+| next action | five bounded builders (workflow `wf_33ae45a0-361`, launched at about 2026-11-06T08:36Z by its script file's time) implement the repair from `b452c6c4` in their own worktrees. R1 labelled procedure paragraphs and one section fact; R2 an examination's outcome against a sub-act's, the instrument's course, one extent fact; A the act frames (antecedent, removal binding, placement against outcome, dispositions, purpose time, F-NEG S); Q1 equal eligibility, evidence-based reconciliation and truthful reasons; Q2 truthful questions, recompute after an answer, answer binding. Then the owner integrates them serially, re-measures, and runs refutation over the integrated diff |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -830,3 +830,10 @@ the progress log below.
     ledger with its no-new-false-READY invariant, the focused suites, the full suite, the retained-case recompute, and
     the freeze where layout or routing moves.
   - No version label moves on a builder branch. The owner integrates and declares once.
+- **Correction to the two entries above (appended, not rewritten).** Their stamps, 08:30Z and 08:50Z, were estimated,
+  not read from the clock. The clock and the records give:
+  - stage 1's commit `b452c6c4` at 08:18:43Z;
+  - the build workflow's script written at 08:35:59Z;
+  - this checkpoint's commit at 08:36:20Z;
+  - the clock read 08:39:35Z when the error was found.
+  The checkpoint table now carries the read times. Later entries use the clock.
