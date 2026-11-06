@@ -3608,3 +3608,106 @@ test('review_plan.addendum is validated, and checkAddendum holds the addendum to
   assert.deepEqual(bad(step({ after: after('ready', { value: 'not_documented', answer_id: 'ans-1' }) })), ['addendum.earlier_answer_not_applied']);
   assert.deepEqual(bad(step({ after: after('needs_clarification') })), ['addendum.ready.45338']);
 });
+
+test('expected_codes: validated, and checkExpectedCodes fails an omitted supported code, an unsupported READY code, a second unit and an incompleteness signal', () => {
+  const doc = codes => ({ id: 'c1a', review_plan: {}, expected_codes: codes });
+  const notes = { approve: 'Agent-executed synthetic verification review' };
+  const good = { ready: ['45385', '45380'], not_ready: ['45378', '43239'], units: { 45385: 1 }, complete: ['gi.colonoscopy'] };
+  assert.deepEqual(vb.planProblems(doc(good), notes), []);
+  const problems = codes => vb.planProblems(doc(codes), notes).join(' | ');
+  assert.match(problems(['45385']), /must be an object/);
+  assert.match(problems({ ready: ['4538'] }), /ready must be a list of distinct five-digit codes/);
+  assert.match(problems({ not_ready: ['45378', '45378'] }), /not_ready must be a list of distinct/);
+  assert.match(problems({ ready: ['45385'], not_ready: ['45385'] }), /both ready and not_ready/);
+  assert.match(problems({ units: { 45385: 0 } }), /units must map/);
+  assert.match(problems({ complete: 'gi.colonoscopy' }), /complete must be a list of families/);
+  assert.match(problems({ readyy: [] }), /unknown key: readyy/);
+  assert.match(vb.planProblems({ id: 'f', review_plan: {}, expected_failure: 'extraction_failed', expected_codes: good }, notes).join(' | '), /carries expected_codes, which its walk never checks/);
+  // the sample operator view: 45380 and 45385 selected READY, 45378 an alternative, 43239 excluded
+  const bad = (codes, op = OP()) => vb.checkExpectedCodes(codes, op).filter(r => r.status === 'fail').map(r => r.id);
+  assert.deepEqual(bad(good), []);
+  assert.deepEqual(vb.checkExpectedCodes(good, OP()).map(r => r.id), ['codes.ready.45385', 'codes.ready.45380', 'codes.not_ready.45378',
+    'codes.not_ready.43239', 'codes.units.45385', 'codes.complete.gi.colonoscopy']);
+  assert.deepEqual(bad({ ready: ['45381'] }), ['codes.ready.45381']);           // an omitted supported service
+  assert.deepEqual(bad({ not_ready: ['45380'] }), ['codes.not_ready.45380']);   // an unsupported addition
+  const held = OP();
+  held.assessment.proposals.find(p => p.code === '45385').status = 'needs_clarification';
+  assert.deepEqual(bad({ ready: ['45385'], not_ready: ['45385'].slice(1) }, held), ['codes.ready.45385']);
+  const twice = OP();
+  twice.assessment.proposals.push({ ...clone(twice.assessment.proposals.find(p => p.code === '45385')), id: 'second-45385' });
+  assert.deepEqual(bad({ units: { 45385: 1 } }, twice), ['codes.units.45385']);
+  const two = OP();
+  two.assessment.proposals.find(p => p.code === '45385').units = 2;
+  assert.deepEqual(bad({ units: { 45385: 1 } }, two), ['codes.units.45385']);
+  const reduced = OP();
+  reduced.assessment.proposals.find(p => p.code === '45380').modifier_considerations = ['The examination did not reach the cecum: modifier 53 may apply.'];
+  assert.deepEqual(bad({ complete: ['gi.colonoscopy'] }, reduced), ['codes.complete.gi.colonoscopy']);
+  const failing = OP();
+  failing.assessment.proposals.find(p => p.code === '45385').checks.push({ id: 'procedure.complete', label: 'Procedure completion', status: 'warn', detail: 'The procedure was incomplete.' });
+  assert.deepEqual(bad({ complete: ['gi.colonoscopy'] }, failing), ['codes.complete.gi.colonoscopy']);
+  // an excluded or alternative proposal of the code is not READY; a passing check that names completion is no signal
+  const passing = OP();
+  passing.assessment.proposals.find(p => p.code === '45385').checks.push({ id: 'procedure.complete', label: 'Incomplete procedure', status: 'pass', detail: 'Not incomplete.' });
+  assert.deepEqual(bad({ not_ready: ['43239', '45378'], complete: ['gi.colonoscopy'] }, passing), []);
+  const odd = OP();  // only a selected, non-excluded proposal is READY, whatever status another bucket's row carries
+  odd.assessment.proposals.find(p => p.code === '43239').status = 'ready';
+  odd.assessment.proposals.find(p => p.code === '45378').status = 'ready';
+  assert.deepEqual(bad({ not_ready: ['43239', '45378'] }, odd), []);
+  const dropped = OP();  // a selected row excluded since (status excluded) carries no signal for the codes still live
+  Object.assign(dropped.assessment.proposals.find(p => p.code === '45380'), { status: 'excluded', modifier_considerations: ['Reduced services: modifier 52 may apply.'] });
+  assert.deepEqual(bad({ complete: ['gi.colonoscopy'] }, dropped), []);
+  assert.deepEqual(vb.checkExpectedCodes(undefined, OP()), []);
+  assert.deepEqual(vb.checkExpectedCodes({ not_ready: ['45380'] }, OP(), 'after_addendum.codes').map(r => r.id), ['after_addendum.codes.not_ready.45380']);
+});
+
+test('checkClarifications: a performed-status expectation is met by a conflict question about the act, and by nothing else', () => {
+  const enc = facts => ({ clarifications: facts.map(([fact, scope, state = 'open']) => ({ fact, scope, state, question: `${fact}?` })) });
+  const bad = (expected, e) => vb.checkClarifications(expected, e).filter(r => r.status === 'fail').map(r => r.id);
+  const want = [{ fact: 'performed_status', scope_in: ['service', 'proposal'] }];
+  assert.deepEqual(bad(want, enc([['performed_status', 'proposal']])), []);
+  assert.deepEqual(bad(want, enc([['conflict:removal', 'proposal']])), []);
+  assert.deepEqual(bad(want, enc([['conflict:removal', 'proposal', 'answered']])), ['clarification.performed_status']);
+  assert.deepEqual(bad(want, enc([['conflict:removal', 'encounter']])), ['clarification.performed_status']);
+  assert.deepEqual(bad(want, enc([['extent', 'proposal']])), ['clarification.performed_status']);
+  // no other fact takes the alias
+  assert.deepEqual(bad([{ fact: 'extent', scope_in: ['proposal'] }], enc([['conflict:extent', 'proposal']])), ['clarification.extent']);
+});
+
+test('checkMemberAnswers: a "Not documented" answer for a code leaves it excluded by that answer, its question closed', () => {
+  const answers = [{ fact: 'service_date', value: 'use_document' }, { fact: 'extent', value: 'not_documented', code: '45385' }];
+  const member = { id: 'member.answer', label: 'Member answer', status: 'fail', source: 'cpt-studio:member-answer@1',
+    detail: 'The member answered "Not documented" to how far the examination reached; this code is excluded by that answer until it is withdrawn.' };
+  const recomputed = () => {
+    const op = OP();
+    const p = op.assessment.proposals.find(item => item.code === '45385');
+    Object.assign(p, { bucket: 'excluded', status: 'excluded', checks: [...p.checks, clone(member)] });
+    op.clarifications = [{ id: 'q1', scope: 'proposal', proposal_id: p.id, family: 'gi.colonoscopy', fact: 'extent', state: 'answered' }];
+    return op;
+  };
+  const bad = op => vb.checkMemberAnswers(answers, { op }).filter(r => r.status === 'fail').map(r => r.id);
+  assert.deepEqual(bad(recomputed()), []);
+  assert.deepEqual(vb.checkMemberAnswers(answers, { op: recomputed() }).map(r => r.id),
+    ['details.member_answer.45385.excluded', 'details.member_answer.45385.question_closed']);
+  // the code still READY (the answer never recomputed), excluded for another reason, or gone; the question still open
+  assert.deepEqual(bad(OP()), ['details.member_answer.45385.excluded']);
+  const other = recomputed();
+  other.assessment.proposals.find(item => item.code === '45385').checks.pop();
+  assert.deepEqual(bad(other), ['details.member_answer.45385.excluded']);
+  const cannot = recomputed();
+  cannot.assessment.proposals.find(item => item.code === '45385').checks.at(-1).detail = member.detail.replace('Not documented', 'Cannot confirm');
+  assert.deepEqual(bad(cannot), ['details.member_answer.45385.excluded']);
+  const gone = recomputed();
+  gone.assessment.proposals = gone.assessment.proposals.filter(item => item.code !== '45385');
+  assert.deepEqual(bad(gone), ['details.member_answer.45385.excluded']);
+  const open = recomputed();
+  open.clarifications[0].state = 'open';
+  assert.deepEqual(bad(open), ['details.member_answer.45385.question_closed']);
+  // a question of another code, or of another fact, stays open without failing this answer
+  const elsewhere = recomputed();
+  elsewhere.clarifications.push({ id: 'q2', scope: 'proposal', proposal_id: 'a1f0b2c3-0001-4d5e-8f60-718293a4b5c6', family: 'gi.colonoscopy', fact: 'extent', state: 'open' },
+    { id: 'q3', scope: 'proposal', proposal_id: elsewhere.assessment.proposals.find(item => item.code === '45385').id, family: 'gi.colonoscopy', fact: 'setting', state: 'open' });
+  assert.deepEqual(bad(elsewhere), []);
+  // an answer with no code, a context answer, or no settled view checks nothing here
+  assert.deepEqual(vb.checkMemberAnswers([{ fact: 'extent', value: 'not_documented' }], { op: OP() }), []);
+  assert.deepEqual(vb.checkMemberAnswers(answers, null), []);
+});
