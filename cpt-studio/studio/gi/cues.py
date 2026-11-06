@@ -1260,10 +1260,18 @@ UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|
 # cues give a sub-act as its own failure fails that act here too ("The polypectomy was halted because of bleeding.",
 # "... was stopped because of bleeding.", "... was precluded by its position."). "stopped" is read only with one of
 # the words routing reads after it, and the match is that one word, as the reading names it ("uncertain: stopped").
-_ACT_FAILURE_PARTICIPLES = '|'.join(ACT_FAILED + (ACT_ABORTED,) + ACT_STOPPED + (ACT_PRECLUDED,))
-FAILED_ACT = rx(r'\b(?:' + _ACT_FAILURE_PARTICIPLES + r'|unsuccessfully|stopped(?=\s+(?:' + '|'.join(ACT_STOPPED_HOW)
-                + r')\b))\b')
-FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + _ACT_FAILURE_PARTICIPLES + r')[ \t]+(?:[\w-]+[ \t]+){0,3}$')
+# Refutation cycle 3 (outcome C3-4, cost C3-4): cycle 2's additions ("halted", "precluded", "stopped" with one of
+# ACT_STOPPED_HOW) are withdrawn from the services reader's own words - read off another subject's coordinated stop
+# ("... removed with a cold snare and retrieval was precluded", "... and the oozing stopped due to pressure") they held
+# plainly done acts. The guarantee they were added for - a failure routing gives to a sub-act is never an act the
+# services reader reads done - is routing's own now: it gives a failure to a sub-act only where this reader reads that
+# act failed by the same word (detect._consumed_by_the_services_reader). The cycle-1 words stay ("aborted", "terminated",
+# "discontinued"). An attribute (FAILED_ACT_BEFORE) never reaches across a word of time order: "The procedure was
+# aborted after the biopsies" is the examination's abort after done biopsies, not the biopsies' failure.
+_ACT_FAILURE_PARTICIPLES = '|'.join(ACT_FAILED + (ACT_ABORTED,) + ('terminated', 'discontinued'))
+FAILED_ACT = rx(r'\b(?:' + _ACT_FAILURE_PARTICIPLES + r'|unsuccessfully)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + _ACT_FAILURE_PARTICIPLES + r')[ \t]+'
+                       r'(?:(?!(?:after|following|before|prior|until|since|once|when|while|during|then)\b)[\w-]+[ \t]+){0,3}$')
 # Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
 # mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
 # removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose

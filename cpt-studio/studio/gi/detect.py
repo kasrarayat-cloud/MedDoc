@@ -1866,10 +1866,9 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
     time of the target [ts, te) - the one reading the documented-service reader takes (studio.gi.purpose): the cue is
     the time word of a purpose phrase (read to the end of its sentence, as the layout segments it); the target starts
     before the phrase's opener; nothing inside the phrase is a service or an intervention (an act named there keeps the
-    purpose's future, and a passage that mixes it with the done act keeps it too); and the clause's main predicate before
-    the opener states an act done and is the target's - the target starts before its participle ends (a passage, the
-    predicate's subject or participle) or is its instrument ("was marked with submucosal tattoo"); and the target is no
-    act word of another kind than the marking kinds (refutation cycle 2). Anything else reads as before."""
+    purpose's future, and a passage that mixes it with the done act keeps it too); the target's sentence is a marking
+    statement read whole (purpose.marking_statement, refutation cycle 3) that holds the phrase; and the target is no act
+    word of another kind than the marking kinds (refutation cycle 2). Anything else reads as before."""
     text = an.text
     _ss, se = an.lay.sentence_for(cue.start, cue.end)
     phrase = purpose.phrase_at(text, cue.start, se)
@@ -1877,12 +1876,10 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
         return False
     if an.services_in(phrase[0], phrase[2]) or an.interventions_in(phrase[0], phrase[2]):
         return False
-    clause_start = an.lay.clauses_for(cue.start, cue.end)[0][0]
-    # bounded: the main predicate is read within CLAUSE_REACH characters before the opener (further, none is read)
-    predicate = purpose.main_predicate_done(text, max(min(clause_start, ts), phrase[0] - CLAUSE_REACH), phrase[0])
-    if predicate is None:
-        return False
-    if not (ts < predicate[2] or purpose.instrument_of(text, predicate[2], ts)):
+    # refutation cycle 3: the target's sentence is a marking statement read whole (purpose.marking_statement, the one
+    # closed form the services reader reads too), holding the phrase; cycle 2's predicate and subject reading is replaced
+    statement = purpose.marking_statement(text, max(ts, _ss), (_ss, se))
+    if statement is None or not (statement[0] <= max(ts, _ss) and phrase[0] < statement[1]):
         return False
     # refutation cycle 2 (acts A6): the services reader's own rule (services._purpose_releases), read per mention as it
     # reads it - a target that is itself an act word of another kind than the marking kinds (services.
@@ -3406,6 +3403,17 @@ def _P2_listed_under_a_denial(an: Analysis, start: int, reading: Reading) -> Rea
                    reading.basis, doubt=True)
 
 
+def _in_a_released_label(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) lies inside the label of a labelled procedure paragraph the structure reader released
+    (studio.gi.structure.released: the label as written, its colon included). Read once per document, then bisected."""
+    key = ('released-labels',)
+    if key not in an.memo:
+        an.memo[key] = sorted((p.label.start, p.label.end) for p in gi_structure.released(an.text))
+    labels = an.memo[key]
+    i = bisect.bisect_right(labels, (start, len(an.text) + 1)) - 1
+    return i >= 0 and labels[i][0] <= start and end <= labels[i][1]
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
@@ -3417,7 +3425,12 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
         if boxed is not None:
             an.memo[key] = boxed
     if key not in an.memo:
-        reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
+        # refutation cycle 3 (parity C3-1 to C3-3): a released labelled paragraph's label ("Colonoscopy: The colonoscope
+        # was introduced ...") is read as its heading twin's name is - by its section, never by the narrative's first
+        # clause, whose cue ('performed: was introduced', basis 'cue') had skipped _silent_section and won _aggregate
+        # before any contradiction (a status line, a typed "No", a call-off or a denial elsewhere) was asked
+        reading = (_default_reading(an, start, end) if _in_a_released_label(an, start, end) else None) \
+            or _cue_reading(an, start, end) or _default_reading(an, start, end)
         if reading.status == 'negated':
             joined = _denied_from_the_line_above(an, start, end)
             if joined:
@@ -5983,7 +5996,33 @@ def _a_sub_acts_failure_at(an: Analysis, clause_start: int, pos: int, name: str,
     clause_end = next((ce for cs, ce in an.lay.clauses_for(pos, pos + 1) if cs == clause_start), len(an.text))
     if gi_clauses.examinations_failure(an.text, clause_start, predicate, pos, clause_end):
         return False
-    return gi_clauses.failure_of(an.text, _failure_subject(an, clause_start, pos)) == gi_clauses.SUB_ACT
+    if gi_clauses.failure_of(an.text, _failure_subject(an, clause_start, pos)) != gi_clauses.SUB_ACT:
+        return False
+    return _consumed_by_the_services_reader(an, clause_start, clause_end, pos, said)
+
+
+def _consumed_by_the_services_reader(an: Analysis, clause_start: int, clause_end: int, pos: int, said: str) -> bool:
+    """Refutation cycle 3 (outcome C3-3, cost C3-1; HARNESS.md "Refutation of the integrated diff, cycle 3"): whether
+    the documented-service reader reads the failure at ``pos`` (its text ``said``) as an act's own failure - its own
+    failure word (cues.FAILED_ACT) said of an act mention of its own vocabulary inside the failure's subject
+    (services._acts_in, read by services._failed_act in the same clause). Only then is the failure a sub-act's: the act
+    is held there, so the examination reads complete without any code reading READY on the failed act. Anything else -
+    a failure word the services reader does not read ("could not be advanced", "did not pass"), or a subject naming no
+    act it reads ("Removal was aborted", "The stent could not be advanced") - keeps the examination's reading, the base
+    reading. Cycle 2 had shared the failure WORDS instead, and routing's subject vocabulary (clauses.SUB_ACTS,
+    ACCESSORIES) is wider than the services reader's acts: a failure given to "Removal" or to an accessory left the
+    earlier act done and the code READY with no warning. One reader decides, the other consumes. Memoised."""
+    key = ('consumed', clause_start, pos)
+    if key not in an.memo:
+        consumed = False
+        found = _failure_subject(an, clause_start, pos) if cues.FAILED_ACT.search(said) else None
+        if found is not None:
+            from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+            s0, s1 = found.phrase
+            consumed = any(gi_services._failed_act(an.text, clause_start, clause_end, a, b)
+                           for _kind, a, b in gi_services._acts_in(an.text, s0, s1))
+        an.memo[key] = consumed
+    return an.memo[key]
 
 
 def _examination_target(an: Analysis, ts: int, te: int) -> bool:
@@ -6070,8 +6109,25 @@ def _completion_states_reach(an: Analysis, ms: int, me: int, ws: int, we: int) -
     key = ('reach-statement', s, e)
     if key not in an.memo:
         found = _REACH_STATEMENT.fullmatch(an.text, s, e) if e - s <= REACH_STATEMENT_CHARS else None
+        # refutation cycle 3 (cost C3-5): and it is the text's only word of a landmark - any other sentence naming one
+        # ("Correction: cecal intubation was not achieved.", "this was the hepatic flexure, not the cecum", "The
+        # statement of cecal intubation above was entered in error.") keeps the extent's base reading, whatever it says
+        if found is not None and any(not (s <= m.start() and m.end() <= e) for m in _landmark_words(an)):
+            found = None
         an.memo[key] = found.span('subject') if found is not None else None
     return an.memo[key] == (ms, me)
+
+
+_LANDMARK_WORD = re.compile(r'\b(?:c(?:a)?ec(?:um|al)|appendiceal|appendix|ileoc(?:a)?ecal|terminal\s+ileum|ileum|ileal|'
+                            r'triradiate)\b', re.A | re.I)
+
+
+def _landmark_words(an: Analysis) -> list:
+    """Every word of a reach landmark in the text (_LANDMARK_WORD), found once per document."""
+    key = ('landmark-words',)
+    if key not in an.memo:
+        an.memo[key] = list(_LANDMARK_WORD.finditer(an.text))
+    return an.memo[key]
 
 
 # The reach statement's grammar (_completion_states_reach): closed classes throughout; the subject is read as written
@@ -8913,8 +8969,17 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
     in_section: dict[int, set] = {}  # I12: per section, the families whose instrument course stands in it
     for m in candidates:
         in_section.setdefault(an.lay.section_at(m.start).start, set()).add(m.family)
+    named_sections: dict[int, bool] = {}
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
+            continue
+        # refutation cycle 3 (parity C3-6): the rule reads a narrative that names NO family - a section whose own text
+        # names a service ("Procedure: Upper endoscopy" over "The colonoscope was then introduced. A 6 mm sessile polyp
+        # was removed ...") is read by that name alone, as its named twin is; its other family's course is no mention
+        section = an.lay.section_at(m.start)
+        if section.start not in named_sections:
+            named_sections[section.start] = bool(an.services_in(section.start, section.end))
+        if named_sections[section.start]:
             continue
         if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
             continue
@@ -9064,8 +9129,12 @@ def _frozen_analysis(text: str) -> Analysis:
     mention outside those paragraphs lies in the same section in both layouts."""
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
-    return Analysis(text, layout(text), _service_mentions(text), (), _clause_cues(text), ctx.find_dates(text),
-                    ctx.service_date_of(text), interventions)
+    an = Analysis(text, layout(text), _service_mentions(text), (), _clause_cues(text), ctx.find_dates(text),
+                  ctx.service_date_of(text), interventions)
+    # the frozen layout releases nothing (structure is still deciding, and reads this very analysis): no label is read
+    # as a heading here, and _in_a_released_label never calls back into the structure reader (refutation cycle 3)
+    an.memo[('released-labels',)] = []
+    return an
 
 
 def named_as_another_occasion(text: str, family: str, start: int, end: int, skip: tuple = (),

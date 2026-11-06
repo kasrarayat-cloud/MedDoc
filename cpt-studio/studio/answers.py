@@ -436,12 +436,17 @@ def _questions(encounter, assessment, view, states=((), (), ())):
             out.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
     # completion repair (2026-11-06, U11): a question the assessment closed with a member's answer it read
     read = {answer.pk for answer in applied}
+    # refutation cycle 3 (answers C3-3): and a closed question a standing answer now supersedes (bound to it by
+    # review._closed_pairs) keeps its row - the member's saved answer is shown on it, never on no surface at all
+    superseding = {(answer.fact, answer.family, answer.code) for answer in bound}
     closed = []
     for item in (assessment.clarifications.filter(state=models.Clarification.ANSWERED, answer__isnull=False)
                  .select_related('proposal').order_by('created_at', 'pk')):
-        if item.answer_id not in read:
-            continue
         proposal = item.proposal
+        key = (item.fact, item.family or (proposal.family if proposal is not None else ''),
+               proposal.code if proposal is not None else '')
+        if item.answer_id not in read and key not in superseding:
+            continue
         if proposal is not None:
             closed.append(('proposal', item.fact, item.family or proposal.family, proposal.code,
                            (2, proposal.position)))
@@ -750,6 +755,14 @@ def save_details(encounter, user, items) -> dict:
         # the question each member of a row is asked now (review.asked_fingerprints), which its answer binds to; one a
         # standing answer the assessment read answers is that answer's question (its row shows it, closed)
         asked = review.asked_fingerprints(assessment) if assessment is not None else {}
+        # refutation cycle 3 (answers C3-4): a question the assessment closed with an answer it read is asked as the
+        # engine recorded it (completeness member_answers 'asked'), so a new answer to that row is bound to it, never
+        # recorded in the earlier, key-only form
+        if assessment is not None:
+            for entry in ((assessment.completeness or {}).get('member_answers') or {}).get('applied') or ():
+                if entry.get('asked'):
+                    asked.setdefault(questions.member_key(entry.get('code') or '', entry.get('family') or '',
+                                                          entry.get('fact') or ''), entry['asked'])
         answers = standing_answers(encounter.current_revision_id) if encounter.current_revision_id else []
         values, recorded, superseded, unchanged, confirming = {}, [], [], 0, None
         for ident, fact, value in parsed:

@@ -845,6 +845,14 @@ def _paragraph_holds(text: str, c: _Candidate, ix: _Index, frames: tuple = ()) -
                 return True
     if c.family != 'gi.flex_sig' and cues.FS_ABBREVIATION.search(text, c.body, c.end):
         return True
+    # refutation cycle 3 (parity C3-4): another family's instrument anywhere in the paragraph ("Upper endoscopy: ... The
+    # gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed ...") - the
+    # derived layout would bind that examination's site-less acts to the label's family, which its heading twin does not
+    from studio.gi import services as gi_services  # local: services is the instrument mapping's owner
+    for m in gi_services.INSTRUMENTS.finditer(text, c.body, c.end):
+        family = _instrument_family(m.group(0))
+        if family and family != c.family:
+            return True
     lo = bisect.bisect_left(ix.sentence_starts, c.body)
     first = bisect.bisect_right(ix.sentence_starts, c.body) - 1
     for k in range(max(lo, first + 1), len(ix.sentences)):
@@ -968,6 +976,17 @@ def _stray_mentions(text: str, lay: Layout, candidates: list) -> dict:
     return found
 
 
+FRAME_REACH = 600  # characters after a candidate's colon its first-sentence frame and course are read in, at most
+
+
+def _frame_end(c: _Candidate, sentence_end: int) -> int:
+    """Where a candidate's frame read stops (refutation cycle 3, parity C3-5): its first sentence's end, never past the
+    candidate's own end nor FRAME_REACH after its colon - soft-wrapped label lines run into one layout sentence, and
+    each candidate had read to that sentence's end, quadratic in the text (a 73 KB paste took 67 s). A frame cut short
+    is only a frame not found: another family's mention there is then not excused (the safe side)."""
+    return min(sentence_end, c.end, c.body + FRAME_REACH)
+
+
 def _framed_course(text: str, c: _Candidate, e: int) -> Optional[re.Match]:
     """The candidate's first-sentence course from its colon to ``e``, read for its frame of today's steps: the named
     instrument's course shape (_course_start); else a generic instrument's course that P2 accepts by its tract
@@ -989,7 +1008,7 @@ def _frames(text: str, candidates: list, ix: _Index) -> tuple:
         k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
         if k < 0:
             continue
-        m = _framed_course(text, c, ix.sentences[k][1])
+        m = _framed_course(text, c, _frame_end(c, ix.sentences[k][1]))
         if m is not None and m.group('frame'):
             spans.append((m.start('frame'), m.end('frame')))
     return tuple(spans)
@@ -1003,7 +1022,7 @@ def _frames_released(text: str, candidates: list, out: list, ix: _Index) -> list
     named = {}
     for n, c in enumerate(candidates):
         k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
-        m = _framed_course(text, c, ix.sentences[k][1]) if k >= 0 else None
+        m = _framed_course(text, c, _frame_end(c, ix.sentences[k][1])) if k >= 0 else None
         if m is not None and m.group('frame'):
             frame = m.group('frame')
             named[n] = {f for f, pattern in cues.SERVICE_PATTERNS if pattern.search(frame)} - {c.family}

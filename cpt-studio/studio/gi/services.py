@@ -658,7 +658,13 @@ def _outcome_in_doubt(cues) -> bool:
     was performed"), an infinitive ("is to be injected") or a later clause's failure of the same act. Another
     facility's or provider's act, a time of something else's, or plain silence (no performance statement) are no
     statement of the act's outcome."""
-    return _attempt_or_failure(cues) or _hedged(cues) \
+    return _attempt_or_failure(cues) or _hedged(cues) or _outcome_stated_otherwise(cues)
+
+
+def _outcome_stated_otherwise(cues) -> bool:
+    """_outcome_in_doubt without the hedge: an attempt or a failure, a condition or an open question, an infinitive, or a
+    later clause's failure of the same act - what the procedure line's placement never overrides (refutation cycle 3)."""
+    return _attempt_or_failure(cues) \
         or (bool(cues) and cues[0].startswith((CONDITION_CUE, INFINITIVE_CUE, LATER_FAILURE_CUE)))
 
 
@@ -2834,37 +2840,19 @@ PURPOSE_MARKING_KINDS = frozenset(('tattoo', 'injection'))
 
 def _purpose_releases(text: str, word_start: int, cs: int, ce: int, pos: int, end: int) -> bool:
     """Whether the purpose phrase whose time word starts at ``word_start`` (studio.gi.purpose) is no time of the act
-    mentioned at [pos, end) in its clause [cs, ce): the mention lies before the phrase's opener, and the clause's main
-    predicate before the opener states an act done (purpose.main_predicate_done) and is said of the mention - the
-    mention is its participle ("was tattooed"), lies in its subject's noun phrase up to its head ("India ink was
-    injected", "Submucosal tattoo placement was performed") or is its instrument ("was marked with submucosal tattoo").
-    Never a word inside the subject's complement ("The vial of tattoo ink was marked with the specimen label for future
-    identification": the vial was marked, test_advanced_gi_binding). A mention inside or after the opener keeps the
-    purpose's time; so does any act word but of the marking kinds (PURPOSE_MARKING_KINDS, refutation cycle 2); any other
-    doubt keeps the base reading."""
+    mentioned at [pos, end) in its clause [cs, ce): the mention lies before the phrase's opener, is a word of the
+    marking kinds (PURPOSE_MARKING_KINDS), and its sentence is a marking statement read whole
+    (purpose.marking_statement; refutation cycle 3) holding the phrase too. Anything else keeps the purpose's time:
+    the base reading."""
     phrase = _purpose.phrase_at(text, word_start, ce)
     if phrase is None or end > phrase[0]:
         return False
-    predicate = _purpose.main_predicate_done(text, cs, phrase[0])
-    if predicate is None:
-        return False
     if any(kind not in PURPOSE_MARKING_KINDS for kind, _, _ in _acts_in(text, pos, end)):
         return False  # refutation cycle 2 (acts A6): another act's word keeps the purpose's future
-    start, participle_start, participle_end = predicate
-    if pos < participle_end and participle_start < end:
-        return True
-    if _purpose.instrument_of(text, participle_end, pos):
-        return True
-    subject = _removal_subject(text, cs, start)
-    if subject is None:
-        return False
-    # the mention is the subject's head ("A tattoo was placed ..."), or lies inside the subject noun phrase before its
-    # head, whatever that head is ("Tattoo ink", "India ink", "tattoo placement", "A tattoo mark") - never after its head,
-    # in a complement ("The vial of tattoo ink"); an act word of another kind never reaches here ("EMR referral placed
-    # for future resection", "An EMR appointment was made ...", "The EMR target lesion was marked ...")
-    if pos <= subject[0] < end:
-        return True
-    return _np_phrase_start(text, cs, subject[0]) <= pos and end <= subject[1]
+    # refutation cycle 3: the sentence is a marking statement, recognized whole (purpose.MARKING_STATEMENT), and the
+    # mention and the phrase both lie in it; cycle 2's subject and head reading is replaced
+    statement = _purpose.marking_statement(text, pos, _sections.layout(text).sentence_for(pos, max(end, pos + 1)))
+    return statement is not None and statement[0] <= pos and phrase[0] < statement[1]
 
 
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
@@ -4044,8 +4032,12 @@ _NEVER_REMOVED_BY_SNARE = frozenset(('stricture', 'ring', 'varix', 'varices', 'u
 
 
 def _techniques_differ(one: str, other: str) -> bool:
-    """Whether two acts of a kind state specific techniques that differ (another instance of the kind)."""
-    return one in _SPECIFIC_TECHNIQUES and other in _SPECIFIC_TECHNIQUES and one != other
+    """Whether a failed act of a kind (technique ``one``) is another instance than a done act of that kind (technique
+    ``other``): the failure states a specific technique and the done act states another specific one or none at all
+    (refutation cycle 3, admission C3-5: "The stricture was dilated with wire-guided dilators to 15 mm." then "Balloon
+    dilation to 18 mm was unsuccessful."). A generic failure ("The snare polypectomy failed."), the same technique, or a
+    done act naming only the generic kind ("removed with a snare") keeps the same-act hold."""
+    return one in _SPECIFIC_TECHNIQUES and one != other and (other in _SPECIFIC_TECHNIQUES or not other)
 
 
 def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> str:
@@ -4108,8 +4100,6 @@ _CLAUSE_WORDS = frozenset(('and', 'or', 'but', 'nor', 'yet', 'so', 'then', 'thus
                            'he', 'she', 'they', 'it', 'there', 'also', 'to'))
 _FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
 REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted)\b')
-REMOVAL_NOMINAL = _rx(r'\b(?:removal|retrieval|extraction)[ \t]+of[ \t]+')
-REMOVAL_COMPOUND = _rx(r'[ \t]+(?:removal|retrieval|extraction)\b')
 # the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
 _VERB_GROUP = _rx(r"(?:\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|"
                   r"must|did|does|do|shall|to|not|never|then|also|[a-z]+ly|\w+n['’]t)[ \t\n]+)+$")
@@ -4279,36 +4269,12 @@ def _attachment_subject(text: str, clause_start: int, predicate_start: int) -> O
 
 
 
-# The main predicates that state an attempt or a failure (predicate_subject's pronoun reading; refutation cycle 2,
-# outcome O2), a closed class read at the antecedent clause's own first verb group (_own_attempt_or_failure): "was/were
-# attempted|tried|unsuccessful", "failed", "could not be <participle>", "was/were not possible|successful|completed".
-# Cycle 1 searched the whole clause for an attempt or failure word, so "... were obtained from the stricture after two
-# attempts" and "... after a failed first pass" lent a pronoun's abort to the brushings (43260 READY).
-_ATTEMPT_OR_FAILURE = _rx(r'(?:was|were)[ \t\n]+(?:attempted|tried|unsuccessful)\b|failed\b'
-                          r'|could[ \t\n]+not[ \t\n]+be[ \t\n]+(?:[a-z]+(?:ed|en)|done)\b'
-                          r'|(?:was|were)[ \t\n]+not[ \t\n]+(?:possible|successful|completed)\b')
-_ANTECEDENT_TOKEN = re.compile(r"[A-Za-z][A-Za-z'’/-]*|[,;:()\[\]]", re.A)
-_PLURAL_VERB = _rx(r'were\b')
-SINGULAR_PRONOUNS = frozenset(('it', 'this', 'that'))
-
-
-def _own_attempt_or_failure(text: str, a0: int, a1: int) -> Optional[int]:
-    """Where the antecedent clause [a0, a1)'s own main predicate begins, when that predicate is an attempt or a failure
-    (_ATTEMPT_OR_FAILURE); None otherwise. The main predicate is the clause's first verb group - its first auxiliary or
-    modal (clauses.AUXILIARIES), or a finite "failed" (one after a determiner or a quantity word, "a failed first pass",
-    is an attribute) - and only where nothing before it but the subject could hold a verb of its own: a mark, a relative
-    pronoun or a subordinator there says that verb group may be an aside's or a subordinate clause's ("Polypectomy,
-    which was attempted twice, was completed"), and nothing is read. Bounded: clauses.SUBJECT_REACH characters."""
-    before = ''
-    for m in _ANTECEDENT_TOKEN.finditer(text, a0, min(a1, a0 + _clauses.SUBJECT_REACH)):
-        word = m.group(0).lower()
-        if word in _clauses.AUXILIARIES or (word == 'failed' and before and before not in _clauses.DETERMINERS
-                                            and before not in _clauses.QUANTITY_WORDS):
-            return m.start() if _ATTEMPT_OR_FAILURE.match(text, m.start(), a1) else None
-        if word == 'failed' or not word[0].isalpha() or word in _clauses.RELATIVES or word in _clauses.SUBORDINATORS:
-            return None
-        before = word
-    return None
+# Refutation cycle 3 (outcome C3-1, C3-2): a pronoun subject ("it was then aborted") is never read through the clause
+# before it. Cycle 1 searched that clause for an attempt or failure word, and cycle 2's closed form read only its first
+# verb group, so "Stone extraction failed with a balloon and was achieved with a basket; it was then aborted" and
+# "Brushing ... was attempted and was successful; it was then aborted" gave the examination's abort to a completed
+# sub-act. The pronoun keeps the base reading - the examination's failure - and no required reading rests on it (the
+# completion corpus moves nothing without it).
 
 
 def predicate_subject(text: str, clause_start: int, predicate_start: int,
@@ -4321,34 +4287,15 @@ def predicate_subject(text: str, clause_start: int, predicate_start: int,
     completion corpus asks for: the two walks agree on 191 of 222; of the rest, the structural walk alone misread "The
     overtube protecting the meat bolus was removed" and "... passed after the overtube was removed" as the bolus's
     removal, and the attachment walk alone read "The food bolus impacted before presentation was removed" as
-    presentation's. A pronoun is read through the clause before it (``antecedent``) by this same reading, one level -
-    and only where that clause's OWN main predicate states an attempt or a failure (_own_attempt_or_failure; refutation
-    cycle 2, outcome O2, replacing cycle 1's word search over the clause): "Hot snare polypectomy was attempted; it was
-    unsuccessful" names the attempted act, while "Biliary brushings were obtained from the stricture after two attempts;
-    it was then aborted" states a completed act, whatever word its clause holds elsewhere. A singular pronoun (it, this,
-    that) never stands for a plural subject - a plural head noun or a "were" predicate ("Biliary brushings were
-    attempted; it was then aborted"). Otherwise the pronoun stays unresolved: the examination's failure, the base
-    reading."""
+    presentation's. A pronoun subject is returned unresolved (refutation cycle 3): the examination's failure, the
+    base reading; ``antecedent`` is accepted and not read."""
     found = _clauses.subject(text, clause_start, predicate_start)
     if found is None:
         return None
     other = _attachment_subject(text, clause_start, predicate_start)
     if other is not None and other != (found.resolved.start, found.resolved.end, found.head.word):
         return None
-    if not found.pronoun or antecedent is None:
-        return found
-    a0, a1 = antecedent
-    if not (0 <= a0 < a1 <= clause_start):
-        return found
-    verb = _own_attempt_or_failure(text, a0, a1)
-    if verb is None:
-        return found  # the antecedent's own predicate states no attempt or failure: it lends the pronoun nothing
-    prior = predicate_subject(text, a0, verb)
-    if prior is None or prior.pronoun or prior.resolved.word in _clauses.PERSONAL:
-        return found
-    if found.head.word in SINGULAR_PRONOUNS and (prior.head.word.endswith('s') or _PLURAL_VERB.match(text, verb)):
-        return found  # a singular pronoun is never a plural subject
-    return replace(found, resolved=prior.resolved, antecedent=prior, pronoun=False)
+    return found  # a pronoun stays unresolved (refutation cycle 3: see predicate_subject's docstring)
 
 
 def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
@@ -4387,34 +4334,11 @@ def _removal_object(text: str, after: int, limit: int) -> Optional[tuple[int, in
     return toks[head][0], toks[head][1], word
 
 
-# A coordinator right before a verb group of its own ("... and was removed"): _predicate_subject's shared subject.
-_VP_COORDINATOR_BEFORE = _rx(r'(?:,[ \t\n]*)?\b(?:and|but|then|and[ \t\n]+then|yet)[ \t\n]+$')
-# Refutation cycle 2 (acts A2): the shared subject is read only for a second conjunct that is a plain done statement,
-# recognized whole by a closed form (_done_conjunct): its verb group exactly "was" or "were" with at most two adverbs of
-# a closed class before the participle (_SHARED_GROUP), and no modal, negation or condition anywhere in the conjunct
-# (_SHARED_DOUBT), read from its coordinator to the next semicolon or the sentence's end within SHARED_REACH characters
-# after the participle. Any other conjunct shares no subject - the base reading: "..., and could be removed if it does
-# not pass", "... and would be removed only if it failed to pass", "... and can be removed at surgery" (cycle 1 had
-# shared the bolus with each, and the act read performed in the first conjunct's clause). Both classes are closed and
-# fail on the safe side: an unlisted adverb or a longer conjunct only costs the shared reading.
-_SHARED_GROUP = _rx(r'(?:was|were)(?:[ \t\n]+(?:then|also|subsequently|successfully|easily|carefully|completely)){0,2}'
-                    r'[ \t\n]+')
-_SHARED_DOUBT = _rx(r"\b(?:could|would|can|cannot|may|might|should|will|must|shall|not|never|no|nor|neither|if|unless|"
-                    r"once|when)\b|n['’]t\b")
-SHARED_REACH = 200  # characters after the participle a shared conjunct is read in, at most (longer: not recognized)
-
-
-def _done_conjunct(text: str, coordinator: int, group_start: int, verb_start: int, verb_end: int, limit: int) -> bool:
-    """Whether the conjunct from the coordinator at ``coordinator`` through the participle at [verb_start, verb_end) is a
-    plain done statement (see _SHARED_GROUP above). Bounded: SHARED_REACH characters after the participle."""
-    if _SHARED_GROUP.fullmatch(text, group_start, verb_start) is None:
-        return False
-    reach = min(limit, verb_end + SHARED_REACH + 1)
-    semicolon = text.find(';', verb_end, reach)
-    if semicolon < 0 and limit > verb_end + SHARED_REACH:
-        return False  # the conjunct runs on past the reach: not recognized whole
-    stop = semicolon if semicolon >= 0 else limit
-    return _SHARED_DOUBT.search(text, coordinator, stop) is None
+# Refutation cycle 3 (closed C3-7): a verb phrase coordinated with an auxiliary of its own ("... was found at 32 cm and
+# was removed ...") shares no subject - the base reading. Cycle 1 shared the first conjunct's subject, and cycle 2's
+# closed form (_done_conjunct) fixed only the words before the participle: another occasion ("the following day", "at a
+# second endoscopy"), a hedge ("hopefully") or a plan ("after she is stabilized") after it still shared the bolus. No
+# required reading rests on it (the completion corpus moves nothing without it).
 
 
 def _predicate_subject(text: str, cs: int, verb_start: int, verb_end: int, limit: int,
@@ -4426,18 +4350,7 @@ def _predicate_subject(text: str, cs: int, verb_start: int, verb_end: int, limit
     passive ("Meat bolus removed with a Roth net."). The form _removal_subject and _removal_object give."""
     group = _VERB_GROUP.search(text, max(cs, verb_start - 60), verb_start)
     if group is not None and _GROUP_AUXILIARY.search(group.group(0)):
-        shared = _VP_COORDINATOR_BEFORE.search(text, max(cs, group.start() - 16), group.start())
-        if shared is not None and _done_conjunct(text, shared.start(), group.start(), verb_start, verb_end, limit):
-            # refutation cycle 1 (acts F6, admission F2): a verb phrase coordinated with its own auxiliary shares the
-            # first conjunct's subject ("A 25 mm polyp was found in the cecum and was removed piecemeal", "... and was
-            # left in place for surgical resection") - read only where the first conjunct has that one auxiliary, and
-            # (cycle 2, acts A2) only for a plain done conjunct (_done_conjunct); any other keeps the base reading below
-            auxes = list(_GROUP_AUXILIARY.finditer(text, cs, shared.start()))
-            if len(auxes) != 1:
-                return None
-            first = _VERB_GROUP.search(text, max(cs, auxes[0].start() - 40), auxes[0].end() + 1)
-            return _removal_subject(text, cs, first.start() if first is not None else auxes[0].start())
-        return _removal_subject(text, cs, group.start())
+        return _removal_subject(text, cs, group.start())  # its own subject; a coordinated "and was ..." shares none
     coordinated = _COORDINATED_PARTICIPLE_BEFORE.search(text, max(cs, verb_start - 30), verb_start)
     if coordinated is not None:
         # the coordinated participle shares the first conjunct's auxiliary and subject, when that conjunct is the
@@ -4586,7 +4499,10 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         else:
             foreign = bare and antecedent is not None and antecedent.foreign
         sites = own_sites or (antecedent.sites if antecedent is not None and not negated else ())
-        anchored = not negated and (antecedent is not None or _plain_finding(text, clause, s, e))
+        # refutation cycle 3 (closed C3-4): the antecedent's whole SENTENCE is the plain finding, never one clause of it
+        # ("Her prior endoscopy was in 2023; an impacted meat bolus was found at 32 cm." dates it; so does "Her brother
+        # underwent EGD; ..." give it to another person)
+        anchored = not negated and (antecedent is not None or _plain_finding(text, (ss, se), s, e))
         mention = _BolusMention(s, e, head, foreign, negated, sites, anchored)
         out.append(mention)
         if not negated:
@@ -4636,15 +4552,12 @@ def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMent
         span = add(_predicate_subject(text, cs, m.start(), m.end(), se))
         if span is not None and predicates is not None:
             predicates[span] = (m.start(), m.end())
-    for m in REMOVAL_NOMINAL.finditer(text, ss, se):
-        found = _removal_object(text, m.end(), se)
-        if found is not None and _nominal_removal_done(text, found[1], se):
-            add(found)
-    for mention in index[bisect.bisect_left(index_starts, ss):bisect.bisect_left(index_starts, se)]:
-        compound = REMOVAL_COMPOUND.match(text, mention.end)
-        if compound is not None and mention.foreign and not mention.negated \
-                and _nominal_removal_done(text, compound.end(), se):
-            add((mention.start, mention.end, mention.head))  # "Bolus removal was performed"
+    # refutation cycle 3 (closed C3-6): a nominal removal ("Removal of the bolus was performed ...", "Bolus removal was
+    # performed") adds no act - the base reading. Cycle 1's lazy reading and cycle 2's closed form (_NOMINAL_DONE) were
+    # each refuted: the form's instrument slot took "with no success", "with intravenous glucagon" and "with surgical
+    # laparotomy" as devices, so a failed or non-endoscopic removal read done. No required reading rests on it (the
+    # completion corpus moves nothing without it); the bolus's own food word ("Removal of the food bolus ...") reads as
+    # the installed release reads it.
     return sorted(out, key=lambda x: x[1])
 
 
@@ -4652,29 +4565,6 @@ def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMent
 # -ly - so a phrase of them ends where a clause word, a preposition, an auxiliary or a manner adverb begins.
 _CONTENT_WORD = (r'(?!(?:' + '|'.join(sorted(_FUNCTION_WORDS, key=len, reverse=True)) + r')\b)(?![A-Za-z]+ly\b)'
                  r'(?:\d+(?:\.\d+)?|[A-Za-z][\w\'\u2019-]*)')
-
-# Refutation cycle 2 (acts A4): a nominal removal ("Removal of the bolus [with a Roth net]", "Bolus removal") adds a done
-# act only where the rest of its sentence after the removed thing is recognized whole: instrument phrases ("with" or
-# "using" a device named by content words), "was" or "were", adverbs of a closed class, one done word, instrument
-# phrases, and the sentence's end (_NOMINAL_DONE, within NOMINAL_REACH characters). Anything else after the done word -
-# "but was unsuccessful", "but failed", "unsuccessfully", "however ...", "and ..." - and any other predicate ("was
-# impossible", "was deemed unsafe", "was discussed") adds no act: the base reading. Cycle 1's reading ("was performed"
-# found lazily anywhere in the clause; refuted both ways: "Bolus removal was performed but was unsuccessful" READY,
-# "... was then successfully performed with a Roth net" dropped) is replaced. Its classes are closed and fail on the
-# safe side: an unlisted phrasing only costs the removal.
-_NOMINAL_INSTRUMENT = (r'(?:[ \t\n]+(?:with|using)[ \t\n]+(?:(?:a|an|the)[ \t\n]+)?(?:' + _CONTENT_WORD + r'[ \t\n]+){0,3}'
-                       + _CONTENT_WORD + r')')
-_NOMINAL_DONE = _rx(_NOMINAL_INSTRUMENT + r'*[ \t\n]+(?:was|were)(?:[ \t\n]+(?:then|subsequently|successfully|easily|'
-                    r'uneventfully|carefully|technically))*[ \t\n]+(?:performed|completed|accomplished|achieved|done|'
-                    r'carried[ \t\n]+out|undertaken|successful)\b' + _NOMINAL_INSTRUMENT + r'*[ \t\n]*[.!]?[ \t\n]*')
-NOMINAL_REACH = 160  # characters after the removed thing a nominal removal's statement is read in, at most
-
-
-def _nominal_removal_done(text: str, after: int, se: int) -> bool:
-    """Whether the rest of a nominal removal's sentence, from the end of the removed thing at ``after`` to the sentence's
-    end ``se``, states the removal done (_NOMINAL_DONE). Bounded: NOMINAL_REACH characters."""
-    return se - after <= NOMINAL_REACH and _NOMINAL_DONE.fullmatch(text, after, se) is not None
-
 
 # Refutation cycle 2 (acts A3): the clause of an antecedent an anaphor may bind to (_bolus_index) is a plain finding of
 # today, recognized whole: [a findings label] [a determiner] [modifiers] <the bolus phrase's head> [its "of" complement,
@@ -4707,7 +4597,8 @@ _PLAIN_END = _rx(r'[ \t\n]*[.;!]?[ \t\n]*')
 
 def _plain_finding(text: str, clause: tuple[int, int], start: int, end: int) -> bool:
     """Whether the bolus phrase whose head is at [start, end) is the subject of a plain finding of today that is its
-    whole clause (see above): each site an anatomical one (_anatomy_in). Bounded: PLAIN_FINDING_CHARS characters."""
+    whole sentence (see above; ``clause`` is the caller's sentence since refutation cycle 3): each site an anatomical
+    one (_anatomy_in). Bounded: PLAIN_FINDING_CHARS characters."""
     cs, ce = clause
     if not cs <= start < end <= ce or ce - cs > PLAIN_FINDING_CHARS:
         return False
@@ -4861,21 +4752,12 @@ def _stated_dispositions(text: str, ss: int, se: int, cls, lesion_at, *, service
     return out
 
 
-# Refutation cycle 2 (acts A8, rule 6b): an act noun that modifies a head noun of a closed class - "polypectomy defect",
-# "polypectomy specimen", "polypectomy site", "biopsy site", "snare defect" - names what or where an act left; it
-# presupposes the act and states neither its performance nor its failure ("Clip closure of the polypectomy defect
-# failed." is the closure's failure, never the polypectomy's). Pass 3 keeps such a mention only where its reading says
-# the act is not today's - denied ("No biopsy specimens were obtained."), cancelled, planned ("EMR margin marking was
-# performed around the lesion for future resection") or historical - as it reads it today, since dropping that would
-# release; it reads no done, failed or doubted act from it. An unknown head keeps today's reading (the safe side), and
-# so does a verb form ("We biopsied tissue from the antrum") and a head that opens a field of its own ("Biopsy
-# Site: sigmoid colon", "Injection sites: four quadrants ...": a label and its answer, as the injection pattern reads it).
-PRESUPPOSING_HEAD = _rx(r'[ \t]+(?:defect|specimen|site|scar|bed|margin|base|ulcer|area|tissue)s?\b(?![ \t]*:)')
-
-
-def _presupposed(text: str, ms: int, me: int) -> bool:
-    """Whether the act mention at [ms, me) is a noun modifying a PRESUPPOSING_HEAD (rule 6b above)."""
-    return PRESUPPOSING_HEAD.match(text, me) is not None and re.search(r'(?:ed|ing)$', text[ms:me], FLAGS) is None
+# Refutation cycle 3 (closed C3-1): cycle 2's rule 6b - an act noun before a head of a closed class ("polypectomy
+# defect", "biopsy specimens", "biopsy tissue") dropped unless its reading was not today's - is abandoned. It dropped a
+# failed or doubted act written that way ("Biopsy tissue acquisition failed.", "It is unclear whether biopsy specimens
+# were obtained."), the only statement against a listed act, so the listing alone read the code READY. Every such
+# mention keeps its own reading, the base reading; "Clip closure of the polypectomy defect failed." reading against the
+# polypectomy again is a recorded safe-side hold (ACCURACY-RESIDUALS.md, cycle 3).
 
 
 def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -> list[tuple[str, int, int]]:
@@ -6366,8 +6248,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 # ("Procedure: Colonoscopy. ... Hot snare polypectomy ... was attempted, but the polypectomy was
                 # unsuccessful": D|RT-f1, D|RT-f3, D|ARCH-D3a had read that failed attempt as performed, a false READY).
                 # The act keeps its own reading (in doubt: held, never READY on its placement).
+                # Refutation cycle 3 (closed C3-5): a hedge is no stated outcome here - the installed release promotes a
+                # hedged listing ("Colonoscopy with hot snare polypectomy for possible adenoma": the hedge is the
+                # reason's diagnosis), and refusing it had held a very common procedure line the base reads READY.
+                # Attempts, failures, conditions, infinitives and a later failure still keep the act's own reading.
                 if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
-                        and not _outcome_in_doubt(reading.cues) and _on_procedure_line(text, ms, part):
+                        and not _outcome_stated_otherwise(reading.cues) and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS \
                         and fam in performed_families \
@@ -6396,9 +6282,6 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 reading = held_under_denial(text, ms, reading, service_date)
                 if ms in doubtful_at and reading.status not in ('negated', 'cancelled'):
                     continue  # R2a: a doubtful compound stands only as a denial, never as an act done
-                if reading.status not in ('negated', 'cancelled', 'planned', 'historical') \
-                        and _presupposed(text, ms, me):
-                    continue  # rule 6b (refutation cycle 2): "the polypectomy defect", "the biopsy site" state no act
                 combined_denial = part.combined and part.kind == 'report' and reading.status in ('negated', 'cancelled')
                 # R4a (reader-bind round 2, refutation F02): a combined report's prose denial is kept whatever date or
                 # history word its clause carries - read_clause has read its time ("No biopsies were taken on

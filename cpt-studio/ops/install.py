@@ -1977,10 +1977,13 @@ def answer_revisions(encounter, assessment):  # whose standing answers 'member_a
 
 
 def answer_markers(encounter, assessment):  # the shown and current assessments the engine re-made with an answer
+    # refutation cycle 3 (answers C3-2): a proposal the answer excluded ('answered' support), or a documented service's
+    # question the answer closed (Clarification.answer: engine close_service), each marks this revision's write
     shown = {item.pk: item for item in (assessment, getattr(encounter, 'current_assessment', None)) if item is not None}
     return [shown[pk] for pk in sorted(shown, key=str)
             if any(isinstance(proposal.support, dict) and proposal.support.get('answered')
-                   for proposal in shown[pk].proposals.all())]
+                   for proposal in shown[pk].proposals.all())
+            or shown[pk].clarifications.filter(answer__isnull=False).exists()]
 
 
 def undo_hazards():

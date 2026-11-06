@@ -735,22 +735,41 @@ def _mention_readings(text: str, flow: str, ev, kind: str, day: Optional[date], 
 _OBSERVED_ONLY = re.compile(
     r'[ \t\n]*+(?:[A-Z][A-Za-z /&()-]{0,40}:[ \t]*+)?(?:there[ \t\n]++(?:was|were)[ \t\n]++)?(?P<np>[^.;:\n]{1,160}?)[ \t\n]++'
     r'(?:was|were)[ \t\n]++(?:also[ \t\n]++)?(?:found|seen|noted|identified|visualized|visualised|observed|detected|present)'
-    r'(?:[ \t\n]++(?:in|at|within|on|near|along)[ \t\n]++[^.;:,\n]{1,80}?)?[ \t]*+\.?[ \t\n]*+', re.I)
+    r'(?:[ \t\n]++(?:in|at|within|on|near|along)[ \t\n]++(?P<loc>[^.;:,\n]{1,80}?))?[ \t]*+\.?[ \t\n]*+', re.I)
 _REMOVAL_IN_NP = re.compile(r'\b(?:remov\w*|resect\w*|excis\w*|snar\w*|polypectom\w*|retriev\w*|extract\w*|'
                             r'taken|cleared|biops\w*|ablat\w*|cauteri\w*)\b', re.I)
+# refutation cycle 3 (admission C3-1): a locative is a place, never a clause - "in the sigmoid colon and was removed"
+_CLAUSE_IN_LOCATIVE = re.compile(r'\b(?:and|but|or|then|was|were|is|are|be|been|being|had|has|have|which|that|who|'
+                                 r'after|before|when|while|because|though|although|if)\b', re.I)
 
 
 def _observed_only(lesion, text: str) -> bool:
     """Whether every sentence the documented-service reader records ``lesion`` in is an observation of it alone
-    (_OBSERVED_ONLY, its noun phrase naming no removal or sampling): the report says nothing was done to it."""
+    (_OBSERVED_ONLY), naming no removal or sampling anywhere in it and holding no clause in its place phrase: the
+    report says nothing was done to it there."""
     if not lesion.evidence:
         return False
     for ev in lesion.evidence:
         sentence = text[ev.start:ev.end]
         m = _OBSERVED_ONLY.fullmatch(sentence)
-        if m is None or _REMOVAL_IN_NP.search(m.group('np')):
+        if m is None or _REMOVAL_IN_NP.search(sentence) \
+                or (m.group('loc') is not None and _CLAUSE_IN_LOCATIVE.search(m.group('loc'))):
             return False
     return True
+
+
+def _removal_said_elsewhere(text: str, acts) -> bool:
+    """Refutation cycle 3 (admission C3-1 to C3-3): whether any word of a removal or sampling (_REMOVAL_IN_NP) stands in
+    the text outside the passages of ``acts`` - the code's own failed, planned or listed acts. A removal the reader binds
+    to no lesion ("The polyp was removed and retrieved.", "It was removed piecemeal."), states partially ("was partially
+    removed piecemeal") or reads after a place ("seen in the sigmoid colon and was removed") is then still a removal the
+    report states, and "not performed" is not established: the code keeps its hold. Closed and fail-safe: any such word
+    anywhere (a later plan, the impression) costs only the exclusion. One pass over the text."""
+    spans = sorted((ev.start, ev.end) for a in acts for ev in a.evidence)
+    for m in _REMOVAL_IN_NP.finditer(text):
+        if not any(s <= m.start() and m.end() <= e for s, e in spans):
+            return True
+    return False
 
 
 def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Reading], text: str,
@@ -803,8 +822,8 @@ def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Rea
     # hold. Closed: an unrecognised sentence can only cost a hold.
     if kinds & gi_services.REMOVAL_KINDS and (not service.lesions or any(
             lesion.disposition not in gi_services.NOT_REMOVED and not _observed_only(lesion, text)
-            for lesion in service.lesions)):
-        return ()
+            for lesion in service.lesions) or _removal_said_elsewhere(text, acts)):
+        return ()  # refutation cycle 3: and no removal is said anywhere but in the code's own acts' passages
     # the reader's own reflowed view, its sentences and its act mentions: one index per document, date and pages
     # (_reader_index) - never a rescan of the text per code
     flow, sentences, starts, mentions, mention_starts = _reader_index(text, day, tuple(pages or ()))
@@ -1589,7 +1608,6 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
-    documented = found  # the documented match before any hold: what the code's units count against (cycle 2)
     unmatched = found is None  # the inventory documents no service of the code's family (found is reset below too)
     if found is None and READ_DOCUMENTED_SERVICES and inventory is not None and outcome.state == 'not_performed':
         # No documented service of the code's family: the routing-era reading of its own passage decided alone. The
@@ -1689,39 +1707,11 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
     row = reference.lookup(code, day if dated else None)
-    return replace(selection, units=_supported_units(selection, documented, text),
-                   evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
-                                          (row if dated else reference.lookup(code, day)).pfs))
-
-
-def _supported_units(selection: '_Selection', found: Optional[reconcile.Match], text: str) -> int:
-    """The units a code the documented service supports accounts for (refutation cycle 2, the owner session's units
-    defect): an entry of the proposal provider's group whose every exact passage lies on an act of the code's kinds that
-    the documented-service reader does not read as done, and none on a matched act, is no unit of it. "A 7 mm polyp in
-    the transverse colon was removed with a cold snare and retrieved." and "Hot snare polypectomy of a 12 mm pedunculated
-    polyp ... was attempted, but ... the polyp was left in place.", each listed as 45385, are one unit (the another-act
-    release had read the code READY with two); two done polypectomies listed twice stay two. Never more than the group,
-    never fewer than one. An entry with no exact passage, or with one on nothing the reader reads, keeps its unit (an
-    empty test proves nothing), and a code the documented service does not support keeps the group's size (it is held
-    or excluded, never READY on its units). Another proposer's passages (``extra``) add no unit, as before. Bounded: one
-    pass over the group's passages against the service's acts' evidence."""
-    if found is None or found.state not in checks.POSITIVE or len(selection.group) < 2 or not found.acts:
-        return selection.units
-    matched_ids = {a.id for a in found.acts}
-    matched = [ev for a in found.acts for ev in a.evidence]
-    profile = reconcile.catalogue.code_profile(selection.code)
-    kinds = set(profile.covers) if profile is not None else {a.kind for a in found.acts}
-    undone = [ev for a in found.service.acts if a.id not in matched_ids and a.status != 'performed' and a.kind in kinds
-              for ev in a.evidence]
-
-    def on(span, evidence) -> bool:
-        return any(span.start < ev.end and ev.start < span.end for ev in evidence)
-    count = 0
-    for item in selection.group:
-        spans = [span for span in item.evidence if not checks._evidence_problem(span, text)]
-        if not spans or any(on(span, matched) for span in spans) or not all(on(span, undone) for span in spans):
-            count += 1
-    return max(1, min(count, selection.units))
+    # refutation cycle 3 (admission C3-4): units are the group's, as the installed release counts them, with its
+    # units.duplicate prompt; cycle 2's _supported_units dropped a unit wherever the reader read an act anything but
+    # done - a modifier misread as "historical" ("across the prior sphincterotomy") silently removed a placed stent
+    return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note,
+                                                     placed, (row if dated else reference.lookup(code, day)).pfs))
 
 
 def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory,
@@ -5311,6 +5301,12 @@ class _MemberAnswers:
         away = {p.key for p in proposals if getattr(views.get(p.key), 'reason', '') == review_view.DETAIL_UNAVAILABLE}
         if not away:
             return tuple(proposals)
+        if all(not answer.question for answer in answer_of.values()):
+            # refutation cycle 3 (answers C3-1): only answers recorded before the binding - each excludes its own code,
+            # as the installed release's read-time overlay did, and leaves every other code's checks, and so its
+            # fingerprint and any decision on it, as they were: a re-assessment by this release (the install's reassess
+            # phase, a later recompute) never reopens an approved record through such an answer
+            return tuple(self._excluded(p, views.get(p.key), answer_of) if p.key in away else p for p in proposals)
         # the CMS endoscopic-family check of every other code reads the codes still in review (the overlay's EFFECTIVE
         # set): engine._encounter's active rows without the codes a member's answer excluded
         rows = endoscopic_rows((s.code, s.evaluation.reference.pfs) for key, s in by_key.items()
@@ -5403,9 +5399,13 @@ class _MemberAnswers:
         read, with why (questions.bind's reasons; NOT_APPLIED for one bound that excluded nothing)."""
         applied: dict = {}
         for answer, scope, key in self.applied:
+            # 'asked' (refutation cycle 3, answers C3-4): the question as these inputs ask it without any answer - what
+            # a later answer saved to the closed question's row binds to (answers.save_details), even where the answer
+            # read was recorded before the binding ('question' '')
             entry = applied.setdefault(answer.answer_id, {
                 'answer': answer.answer_id, 'scope': scope, 'code': answer.code, 'family': answer.family,
-                'fact': answer.fact, 'value': answer.value, 'question': answer.question, 'proposals': []})
+                'fact': answer.fact, 'value': answer.value, 'question': answer.question, 'proposals': [],
+                'asked': self.asked.get(questions.member_key(answer.code, answer.family, answer.fact), '')})
             if key and key not in entry['proposals']:
                 entry['proposals'].append(key)
         rest = [answer for answer in self.answers if answer.answer_id not in applied]
