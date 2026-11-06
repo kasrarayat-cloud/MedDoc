@@ -5225,10 +5225,11 @@ class _MemberAnswers:
     """The revision's standing member answers, read as an input (``assess(member_answers=...)``).
 
     Each answer is bound to the question it was given to - its (code, family, fact) asked, in the assessment these same
-    inputs make WITHOUT any answer, with the fingerprint it carries (studio.validation.questions.bind) - and is read
-    there only. An answer that answers no question asked now, or a question asked differently, or that was recorded
-    before answers carried a fingerprint, is kept as an earlier answer (completeness['member_answers']['earlier'], with
-    why) and changes nothing.
+    inputs make WITHOUT any answer, with the fingerprint it carries, or by that key alone for an answer recorded before
+    answers carried a fingerprint, as the installed release bound it (studio.validation.questions.bind; refutation
+    cycle 2, answers W2) - and is read there only. An answer that answers no question asked now, or a question asked
+    differently, is kept as an earlier answer (completeness['member_answers']['earlier'], with why) and changes
+    nothing.
 
     Read, an answer ("Not documented" or "Cannot confirm") excludes the code whose question it answers - and nothing
     else - by the review overlay's one rule (studio.validation.review_view: the first open question of the code a
@@ -5248,14 +5249,12 @@ class _MemberAnswers:
             if not isinstance(answer, questions.MemberAnswerInput):
                 raise ValueError(f'A member answer must be a MemberAnswerInput, not {type(answer).__name__}.')
             if not all(isinstance(getattr(answer, name), str)
-                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id', 'worded')):
-                raise ValueError('A member answer names its code, family, fact, value, question, id and wording as text.')
+                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id')):
+                raise ValueError('A member answer names its code, family, fact, value, question and id as text.')
             answers.append(answer)
         self.answers = sorted(answers, key=lambda a: (a.answer_id, a.code, a.family, a.fact, a.value, a.question))
         self.reading: dict = {}  # the documented-service reading's JSON form, as Assessment.services records it
         self.asked: dict = {}  # member key -> fingerprint of every question these inputs ask without any answer
-        self.asked_words: dict = {}  # member key -> its earlier form's wording (refutation cycle 1)
-        self.given_words = {a.answer_id: a.worded for a in self.answers if a.worded}
         self.applied: list = []  # (answer, scope, proposal key or '')
         self.closed = 0  # the questions an applied answer answers: kept, answered, never open
 
@@ -5270,7 +5269,6 @@ class _MemberAnswers:
                 pairs.append((questions.member_key(p.code, family, spec.fact),
                               questions.instance(spec.scope, family, spec.fact, p.code, spec.question, spec.reason,
                                                  shown)))
-        self.asked_words.update(questions.group_wording(pairs))
         return questions.group(pairs)
 
     def apply(self, proposals: Sequence[ProposalAssessment], by_key: Mapping[str, '_Selection'], services,
@@ -5282,7 +5280,7 @@ class _MemberAnswers:
 
         asked = self._proposal_questions(proposals)
         self.asked.update(asked)
-        bound, _ = questions.bind([a for a in self.answers if a.code], asked, self.asked_words, self.given_words)
+        bound, _ = questions.bind([a for a in self.answers if a.code], asked)
         answer_of: dict = {}
         for answer in bound:
             answer_of.setdefault(questions.member_key(answer.code, answer.family, answer.fact), answer)
@@ -5363,8 +5361,7 @@ class _MemberAnswers:
                  for spec in specs if spec.scope == 'service' and not spec.proposal_key]
         asked = questions.group(pairs)
         self.asked.update(asked)
-        self.asked_words.update(questions.group_wording(pairs))
-        bound, _ = questions.bind([a for a in self.answers if not a.code], asked, self.asked_words, self.given_words)
+        bound, _ = questions.bind([a for a in self.answers if not a.code], asked)
         counts = Counter(key for key, _ in pairs)
         done = set()
         for answer in bound:
@@ -5395,7 +5392,7 @@ class _MemberAnswers:
             if key and key not in entry['proposals']:
                 entry['proposals'].append(key)
         rest = [answer for answer in self.answers if answer.answer_id not in applied]
-        bound, earlier = questions.bind(rest, self.asked, self.asked_words, self.given_words)
+        bound, earlier = questions.bind(rest, self.asked)
         why = {id(answer): reason for answer, reason in earlier}
         listed = [{'answer': a.answer_id, 'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value,
                    'why': why.get(id(a), NOT_APPLIED)}

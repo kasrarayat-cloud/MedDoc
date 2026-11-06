@@ -968,9 +968,11 @@ one save for every row of "A few details needed" (owner or reviewer; 403 otherwi
   added to the documentation by the physician.", "Choose one of the answers offered for this detail.", ...); 409 while
   processing runs or for a detail no longer asked.
 
-**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer (the detail is asked again);
-201 `{"revoked": "<answer id>"}`; 404 for another document's answer; 409 while processing runs or when already
-withdrawn. A later answer to the same detail withdraws the earlier one itself.
+**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer: the detail is asked again, at
+once for an answer only the review overlay applied, and once the recompute the withdrawal queues has run for one the
+assessment itself read (until then every surface reads that assessment, the answer still in effect: the recorded
+limitation under "Completion repair (2026-11-06)"); 201 `{"revoked": "<answer id>"}`; 404 for another document's answer;
+409 while processing runs or when already withdrawn. A later answer to the same detail withdraws the earlier one itself.
 
 **Blocks** (built by `answers.details_needed(encounter, assessment, view)`, `answers.service_date_block(encounter)`,
 `progress.encounter_progress(encounter, now)` and `progress.checks_summary(encounter)` with DESIGN section 7's keys):
@@ -1246,6 +1248,13 @@ tests are `tests/test_completion_answers.py` unless named.
   and no standing answer moves them), so the queue never says `question` of one a member answered; the operator view's
   `open_clarifications` stays the stored rows' count. The code reads exactly as before on the customer page
   (`excluded`, "A needed detail is not documented"), in the reports and in readiness (resolved, needing no decision).
+  **A withdrawal takes effect through its recompute** (refutation cycle 2, answers W1, W5, W6; recorded as a
+  limitation, not hidden): an answer the assessment itself read stays in effect on every surface - the stored exclusion
+  and its reason, the closed question, readiness, coding completeness, the queue and the reports - until the recompute
+  the withdrawal queued has run, and while that recompute is queued or stopped the page shows it as a job with Stop and
+  Resume; nothing asks the question again before it has run. One source of truth: cycle 1's read-time reopen changed the
+  overlay's row alone, so the page asked the question again while five readers of the stored row still read the code
+  excluded "by a documentation check" behind a blocker naming actions it did not offer.
 - **Its cross-code effects are the overlay's, read by the engine.** The code still holds every code its presence held -
   a diagnostic base beside it keeps its `base_included` question, an E/M its separate-visit question (session decision
   (e), refutation round 2 L7-01: a member's answer never releases a code; only a reviewer's decision does). A
@@ -1258,19 +1267,25 @@ tests are `tests/test_completion_answers.py` unless named.
   `cpt-studio-question@1` (`studio/validation/questions.py`), every instance of that (code, family, fact) together. A
   later assessment, the engine or the read-time overlay, applies it only where it asks the same question. Any other
   standing answer is kept and listed in `earlier_answers` (`[{answer_id, fact, family_label, prompt, affects, value,
-  label, by, at, why, why_text}]`, `why` one of `no_longer_asked`, `asked_differently`, `earlier_form`), never
-  applied, and can be withdrawn alone. **The rule for answers stored before this release** (no fingerprint; refutation
-  cycle 1 of the integrated diff, 2026-11-06): they were given to the earlier form of the question, a fixed prompt with
-  no passage - the words of the question their own assessment asked (scope, family, fact, code, CPT Studio's question
-  and reason; `questions.wording`, form `cpt-studio-question@0`). Such an answer binds where the question asked now has
-  exactly those words, and is listed with `why` `earlier_form` where it is asked in other words (`no_longer_asked` where
-  it is not asked at all); it is never applied to a question asked in other words. The first form of this rule never
-  applied any of them, and the install's prediction measured what that does to a live record nobody touches: on the
-  read-only restore of 2026-11-06T15:12Z, the state recompute alone turned three reviewed encounters (two of the owner's,
-  one agent's) back to needing details, because the questions their answers settled reopened. All 14 stored answers had
-  been given to questions their current assessments still ask word for word. With this rule the recompute changes no
-  encounter, and an encounter re-assessed by this release reads its stored answers against the questions the new reading
-  asks: 39f0ac49's six answers are `no_longer_asked` once its labelled paragraphs are read as today's (its codes READY).
+  label, by, at, why, why_text}]`, `why` one of `no_longer_asked`, `asked_differently`), never applied, and can be
+  withdrawn alone. An answer saved to a question the assessment closed with another member's answer that no longer
+  stands (a value superseded while the recompute that reads it is queued or stopped) answers that question: it is shown
+  on its row, never listed as no longer asked, and the code reads as stored until that recompute has run.
+  **The rule for answers stored before this release** (no fingerprint; refutation cycle 2 of the integrated diff,
+  2026-11-06, answers W2 and W4): they were given to the installed release's fixed prompt for their (code, family,
+  fact) - no question, reason or passage reached the member - and that release applied each one wherever an assessment
+  of its revision asked a question with that key. They bind by that key, as it did, in the engine and in the read-time
+  overlay alike: through a re-assessment by this release (the installer's reassess phase, the recompute after the
+  member's next answer) and for a question only the overlay asks (a reinstated procedure's separate-visit question).
+  Two earlier forms of this rule are withdrawn. The first (never applied) turned three reviewed encounters of the
+  install's read-only prediction (2026-11-06T15:12Z) back to needing details at the state recompute alone. The second
+  (refutation cycle 1: bind where the question asked now has the words of the one the answer's own assessment asked,
+  `why` `earlier_form` otherwise) keyed on CPT Studio's question and reason, which that member never saw and this
+  release words anew for the two commonest facts: the first re-assessment by this release turned a settled answer back
+  into an open question and told the member the question was "now asked in other words" beside an unchanged prompt.
+  Measured read-only on this release's tree against the throwaway restore that prediction uses: all 14 stored answers
+  bind and the derived state of every encounter equals its stored state; 39f0ac49's six answers are `no_longer_asked`
+  once it is re-assessed with them (its codes READY, no question asked with their keys).
 - **Migration `0013_completion_answer_binding`** adds `MemberAnswer.question` (`db_default` '') and
   `Clarification.answer` (a nullable foreign key): additive (`ops/install.py migration_verdict` safe), so a row the
   previous release inserts stays valid. A rollback past this release leaves assessments whose answered codes carry

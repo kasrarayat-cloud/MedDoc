@@ -18,7 +18,9 @@ the answers a member saves, and the date of service as the document and the memb
   recorded runs, the bounded assess child, nothing sent), which reads the answers as an input (engine._MemberAnswers).
   Until it has run, the review overlay applies them at read time. A repeated identical save makes nothing.
 - ``revoke_answer(encounter, user, answer_id)``: withdraws one answer - with it, the same question's answer for the
-  row's other codes - and queues the recompute the same way.
+  row's other codes - and queues the recompute the same way. An answer the assessment itself read stays in effect on
+  every surface until that recompute has run (refutation cycle 2, answers W1: one source of truth); the recompute is
+  a visible job, with Stop and Resume.
 - ``saved_answers(assessment)``: the standing answers of the assessment's revision.
 - ``earlier_answers(encounter, assessment)``: the standing answers no question asked now takes, each with why.
 - ``service_date_block(encounter)``: the date of service as the document and the member state it, side by side.
@@ -27,8 +29,10 @@ An answer binds to the question it answered (completion repair 2026-11-06, U11):
 of, its revision, and the fingerprint of that question as the row showed it - CPT Studio's question and reason and the
 passages it concerns (studio.validation.questions) - never to a clarification row or a proposal key, which every
 re-assessment makes anew. A later assessment applies it only where it asks the same question; an answer to a question
-no longer asked, or asked differently - or given before rows showed their passages - is kept and listed as an earlier
-answer, never applied. Every sentence a member reads here is from the fixed tables below: no stored question, reason or
+no longer asked, or asked differently, is kept and listed as an earlier answer, never applied. An answer given before
+rows showed their passages (MemberAnswer.question '') was given to the installed release's fixed prompt for its code,
+family and fact, and binds by them, as that release bound it (refutation cycle 2, answers W2 and W4). Every sentence a
+member reads here is from the fixed tables below: no stored question, reason or
 note text (engine prose, which may quote anything) is passed through; the document's own words are quoted only as
 exact slices of its text.
 """
@@ -124,9 +128,6 @@ EARLIER_WHY = {
     questions.NO_LONGER_ASKED: 'This question is no longer asked, so this answer is not applied.',
     questions.ASKED_DIFFERENTLY: ('This question is now asked differently, so this answer is not applied; answer the '
                                   'question as it is asked now.'),
-    questions.EARLIER_FORM: ('This answer was saved before each question showed the passages it concerns, and the '
-                             'question is now asked in other words, so it is not applied; answer the question as it is '
-                             'asked now.'),
     'not_applied': 'This answer is not applied to the current results.',
 }
 STATED_IN_DOCUMENT = '{value} (stated in the document)'
@@ -893,9 +894,9 @@ def revoke_answer(encounter, user, answer_id):
 
 def earlier_answers(encounter, assessment) -> list[dict]:
     """The standing answers of the current revision that no question the live assessment asks now takes (completion
-    repair 2026-11-06, U11): answered to a question no longer asked, or asked differently, or saved before questions
-    showed their passages. Kept, never applied, each listed with who gave it, when, the code it was given for and why it
-    is not applied (EARLIER_WHY), and withdrawable. Every sentence is from the fixed tables above."""
+    repair 2026-11-06, U11): answered to a question no longer asked, or asked differently. Kept, never applied, each
+    listed with who gave it, when, the code it was given for and why it is not applied (EARLIER_WHY), and withdrawable.
+    Every sentence is from the fixed tables above."""
     out = []
     for answer, why in _states(encounter, assessment)[2]:
         subject = answer.fact.split(':', 1)[1] if answer.fact.startswith('conflict:') else ''
