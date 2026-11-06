@@ -426,6 +426,15 @@ class SelfRefutationTests(SimpleTestCase):
         quote = 'Fine-needle aspiration of the pancreatic head cyst was performed.'
         self.assertEqual(proposal(run(text, corti(('43242', span(text, quote)))), '43242').status, 'ready')
 
+    def test_n1_another_familys_service_named_inside_the_paragraph(self):
+        # the derived layout reads the paragraph as the label's procedure section: another service named there would
+        # read as performed too, so the paragraph is held (its frame of today's steps apart)
+        for later in ('Sigmoidoscopy showed diverticula.', 'An EGD was also performed.', 'FS was not needed.'):
+            with self.subTest(later):
+                text = colonoscopy(COL.rstrip('\n') + ' ' + later + '\n')
+                self.assertHeldBy(text, 'N1')
+                self.assertNotIn('performed', {f.family: f.status for f in detect.route(text, DAY).findings}.values())
+
     def test_p2_a_frame_naming_a_procedure_whose_paragraph_is_not_released(self):
         # "After the upper endoscopy," is today's sequence only beside today's EGD paragraph: with that paragraph held
         # (N1, another place), the colonoscopy's frame lends the EGD nothing and is held too

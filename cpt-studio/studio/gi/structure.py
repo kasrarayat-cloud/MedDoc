@@ -55,9 +55,10 @@ base reading (the Indications' hold), which is the safe side.
   another agent (Dr., a person noun, "by" anything but a landmark, per, according to, reportedly) or another source (a
   report, a record, a chart, a copy, documentation); every sentence or clause whose subject is the examination ("This
   examination", "The procedure", a service name; "It" at a sentence's start) says only what an allow-list of today's
-  predicates says (normal, complete, well tolerated, performed under sedation, a future form, ...); and a later sentence
+  predicates says (normal, complete, well tolerated, performed under sedation, a future form, ...); a later sentence
   naming the examination anywhere else ("The patient had this colonoscopy when she was 50.") holds, unless it says the
-  patient tolerated it or that it had no complications. A future or plan word about a sub-act does not block ("not
+  patient tolerated it or that it had no complications; and no other family's service is named in the paragraph outside
+  its frame of today's steps (the derived layout would read it as performed too). A future or plan word about a sub-act does not block ("not
   resected today; it will be referred for endoscopic mucosal resection").
 - N2, no later sentence that names the paragraph's family, an examination noun or "above" states another time (outside
   a plan section or a future form), place, agent or source ("Note: the colonoscopy above was performed in 2025 and is
@@ -575,10 +576,20 @@ def _first_sentence_ok(text: str, c: _Candidate, ix: _Index) -> bool:
     return m is not None and _instrument_family(m.group('instrument')) == c.family
 
 
-def _paragraph_holds(text: str, c: _Candidate, ix: _Index) -> bool:
-    """N1: another time, place, agent or source anywhere in the paragraph, or an examination subject saying what the
-    allow-list does not. Linear in the paragraph."""
+def _paragraph_holds(text: str, c: _Candidate, ix: _Index, frames: tuple = ()) -> bool:
+    """N1: another time, place, agent or source anywhere in the paragraph, an examination subject saying what the
+    allow-list does not, or another family's service named in it outside its frame of today's steps (the derived layout
+    reads the paragraph as the label's procedure section, which would read that service as performed too: "Sigmoidoscopy
+    showed diverticula." inside a colonoscopy paragraph). Linear in the paragraph."""
     if _signals(text, c.start, c.end):
+        return True
+    for family, pattern in cues.SERVICE_PATTERNS:
+        if family == c.family:
+            continue
+        for m in pattern.finditer(text, c.body, c.end):
+            if not any(lo <= m.start() < hi for lo, hi in frames):
+                return True
+    if c.family != 'gi.flex_sig' and cues.FS_ABBREVIATION.search(text, c.body, c.end):
         return True
     lo = bisect.bisect_left(ix.sentence_starts, c.body)
     first = bisect.bisect_right(ix.sentence_starts, c.body) - 1
@@ -799,7 +810,7 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
                 section.kind == 'indication' and (_heading_has_content(text, section) or (follows and previous_released))):
             why = f'P4: it stands in a {section.kind} section' if section.kind != 'indication' \
                 else 'P4: an empty indication heading introduces it'
-        elif _paragraph_holds(text, c, ix):
+        elif _paragraph_holds(text, c, ix, frames):
             why = 'N1: the paragraph states another time, place, agent or source'
         elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
                 or _later_occasion(text, c, frames):
