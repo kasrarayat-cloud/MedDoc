@@ -3477,3 +3477,67 @@ The way there is to repair the shared application logic, never individual docume
   - concurrency one, finite deadlines, Stop and duplicate prevention;
   - unknown outcomes reconciled before any resubmission;
   - no identical failing paid attempt repeated.
+
+### Stage 1 (2026-11-06): the failures, established (C1)
+
+The full trace is `docs/cpt-harness/completion-20261106/stage1-trace.md`.
+
+**Reproduced.** The four retained cases (39f0ac49, d44a77b3, e888f9ce and the guard 88d9db32) were recomputed in
+memory from their recorded inputs, on the installed code, against a throwaway copy of a read-only dump. Each result is
+identical to the stored assessment, measured twice and independently. Re-assessing through the pipeline is no
+reproduction: the assess job's key returns the stored assessment.
+
+**The causes, each measured:**
+- **U2: section kind.** An inline service label with text after its colon opens no section (`sections._heading`:398,
+  :405, :409-410; :752). Indications therefore runs to the Impression. Routing then holds every performance cue there
+  (detect.py:2162-2164), reads no extent, and the services reader folds that doubt over its own performed reading
+  (services.py:5943-5959).
+- **U1: the bolus.** There are two causes:
+  - the vocabulary: "the bolus" names no act (services.py:252);
+  - the binding: with no part family, no site in the sentence and two families present, the act is dropped
+    (services.py:3907-3940, :5118-5134).
+  The listing reason then asserts non-performance (engine.py:719-722, :3382; never reinstatable, :3935).
+- **U3 and U4: one repair, not two.**
+  - U3: a bare `(was|were) unsuccessful` in `INCOMPLETE_CLAUSE` (cues.py:470) is read as the examination's
+    incompleteness for any subject (detect.py:5856-5913, 6492, 7724-7729).
+  - U4: a title with an aside is silent (cues.py:727), and an instrument's own course is never a family mention
+    (detect.py:115-122).
+  - Measured: removing U3 alone turns e888f9ce PLANNED (detect.py:6502).
+- **U6: placement overwrites outcome.** A failed act sharing the Procedure line is promoted to performed
+  (services.py:5181-5183): a false READY.
+- **F1: F-NEG S, a kept rule.** It reads three of the earlier repair's counterexamples READY where base and main held
+  them (services.py:542-546, :857-859, :2724).
+- **U9 to U11:**
+  - "Not documented" and "does not establish" are said from absence: engine.py:549, :719-722, :3381-3382;
+    reconcile.py:236-238; checks.py:579, :705, :743; customer_api.py:456-467; review_view.py:455-458.
+  - Every proposal question offers only excluding answers (answers.py:475-478, :648-660).
+  - No answer recomputes anything (answers.py:705-711; the engine has no member-answer input).
+  - Answers bind only to the revision and (code, family, fact), so they are reused for a changed assessment
+    (models.py:430-446; answers.py:347-362; review_view.py:182-190).
+- **U12: one fact, three readers.** Section kind, act status, date binding, performer, extent, lesion identity and
+  segmentation are each computed twice or three times. For each, a measured input shows the readers disagreeing. The
+  services reader copies routing's status, and the admission then counts routing again as an independent second
+  opinion.
+
+**Pinned.** `tests/fixtures/gi4/completion/corpus.json` holds 611 entries over 532 synthetic texts, measured by
+`ops.gi4.completion` and checked by `tests/test_completion_corpus.py`:
+- group A: every withdrawn rule's counterexamples, measured on that rule's own trees;
+- group B: the base's false READYs;
+- group C: the base's false holds;
+- group D: the stage-1 minimal pairs and the two fictional walk documents.
+
+Two invariants:
+- every entry reads as pinned, and a movement is re-pinned only beside its declaration;
+- no entry is a false READY unless it already was one on `fd8040d71e44`.
+
+The guard is mutation-proved: restoring the bare "bolus" fails 82 subtests.
+
+**C5's confirming answer, given decision D7 (reviewer confirmation off, kept by the owner's instruction of
+2026-11-03):**
+- **The document does not state the fact (genuine ambiguity):** the confirming answer is the physician's addendum
+  stating it. That makes a new revision, which is recomputed.
+- **A context fact (setting, patient status, billing context, a date):** the confirming answer is its choice or date
+  control.
+- **The document states the fact but a reader misses it:** that is a reader defect, repaired at the reader. Item 5
+  forbids both an addendum that repeats existing documentation and a blanket override.
+- **Checklist 4.6 (a human-override confirmation)** stays the owner's decision.

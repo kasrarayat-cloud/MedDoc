@@ -224,25 +224,28 @@ the progress log below.
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
 | candidate | none yet: branch `fix/cpt-studio-completion-20261106` from main `eb7c9a77` |
-| current stage | 1, establish the exact remaining failures: IN PROGRESS |
-| next action | reproduce 39f0ac49, d44a77b3 and e888f9ce offline from a read-only dump; recover the withdrawn fixes' counterexamples |
+| current stage | 2 to 5, the repair: IN PROGRESS (stage 1 PASS, VERIFIED OFFLINE, 2026-11-06T08:30Z) |
+| next action | the repair's design over the stage-1 fact map, then bounded implementation in isolated worktrees, each measured on `tests/fixtures/gi4/completion/corpus.json` and the four retained cases before it is relied on |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
 | id | defect | evidence | status |
 |---|---|---|---|
-| U1 | Astra's and Fable's explicit 43247 for a food-bolus removal ("the bolus was removed") is listed as not done and is not reinstatable | d44a77b3 (h3a), 39f0ac49; `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md` "What did not reach review" | OPEN |
-| U2 | procedure narratives after inline labels are read as part of the Indications, so the services read uncertain and the codes are held for performed_status and extent | d44a77b3 and 39f0ac49 routing mentions "section: indication"; `docs/cpt-harness/repair3-20261105/stage1-trace-39f0ac49.md` | OPEN |
-| U3 | routing reads a failed polypectomy attempt as the colonoscopy's own status (incomplete) | e888f9ce (h3b) `routing.gi.colonoscopy.status` | OPEN |
-| U4 | a report title read with no performance evidence of its own | h2b, e888f9ce: "Colonoscopy" uncertain | OPEN |
-| U5 | a completed marking for future localization is read as future (F-TIME R dropped) | HARNESS.md "refutation cycle 2"; repair 2 round 6 | OPEN |
-| U6 | the base's own false READYs | "The polyp was left in place." under a procedure line naming the polypectomy; "At the community hospital, ..."; "the snare would not close"; C3-4-4, 5, 8, 10, 11 and 12 (HARNESS.md cycles 3 and 4) | OPEN |
-| U7 | recorded false holds on the safe side | HARNESS.md cycles 2 to 4 (among them L4-2 case 1 and C2-4-3) | OPEN |
-| U8 | two recorded asymmetries | L4-4; Corti's own selection on a not-done act stays held | OPEN |
-| U9 | a listing reason asserts "not documented as done" from a missing parser rule | U1's reason text | OPEN |
-| U10 | questions whose only offered answers exclude the code | 39f0ac49 (stage-1 trace); repair-3 item 7 | OPEN |
-| U11 | answering a clarification, and the recomputation after it, never verified live | the fd8040d71e44 record, "Not walked here" | OPEN |
-| U12 | routing, the documented-service reader and the admission can disagree about one fact | U2 and U3 (routing against the services) | OPEN |
+| U1 | Astra's and Fable's explicit 43247 for a food-bolus removal ("the bolus was removed") is listed as not done and is not reinstatable. Two causes: the act's vocabulary (services.py:252) and its binding with no part family and no site while two families are present (services.py:3907-3940, :5118-5134) | d44a77b3 (h3a), 39f0ac49; stage-1 trace; corpus D\|AB-B1 to B5, D\|CASE-d44a77b3 | OPEN |
+| U2 | procedure narratives after inline labels are read as part of the Indications (sections.py:398, :405, :409-410, :752; detect.py:2162-2164), and the services reader folds that doubt over its own performed reading (services.py:5943-5959) | d44a77b3 and 39f0ac49; stage-1 trace; corpus D\|ARCH-D1a | OPEN |
+| U3 | a failed sub-act's "was unsuccessful" or "could not be passed" is read as the examination's incompleteness (cues.py:450-451, :470; detect.py:5856-5913, :6492, :7724-7729); an EGD's extent is rewritten too (detect.py:6020-6022) | e888f9ce (h3b); corpus WRONG FLAG entries (e888f9ce, a1, a2, d1, d2, D2a) | OPEN |
+| U4 | a report title with an aside is silent (cues.py:727), and an instrument's own course is never a family mention (detect.py:115-122). U3 masks it: repairing U3 alone turns e888f9ce PLANNED (detect.py:6502), so U3 and U4 are one repair | e888f9ce; corpus D\|ARCH-D9, D\|RT-c1, D\|ARCH-D1b | OPEN |
+| U5 | a completed marking for future localization is read as future (F-TIME R dropped); routing reads d44a77b3's tattoo "planned: future" | HARNESS.md "refutation cycle 2"; repair 2 round 6; corpus group A F-TIME R (35) | OPEN |
+| U6 | false READYs: the base's 53 (with "The polyp was left in place.", C3-4-4, 5, 8, 10, 11 and 12); a failed act sharing the Procedure line promoted to performed (services.py:5181-5183); F1, F-NEG S reading three of the earlier repair's counterexamples READY (services.py:542-546, :857-859, :2724); F5's "It is unknown whether ..." | corpus groups B and A (F5), D\|RT-f1, f3, D\|ARCH-D3a | OPEN |
+| U7 | false holds: the base's 66, the competition holds F4 (4), and the stage-1 minimal pairs (11) | corpus groups C, A (F4) and D | OPEN |
+| U8 | asymmetries: a participant's code for a doubted act is listed where Corti's is held (`engine._in_doubt`); every participant alternative is non-reinstatable (engine.py:3935) | L4-4; stage-1 trace | OPEN |
+| U9 | "not documented" and "does not establish" said from absence, not a passage: engine.py:549, :719-722, :3381-3382; reconcile.py:236-238; checks.py:579, :705, :743; customer_api.py:456-467; review_view.py:455-458 (the summary contradicts the reader's own performed biopsy) | stage-1 trace (c1-questions) | OPEN |
+| U10 | every proposal question offers only excluding answers (answers.py:475-478, :648-660); a held code's only action is Reject (review.py:431-437) | 39f0ac49: three codes excluded, reviewed report with no billable code | OPEN |
+| U11 | no answer recomputes the assessment (answers.py:705-711; the engine has no member-answer input); stored questions stay open while the customer page says answered (serializers.py:155-156); answers bind only to (revision, code, family, fact), so 39f0ac49's engine@7 answers exclude engine@8's codes (models.py:430-446; answers.py:347-362) | stage-1 trace (c1-questions) | OPEN |
+| U12 | one fact, three readers: section kind, act status (copied, then counted again as a second opinion), date binding, performer, extent, lesion, segmentation; each with a measured disagreement | stage-1 trace, "One fact, three readers"; corpus group D | OPEN |
+| U13 | adjacent: the interventions fact lists a failed attempt's "hot snare" (detect.py:5921-5935); "right and left colon" reads as the descending colon (services.py:102, :3713); "the polyp was left in place" leaves the disposition unknown (services.py:6004-6018) | e888f9ce; stage-1 trace | OPEN |
+| Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
+| Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
 | L2 | NCCI PTP unconnected; D3 to D5 open | External dependencies above | LIMITATION, reported separately |
 
@@ -250,11 +253,11 @@ the progress log below.
 
 | | Item | Status | Kind | Revision | Evidence | Next |
 |---|---|---|---|---|---|---|
-| [ ] | 1. Establish the exact remaining failures (C1) | IN PROGRESS | - | `fd8040d71e44`; main `eb7c9a77` | - | reproduce offline; recover and pin the counterexamples |
-| [ ] | 2. Repair the shared document interpretation (C2) | NOT RUN | - | - | - | after item 1 |
-| [ ] | 3. Preserve equal proposal eligibility (C3) | NOT RUN | - | - | - | after item 1 |
-| [ ] | 4. Fix false positives as well as false holds (C4) | NOT RUN | - | - | - | with item 2 |
-| [ ] | 5. Make questions and statuses truthful (C5) | NOT RUN | - | - | - | after item 1 |
+| [x] | 1. Establish the exact remaining failures (C1) | PASS | VERIFIED OFFLINE | `fd8040d71e44` (branch `studio/` identical) | `docs/cpt-harness/completion-20261106/stage1-trace.md`; `tests/test_completion_corpus.py` | - |
+| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | - | - | - | design over the fact map; bounded implementation |
+| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | - | - | - | with item 2 |
+| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | - | - | - | with item 2, measured on the corpus |
+| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | - | - | - | with item 2 |
 | [ ] | 6. Prove the repair against retained evidence first (C6) | NOT RUN | - | - | - | after items 2 to 5 |
 | [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
 | [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
@@ -262,6 +265,12 @@ the progress log below.
 
 ### Tests, provider runs, usage and receipts
 
+- **Stage 1 (VERIFIED OFFLINE, `fd8040d71e44`):**
+  - the four retained cases recomputed in memory, each identical to its stored assessment, twice and independently;
+  - the corpus's 815 inputs measured twice (the lens and the session), all readings identical;
+  - `tests.test_completion_corpus`: 3 tests OK in 7.4 s; mutation-proved (bare "bolus": 82 failures, the file
+    restored byte-identical);
+  - the export traced with the report's own snapshot, read-only.
 - **Tests on the candidate:** none yet.
 - **Provider runs and usage in this repair:** none sent.
 - **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
@@ -801,3 +810,14 @@ the progress log below.
     to 9.
   - Preflight GO: `docs/preflight-reports/preflight-20261106T064528Z.md` (shared tree, untracked by convention).
   - Stage 1 is in progress.
+- **2026-11-06T08:30Z Completion repair, stage 1 PASS (VERIFIED OFFLINE).** The four retained cases recompute identical
+  to their stored assessments on the installed code. Five read-only lenses traced every core defect to FILE:LINE, and
+  the session reproduced each headline claim before recording it (`docs/cpt-harness/completion-20261106/stage1-trace.md`).
+  The counterexamples are pinned in `tests/fixtures/gi4/completion/corpus.json`: 611 entries, with the guard that no
+  entry becomes a false READY that was not one on `fd8040d71e44`. New, by measuring:
+  - U3 masks U4, so they are one repair;
+  - F1, a kept rule's false READYs;
+  - U11's answer reuse;
+  - U13's adjacent misreadings;
+  - two owner coding questions (Q1, Q2).
+  Next: the repair's design and its bounded implementation.
