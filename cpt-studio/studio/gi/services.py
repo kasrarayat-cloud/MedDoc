@@ -4628,9 +4628,10 @@ DISPOSITION_GROUPS = {
     'scheduled': frozenset(('will be', 'is to be', 'are to be')),
 }
 # (refutation cycle 1, admission F2: a purpose or a pending tail - "for surgical resection", "pending referral", "to be
-# removed at a later date" - states the same disposition today; it only ever holds more, the safe side)
+# removed at a later date" - states the same disposition today; it only ever holds more, the safe side. Never "until":
+# "The polyp was not removed until the end of the procedure." is a removal)
 DISPOSITION_TAIL = _rx(r'[ \t]*(?:today[ \t]*)?(?:[.;!]|$|,?[ \t]*(?:because|due[ \t]+to|given|owing[ \t]+to|as|since|'
-                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to|for|pending|awaiting|until|to[ \t]+be)\b)')
+                       r'in[ \t]+view[ \t]+of|secondary[ \t]+to|for|pending|awaiting|to[ \t]+be)\b)')
 
 
 def _plain_disposition(text: str, clause: tuple[int, int], m: re.Match, found: tuple[int, int, str], se: int,
@@ -6315,12 +6316,23 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                                                                                     default=-1))
                                                            for a in d.acts
                                                            if a.status == 'performed' and LISTED_CUE not in a.cues})
+            # - and names the nearest act of its kind before it, never one an attempt between them stands for ("A cold
+            # snare polypectomy ... was performed." then "Hot snare polypectomy was attempted, but the polypectomy was
+            # unsuccessful.": the failure is the attempt's)
+            act_starts: dict = {}
+            for a in d.acts:
+                act_starts.setdefault(a.kind, set()).add(min((ev.start for ev in a.evidence), default=-1))
+
+            def nearest_before(kind, at):
+                before = [s for s in act_starts.get(kind, ()) if s < at]
+                return max(before) if before else None
             for i, a in enumerate(d.acts):
                 if a.status != 'performed' or not a.lesion or LISTED_CUE in a.cues:
                     continue
                 first = min((ev.start for ev in a.evidence), default=-1)
                 if any(kind == a.kind and at > first and (lesion == a.lesion or (
-                        not lesion and done_of_kind[kind] == 1 and (not sites or sites & set(a.anatomy))))
+                        not lesion and done_of_kind[kind] == 1 and (not sites or sites & set(a.anatomy))
+                        and nearest_before(kind, at) == first))
                        for kind, lesion, sites, at in failed_after):
                     d.acts[i] = replace(a, status='uncertain', cues=a.cues + (SAME_ACT_FAILED_CUE,))
             body_done = {a.kind for a in d.acts if a.status == 'performed' and LISTED_CUE not in a.cues}

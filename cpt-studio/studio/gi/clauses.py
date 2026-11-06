@@ -485,8 +485,15 @@ def examinations_failure(text: str, clause_start: int, predicate_start: int, pos
     [clause_start, clause_end) is the examination's by its predicate or its subject (above), whatever failure_of reads
     from the subject's head. Bounded: the subject and PASSAGE_READ characters after the failure word."""
     lo = max(clause_start, min(predicate_start, pos))
-    return bool(_EXAM_IN_SUBJECT.search(text, clause_start, lo)
+    frame = _FRONTED_FRAME.match(text, clause_start, lo)  # "During the colonoscopy, the polypectomy was unsuccessful."
+    subject_start = frame.end() if frame is not None else clause_start
+    return bool(_EXAM_IN_SUBJECT.search(text, subject_start, lo)
                 or _PASSAGE_PREDICATE.search(text, lo, min(clause_end, pos + PASSAGE_READ)))
+
+
+# A fronted frame before the subject (examinations_failure): an adverbial up to its comma names no subject.
+_FRONTED_FRAME = re.compile(r'[ \t\n]*(?:during|after|before|on|at|with|upon|while|despite|following|in|throughout|because|'
+                            r'since|although|though|when|once|as|prior[ \t\n]+to)\b[^,.;]{0,120},', re.I)
 
 
 def failure_of(text: str, found: Optional[Subject]) -> Optional[str]:

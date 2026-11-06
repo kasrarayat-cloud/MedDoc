@@ -8855,7 +8855,15 @@ def _course_sentence_doubted(an: Analysis, m: Mention) -> bool:
     "Presumably, ...". A course so stated is not today's plain statement, and the base reading stands."""
     from studio.gi import services as gi_services, structure as gi_structure  # local: both read routing lazily
     s, e = an.lay.sentence_for(m.start, m.end)
-    return bool(gi_structure._signals(an.text, s, e, narrative=True) or gi_services.HEDGE_WORDS.search(an.text, s, e))
+    sentence = an.text[s:e]
+    physicians = gi_services._report_physician_words(an.text)
+
+    def own(match):  # the report's own physician named as the agent is no other source (I4 reads it so)
+        surname = [w for w in match.group('name').split() if not gi_services.CREDENTIAL.match(w)][-1:]
+        return ' ' * len(match.group(0)) if surname and surname[0].lower() in physicians else match.group(0)
+    sentence = gi_services.AGENT_NAMED.sub(own, sentence)
+    return bool(gi_structure._signals(sentence, 0, len(sentence), narrative=True)
+                or gi_services.HEDGE_WORDS.search(sentence))
 
 
 def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mention]:
