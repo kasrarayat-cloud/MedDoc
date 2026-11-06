@@ -3580,3 +3580,31 @@ test('checkDetailsPanel holds a saved row to its saved answer and a way to chang
   busy.progress.busy = true;
   assert.ok(!/offers no way to change/.test(reasons(busy, html => html)));
 });
+
+test('review_plan.addendum is validated, and checkAddendum holds the addendum to a new revision with nothing carried', () => {
+  const doc = plan => ({ id: 'c1c', review_plan: plan });
+  const notes = { approve: 'Agent-executed synthetic verification review' };
+  assert.deepEqual(vb.planProblems(doc({ addendum: { fact: 'extent', code: '45338', text: 'Advanced to 40 cm.', expect_ready: ['45338'] } }), notes), []);
+  const problems = plan => vb.planProblems(doc({ addendum: plan }), notes).join(' | ');
+  assert.match(problems('extent'), /must be an object/);
+  assert.match(problems({ text: 'x' }), /\.fact must name/);
+  assert.match(problems({ fact: 'extent', text: '  ' }), /\.text must be/);
+  assert.match(problems({ fact: 'extent', text: 'x', code: '4533' }), /\.code must be a five-digit code/);
+  assert.match(problems({ fact: 'extent', text: 'x', expect_ready: '45338' }), /expect_ready must be a list/);
+  assert.match(problems({ fact: 'extent', text: 'x', answer: 'yes' }), /unknown key: answer/);
+  const plan = { fact: 'extent', code: '45338', text: 'Advanced to 40 cm.', expect_ready: ['45338'] };
+  const after = (status = 'ready', saved = null) => ({
+    op: { assessment: { proposals: [{ code: '45338', bucket: 'selected', status }] } },
+    cust: { details_needed: saved ? [{ fact: 'extent', affects: ['45338'], saved }] : [] } });
+  const step = (over = {}) => ({ error: null, after: after(), ...over,
+    record: { requests: 1, http_status: 201, withdrew: 'ans-1', revision: { before: { id: 'r1', number: 1, total: 1, kind: 'upload' },
+      after: { id: 'r2', number: 2, total: 2, kind: 'addendum' } }, ...(over.record || {}) } });
+  const bad = s => vb.checkAddendum(plan, s).filter(r => r.status === 'fail').map(r => r.id);
+  assert.deepEqual(bad(step()), []);
+  assert.deepEqual(bad(step({ record: { requests: 2 } })), ['addendum.added']);
+  assert.deepEqual(bad(step({ error: 'expected one open extent row that offers the addendum, found 0', after: null })), ['addendum.added']);
+  assert.deepEqual(bad(step({ record: { revision: { before: { id: 'r1', number: 1, total: 1, kind: 'upload' },
+    after: { id: 'r1', number: 1, total: 1, kind: 'upload' } } } })), ['addendum.new_revision']);
+  assert.deepEqual(bad(step({ after: after('ready', { value: 'not_documented', answer_id: 'ans-1' }) })), ['addendum.earlier_answer_not_applied']);
+  assert.deepEqual(bad(step({ after: after('needs_clarification') })), ['addendum.ready.45338']);
+});
