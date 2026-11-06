@@ -1868,8 +1868,8 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
     before the phrase's opener; nothing inside the phrase is a service or an intervention (an act named there keeps the
     purpose's future, and a passage that mixes it with the done act keeps it too); and the clause's main predicate before
     the opener states an act done and is the target's - the target starts before its participle ends (a passage, the
-    predicate's subject or participle) or is its instrument ("was marked with submucosal tattoo"). Anything else reads
-    as before."""
+    predicate's subject or participle) or is its instrument ("was marked with submucosal tattoo"); and the target is no
+    act word of another kind than the marking kinds (refutation cycle 2). Anything else reads as before."""
     text = an.text
     _ss, se = an.lay.sentence_for(cue.start, cue.end)
     phrase = purpose.phrase_at(text, cue.start, se)
@@ -1884,17 +1884,21 @@ def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> boo
         return False
     if not (ts < predicate[2] or purpose.instrument_of(text, predicate[2], ts)):
         return False
-    # refutation cycle 1 (acts F2): never a word modifying a subject head that is not the act's own material ("EMR referral
-    # placed for future resection", "An EMR appointment was made ...", "The EMR target lesion was marked ...") - the
-    # services reader's own subject and material reading (services._removal_subject, _PURPOSE_MATERIAL_HEADS); "Tattoo
-    # ink was injected ..." and "India ink was injected ..." are released as before
+    # refutation cycle 2 (acts A6): the services reader's own rule (services._purpose_releases), read per mention as it
+    # reads it - a target that is itself an act word of another kind than the marking kinds (services.
+    # PURPOSE_MARKING_KINDS: a tattoo, an injection), whatever its position or its subject's head, keeps the purpose's
+    # future ("EMR" in "EMR margin marking was performed ... for future resection", "An EMR tattoo was placed ...", "EMR
+    # referral placed for future resection"); a marking word is released whatever head its subject has, and so is a
+    # passage, whose own act words the services reader reads each by itself. Cycle 1's subject head-word test is
+    # dropped. One reading of the target's act words, kept per target.
     from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
-    pcs = an.lay.clauses_for(predicate[0], predicate[0] + 1)[0][0]
-    subject = gi_services._removal_subject(text, pcs, predicate[0])
-    if subject is not None and te <= subject[0] and ts >= gi_services._np_phrase_start(text, pcs, subject[0]) \
-            and subject[2].lower() not in gi_services._PURPOSE_MATERIAL_HEADS:
-        return False
-    return True
+    key = ('purpose-other-act', ts, te)
+    if key not in an.memo:
+        lead = len(text[ts:te]) - len(text[ts:te].lstrip())
+        trail = len(text[ts:te]) - len(text[ts:te].rstrip())
+        an.memo[key] = any(kind not in gi_services.PURPOSE_MARKING_KINDS and a <= ts + lead and te - trail <= b
+                           for kind, a, b in gi_services._acts_in(text, ts, te))
+    return not an.memo[key]
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
