@@ -3785,6 +3785,390 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
     return best
 
 
+# --- completion repair (2026-11-06, U1; builder A): a bolus's documented antecedent, and its removal -----------------
+# The foreign-body act's own vocabulary (ACTS: "foreign body", "food bolus", "food impaction") is read exactly as
+# before - a push named that way included (owner question Q1, never decided here). Beside it, a bolus named another way
+# - by its food ("the meat bolus", "a steak impaction", "the impacted meat"), as a definite anaphor ("the bolus", "the
+# impaction", "the coin", "the object") - is the foreign-body act only where BOTH hold:
+#  (1) the noun phrase, or its documented antecedent, is a food or a foreign body (_bolus_index: the nearest preceding
+#      mention of the same head in the same report part, with its modifiers; a medication, saline, contrast, fluid or
+#      secretions bolus is never one: no food word, so no act - an unknown modifier keeps the base reading);
+#  (2) it, or a partitive of it ("fragments of the bolus"), is the subject (passive) or the object (active) of a removal
+#      predicate - removed, retrieved, extracted, or "removal of" - found structurally (_removal_subject), never by
+#      distance: a subordinate clause's, a relative clause's or a prepositional object's bolus is not the removal's
+#      ("Because the meat bolus passed spontaneously the scope was removed", "The Roth net that missed the bolus was
+#      removed", "The overtube placed over the bolus was removed": F-ACTS' refuters, cycles 3 and 4).
+# "cleared" and "dislodged" do not name a removal here: "cleared into the stomach", "dislodged distally" and "cleared
+# by peristalsis" are a push or a passage, and the verb alone does not tell them apart (Q1); they keep the base reading.
+# Every act found this way is then read by read_clause like any other (negation, time, place, source, hedge, section).
+# And an act of the kind naming no site of its own takes its antecedent's site (the bolus found "in the distal
+# esophagus", "at 35 cm from the incisors"), so it binds to that site's family where two are present.
+BOLUS_HEAD = _rx(r'\b(?:bolus(?:es)?|boli|impactions?|foreign[ \t-]+bod(?:y|ies)|coins?|objects?)\b'
+                 r'|(?<=\bimpacted )(?:food|meat|steak|chicken|beef|pork|bread)\b')
+# the food words that make a bolus or an impaction a food one (a closed class: an unknown word is no food, so no act)
+FOOD_WORDS = frozenset(('food', 'meat', 'steak', 'chicken', 'beef', 'pork', 'bread', 'vegetable', 'vegetables', 'fish',
+                        'turkey', 'ham'))
+FOREIGN_OBJECT_WORDS = frozenset(('foreign', 'swallowed', 'ingested'))  # what makes "an object" a foreign one
+PARTITIVE_HEADS = frozenset(('fragment', 'fragments', 'piece', 'pieces', 'portion', 'portions', 'part', 'parts',
+                             'remnant', 'remnants', 'remainder', 'rest', 'bits', 'chunk', 'chunks', 'attempt',
+                             'attempts'))
+_SUBJECT_TOKEN = re.compile(r"[A-Za-z][\w'’-]*|\d+(?:\.\d+)?|[(),;:\[\]]")
+_DETERMINERS = frozenset(('the', 'a', 'an', 'this', 'that', 'these', 'those', 'its', 'their', 'his', 'her', 'our',
+                          'your', 'some', 'any', 'each', 'every', 'another', 'both', 'all', 'no', 'neither', 'one',
+                          'two', 'three', 'several', 'multiple', 'zero'))
+_DEFINITE = frozenset(('the', 'this', 'that', 'these', 'those', 'its', 'their', 'his', 'her', 'our'))
+_NEGATIVE_DET = frozenset(('no', 'neither', 'nor', 'zero', 'without'))
+_PREPOSITIONS = frozenset(('of', 'in', 'at', 'from', 'with', 'on', 'over', 'under', 'into', 'onto', 'through',
+                           'throughout', 'by', 'for', 'to', 'toward', 'towards', 'near', 'beside', 'around', 'across',
+                           'behind', 'within', 'inside', 'along', 'against', 'above', 'below', 'beyond', 'past', 'via',
+                           'during', 'using', 'per', 'among', 'between', 'upon', 'about', 'without', 'like'))
+_RELATIVES = frozenset(('that', 'which', 'who', 'whom', 'whose', 'where'))
+_AUXILIARIES = frozenset(('was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would',
+                          'could', 'can', 'cannot', 'should', 'may', 'might', 'must', 'did', 'does', 'do', 'shall'))
+_CLAUSE_WORDS = frozenset(('and', 'or', 'but', 'nor', 'yet', 'so', 'then', 'thus', 'hence', 'however', 'therefore',
+                           'whereupon', 'because', 'since', 'after', 'before', 'when', 'whenever', 'while', 'once',
+                           'until', 'although', 'though', 'if', 'unless', 'whether', 'as', 'not', 'never', 'we', 'i',
+                           'he', 'she', 'they', 'it', 'there', 'also', 'to'))
+_FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
+REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted)\b')
+REMOVAL_NOMINAL = _rx(r'\b(?:removal|retrieval|extraction)[ \t]+of[ \t]+')
+REMOVAL_COMPOUND = _rx(r'[ \t]+(?:removal|retrieval|extraction)\b')
+# the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
+_VERB_GROUP = _rx(r"(?:\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|"
+                  r"must|did|does|do|shall|to|not|never|then|also|[a-z]+ly|\w+n['’]t)[ \t\n]+)+$")
+_GROUP_AUXILIARY = _rx(r"\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|"
+                       r"might|must|did|does|do|shall|\w+n['’]t)\b")
+_COORDINATED_PARTICIPLE_BEFORE = _rx(r'(?:,[ \t]*)?\b(?:and|then)[ \t]+(?:then[ \t]+|subsequently[ \t]+)?$')
+_ACTIVE_SUBJECT_BEFORE = _rx(r'\b(?:we|I|he|she|they)[ \t]+(?:(?:then|subsequently|successfully|[a-z]+ly)[ \t]+)?$')
+INCISOR_DISTANCE = _rx(r'\b\d+(?:\.\d+)?[ \t]*(?:cm|centimet(?:er|re)s?)[ \t\n]+from[ \t\n]+the[ \t\n]+'
+                       r'(?:central[ \t]+)?(?:incisors|teeth)\b')
+
+
+def _content_word(word: str) -> bool:
+    return word[:1].isalnum() and word.lower() not in _FUNCTION_WORDS
+
+
+def _np_start(toks: Sequence[tuple[int, int, str]], i: int) -> Optional[int]:
+    """The index of the first token of the noun phrase whose head is toks[i], read leftward over modifiers that are no
+    function word, up to and including a determiner (at most six words); None when toks[i] heads no noun phrase or the
+    phrase is ambiguous (a present participle among its modifiers: "overtube protecting meat bolus" may be a reduced
+    relative, so it is read as no subject at all - the safe side)."""
+    if i < 0 or not _content_word(toks[i][2]) or toks[i][2].lower() in _DETERMINERS:
+        return None
+    j = i
+    while j - 1 >= 0 and i - j < 6:
+        word = toks[j - 1][2]
+        low = word.lower()
+        if low in _DETERMINERS:
+            j -= 1
+            break
+        if not _content_word(word):
+            break
+        j -= 1
+    if any(toks[k][2].lower().endswith('ing') for k in range(j, i)):
+        return None
+    return j
+
+
+def _participle_word(word: str) -> bool:
+    """A verb form that takes the phrase after it as its object or complement ("placed", "protecting", "missed",
+    "found"): read only where it stands between a noun phrase and what it governs (never a noun phrase's own modifier)."""
+    low = word.lower()
+    return len(low) > 3 and (low.endswith(('ed', 'ing', 'en')) or low in ('found', 'seen', 'held', 'left', 'put', 'set',
+                                                                          'caught', 'stuck', 'lodged'))
+
+
+def _removal_subject(text: str, clause_start: int, predicate_start: int) -> Optional[tuple[int, int, str]]:
+    """The head of the noun phrase that is the subject of the predicate starting at ``predicate_start`` (its first
+    auxiliary, or the participle itself for a reduced passive "Meat bolus removed ..."), read structurally within the
+    clause starting at ``clause_start`` (CLAUSE_REACH characters at most): (start, end, head), where [start, end) is the
+    RESOLVED head as written and ``head`` the grammatical head, lower-cased - the same unless a partitive or an attempt
+    resolves to its complement ("Fragments of the bolus were removed": the span of "bolus", head 'fragments'). None when
+    no subject can be read. The contract of builder R2's clauses.subject_head; the integrator unifies the two.
+    - the nearest preceding noun phrase of the clause;
+    - never a prepositional object: an "of/in/at/over/into ..." phrase is climbed to the phrase it modifies, and a
+      participle it complements is passed over ("The overtube placed over the bolus" is the overtube);
+    - never a verb's object inside a relative clause or a participial modifier ("The Roth net that missed the bolus",
+      "The overtube protecting the meat bolus", "The scope that had pushed the bolus into the stomach");
+    - never inside a comma aside or a parenthesis ("The bolus, which was large, was ...");
+    - a relative pronoun right before the predicate ("..., which was removed") is its antecedent's subject;
+    - a partitive or an attempt resolves to its complement.
+    Pure and bounded: one tokenisation of at most CLAUSE_REACH characters."""
+    lo = max(clause_start, predicate_start - CLAUSE_REACH)
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, lo, predicate_start)]
+    i = len(toks) - 1
+    while i >= 0 and toks[i][2].lower() in ('then', 'also', 'subsequently', 'successfully'):
+        i -= 1  # "the bolus then was removed"
+    if i >= 0 and toks[i][2].lower() in ('which', 'that', 'who'):
+        i -= 1  # "..., which was removed": the relative's antecedent
+        if i >= 0 and toks[i][2] == ',':
+            i -= 1
+    for _ in range(8):  # each step climbs one attachment; eight is far beyond any phrase this reads
+        if i < 0:
+            return None
+        word = toks[i][2]
+        if word == ')':
+            depth, k = 0, i
+            while k >= 0:
+                depth += toks[k][2] == ')'
+                depth -= toks[k][2] == '('
+                if depth == 0:
+                    break
+                k -= 1
+            i = k - 1
+            continue
+        if word == ',':
+            # a comma aside that closes before the predicate: its opening comma, and what opens it - a relative, a
+            # participle or an adverb - says it is an aside; anything else (a list, a fronted phrase) is not read
+            k = i - 1
+            while k >= 0 and toks[k][2] not in (',', ';', ':', '(', ')'):
+                k -= 1
+            if k < 0 or toks[k][2] != ',' or k + 1 >= i:
+                return None
+            opener = toks[k + 1][2].lower()
+            if not (opener in _RELATIVES or _participle_word(opener) or opener.endswith('ly')):
+                return None
+            i = k - 1
+            continue
+        start = _np_start(toks, i)
+        if start is None:
+            return None
+        before = toks[start - 1][2].lower() if start > 0 else ''
+        if before in _PREPOSITIONS:
+            # a prepositional object: the phrase it modifies is before the preposition; a partitive's or an attempt's
+            # complement is its subject's referent
+            k = start - 2
+            if before == 'of' and k >= 0:
+                head_start = _np_start(toks, k)
+                if head_start is not None and toks[k][2].lower() in PARTITIVE_HEADS:
+                    return toks[i][0], toks[i][1], toks[k][2].lower()
+            if k >= 0 and _participle_word(toks[k][2]) and _np_start(toks, k - 1) is not None:
+                k -= 1  # "placed over the bolus": the participle the phrase complements, after its own noun
+            i = k
+            continue
+        if before and _participle_word(before):
+            # a verb form right before the phrase may take it as its object. That is read only where the structure marks
+            # the verb as a modifier of an earlier noun phrase - a relative pronoun before it ("The Roth net that
+            # (had) missed the bolus"), or a reduced relative: an -ing form, or "having"/"being", right after a noun
+            # ("The overtube protecting the meat bolus", "The scope having pushed the bolus") - and then the subject is
+            # that earlier phrase. Anywhere else the phrase may as well be a new clause's subject after an intransitive
+            # verb ("Once the steak impaction cleared the overtube was removed"): no subject is read (the safe side).
+            k = start - 2
+            while k >= 0 and toks[k][2].lower() in _AUXILIARIES | {'having', 'being'}:
+                k -= 1
+            chained = k < start - 2 and toks[k + 1][2].lower() in ('having', 'being')
+            if k >= 0 and toks[k][2].lower() in _RELATIVES:
+                i = k - 1
+                continue
+            if (before.endswith('ing') or chained) and k >= 0 and _np_start(toks, k) is not None:
+                i = k
+                continue
+            return None
+        head = toks[i][2].lower()
+        if head in PARTITIVE_HEADS and i - 1 >= start and _content_word(toks[i - 1][2]) \
+                and toks[i - 1][2].lower() not in _DETERMINERS:
+            return toks[i - 1][0], toks[i - 1][1], head  # "the bolus fragments": the compound's own referent
+        return toks[i][0], toks[i][1], head
+    return None
+
+
+def _removal_object(text: str, after: int, limit: int) -> Optional[tuple[int, int, str]]:
+    """The head of the noun phrase an active removal verb, or "removal of", takes as its object, starting at ``after``
+    (within ``limit``): (start, end, head) as _removal_subject gives it - a partitive resolves to its complement
+    ("removed fragments of the bolus"). None when a preposition, a mark or a clause word comes first (no object)."""
+    toks = [(m.start(), m.end(), m.group(0)) for m in _SUBJECT_TOKEN.finditer(text, after, min(limit, after + 160))]
+    i = 0
+    if i < len(toks) and toks[i][2].lower() in _DETERMINERS:
+        i += 1
+    head = None
+    while i < len(toks) and _content_word(toks[i][2]) and toks[i][2].lower() not in _DETERMINERS:
+        head = i
+        if toks[i][2].lower().endswith('ing'):
+            return None  # a participle: no plain object noun phrase
+        i += 1
+        if head - 0 > 6:
+            return None
+    if head is None:
+        return None
+    word = toks[head][2].lower()
+    if word in PARTITIVE_HEADS and i < len(toks) and toks[i][2].lower() == 'of':
+        inner = _removal_object(text, toks[i][1], limit)
+        return (inner[0], inner[1], word) if inner is not None else None
+    return toks[head][0], toks[head][1], word
+
+
+@dataclass(frozen=True)
+class _BolusMention:
+    """A bolus-class noun phrase (BOLUS_HEAD): its head span, its head class, whether it (or its antecedent) is a food or
+    a foreign body, whether it denies one ("No food impaction"), and the site it, or its antecedent, is stated at."""
+    start: int
+    end: int
+    head: str  # 'bolus' (a bolus, an impaction, impacted food), 'foreign body', 'coin' or 'object'
+    foreign: bool
+    negated: bool
+    sites: tuple
+
+
+def _bolus_class(word: str) -> str:
+    low = ' '.join(word.lower().replace('-', ' ').split())
+    if low.startswith('foreign'):
+        return 'foreign body'
+    if low.startswith('coin'):
+        return 'coin'
+    if low.startswith('object'):
+        return 'object'
+    return 'bolus'
+
+
+def _bolus_sites(text: str, clause: tuple[int, int], sentence: tuple[int, int]) -> tuple:
+    """The sites a bolus is stated at: its clause's anatomy, or a distance from the incisors (an esophageal site), else
+    its sentence's."""
+    for lo, hi in (clause, sentence):
+        found = _anatomy_in(text, lo, hi)
+        found += [('esophagus', 'esophagus', m.start(), m.end()) for m in INCISOR_DISTANCE.finditer(text, lo, hi)
+                  if not any(a < m.end() and m.start() < b for _, _, a, b in found)]
+        if found:
+            return tuple(sorted(found, key=lambda x: x[2]))
+    return ()
+
+
+def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_starts: Sequence[int], clauses_of,
+                 plist: Sequence['_Part'], starts: Sequence[int]) -> tuple[list, list]:
+    """Every bolus-class noun phrase of the text, in order, with its food or foreign-body reading resolved against its
+    documented antecedent (rule (1) above): a phrase with its own food word ("meat bolus", "a bolus of steak"), an
+    "impacted" bolus, a foreign body, a coin, or a foreign, swallowed or ingested object is one; a definite or bare
+    phrase with no modifier of its own ("the bolus", "the impaction", "Bolus removal") is what the nearest preceding
+    phrase of its head class in the same report part is, and is stated where that one is when it names no site of its
+    own; any other phrase ("a saline bolus", "a 50 mg bolus of propofol", "a bolus of retained contrast") is none. A
+    denial ("No food impaction was seen") is no antecedent. One pass: (mentions, their head starts)."""
+    out: list[_BolusMention] = []
+    last: dict[tuple[int, str], _BolusMention] = {}  # (part start, head class) -> the last phrase of that class there
+    for m in BOLUS_HEAD.finditer(text):
+        s, e = m.span()
+        si = bisect.bisect_right(sentence_starts, s) - 1
+        if si < 0 or s >= sentences[si][1]:
+            continue
+        ss, se = sentences[si]
+        read_end = min(se, ss + SENTENCE_READ_CHARS)
+        if s >= read_end:
+            continue  # beyond the part of the sentence pass 3 reads
+        toks = [(t.start(), t.end(), t.group(0)) for t in _SUBJECT_TOKEN.finditer(text, max(ss, s - 120), s)]
+        mods: list[str] = []
+        det = ''
+        k = len(toks) - 1
+        while k >= 0 and len(mods) < 6:
+            low = toks[k][2].lower()
+            if low in _DETERMINERS:
+                det = low
+                break
+            if not _content_word(toks[k][2]):
+                break
+            mods.append(low)
+            k -= 1
+        # the word that leads the phrase: before its determiner, or the function word that ended its modifiers
+        lead = (toks[k - 1][2].lower() if k >= 1 else '') if det else (toks[k][2].lower() if k >= 0 else '')
+        comp_words: list[str] = []
+        comp = re.match(r'[ \t\n]+of[ \t\n]+', text[e:e + 8])
+        if comp:
+            for t in _SUBJECT_TOKEN.finditer(text, e + comp.end(), min(len(text), e + 80)):
+                if not _content_word(t.group(0)) or len(comp_words) >= 3:
+                    break
+                comp_words.append(t.group(0).lower())
+        words = set(mods) | set(comp_words)
+        head = _bolus_class(m.group(0))
+        low_head = m.group(0).lower()
+        negated = det in _NEGATIVE_DET or lead in _NEGATIVE_DET
+        part = _part_at(plist, starts, s)
+        clause = _clause_for(clauses_of(ss, read_end), s)
+        own_sites = _bolus_sites(text, clause, (ss, read_end))
+        # a definite or bare phrase with no modifier of its own refers to its antecedent: what it is, and where
+        bare = not mods and not comp_words and (det in _DEFINITE or not det)
+        antecedent = last.get((part.start, head)) if bare else None
+        if negated:
+            foreign = False
+        elif head == 'foreign body' or head == 'coin':
+            foreign = True
+        elif head == 'object':
+            foreign = bool(words & FOREIGN_OBJECT_WORDS) or (antecedent is not None and antecedent.foreign)
+        elif not low_head.startswith(('bolus', 'boli', 'impaction')):
+            foreign = True  # "the impacted meat": its own food is its head
+        elif words & FOOD_WORDS or (low_head.startswith(('bolus', 'boli')) and 'impacted' in mods):
+            foreign = True
+        else:
+            foreign = antecedent is not None and antecedent.foreign
+        sites = own_sites or (antecedent.sites if antecedent is not None and not negated else ())
+        mention = _BolusMention(s, e, head, foreign, negated, sites)
+        out.append(mention)
+        if not negated:
+            last[(part.start, head)] = mention
+    return out, [b.start for b in out]
+
+
+def _bolus_at(index: Sequence[_BolusMention], index_starts: Sequence[int], start: int, end: int) -> Optional[_BolusMention]:
+    """The bolus-class phrase whose head lies in [start, end), if any: one bisection."""
+    i = bisect.bisect_left(index_starts, start)
+    if i < len(index) and index[i].start < end:
+        return index[i]
+    # a head that starts before ``start`` but covers it ("foreign body" read from its second word)
+    if i > 0 and index[i - 1].end > start:
+        return index[i - 1]
+    return None
+
+
+def _bolus_removals(text: str, ss: int, se: int, cls, index: Sequence[_BolusMention], index_starts: Sequence[int],
+                    taken: Sequence[tuple[str, int, int]]) -> list[tuple[str, int, int]]:
+    """The foreign-body act mentions a sentence [ss, se) adds by rule (2) above: for each removal predicate, its subject
+    (passive: "the bolus was removed", "was grasped ... and removed", "Meat bolus removed ...") or its object (active:
+    "we removed the bolus"; "removal of the bolus"; "bolus removal"), resolved structurally, where that is a bolus-class
+    phrase that is a food or a foreign body (_bolus_index) - as ('foreign_body', head start, head end), never a phrase
+    an ACTS mention already reads. Bounded: the sentence's removal predicates, each read in its own clause."""
+    if not index:
+        return []
+    out: list[tuple[str, int, int]] = []
+
+    def add(found):
+        if found is None:
+            return
+        mention = _bolus_at(index, index_starts, found[0], found[1])
+        if mention is None or not mention.foreign or mention.negated:
+            return
+        span = (mention.start, mention.end)
+        if any(a < span[1] and span[0] < b for _, a, b in list(taken) + out):
+            return
+        out.append(('foreign_body', span[0], span[1]))
+
+    for m in REMOVAL_PREDICATE.finditer(text, ss, se):
+        cs, _ = _clause_for(cls, m.start())
+        group = _VERB_GROUP.search(text, max(cs, m.start() - 60), m.start())
+        if group is not None and _GROUP_AUXILIARY.search(group.group(0)):
+            add(_removal_subject(text, cs, group.start()))
+            continue
+        coordinated = _COORDINATED_PARTICIPLE_BEFORE.search(text, max(cs, m.start() - 30), m.start())
+        if coordinated is not None:
+            # "was grasped with the Roth net and removed": the coordinated participle shares the first conjunct's
+            # auxiliary and subject, when that conjunct is the auxiliary's own participle phrase
+            aux = None
+            for aux in _GROUP_AUXILIARY.finditer(text, cs, coordinated.start()):
+                pass
+            if aux is not None:
+                between = text[aux.end():coordinated.start()]
+                if re.match(r'[ \t\n]+(?:(?:then|also|[a-z]+ly)[ \t\n]+)?[a-z]+(?:ed|en)\b', between) \
+                        and not _GROUP_AUXILIARY.search(between) and not re.search(r'[,;:]', between):
+                    group = _VERB_GROUP.search(text, max(cs, aux.start() - 40), aux.end() + 1)
+                    add(_removal_subject(text, cs, group.start() if group is not None else aux.start()))
+            continue
+        if _ACTIVE_SUBJECT_BEFORE.search(text, max(cs, m.start() - 30), m.start()):
+            add(_removal_object(text, m.end(), se))
+            continue
+        add(_removal_subject(text, cs, m.start()))  # a reduced passive: "Meat bolus removed with a Roth net."
+    for m in REMOVAL_NOMINAL.finditer(text, ss, se):
+        add(_removal_object(text, m.end(), se))
+    for mention in index[bisect.bisect_left(index_starts, ss):bisect.bisect_left(index_starts, se)]:
+        if REMOVAL_COMPOUND.match(text, mention.end) and mention.foreign and not mention.negated:
+            add((mention.start, mention.end, mention.head))  # "Bolus removal was performed"
+    return sorted(out, key=lambda x: x[1])
+
+
 def _acts_in(text: str, start: int, end: int, doubtful: Optional[list] = None) -> list[tuple[str, int, int]]:
     """Act mentions in [start, end): (kind, start, end); a later kind never claims text an earlier one took. An act word
     that heads an attributive participle compound ("the snare-treated lesion": _attributive_compound) describes a noun
@@ -4882,6 +5266,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d.completion_neg.append(_span(text, *_bounded_clause(text, (cs, ce), m.start(), m.end())))
                     break
         # Pass 3: lesions and acts.
+        # Completion repair (2026-11-06, U1): every bolus-class noun phrase with its antecedent's reading, once
+        sentence_starts = [s for s, _ in sentences]
+        bolus_index, bolus_starts = _bolus_index(text, sentences, sentence_starts, clauses_of, plist, starts)
         act_count = 0
         last_lesion: dict[str, Lesion] = {}
         indwelling: list[tuple[str, str]] = []  # (family, act id) read as an indwelling stent's state (W1, below)
@@ -4931,6 +5318,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             doubtful_at = {ms for _, ms, _ in doubtful}
             if doubtful:
                 mentions = sorted(mentions + doubtful, key=lambda x: x[1])
+            # U1: a food or foreign body named otherwise than ACTS names it, the subject or object of a removal
+            # predicate (_bolus_removals) - only in a sentence that names a bolus-class phrase at all
+            at = bisect.bisect_left(bolus_starts, ss)
+            if at < len(bolus_starts) and bolus_starts[at] < read_end:
+                removals = _bolus_removals(text, ss, read_end, clauses_of(ss, read_end), bolus_index, bolus_starts,
+                                           mentions)
+                if removals:
+                    mentions = sorted(mentions + removals, key=lambda x: x[1])
             comparisons = _comparison_objects(text, ss, read_end)
             lesion_matches = [m for m in LESION.finditer(text, ss, read_end)
                               if not any(a <= m.start() < b for a, b in comparisons)]
@@ -5090,6 +5485,13 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue  # "a polyp adjacent to the tattoo", "the existing tattoo": a place, no tattoo placed
                 own_anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]]
                 anat = own_anat or anatomy_all
+                if kind == 'foreign_body' and not own_anat:
+                    # U1: a foreign body or bolus naming no site of its own is where it, or its documented antecedent,
+                    # is stated to be ("An impacted meat bolus was found in the distal esophagus ... the bolus was
+                    # removed"; "at 35 cm from the incisors") - before any other clause's site of the sentence
+                    stated = _bolus_at(bolus_index, bolus_starts, ms, me)
+                    if stated is not None and stated.sites:
+                        anat = list(stated.sites)
                 region = anat[0][1] if anat else ''
                 # rule 1: a lesion label (or one lesion's specimen) named in the act's own clause binds the act to that
                 # lesion, its service and its region, before any other rule places it; two of them, an ambiguous label,

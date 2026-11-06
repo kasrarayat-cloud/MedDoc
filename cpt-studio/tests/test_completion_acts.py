@@ -102,6 +102,181 @@ class PlacementNeverOverwritesOutcomeTests(SimpleTestCase):
         self.assertFalse(gi_services._outcome_in_doubt(('uncertain: no performance statement',)))
 
 
+EGD_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\n'
+            'Date of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure\n'
+            'The gastroscope was passed to the second portion of the duodenum.\n')
+COMBINED_HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEndoscopy Procedure Report\n'
+                 'Date of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+                 'Procedure: Upper endoscopy and colonoscopy\n')
+FOUND = 'A large meat bolus was found at 34 cm. '
+
+
+def removal_acts(text, family='gi.egd'):
+    svc = next((s for s in inventory(text).services if s.family == family), None)
+    return [] if svc is None else [(a.status, a.anatomy) for a in svc.acts if a.kind == 'foreign_body']
+
+
+def subject(sentence, verb='removed'):
+    """The removal predicate's subject as _removal_subject reads it (the verb group's start, as pass 3 passes it)."""
+    import re
+    m = re.search(r'\b' + verb + r'\b', sentence)
+    group = gi_services._VERB_GROUP.search(sentence, max(0, m.start() - 60), m.start())
+    start = group.start() if group is not None and gi_services._GROUP_AUXILIARY.search(group.group(0)) else m.start()
+    found = gi_services._removal_subject(sentence, 0, start)
+    return None if found is None else (sentence[found[0]:found[1]], found[2])
+
+
+class RemovalSubjectTests(SimpleTestCase):
+    """U1's second half, the structural subject (services._removal_subject, the contract of R2's clauses.subject_head):
+    the nearest preceding noun phrase of the clause that is no prepositional object and no verb's object inside a
+    relative clause or a participial modifier; a comma aside and a parenthesis are passed over; a partitive resolves to
+    its complement. Every F-ACTS refuter's removal is another noun's."""
+
+    def test_the_refuters_removal_is_another_nouns(self):
+        cases = {
+            'Because the meat bolus passed spontaneously the scope was removed.': 'scope',
+            'The meat bolus remained impacted yet the overtube was removed.': 'overtube',
+            'The Roth net that missed the bolus was removed.': 'net',
+            'The meat bolus remained impacted while the scope was removed.': 'scope',
+            'The overtube placed over the bolus was removed.': 'overtube',
+            'The overtube protecting the meat bolus was removed.': 'overtube',
+            'The scope that had pushed the bolus into the stomach was then removed.': 'scope',
+            'The scope that pushed the meat bolus was removed.': 'scope',
+            'After the meat bolus passed into the stomach the scope was removed.': 'scope',
+            'The steak impaction cleared as soon as the guidewire was removed.': 'guidewire',
+            'After a 50 mg propofol bolus, the bite block was removed.': 'block',
+            'A fentanyl bolus was given and the clip was then removed.': 'clip',
+            'The scope having pushed the bolus was removed.': 'scope',
+        }
+        for sentence, head in cases.items():
+            with self.subTest(sentence):
+                self.assertEqual(subject(sentence), (head, head))
+
+    def test_the_boluss_own_removal(self):
+        cases = {
+            'the bolus was removed through the mouth': ('bolus', 'bolus'),
+            'The bolus in the distal esophagus was removed.': ('bolus', 'bolus'),
+            'The bolus found in the esophagus was removed.': ('bolus', 'bolus'),
+            'The meat bolus, which was large, was removed.': ('bolus', 'bolus'),
+            'The meat bolus (3 cm) was removed.': ('bolus', 'bolus'),
+            'Meat bolus removed with a Roth net.': ('bolus', 'bolus'),
+            'The bolus could not be removed.': ('bolus', 'bolus'),
+            'Fragments of the bolus were removed with a net.': ('bolus', 'fragments'),
+            'The bolus fragments were removed.': ('bolus', 'fragments'),
+        }
+        for sentence, expected in cases.items():
+            with self.subTest(sentence):
+                self.assertEqual(subject(sentence), expected)
+
+    def test_an_unreadable_subject_is_none(self):
+        # an intransitive verb before a new clause's subject, or a participle among bare modifiers: no subject is read
+        for sentence in ('Once the steak impaction cleared the overtube was removed.',
+                         'Overtube protecting meat bolus was removed.', 'Once dislodged the bolus was removed.'):
+            with self.subTest(sentence):
+                self.assertIsNone(subject(sentence))
+
+
+class BolusAntecedentTests(SimpleTestCase):
+    """U1 (d44a77b3, 39f0ac49): "An impacted meat bolus was found ... the bolus was removed through the mouth" read no
+    act, so a participant's 43247 was listed "not documented as done". A bolus named by its food, or a definite anaphor
+    whose documented antecedent is a food or a foreign body, is the foreign-body act when it is the removal predicate's
+    subject or object - and takes its antecedent's site."""
+
+    def test_the_anaphor_of_a_food_bolus_removed_today(self):
+        for removal in ('The bolus was removed with a Roth net.', 'We removed the bolus with a Roth net.',
+                        'The bolus was grasped with a Roth net and removed through the mouth.',
+                        'Fragments of the bolus were removed with a Roth net.',
+                        'Removal of the bolus with a Roth net was performed.'):
+            with self.subTest(removal):
+                text = EGD_HEAD + FOUND + removal + '\n'
+                self.assertEqual([s for s, _ in removal_acts(text)], ['performed'])
+                self.assertEqual(outcome(text, '43247', removal), (('selected', 'ready'), ('selected', 'ready')))
+
+    def test_a_bolus_named_by_its_food_or_an_impaction(self):
+        for text, quote in (
+                (EGD_HEAD + 'The meat bolus was removed with a retrieval net.\n', 'The meat bolus was removed with a retrieval net.'),
+                (EGD_HEAD + 'A steak impaction was found in the distal esophagus. The impaction was removed with a Roth net.\n',
+                 'The impaction was removed with a Roth net.'),
+                (EGD_HEAD + 'She could not swallow after a steak impaction at dinner. The bolus was removed with a Roth net.\n',
+                 'The bolus was removed with a Roth net.'),
+                (EGD_HEAD + 'A coin was seen in the stomach. The coin was removed with a Roth net.\n',
+                 'The coin was removed with a Roth net.'),
+                (EGD_HEAD + 'A swallowed object was seen in the stomach. The object was removed with a Roth net.\n',
+                 'The object was removed with a Roth net.')):
+            with self.subTest(quote):
+                self.assertEqual([s for s, _ in removal_acts(text)], ['performed'])
+                self.assertEqual(outcome(text, '43247', quote)[0], ('selected', 'ready'))
+
+    def test_no_food_or_foreign_antecedent_is_no_act(self):
+        for text in (EGD_HEAD + 'A 50 mg bolus of propofol was given. The bolus was removed.\n',
+                     EGD_HEAD + 'A saline bolus was injected. The bolus was removed.\n',
+                     EGD_HEAD + 'A bolus of retained secretions was seen. The bolus was removed with suction.\n',
+                     EGD_HEAD + 'The bolus was removed with a Roth net.\n',
+                     EGD_HEAD + 'No food impaction was seen. The impaction was removed.\n',
+                     EGD_HEAD + 'An object resembling a pill was seen. The object was removed.\n'):
+            with self.subTest(text.split('\n')[-2]):
+                self.assertEqual(removal_acts(text), [])
+
+    def test_the_f_acts_refuters_stay_non_removals(self):
+        for sentence in ('Because the meat bolus passed spontaneously the scope was removed.',
+                         'The meat bolus remained impacted yet the overtube was removed.',
+                         'The Roth net that missed the bolus was removed.',
+                         'The meat bolus remained impacted while the scope was removed.',
+                         'The overtube placed over the bolus was removed.',
+                         'The overtube protecting the meat bolus was removed.',
+                         'The scope that had pushed the bolus into the stomach was then removed.',
+                         'Once the steak impaction cleared the overtube was removed.',
+                         'An impacted meat bolus was found.', 'No food impaction was seen.'):
+            with self.subTest(sentence):
+                text = EGD_HEAD + FOUND + sentence + '\n'
+                self.assertNotIn('performed', [s for s, _ in removal_acts(text)])
+                for path in outcome(text, '43247', sentence):
+                    self.assertNotEqual(path[1], 'ready')
+
+    def test_a_push_a_passage_or_another_time_or_source_is_never_ready(self):
+        for sentence in ('The bolus was cleared into the stomach with gentle insufflation.',
+                         'The bolus was dislodged distally into the stomach with the tip of the scope.',
+                         'The bolus was cleared by peristalsis.', 'The bolus could not be removed.',
+                         'At the referring hospital, the bolus was removed with a Roth net.',
+                         'The bolus will be removed at a later date.'):
+            with self.subTest(sentence):
+                text = EGD_HEAD + FOUND + sentence + '\n'
+                self.assertNotIn('performed', [s for s, _ in removal_acts(text)])
+                for path in outcome(text, '43247', sentence):
+                    self.assertNotEqual(path[1], 'ready')
+
+    def test_the_antecedents_site_binds_it_where_two_families_are_present(self):
+        removal = 'A retrieval net was passed through the working channel and the bolus was removed through the mouth.'
+        colon = 'The colonoscope was advanced to the cecum. A 5 mm polyp in the sigmoid colon was removed with a cold snare.\n'
+        for antecedent, site in (('An impacted meat bolus was found in the distal esophagus.', ('distal esophagus',)),
+                                 ('A large impacted meat bolus was encountered at 35 cm from the incisors.', ('esophagus',))):
+            with self.subTest(antecedent):
+                text = (COMBINED_HEAD + 'The gastroscope was advanced to the second portion of the duodenum. ' + antecedent
+                        + ' ' + removal + '\n' + colon)
+                self.assertEqual(removal_acts(text), [('performed', site)])
+                quote = 'the bolus was removed through the mouth'
+                self.assertEqual(outcome(text, '43247', quote), (('selected', 'ready'), ('selected', 'ready')))
+
+    def test_a_colon_foreign_body_binds_to_the_colonoscopy(self):
+        # C3-1-1's refuter: the site-less removal of a foreign body seen in the transverse colon is the colonoscopy's,
+        # never the upper endoscopy's (43247 not READY; 45379 READY)
+        text = (COMBINED_HEAD + 'The gastroscope was advanced to the second portion of the duodenum.\n'
+                'The colonoscope was advanced to the cecum. A foreign body (a swallowed coin) was seen in the transverse '
+                'colon. The foreign body was removed with a Roth net.\n')
+        quote = 'The foreign body was removed with a Roth net.'
+        self.assertEqual(removal_acts(text, 'gi.colonoscopy'), [('performed', ('transverse colon',))])
+        self.assertEqual(removal_acts(text, 'gi.egd'), [])
+        for path in outcome(text, '43247', quote):
+            self.assertNotEqual(path[1], 'ready')
+        self.assertEqual(outcome(text, '45379', quote)[0], ('selected', 'ready'))
+
+    def test_no_stated_site_with_two_families_stays_unbound(self):
+        # a recorded residual: "at 34 cm" names no site, so with two families present the act is not attributed
+        text = (COMBINED_HEAD + 'The gastroscope was advanced to the second portion of the duodenum. ' + FOUND
+                + 'The bolus was removed with a Roth net.\nThe colonoscope was advanced to the cecum.\n')
+        self.assertEqual(removal_acts(text), [])
+
+
 class CoordinatedAnatomyTests(SimpleTestCase):
     """U13: "from the right and left colon" had read the descending colon only (the left colon) - the coordinated
     modifier shares the site's head."""
