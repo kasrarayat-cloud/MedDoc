@@ -367,7 +367,11 @@ this installer's) and reloads nginx; the certificate lineage is kept.
     revision since the core repair writes (a member's answer, a reviewer's
     chosen modifier: no worker makes either) written since the file was
     replaced: a revision before the core repair shows them wrongly, and its
-    worker's re-assessment would drop a chosen modifier. Which web wrote one
+    worker's re-assessment would drop a chosen modifier. Since the completion
+    repair (2026-11-06) a member's answer also re-makes the assessment, whose
+    answered code a revision before it reads as an ordinary exclusion - so a
+    base code that answer still held may show READY there; the standing answer
+    that made it names the encounter for the same reason. Which web wrote one
     cannot be read - a revision since the core repair writes them too, and
     reads them as this one does - so the receipt says when each was written,
     never by whom. Such records written before the switch began are named only:

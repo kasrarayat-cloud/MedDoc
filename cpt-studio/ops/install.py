@@ -1943,7 +1943,13 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #   member_answer - the current assessment has a member's answer that stands (MemberAnswer, not revoked: "Not
 #              documented" or "Cannot confirm", core repair 2026-11-03). No revision before it reads one: its page asks
 #              that question again and shows the code held, where this revision shows it Excluded with the answer and
-#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS).
+#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS). Completion repair
+#              (2026-11-06, U11): an answer now re-makes the assessment (jobs.recompute_after_answers), whose answered
+#              code is stored Excluded with the answer as its reason (support 'answered') while it still holds the codes
+#              it held (the base code of a therapeutic code answered away: decision (e)). A revision before the
+#              completion repair reads that row as an ordinary exclusion, which holds nothing, so its page may show such
+#              a base code READY. Every such assessment has the standing answer that made it, so this same reason names
+#              it; nothing else is needed to find it, and no state can be put back for it either.
 #   modifier - a current decision of the current assessment carries the reviewer's chosen modifier (Decision.modifiers,
 #              core repair 2026-11-03). No revision before it reads one: its page and both reports show that approval
 #              without the modifier. The decision row stays; no state can be put back for it (SHOWN_HAZARDS).
@@ -3508,7 +3514,8 @@ WEB_WRITTEN_HAZARDS = ('member_answer', 'modifier')
 WEB_WRITTEN_NOTE = 'hold records only a revision since the core repair writes'
 WEB_WRITTEN_SHOWN = ('a revision before the core repair shows them wrongly - it asks the answered question again, and '
                      'shows the approval without its modifier - and its worker would drop a chosen modifier when it '
-                     're-assesses')
+                     're-assesses; a revision before the completion repair also reads an assessment re-made with an '
+                     'answer as an ordinary exclusion, so a base code that answer still held may show READY')
 
 
 def merge_hazards(*answers) -> dict:
