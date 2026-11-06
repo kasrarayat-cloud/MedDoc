@@ -10,6 +10,7 @@ from django.test import SimpleTestCase
 from studio import review
 from studio.gi import structure
 from studio.validation import questions
+from tests.test_completion_parity import heading_twin, named_twin
 from tests.test_harness_engine import code, corti, read, run, span
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
@@ -37,39 +38,46 @@ def ready(text, picks, readings=()):
 
 
 class LabelledParagraphTests(SimpleTestCase):
-    """structure lens: an announced, appended, another person's, denied or summary-dated narrative is never released."""
+    """structure lens. Cycle 1 held an announced, appended, another person's or summary-dated narrative with word readers
+    (N3's deixis, present-occasion and attribution reads, N2's summary dating, P4's first-summary rule); cycle 2 refuted
+    them both ways, and the approach changed to layout parity (HARNESS.md "Refutation of the integrated diff, cycle 2";
+    tests/test_completion_parity.py): a labelled paragraph reads as its heading twin. Each input here reads exactly as its
+    twin does - READY, the installed engine's own reading of the twin, recorded as its residual - and N1's negative
+    quantifier still holds "None of this was done today." inside the paragraph."""
 
-    def test_an_announced_or_attributed_earlier_narrative_holds(self):
+    def same_as_twin(self, text, picks, expected):
+        self.assertEqual(ready(text, picks), ready(heading_twin(text), picks))
+        self.assertEqual(ready(text, picks), expected)
+
+    def test_an_announced_or_attributed_earlier_narrative_reads_as_its_heading_twin(self):
         for ind in ('Indications: Surveillance. Her colonoscopy in 2022 is reprinted here for reference.\n',
                     'Indications: Surveillance. Her colonoscopy in 2022 is carried forward for reference.\n',
                     'Indications: Surveillance. Her 2022 colonoscopy is shown for comparison.\n'):
             with self.subTest(ind):
-                text = REPORT_HEAD + ind + COL + '\nImpression: Sigmoid polyp removed.\n'
-                self.assertEqual(ready(text, [('45385', SN)]), set())
+                self.same_as_twin(REPORT_HEAD + ind + COL + '\nImpression: Sigmoid polyp removed.\n', [('45385', SN)],
+                                  {'45385'})
         text = REPORT_HEAD + 'Indications: Dysphagia. The next paragraph is from her 2023 visit at another hospital.\n' + \
             EGD + '\nImpression: Esophageal biopsies.\n'
-        self.assertEqual(ready(text, [('43239', BX)]), set())
+        self.same_as_twin(text, [('43239', BX)], {'43239'})
 
-    def test_an_earlier_paragraph_pointing_at_the_next_holds_it(self):
+    def test_an_earlier_paragraph_pointing_at_the_next_reads_as_its_heading_twin(self):
         text = REPORT_HEAD + 'Indications: Dysphagia and surveillance after adenomas.\n' + EGD + \
             ' The paragraph that follows belongs to her sister.\n' + COL + \
             '\nImpression: Esophageal biopsies; sigmoid polyp removed.\n'
-        self.assertNotIn('45385', ready(text, [('43239', BX), ('45385', SN)]))
-        self.assertTrue(structure.decisions(text)[1][1].startswith('N3'))
+        self.same_as_twin(text, [('43239', BX), ('45385', SN)], {'43239', '45385'})
 
-    def test_an_appended_prior_report_is_never_released(self):
+    def test_an_appended_prior_report_reads_as_its_heading_twin(self):
         text = REPORT_HEAD + 'Indications: Dysphagia.\n' + EGD + '\nImpression: Esophageal biopsies.\nPlan: Await ' \
             'pathology.\n\nPrior Colonoscopy Report 2022\nIndications: Surveillance.\n' + COL + \
             '\nImpression: Sigmoid polyp removed.\n'
-        self.assertNotIn('45385', ready(text, [('43239', BX), ('45385', SN)]))
-        self.assertTrue(structure.decisions(text)[1][1].startswith('P4: a summary section comes before it'))
+        self.same_as_twin(text, [('43239', BX), ('45385', SN)], {'43239', '45385'})
 
-    def test_a_denial_or_a_summary_dating_the_act_holds(self):
-        for tail in (' None of this was done today.\nImpression: Sigmoid polyp removed.\n',
-                     '\nImpression: Sigmoid polyp removed in 2022.\n'):
-            with self.subTest(tail):
-                text = REPORT_HEAD + 'Indications: Surveillance after adenomas.\n' + COL + tail
-                self.assertEqual(ready(text, [('45385', SN)]), set())
+    def test_a_denial_holds_and_a_summary_dating_reads_as_its_heading_twin(self):
+        text = REPORT_HEAD + 'Indications: Surveillance after adenomas.\n' + COL + \
+            ' None of this was done today.\nImpression: Sigmoid polyp removed.\n'
+        self.assertEqual(ready(text, [('45385', SN)]), set())  # N1's negative quantifier, kept (stricter than the twin)
+        text = REPORT_HEAD + 'Indications: Surveillance after adenomas.\n' + COL + '\nImpression: Sigmoid polyp removed in 2022.\n'
+        self.same_as_twin(text, [('45385', SN)], {'45385'})
 
     def test_the_controls_still_release(self):
         """A dated history, a history in the impression, a common report title, a generic scope naming its tract."""
@@ -96,16 +104,22 @@ class OutcomeTests(SimpleTestCase):
     def head(self, title='Colonoscopy'):
         return BANNER + f'{title}\nDate of service: 2026-10-14\n'
 
-    def test_a_cancelled_or_not_todays_course_routes_nothing(self):
-        for body, quote in (
+    def test_a_course_reads_as_its_named_twin(self):
+        """Cycle 1's I12 and I13 (word readers over the course's sentence and the document) were refuted both ways in
+        cycle 2 and replaced by parity: the instrument's course names its family as "Procedure: Colonoscopy" names it, and
+        is read no more permissively than that twin. "Status: Cancelled" holds both; the other two read READY in both
+        forms (the installed engine's own reading of the named form, recorded as its residual)."""
+        for body, quote, expected in (
                 ('Indications: Surveillance.\nProcedure: The colonoscope was advanced to the cecum.\nStatus: Cancelled - '
-                 'inadequate bowel preparation.\n', 'The colonoscope was advanced to the cecum'),
+                 'inadequate bowel preparation.\n', 'The colonoscope was advanced to the cecum', set()),
                 ('Indications: Screening.\nProcedure: The colonoscope was advanced to the cecum on a prior occasion.\n',
-                 'The colonoscope was advanced to the cecum on a prior occasion'),
+                 'The colonoscope was advanced to the cecum on a prior occasion', {'45378'}),
                 ('Indications: Screening.\nProcedure: The patient states that the colonoscope was advanced to the '
-                 'cecum.\n', 'the colonoscope was advanced to the cecum')):
+                 'cecum.\n', 'the colonoscope was advanced to the cecum', {'45378'})):
             with self.subTest(body):
-                self.assertEqual(ready(self.head() + body, [('45378', quote)]), set())
+                text = self.head() + body
+                self.assertEqual(ready(text, [('45378', quote)]), ready(named_twin(text, 'Colonoscopy'), [('45378', quote)]))
+                self.assertEqual(ready(text, [('45378', quote)]), expected)
 
     def test_a_reach_of_another_attempt_never_completes_the_examination(self):
         text = self.head('Colonoscopy Report') + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the transverse ' \
@@ -201,11 +215,14 @@ class AdmissionTests(SimpleTestCase):
                                                                                                          self.P2)])])):
             with self.subTest(picks):
                 self.assertEqual(ready(text, picks, readings), set())
+        # refutation cycle 2 (the two-cycle rule): the another-act release is abandoned, so a cited failed attempt holds
+        # the code even beside another polyp plainly removed (the declared cost, E|ANOTHER-failed-attempt); the removed
+        # polyp's own passage, cited alone, is READY
         clean = COLON_HEAD + 'Procedure: Colonoscopy\n' + ADVANCED + self.P1 + '\nA 6 mm polyp in the transverse colon ' \
             'was removed with a cold snare.\n'
-        self.assertEqual(ready(clean, [('45385', self.P1)], [read('astra', [code(clean, '45385', 'A 6 mm polyp in the '
-                                                                                  'transverse colon was removed with a '
-                                                                                  'cold snare.')])]), {'45385'})
+        removed = 'A 6 mm polyp in the transverse colon was removed with a cold snare.'
+        self.assertEqual(ready(clean, [('45385', self.P1)], [read('astra', [code(clean, '45385', removed)])]), set())
+        self.assertEqual(ready(clean, [('45385', removed)]), {'45385'})
 
     def test_a_polyp_found_and_left_in_place_contradicts_the_listing(self):
         quote = 'A 10 mm polyp was found in the sigmoid colon and was left in place for surgical resection.'
@@ -218,10 +235,14 @@ class AdmissionTests(SimpleTestCase):
         text = UPPER_HEAD + 'Procedure: Upper endoscopy with dilation\nThe endoscope was advanced to the second portion ' \
             'of the duodenum.\nA benign-appearing distal esophageal stricture was found.\n' + inflated + '\n'
         self.assertEqual(ready(text, [('43249', inflated)], [read('astra', [code(text, '43248', inflated)])]), {'43249'})
+        # refutation cycle 2 (D2, D6): cycle 1's deferral of a generic wire-guided dilator to a balloon named beside it is
+        # abandoned - two techniques named, each code fits, and proposed together they compete (owner question Q2);
+        # Corti's 43248 alone reads READY, as the installed release reads it (it reads no technique)
         cre = 'The stricture was dilated to 15 mm with a CRE wire-guided balloon dilator.'
         text = UPPER_HEAD + 'Procedure: Upper endoscopy with dilation\nThe endoscope was advanced to the second portion ' \
             'of the duodenum.\nA benign-appearing distal esophageal stricture was found.\n' + cre + '\n'
-        self.assertEqual(ready(text, [('43248', cre)]), set())
+        self.assertEqual(ready(text, [('43248', cre)]), {'43248'})
+        self.assertEqual(ready(text, [('43248', cre)], [read('astra', [code(text, '43249', cre)])]), set())
 
     def test_a_removal_before_a_failed_technique_keeps_the_hold(self):
         text = COLON_HEAD + 'Procedure: Colonoscopy\n' + ADVANCED + 'A 25 mm sessile polyp in the ascending colon was ' \
@@ -232,59 +253,39 @@ class AdmissionTests(SimpleTestCase):
 
 
 class EarlierFormBindingTests(SimpleTestCase):
-    """The rule for answers stored before the binding (cycle 1): their own question's words, word for word."""
+    """The rule for answers stored before the binding. Cycle 1 bound them by their own question's words; cycle 2 (answers
+    W2, W4) refuted that - the words were engine prose the member never saw, which this release rewords - and they now
+    bind by their (code, family, fact) key, as the installed release bound them."""
 
-    def test_bind_reads_an_earlier_form_answer_by_its_own_questions_words(self):
+    def test_bind_reads_an_earlier_form_answer_by_its_key(self):
         key = ('45385', 'gi.colonoscopy', 'extent')
-        asked, words = {key: 'f' * 64}, {key: 'w' * 64}
+        asked = {key: 'f' * 64}
 
         def answer(**kw):
             return {'code': '45385', 'family': 'gi.colonoscopy', 'fact': 'extent', 'value': 'not_documented',
                     'question': '', 'answer_id': 'a1', **kw}
-        bound, earlier = questions.bind([answer()], asked, words, {'a1': 'w' * 64})
+        bound, earlier = questions.bind([answer()], asked)
         self.assertEqual((len(bound), earlier), (1, []))
-        bound, earlier = questions.bind([answer()], asked, words, {'a1': 'v' * 64})
-        self.assertEqual((bound, [why for _, why in earlier]), ([], [questions.EARLIER_FORM]))
-        bound, earlier = questions.bind([answer()], asked, words, {})
-        self.assertEqual((bound, [why for _, why in earlier]), ([], [questions.EARLIER_FORM]))
-        bound, earlier = questions.bind([answer(code='45380')], asked, words, {'a1': 'w' * 64})
+        bound, earlier = questions.bind([answer(code='45380')], asked)
         self.assertEqual((bound, [why for _, why in earlier]), ([], [questions.NO_LONGER_ASKED]))
         # a fingerprinted answer is read by its fingerprint alone, as before
         bound, earlier = questions.bind([answer(question='f' * 64)], asked)
         self.assertEqual(len(bound), 1)
+        bound, earlier = questions.bind([answer(question='e' * 64)], asked)
+        self.assertEqual((bound, [why for _, why in earlier]), ([], [questions.ASKED_DIFFERENTLY]))
 
-    def test_the_wording_leaves_out_the_passages_the_earlier_form_never_showed(self):
-        one = questions.instance('proposal', 'gi.colonoscopy', 'extent', '45385', 'How far?', 'Reason.', ((1, 5, 'abcd'),))
-        two = questions.instance('proposal', 'gi.colonoscopy', 'extent', '45385', 'How far?', 'Reason.', ())
-        self.assertEqual(questions.wording([one]), questions.wording([two]))
-        self.assertNotEqual(questions.fingerprint([one]), questions.fingerprint([two]))
-        other = questions.instance('proposal', 'gi.colonoscopy', 'extent', '45385', 'How far?', 'Another reason.', ())
-        self.assertNotEqual(questions.wording([two]), questions.wording([other]))
-        self.assertEqual(questions.wording([]), '')
+    def test_the_word_binding_is_gone(self):
+        for name in ('wording', 'group_wording', 'EARLIER', 'EARLIER_FORM'):
+            self.assertFalse(hasattr(questions, name), name)
 
 
 class WithdrawnEngineAnswerTests(SimpleTestCase):
-    """answers lens F2: a withdrawn answer the engine had applied no longer excludes its code, before any recompute."""
+    """answers lens F2 (cycle 1) reopened a withdrawn engine-applied answer's question in the overlay alone
+    (review._reopened); cycle 2 (W1, W5, W6) refuted it - the other readers read the stored assessment and disagreed -
+    and the stage-1 design returned: every surface reads the stored assessment until the withdrawal's recompute runs, and
+    readiness holds meanwhile (review.STALE_ANSWER_BLOCKER; tests/test_completion_refutation_c2_answers.py)."""
 
-    class Clar:
-        def __init__(self, pk, answer_id):
-            self.pk, self.answer_id = pk, answer_id
-            self.scope, self.family, self.fact = 'proposal', 'gi.colonoscopy', 'performed_status'
-            self.question, self.reason = 'Was it performed?', 'A passage hedges.'
+    def test_the_overlay_reopen_is_gone_and_readiness_holds_instead(self):
+        self.assertFalse(hasattr(review, '_reopened'))
+        self.assertTrue(review.STALE_ANSWER_BLOCKER)
 
-    def row(self):
-        from studio.validation import review_view
-        return review_view.Stored(key='sel:1', code='45385', family='gi.colonoscopy', bucket='excluded',
-                                  status='excluded', checks=({'id': 'member.answer', 'status': 'fail'},
-                                                             {'id': 'pfs.presence', 'status': 'pass'}),
-                                  support={'answered': {'fact': 'performed_status', 'value': 'not_documented',
-                                                        'answers': ['a1']}})
-
-    def test_a_standing_answer_keeps_the_exclusion_and_a_withdrawn_one_reopens_the_question(self):
-        kept = review._reopened(self.row(), [self.Clar('c1', 'a1')], {'a1'})
-        self.assertEqual((kept.bucket, kept.status), ('excluded', 'excluded'))
-        reopened = review._reopened(self.row(), [self.Clar('c1', 'a1')], set())
-        self.assertEqual((reopened.bucket, reopened.status), ('selected', 'needs_clarification'))
-        self.assertEqual([c['id'] for c in reopened.checks], ['pfs.presence'])
-        self.assertNotIn('answered', reopened.support)
-        self.assertEqual([q['fact'] for q in reopened.questions], ['performed_status'])
