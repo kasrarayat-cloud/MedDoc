@@ -19,8 +19,7 @@ from django.test import SimpleTestCase
 from studio.gi import detect, sections, structure
 from studio.gi import services as gi_services
 from studio.validation import engine, review_view
-from tests.test_harness_engine import DAY, code, corti, not_coded, proposal, read, run, span
-from tests.test_harness2_r6_meaning import P_ADMIT_REASONS
+from tests.test_harness_engine import DAY, code, corti, decision, not_coded, proposal, read, run, span
 
 HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
         'Gastroenterology Procedure Report\n'
@@ -159,6 +158,7 @@ class InlineServiceLabelTests(SimpleTestCase):
                 item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
                                  ('selected', 'ready', 'participant', [name]))
+                self.assertEqual(decision(item), decision(by_corti))  # builder Q1: one evaluation, whoever proposed
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -244,9 +244,17 @@ class AdmissionCaseTests(SimpleTestCase):
                 result = run(text, corti(('45380', span(text, biopsy))),
                              [read('astra', [code(text, '45385', line)]), read('fable', [code(text, '45385', line)])])
                 found = [p for p in result.proposals if p.code == '45385']
-                self.assertEqual([(p.bucket, p.status) for p in found], [('alternative', 'informational')])
-                after = found[0].exclusion_reason.split('but not added as a proposal: ', 1)[1]
-                self.assertTrue(any(after.startswith(reason) for reason in P_ADMIT_REASONS), after)
+                # moved by the completion repair (builder Q1, equal eligibility): never READY, and read exactly as
+                # Corti's own selection of the passage - excluded with the passage that states the act failed, denied
+                # or planned (reinstatable), held for the earlier colonoscopy's - never an alternative
+                self.assertEqual(len(found), 1)
+                self.assertNotEqual(found[0].status, 'ready')
+                self.assertIn((found[0].bucket, found[0].status),
+                              (('excluded', 'excluded'), ('selected', 'needs_clarification')))
+                by_corti = proposal(run(text, corti(('45380', span(text, biopsy)), ('45385', span(text, line)))),
+                                    '45385')
+                self.assertEqual((found[0].bucket, found[0].status, found[0].exclusion_reason),
+                                 (by_corti.bucket, by_corti.status, by_corti.exclusion_reason))
 
     def test_a_number_only_in_an_alternative_list_is_never_promoted(self):
         codes = corti(('45385', span(PLAIN, SNARE))) + [engine.ProviderCode('candidate', 'cpt', '43239', '', ())]

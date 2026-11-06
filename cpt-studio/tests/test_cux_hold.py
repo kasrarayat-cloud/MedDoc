@@ -40,6 +40,11 @@ H3R = {(name, code): (before, after) for name, code, before, after in json.loads
 C1R = {(name, code): (before, after) for name, code, before, after in json.loads(
     (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'completion-r1-structure.json')
     .read_text(encoding='utf-8'))['battery']}
+# The completion repair's builder Q1 battery declaration (2026-11-06, measured after its code: an act the document
+# states not done - its own failure word, an infinitive - is excluded with that passage, and its base code is READY)
+Q1R = {(name, code): (before, after) for name, code, before, after in json.loads(
+    (Path(__file__).resolve().parent / 'fixtures' / 'gi4' / 'declarations' / 'cptc-q1-admission.json')
+    .read_text(encoding='utf-8'))['battery']}
 HELD = 'selected/needs_clarification'
 READY = 'selected/ready'
 _MODULES = []
@@ -120,7 +125,7 @@ class RegisterRowsTests(SimpleTestCase):
             for code in result['proposals']:
                 with self.subTest(name, code=code):
                     pinned = DECLARED[(name, code)][1] if (name, code) in DECLARED else UNMOVED[(name, code)]
-                    for later in (H2R, H3R, C1R):  # each repair moves a row from where the pins before it left it
+                    for later in (H2R, H3R, C1R, Q1R):  # each repair moves a row from where the pins before it left it
                         if (name, code) in later:
                             self.assertEqual(later[(name, code)][0], pinned)
                             pinned = later[(name, code)][1]
@@ -206,8 +211,16 @@ class FailedActIsNeverReleasedTests(SimpleTestCase):
                 text, base, base_line = self.HEADS[head]
                 text += line + '\n'
                 item = proposal(run(text, [sel(base, span(text, base_line)), sel(code, span(text, line))]), code)
-                self.assertEqual(item.bucket, 'selected')
                 self.assertNotEqual(item.status, 'ready', check(item, 'service.status').detail)
+                # moved by the completion repair (owner directive 2026-11-06, item 5; builder Q1): where the
+                # documented-service reader reads the act's own failure word (or a later failure, an infinitive, a plan)
+                # and nothing after it in the service is read done or in doubt, the code is excluded with that passage,
+                # reinstatable (engine._stated_not_done) - before, held with a question asking whether it was done.
+                # Every other phrasing (an attempt, no tissue, a discontinuation) stays held, as before
+                self.assertIn(item.bucket, ('selected', 'excluded'))
+                if item.bucket == 'excluded':
+                    self.assertTrue(item.reinstatable)
+                    self.assertIn(line, item.exclusion_reason)
                 self.assertNotIn('read from its own passage by the routing-era reader',
                                  check(item, 'service.status').detail)
 

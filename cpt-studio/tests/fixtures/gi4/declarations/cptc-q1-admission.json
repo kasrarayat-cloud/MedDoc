@@ -1,0 +1,61 @@
+{
+ "package": "Completion repair 2026-11-06, builder Q1 (owner directive 2026-11-06, items 3 and 5; HARNESS.md \"Completion repair (2026-11-06)\"): the H4 battery's movements against b452c6c42aa62037716b9e4fe2e3154a4f379f04.",
+ "measured_after_code": true,
+ "provenance": "Not declared before the code: measured by python -m ops.gi4.battery --base b452c6c42aa62037716b9e4fe2e3154a4f379f04 --head <builder Q1's working tree> after the rules were written, each movement read against its row's provisional truth before it was written here (0 new violations). The rule that moves them is engine._stated_not_done: where the documented service is performed and every act of the kinds a code accounts for is stated not done by its own clause (the documented-service reader's failure word, an infinitive predicate) where the statement closes what the document says about the act (it ends its sentence and its paragraph; a failure's sentence opens no other clause before the act and ends with the reader's failure word; every other mention of an act of its kinds in the service reads not done; nothing read after it says anything was done or is in doubt), the code is excluded with that passage, reinstatable, for every proposer - before, it was held with a question asking whether the act was done, and the held code held its family's base code as included in it.",
+ "battery": [
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45378",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45385",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D1 N4 ERCP stent placement failed",
+   "43260",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D1 N4 ERCP stent placement failed",
+   "43274",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D2 N10 antral biopsy failed",
+   "43235",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D2 N10 antral biopsy failed",
+   "43239",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45378",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45385",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ]
+ ],
+ "why": {
+  "R8 D1 N1": "\"Hot snare polypectomy failed.\": 45385 is excluded with that passage (truth not_done); 45378 is READY, no longer held as included in a polypectomy the document states failed (truth done)",
+  "R8 D1 N4": "\"Biliary stent placement failed.\": 43274 is excluded with that passage; 43260 is READY",
+  "R8 D2 N10": "\"Cold forceps biopsy of the antrum failed.\": 43239 is excluded with that passage; 43235 is READY",
+  "R8 D9": "\"The polyp is to be removed by hot snare tomorrow.\": an infinitive predicate, still to be done; 45385 is excluded with that passage; 45378 is READY"
+ }
+}

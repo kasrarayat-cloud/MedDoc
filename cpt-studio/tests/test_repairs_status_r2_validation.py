@@ -385,6 +385,7 @@ class Status13HedgedOwnPassageTests(RealCase):
         self.assertIn(positive, status.detail)
         self.assertIn(hedge, status.detail)
         self.assertFalse(status.detail.startswith('No documentation establishes'), status.detail)
+        self.assertFalse(status.detail.startswith('CPT Studio could not confirm'), status.detail)  # builder Q1's words
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
         self.assertIn(hedge, asked.reason)
         self.assertIn(positive, asked.reason)

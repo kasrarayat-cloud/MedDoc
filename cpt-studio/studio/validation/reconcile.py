@@ -157,9 +157,9 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # The cue that made it uncertain: routing's reading of the family when that decided it (services._finish adds it
         # after the statement of performance it overrides), else the service's own first doubt.
         cue = next((c for c in service.cues if c.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE))),
-                   service.cues[0] if service.cues else 'its documentation does not establish it')
+                   service.cues[0] if service.cues else 'CPT Studio read no statement of it')
         return Match('uncertain', service, (), 'service_uncertain',
-                     f'The document does not establish the {name} as performed on the date of service ({cue}).',
+                     f'CPT Studio could not confirm the {name} as performed on the date of service ({cue}).',
                      question=f'Confirm whether the {name} was performed on the date of service.')
     positive = 'incomplete' if service.status == 'incomplete' else 'performed'
     if profile is None or profile.family != family:
@@ -230,13 +230,15 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # that passage, never reported as an act the document does not mention. Still 'act_missing' - no such act is
         # documented as done - so every rule that reads that reason (engine._select, engine._second_opinion) is unchanged.
         return Match('uncertain', service, (), 'act_missing',
-                     f'The {name} is documented as {service.status}, but the document does not establish the {what} '
+                     f'The {name} is documented as {service.status}, but CPT Studio could not confirm the {what} '
                      f'as done: {quote(doubted.evidence[0])}.',
                      question=f'The documented {name} leaves the {what} in doubt ({quote(doubted.evidence[0], 120)}). '
                               f'Was a {what} performed on the date of service?')
     return Match('uncertain', service, (), 'act_missing',
-                 f'The {name} is documented as {service.status}, but no {what} is documented as done in it.',
-                 question=f'The documented {name} shows no {what}. Was a {what} performed on the date of service?')
+                 f'The {name} is documented as {service.status}, but CPT Studio could not find a {what} documented '
+                 'as done in it.',
+                 question=f'CPT Studio could not find a {what} in the documented {name}. Was a {what} performed on the '
+                          'date of service?')
 
 
 @dataclass(frozen=True)

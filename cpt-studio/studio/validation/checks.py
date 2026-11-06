@@ -576,7 +576,9 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         if outcome.contrary:
             reason += f' Routing reads it as {outcome.contrary.status} elsewhere: {cite(outcome.contrary)}.'
         return reason
-    reason = f'No documentation establishes that {name} was performed on the date of service.'
+    # completion repair (owner directive 2026-11-06, item 5; builder Q1): said of what CPT Studio read, never as a fact
+    # about the document - no reader rule matching is no proof the service was not performed (U9)
+    reason = f'CPT Studio could not confirm that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
                    f'document never names {name}.')

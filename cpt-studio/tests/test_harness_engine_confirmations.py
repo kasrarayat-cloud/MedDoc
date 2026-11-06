@@ -724,9 +724,11 @@ class BindingTests(SimpleTestCase):
 
     def test_a_participant_read_after_reconcile_never_takes_the_confirmation(self):
         """Moved by refutation round 6 (R6-MEANING, the session's D14): Astra's reading, read after a reconcile,
-        selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). It is listed
-        now, never selected, so it takes no key and no confirmation, and Corti's 45380 reads its own. (Refutation cycle
-        2 had held it; cycle 3 lists a participant's code for an act read in doubt itself again.)"""
+        selected its 45385 ahead of 45380 (both the participants' own proposals under Corti's failure). Moved again by
+        the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): Astra's explicit 45385
+        on the hedged snare passage is a proposal of its own again, held for that passage's doubt as Corti's selection
+        of it would be (refutation cycle 3 had listed it), and it is keyed after Corti's 45380 - so it still takes no
+        confirmation: the one made for 45380 is bound to 45380's own reading, which keeps its key and reads it."""
         fable = read('fable', [participant_code(DOUBTS_STATED, '45380', UNCLEAR)])
         early = [ParticipantInput('astra', 'unknown', reason='the outcome of its request is unknown'), fable]
         codes = (('45380', UNCLEAR),)
@@ -735,9 +737,11 @@ class BindingTests(SimpleTestCase):
         made = made_for(one, 'sel:0', DONE_BX)
         later = [read('astra', [participant_code(DOUBTS_STATED, '45385', HEDGED_SNARE)]), fable]
         two = run(DOUBTS_STATED, codes, [made], participants=later)
-        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('altp:0', '45385')])
-        listed = proposal(two, 'altp:0')
-        self.assertEqual((listed.status, listed.support.get('confirmed')), ('informational', None))
+        self.assertEqual([(key, code) for key, code, _ in rows(two)], [('sel:0', '45380'), ('sel:1', '45385')])
+        admitted = proposal(two, 'sel:1')
+        self.assertEqual((admitted.status, admitted.support.get('origin'), admitted.support.get('confirmed')),
+                         ('needs_clarification', 'participant', None))
+        self.assertNeverAnswers(two, 'sel:1', '45385')
         self.assertEqual((proposal(two, 'sel:0').code, proposal(two, 'sel:0').status), ('45380', 'ready'))
 
     def test_a_new_answer_that_selects_a_code_ahead_never_takes_the_confirmation(self):

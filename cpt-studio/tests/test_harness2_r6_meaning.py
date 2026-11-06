@@ -26,6 +26,7 @@ from html import unescape
 from django.test import SimpleTestCase, override_settings
 
 from studio import models, review
+from studio.types import ProviderCode
 from studio.validation import engine
 from tests import test_harness2_pipeline as hp
 from tests.test_harness2_r2_wording import browser
@@ -270,13 +271,45 @@ class PositionWordingTests(MeaningCase):
         self.assertIn(f'Astra proposed it: Astra proposed this code, quoting the document verbatim. — “{history}”',
                       self.page_lines(detail))
         self.assert_worded(encounter_id, detail)
-        self.assertEqual(corti_rows(detail), corti_rows(self.corti_alone(text, [('45385', snare)])))
+        # moved by the completion repair (owner directive 2026-11-06, item 2: evidence-based reconciliation; builder
+        # Q1): Astra's own passage is read with Corti's 45385 now, once, so the code cites both - and the history line
+        # is recorded as about another occasion (support 'unrelated', provenance Astra's) and decides nothing: the
+        # code's bucket, status and actions are Corti alone's
+        mine = [row[:5] for row in corti_rows(detail)]
+        self.assertEqual(mine, [row[:5] for row in corti_rows(self.corti_alone(text, [('45385', snare)]))])
+        (item,) = [p for p in proposals(detail) if p['code'] == '45385']
+        provenance = {text[x['start']:x['end']]: x['by'] for x in item['support']['provenance']}
+        self.assertEqual(provenance, {history: ['astra'], snare: ['corti']})
+        self.assertEqual(item['support']['status'], 'pass')
+        self.assertEqual(len(item['support']['unrelated']), 1)
 
 
 # --- D14 on the engine: a participant's code no decidable proposal carries is an alternative, never a proposal --------
 
 def participant_only(result, value):
     return [p for p in result.proposals if p.code == value and (p.support or {}).get('origin') == 'participant']
+
+
+def first_spans(participants, value):
+    """The exact spans every participant's frozen first reading quoted for ``value``, each once, in document order: what
+    Corti's own selection of the same passages cites (the completion repair's equal-eligibility contract)."""
+    found = {}
+    for item in participants:
+        reading = getattr(item, 'reading', None)
+        for entry in (reading.codes if reading is not None else ()):
+            if entry.code == value:
+                for quote in entry.evidence:
+                    for one in quote.spans:
+                        found.setdefault((one.start, one.end), one)
+    return tuple(found[key] for key in sorted(found))
+
+
+def shape(item, code=False):
+    """A proposal's outcome apart from its key, record and rationale: bucket, status, reinstatability, exclusion reason,
+    questions (fact and question) and its checks' ids and statuses."""
+    out = (item.bucket, item.status, item.reinstatable, item.exclusion_reason,
+           tuple((q.fact, q.question) for q in item.clarifications), tuple((c.id, c.status) for c in item.checks))
+    return ((item.code,) + out) if code else out
 
 
 def corti_part(result):
@@ -297,23 +330,38 @@ class D14EngineTests(SimpleTestCase):
     admitted by none of its rules - and its reason is P-ADMIT's (not_added_reason), never D14's."""
 
     def assert_d14(self, text, corti_codes, participants, only, provider_status='succeeded'):
+        """Moved by the completion repair (owner directive 2026-11-06, item 3: "an explicit supported proposal must
+        receive the same evaluation regardless of which participant supplied it"; builder Q1). Under D14 and P-ADMIT
+        each of these participant codes was listed and Corti's proposals read as with no participant. Now a code a first
+        reading proposed is read by the per-code path and is EXACTLY what Corti's own selection of the same passages is
+        (bucket, status, reinstatability, exclusion reason, questions) - so it is never READY where that is not, and an
+        act the document states not done is excluded with its passage - and every other proposal and the reconciliation
+        are exactly what they are when Corti selects it too: the cross-code effects (the base rules, competition, the
+        acts it covers) are computed the same way whoever proposed it. A code only a peer review added stays an
+        alternative (PARTICIPANT_PEER_ONLY). ``alone`` is still returned: the engine with no participant."""
         codes = corti(*((value, span(text, quote)) for value, quote in corti_codes))
         result = run(text, codes, participants, provider_status=provider_status)
         alone = run(text, codes, provider_status=provider_status)
+        first = {value: first_spans(participants, value) for value in only}
+        extra = [ProviderCode('selected', 'cpt', value, 'UNVERIFIED PROVIDER WORDING', spans)
+                 for value, spans in first.items() if spans]
+        both = run(text, codes + extra, provider_status=provider_status)  # Corti selecting them too, no participant
         for value in only:
             items = participant_only(result, value)
-            self.assertEqual([(p.bucket, p.status, p.reinstatable) for p in items],
-                             [('alternative', 'informational', False)], (value, text[-120:]))
-            self.assertTrue(items[0].key.startswith('altp:'), items[0].key)
-            self.assertTrue(not_added_reason(items[0].exclusion_reason), items[0].exclusion_reason)
-            self.assertFalse(any(p.code == value and p.bucket != 'alternative' for p in result.proposals), value)
-        self.assertEqual(corti_part(result), list(alone.proposals), text[-160:])
-        self.assertEqual(result.clarifications, alone.clarifications)
+            self.assertEqual(len(items), 1, (value, [(p.code, p.bucket) for p in result.proposals]))
+            if not first[value]:
+                self.assertEqual((items[0].bucket, items[0].status), ('alternative', 'informational'), value)
+                self.assertIn(engine.PARTICIPANT_PEER_ONLY, items[0].exclusion_reason)
+                continue
+            theirs = [p for p in both.proposals if p.code == value and p.bucket != 'alternative']
+            self.assertEqual(len(theirs), 1, value)
+            self.assertEqual(shape(items[0]), shape(theirs[0]), (value, text[-160:]))
+            self.assertNotEqual(items[0].bucket, 'alternative', value)
+        decided = [p for p in result.proposals if (p.support or {}).get('origin') != 'participant']
+        self.assertEqual(sorted(shape(p, code=True) for p in decided),
+                         sorted(shape(p, code=True) for p in both.proposals if p.code not in first or not first[p.code]))
         for key in RECONCILED:
-            self.assertEqual(result.completeness[key], alone.completeness[key], key)
-        # nothing a participant gave is selected: every selected proposal is Corti's
-        self.assertEqual([p.code for p in result.proposals if p.bucket != 'alternative'],
-                         [p.code for p in alone.proposals if p.bucket != 'alternative'])
+            self.assertEqual(result.completeness[key], both.completeness[key], key)
         return result, alone
 
     def test_negation_1_a_failed_or_attempted_act(self):
@@ -420,9 +468,14 @@ class D14EngineTests(SimpleTestCase):
                 result, alone = self.assert_d14(
                     text, [], [read('astra', [code(text, '45385', line)],
                                     services=[service(text, 'colonoscopy', line)])], ['45385'])
-                self.assertEqual([p.bucket for p in result.proposals], ['alternative'])
+                # moved by the completion repair (builder Q1, equal eligibility): the explicit code is read by the
+                # per-code path, as Corti's own selection of the line is (assert_d14) - held where the readers
+                # disagree about the act's time, excluded where both read it as an earlier occasion's - and is never
+                # ready or approvable as it stands; with no participant there is no code at all
+                (item,) = result.proposals
+                self.assertIn((item.bucket, item.status), (('selected', 'needs_clarification'), ('excluded', 'excluded')))
                 self.assertEqual(alone.proposals, ())
-                self.assertEqual(result.completeness['state'], alone.completeness['state'])
+                self.assertNotEqual(result.completeness['state'], 'complete_pending_review')
                 # a first proposed after peer review, by Fable alone (t25): the same
                 peered = run(text, (), [reviewed('fable', [], review=peer('fable',
                                                                           additional=(code(text, '45385', line),)))])
@@ -430,8 +483,14 @@ class D14EngineTests(SimpleTestCase):
                 self.assertIn(engine.PARTICIPANT_PEER_ONLY, peered.proposals[0].exclusion_reason)
 
     def test_time_2_beside_corti_s_correct_base_code(self):
-        """time-2: Corti's 45378 on today's cecal intubation keeps its own question (never "Is 45378 reported
-        separately from 45385"), and CPT Studio's own unresolved-act warning stays."""
+        """time-2: Corti's 45378 on today's cecal intubation. Moved by the completion repair (owner directive
+        2026-11-06, item 3; builder Q1): Astra's explicit 45385 on the earlier colonoscopy's line is read by the
+        per-code path and held - the inventory reads the line's removal as today's act and routing as another time's,
+        so the readers disagree about its time (the meaning check's time-1 shape, held for both, as Corti's own
+        selection is) - and its cross-code effect is the one Corti's selection has: 45378, held already beside the
+        snare removal the inventory reads (base_included's reportable arm), now names 45385 in its question. The
+        unresolved snare is covered by the held code, as by any selection; a peer-review addition stays an
+        alternative and changes nothing."""
         text = earlier(LAST_LABEL)
         for participants in ([read('astra', [code(text, '45385', LAST_LABEL)],
                                    services=[service(text, 'colonoscopy', LAST_LABEL)])],
@@ -441,11 +500,17 @@ class D14EngineTests(SimpleTestCase):
                 result, alone = self.assert_d14(text, [('45378', CECUM_LANDMARKS)], participants, ['45385'])
                 base = next(p for p in result.proposals if p.code == '45378')
                 corti_base = next(p for p in alone.proposals if p.code == '45378')
-                self.assertEqual([q.question for q in base.clarifications],
-                                 [q.question for q in corti_base.clarifications])
-                self.assertFalse(any('45385' in q.question for q in base.clarifications), base.clarifications)
-                self.assertTrue(result.completeness['unresolved_items'])
-                self.assertEqual(result.completeness['included_by'], alone.completeness['included_by'])
+                self.assertEqual([q.fact for q in corti_base.clarifications], ['base_included'])  # held with Corti alone
+                self.assertEqual([q.fact for q in base.clarifications], ['base_included'])
+                if len(participants) == 1:  # the first reading's code, admitted
+                    self.assertEqual([q.question for q in base.clarifications],
+                                     ['Is 45378 reported separately from 45385 for this examination?'])
+                    self.assertEqual(result.completeness['unresolved_items'], [])
+                else:  # only a peer review proposed it: an alternative, and everything is as with Corti alone
+                    self.assertEqual([q.question for q in base.clarifications],
+                                     [q.question for q in corti_base.clarifications])
+                    self.assertTrue(result.completeness['unresolved_items'])
+                    self.assertEqual(result.completeness['included_by'], alone.completeness['included_by'])
 
     def test_a_documented_act_a_participant_codes_is_admitted(self):
         """The rule's plain case, moved by HARNESS.md P-ADMIT (2026-11-05; D14 listed it and left the biopsy
@@ -475,17 +540,20 @@ class D14EngineTests(SimpleTestCase):
         result = run(text, (), [read('astra', [code(text, '45385', FAILED)]),
                                 read('fable', [code(text, '45378', CECUM)])], provider_status='failed')
         # HARNESS.md P-ADMIT (2026-11-05): Corti's failure blocks only itself (I10), so a first-reading proposal is
-        # checked for admission as beside an answer. Fable's 45378 on today's completed examination is admitted; Astra's
-        # 45385 on "Hot snare polypectomy failed." is not (it accounts for nothing left open), with P-ADMIT's reason.
+        # checked for admission as beside an answer. Fable's 45378 on today's completed examination is admitted.
+        # Moved by the completion repair (builder Q1): Astra's 45385 on "Hot snare polypectomy failed." is admitted
+        # too and excluded with that passage, reinstatable, as Corti's own selection of it is - never READY
         self.assertEqual([(p.code, p.bucket, p.status) for p in result.proposals],
-                         [('45378', 'selected', 'ready'), ('45385', 'alternative', 'informational')])
+                         [('45378', 'selected', 'ready'), ('45385', 'excluded', 'excluded')])
         self.assertEqual(result.proposals[0].support['origin'], 'participant')
-        self.assertTrue(not_added_reason(result.proposals[1].exclusion_reason), result.proposals[1].exclusion_reason)
+        self.assertTrue(result.proposals[1].reinstatable)
+        self.assertIn(FAILED, result.proposals[1].exclusion_reason)
         provider = next(c for c in result.encounter_checks if c.id == 'provider.status')
         # never "so there are no CPT proposals" beside a proposal (engine._Harness.provider_checks)
         self.assertNotIn('so there are no CPT proposals', provider.detail)
-        self.assertIn('so it proposed no codes. The proposals listed come only from the independent participants (Fable)',
-                      provider.detail)
+        # moved by the completion repair (builder Q1): Astra's excluded proposal is listed too, so both are named
+        self.assertIn('so it proposed no codes. The proposals listed come only from the independent participants (Astra '
+                      'and Fable)', provider.detail)
 
     def test_the_scope_and_unlocated_reasons_still_come_first(self):
         """The existing reasons apply first: a code out of the CPT scope says so, and a code none of whose quotes was
@@ -495,43 +563,62 @@ class D14EngineTests(SimpleTestCase):
                      [read('astra', [code(text, 'G0105', CECUM), code(text, '45380', 'not in the document'),
                                      code(text, '45385', FAILED)])])
         reasons = {p.code: p.exclusion_reason for p in result.proposals if p.bucket == 'alternative'}
-        self.assertEqual(sorted(reasons), ['45380', '45385', 'G0105'])
+        # moved by the completion repair (builder Q1): the scope and unlocated codes are the only alternatives; 45385, an
+        # explicit first-reading code, is admitted and excluded with the passage that states the polypectomy failed
+        self.assertEqual(sorted(reasons), ['45380', 'G0105'])
         self.assertIn('HCPCS Level II code', reasons['G0105'])
         self.assertNotIn(D14_REASON, reasons['G0105'])
         self.assertIn(engine.UNLOCATED, reasons['45380'])
         self.assertNotIn(D14_REASON, reasons['45380'])
-        self.assertTrue(not_added_reason(reasons['45385']), reasons['45385'])
-        self.assertNotIn(D14_REASON, reasons['45385'])
+        (failed,) = [p for p in result.proposals if p.code == '45385']
+        self.assertEqual((failed.bucket, failed.reinstatable), ('excluded', True))
+        self.assertIn(FAILED, failed.exclusion_reason)
+        self.assertNotIn(D14_REASON, failed.exclusion_reason)
 
 
 # --- D14 through the pipeline: every surface, and Corti's proposals as with no participant configured -----------------
 
 class D14PipelineTests(MeaningCase):
     def assert_d14(self, text, only, corti=(), **participants):
-        """The findings' input through the pipeline: each participant-only code is served as an alternative a member
-        can do nothing with, and every Corti proposal's bucket, status, allowed actions, checks and questions are the
-        participants-disabled run's on the same document."""
+        """The findings' input through the pipeline. Moved by the completion repair (owner directive 2026-11-06, item
+        3: equal eligibility; builder Q1): under D14 and P-ADMIT each participant-only code was served as an alternative
+        and every Corti proposal as with no participant. Now a code a participant's first reading proposed is admitted
+        and served as the engine reads it by the per-code path - D14EngineTests pins, on these same inputs, that it is
+        exactly what Corti's own selection of the same passages is, cross-code effects included - so here: it is never
+        READY on these meaning-check inputs, never approvable as it stands (held: its question and Reject; excluded:
+        reinstatable with the passage), and approving it is refused; a code only a peer review added stays an
+        alternative a member can do nothing with."""
         encounter_id = self.scenario(text, corti, **participants)
         detail = self.detail(encounter_id)
         self.assertEqual(detail['harness']['phase'], 2)
+        first = {item['code'] for key in ('astra', 'fable') if participants.get(key)
+                 for item in participants[key].get('codes', ())}
         for value in only:
             rows = [p for p in proposals(detail) if p['code'] == value]
-            self.assertEqual([(p['bucket'], p['status'], p['allowed_actions'], p['reinstatable']) for p in rows],
-                             [('alternative', 'informational', [], False)], value)
-            self.assertTrue(not_added_reason(rows[0]['exclusion_reason']), rows[0]['exclusion_reason'])
+            self.assertEqual(len(rows), 1, value)
+            row = rows[0]
+            if value not in first:  # proposed only in peer review
+                self.assertEqual((row['bucket'], row['status'], row['allowed_actions'], row['reinstatable']),
+                                 ('alternative', 'informational', [], False), value)
+                self.assertTrue(not_added_reason(row['exclusion_reason']), row['exclusion_reason'])
+            else:
+                self.assertIn((row['bucket'], row['status']), (('selected', 'needs_clarification'),
+                                                               ('excluded', 'excluded')), value)
+                self.assertNotIn('approve', row['allowed_actions'], value)
+                self.assertEqual(row['reinstatable'], row['bucket'] == 'excluded', value)
             made = self.post(f'/api/encounters/{encounter_id}/decisions',
-                             {'proposal_id': rows[0]['id'], 'action': 'approve', 'acknowledgement': ACK,
+                             {'proposal_id': row['id'], 'action': 'approve', 'acknowledgement': ACK,
                               'note': 'Synthetic attempt.'})
             self.assertNotEqual(made.status_code, 201, value)
-            self.assertFalse(any(value in blocker for blocker in detail['readiness']['blockers']),
-                             detail['readiness'])
         self.assertFalse(models.Decision.objects.filter(encounter_id=encounter_id).exists())
-        self.assertEqual(corti_rows(detail), corti_rows(self.corti_alone(text, corti)))
         return encounter_id, detail
 
     def test_n1_every_surface_lists_the_failed_polypectomy_as_an_alternative(self):
         """negation-1, N1: Astra's 45385 on "Hot snare polypectomy failed." (Fable's peer review supporting it) was
-        Ready, approvable and approved into the reviewed report, and held Corti's 45378 as included in it."""
+        Ready, approvable and approved into the reviewed report, and held Corti's 45378 as included in it. Moved by the
+        completion repair (owner directive 2026-11-06, items 3 and 5; builder Q1): the explicit code is admitted and
+        EXCLUDED with the passage that states the polypectomy failed - reinstatable, as Corti's own selection of it is -
+        so 45378 is READY, and no surface ever offers 45385 as ready or approved."""
         text = doc(COLON, SEEN, FAILED)
         encounter_id, detail = self.assert_d14(
             text, ['45385'], [('45378', CECUM)],
@@ -540,28 +627,19 @@ class D14PipelineTests(MeaningCase):
             fable_peer=hp.peer_answer(positions=[('45385', 'supports', FAILED)]))
         (item,) = [p for p in proposals(detail) if p['code'] == '45385']
         self.assertEqual((item['proposed_by'], item['support']['origin']), (['astra'], 'participant'))
-        # the page: no code card for it, and its Alternatives row gives CPT Studio's reason, with no action
-        page = browser('page()', detail)
-        self.assertNotIn(f'id="card-{item["id"]}"', page)
-        said = not_added_reason(item['exclusion_reason'])
-        self.assertTrue(said, item['exclusion_reason'])
-        reason = json.dumps(said)
-        row = browser(f'visible(page()).split("\\n").filter(line => line.includes({reason})).join("\\n")', detail)
-        self.assertIn(said, row)
-        # card-scoped (refutation round 7, falsegreen-3): the page draws a card's badge and its code on separate lines,
-        # so the per-line check this replaces could never fail
+        self.assertEqual((item['bucket'], item['status'], item['reinstatable']), ('excluded', 'excluded', True))
+        self.assertIn(FAILED, item['exclusion_reason'])
+        (base,) = [p for p in proposals(detail) if p['code'] == '45378']
+        self.assertEqual((base['bucket'], base['status']), ('selected', 'ready'))
+        # card-scoped (refutation round 7, falsegreen-3): no card shows 45385 as ready for review
         self.assertEqual(browser('cards(page()).map(visible).filter(card => card.split("\\n").includes("45385") '
                                  '&& card.includes("Ready for review")).length', detail), 0)
-        # the reports: listed under ALTERNATIVES, never selectable, and never among the selections
-        draft = self.download(encounter_id, 'draft', 'txt')
-        listed = [line for line in draft.splitlines() if '45385' in line and 'never selectable' in line]
-        self.assertEqual(len(listed), 1, draft)
-        self.assertIn(not_added_reason(item['exclusion_reason']), listed[0])
+        # the reports: never among the approved or undecided selections
         rows = [r for r in csv_rows(self.download(encounter_id, 'draft', 'csv'))
                 if r['code'] == '45385' and r['item_list'] in ('approved', 'rejected', 'undecided', 'excluded',
                                                                 'alternative')]
-        self.assertEqual([r['item_list'] for r in rows], ['alternative'])
-        # the owner's trace: its reconciliation row is the alternative's
+        self.assertEqual([r['item_list'] for r in rows], ['excluded'])
+        # the owner's trace: its reconciliation row is never ready
         trace = self.trace(encounter_id)
         lines = [line for line in self.trace_lines(trace) if line.startswith('45385 ·')]
         self.assertTrue(lines, self.trace_lines(trace))
@@ -611,19 +689,22 @@ class D14PipelineTests(MeaningCase):
         text = earlier(LAST_LABEL)
         astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
         encounter_id, detail = self.assert_d14(text, ['45385'], astra=astra)
-        alone = self.corti_alone(text)
-        self.assertEqual(detail['assessment']['completeness']['unresolved_items'],
-                         alone['assessment']['completeness']['unresolved_items'])
         self.assertFalse(detail['readiness']['reviewed'])
-        # the panel says whose the listed code is, never that the provider proposed it (Corti selected nothing)
         lines = self.page_lines(detail)
-        # moved by refutation round 7 (display-2): who gave it, never "independent" (it was "Each code listed below is
-        # an independent participant's, offered only as an alternative."); and by round 8 (wording-3, page-3): never
-        # "not the provider", which a refused or unread provider response can carry the same code against
-        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable and is '
-                      'offered only as an alternative.', lines)
         self.assertFalse(any('The provider proposed' in line for line in lines), lines)
-        self.assert_d14(text, ['45385'], fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
+        # moved by the completion repair (builder Q1): the first reading's code is a held proposal now, never "offered
+        # only as an alternative"; the peer review's alone still is, and the panel says whose it is (refutation round 7,
+        # display-2; round 8, wording-3, page-3)
+        self.assertNotIn('No code is selected for approval. Each code listed below was given by Astra or Fable and is '
+                         'offered only as an alternative.', lines)
+        # another request (a trailing blank line), so the first scenario's retained reading is never reused for it
+        text += '\n'
+        peer_id, peered = self.assert_d14(text, ['45385'], fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
+        self.assertIn('No code is selected for approval. Each code listed below was given by Astra or Fable and is '
+                      'offered only as an alternative.', self.page_lines(peered))
+        alone = self.corti_alone(text)
+        self.assertEqual(peered['assessment']['completeness']['unresolved_items'],
+                         alone['assessment']['completeness']['unresolved_items'])
 
     def test_time_2_p4_and_p6(self):
         """time-2: Corti's correct 45378 keeps its own question and CPT Studio's own unresolved-act warning stays."""
@@ -631,10 +712,19 @@ class D14PipelineTests(MeaningCase):
         for participants in ({'astra': hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])},
                              {'fable_peer': hp.peer_answer(codes=[('45385', LAST_LABEL)])}):
             with self.subTest(sorted(participants)):
+                # each variant its own request (a trailing blank line), so no retained reading is reused across them
+                text += '\n'
                 encounter_id, detail = self.assert_d14(text, ['45385'], [('45378', CECUM_LANDMARKS)], **participants)
                 draft = self.download(encounter_id, 'draft', 'txt')
-                self.assertIn('snare removal (hot snare) in the colonoscopy [not_covered]', draft)
-                self.assertNotIn('Is 45378 reported separately from 45385', json.dumps(detail))
+                if 'astra' in participants:
+                    # moved by the completion repair (builder Q1, equal eligibility; D14EngineTests' time-2): the first
+                    # reading's 45385 is held, as Corti's own selection of the line is, so it covers the snare the
+                    # inventory reads and 45378's base question names it
+                    self.assertNotIn('snare removal (hot snare) in the colonoscopy [not_covered]', draft)
+                    self.assertIn('Is 45378 reported separately from 45385', json.dumps(detail))
+                else:  # a peer review's addition alone: an alternative, and nothing else moves
+                    self.assertIn('snare removal (hot snare) in the colonoscopy [not_covered]', draft)
+                    self.assertNotIn('Is 45378 reported separately from 45385', json.dumps(detail))
 
 
 # --- negation-5: a participant's performed service where the documented-service reading reads it as not done ----------
@@ -819,9 +909,18 @@ class D14BlockerTests(MeaningCase):
         return detail
 
     def test_time_1_p1_says_whose_the_listed_code_is(self):
+        """Moved by the completion repair (builder Q1, equal eligibility): Astra's first-reading 45385 on the last
+        colonoscopy's line is admitted now, held with its question (its own blocker), so the every-code-an-alternative
+        state is reached by a code a peer review alone added - which stays an alternative."""
         text = earlier(LAST_LABEL)
         astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
-        encounter_id = self.scenario(text, astra=astra)
+        admitted = self.detail(self.scenario(text, astra=astra))
+        self.assertEqual([(p['code'], p['bucket'], p['status'], (p.get('support') or {}).get('origin'))
+                          for p in proposals(admitted)], [('45385', 'selected', 'needs_clarification', 'participant')])
+        self.assertIn('45385 has an open clarification', admitted['readiness']['blockers'])
+        # another request (a trailing blank line), so the first scenario's retained reading is never reused for it
+        text += '\n'
+        encounter_id = self.scenario(text, fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
         detail = self.assert_blocker(encounter_id, PARTICIPANTS_ONLY, 'provider proposed')
         # and nowhere in the draft TXT does CPT Studio say the provider proposed a code
         self.assertNotIn('provider proposed', self.download(encounter_id))
@@ -833,8 +932,10 @@ class D14BlockerTests(MeaningCase):
         # nothing is reviewable), so the provider did propose a code that was excluded - its sentence stands, and the
         # participants' does not
         text = earlier(LAST_LABEL)
-        astra = hp.reading(codes=[('45385', LAST_LABEL)], services=[colon_service(LAST_LABEL)])
-        encounter_id = self.scenario(text, corti=[('G0121', CECUM_LANDMARKS)], astra=astra)
+        # moved by the completion repair (builder Q1): the participant's code is a peer review's alone, so it stays an
+        # alternative (a first reading's is admitted now, test above)
+        encounter_id = self.scenario(text, corti=[('G0121', CECUM_LANDMARKS)],
+                                     fable_peer=hp.peer_answer(codes=[('45385', LAST_LABEL)]))
         detail = self.detail(encounter_id)
         self.assertEqual(sorted((p['code'], p['bucket'], (p.get('support') or {}).get('origin') or 'primary')
                                 for p in proposals(detail)),

@@ -166,8 +166,9 @@ def decision(item):
 
 
 # What a configured participant adds to a proposal's support, outside its decision: the participants' record, and the
-# identity a confirmation of its question is bound to (HARNESS.md 12.5), recorded only while one is configured.
-RECORD = ('proposed_by', 'participants', 'phases', 'identity')
+# identity a confirmation of its question is bound to (HARNESS.md 12.5), recorded only while one is configured. The
+# completion repair (builder Q1) adds who cited each passage ('provenance'), a record too.
+RECORD = ('proposed_by', 'participants', 'phases', 'identity', 'provenance')
 
 
 def without_record(item):
@@ -218,11 +219,17 @@ class ParityTests(SimpleTestCase):
 
 class MergeTests(SimpleTestCase):
     def test_a_code_the_provider_selected_stays_its_proposal_with_the_participant_recorded(self):
+        """Moved by the completion repair (owner directive 2026-11-06, item 3; builder Q1, evidence-based
+        reconciliation): the code stays Corti's one proposal, and a participant's own first-reading passage is now read
+        with it, once, in document order - before, "another quote: never merged into it", so a code was held by the
+        evidence hold when Corti's passages cited other text while a participant's showed the act (L4-4). Who cited
+        which passage is recorded (support['provenance']); the decision here is the same, READY on the snare."""
         alone = run(COLON, corti(('45385', span(COLON, SNARE))))
-        both = run(COLON, corti(('45385', span(COLON, SNARE))),
-                   [read('astra', [code(COLON, '45385', POLYP)])])  # another quote: never merged into it
+        both = run(COLON, corti(('45385', span(COLON, SNARE))), [read('astra', [code(COLON, '45385', POLYP)])])
         mine, before = proposal(both, '45385'), proposal(alone, '45385')
-        self.assertEqual(without_record(mine), before)  # nothing else about it changes: evidence, checks, fingerprint
+        self.assertEqual((mine.key, mine.bucket, mine.status), (before.key, before.bucket, before.status))
+        self.assertEqual([e.text for e in mine.evidence], [POLYP, SNARE])  # read with it, each once, in document order
+        self.assertEqual([p['by'] for p in mine.support['provenance']], [['astra'], ['corti']])
         self.assertEqual(mine.support['proposed_by'], ['corti', 'astra'])
         astra = mine.support['participants']['astra']
         self.assertEqual(astra['position'], 'proposed')
@@ -301,28 +308,21 @@ class MergeTests(SimpleTestCase):
         self.assertNotIn(OWN_WORDS, canonical_json(result).decode('utf-8'))
 
     def test_a_participant_code_is_judged_by_the_providers_own_path_and_admitted_only_where_its_passage_shows_the_act(self):
-        """I2 (HARNESS.md P-ADMIT, 2026-11-05): a participant's code is judged by the proposal provider's own path, the
-        same passage giving the same proposal whoever proposed it where it is admitted. Admission adds one condition
-        the provider's own selection does not meet: the participant's own passage must show the act it accounts for.
-        So the plan sentence and the cecal-intubation sentence quoted for 45380 are not admitted (the provider's own
-        selection of them is held, or ready on the documented biopsy with its support warned), and Corti's proposals
-        are then exactly what the engine makes with no participant. (D14 had listed all three; before D14 all three
-        were proposals.)"""
+        """I2 (HARNESS.md P-ADMIT, 2026-11-05): a participant's code is judged by the proposal provider's own path.
+        Moved by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): the
+        admission's own extra condition - the participant's passage must show the act, else the code was an alternative
+        "not shown" - is gone, because it made the outcome depend on who proposed the code: the plan sentence and the
+        cecal-intubation sentence quoted for 45380 now give exactly the proposal the provider's own selection of them
+        gives (held, or ready on the documented biopsy with its support warned), for all three quotes. (D14 had listed
+        all three; P-ADMIT listed two.)"""
         for quote, text in ((BIOPSY, COLON), (PLAN, COLON_PLAN), (CECUM, COLON)):
-            alone = run(text, corti(('45385', span(text, SNARE))))
             by_provider = proposal(run(text, corti(('45385', span(text, SNARE)), ('45380', span(text, quote)))),
                                    '45380')
             result = run(text, corti(('45385', span(text, SNARE))), [read('fable', [code(text, '45380', quote)])])
             by_participant = proposal(result, '45380')
             self.assertEqual(by_participant.provider_display, '')  # a participant's own words are never shown
-            if quote == BIOPSY:
-                self.assertEqual(decision(by_participant), decision(by_provider), quote)
-                self.assertEqual(by_participant.support['origin'], 'participant')
-            else:
-                self.assertEqual((by_participant.bucket, by_participant.status), ('alternative', 'informational'), quote)
-                self.assertIn(engine.PARTICIPANT_NOT_SHOWN, by_participant.exclusion_reason)
-                self.assertEqual([without_record(p) for p in result.proposals if p.code != '45380'],
-                                 list(alone.proposals))
+            self.assertEqual(decision(by_participant), decision(by_provider), quote)
+            self.assertEqual(by_participant.support['origin'], 'participant')
 
     def test_a_held_or_excluded_reading_is_never_overridden_by_a_participant(self):
         """I2: a participant's code is ready only where the readers make it so. "Repeat colonoscopy" quoted from a plan
@@ -337,8 +337,12 @@ class MergeTests(SimpleTestCase):
                                 read('fable', [code(text, '45380', 'Colonoscopy with biopsies next month.')])])
         item = proposal(result, '45380')
         self.assertNotEqual(item.status, 'ready')
-        self.assertEqual((item.bucket, item.status, item.reinstatable), ('alternative', 'informational', False))
-        self.assertTrue(not_added_reason(item.exclusion_reason), item.exclusion_reason)
+        # moved by the completion repair (builder Q1, equal eligibility): the participants' explicit code is read by the
+        # per-code path and excluded with the passage that plans it, reinstatable - as the provider's own selection of
+        # that passage is - never an alternative "not documented"
+        self.assertEqual((item.bucket, item.status, item.reinstatable), ('excluded', 'excluded', True))
+        self.assertIn('Colonoscopy with biopsies next month.', item.exclusion_reason)
+        self.assertFalse(not_added_reason(item.exclusion_reason), item.exclusion_reason)
 
     def test_unverified_quotes_never_make_a_proposal(self):
         """I2 and I7: a code whose quotes were all not found verbatim, or whose spans are not exact slices of the
@@ -464,12 +468,14 @@ class AgreementNeverPromotesTests(SimpleTestCase):
                         read('astra', [code(COLON_HEDGE, '45380', HEDGE)]))
         alone = proposal(run(COLON_HEDGE, codes, [fable]), '45380')
         self.assertEqual((alone.bucket, alone.status), ('selected', 'ready'))
+        # moved by the completion repair (builder Q1, equal eligibility): the hedged code reaches review held with the
+        # per-code path's question, as the provider's own selection of the hedge is - never an alternative
         hedged = proposal(run(COLON_HEDGE, codes, [astra]), '45380')
-        self.assertEqual((hedged.bucket, hedged.status), ('alternative', 'informational'))
-        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, hedged.exclusion_reason)  # its own passage puts the act in doubt
+        self.assertEqual((hedged.bucket, hedged.status), ('selected', 'needs_clarification'))
+        by_provider = proposal(run(COLON_HEDGE, codes + corti(('45380', span(COLON_HEDGE, HEDGE)))), '45380')
+        self.assertEqual(decision(hedged), decision(by_provider))
         both = proposal(run(COLON_HEDGE, codes, [astra, fable]), '45380')
-        self.assertEqual((both.bucket, both.status, both.clarifications), ('alternative', 'informational', ()))
-        self.assertIn(engine.PARTICIPANT_NOT_ESTABLISHED, both.exclusion_reason)
+        self.assertEqual((both.bucket, both.status), ('selected', 'needs_clarification'))  # agreement never releases
         self.assertEqual([e.text for e in both.evidence], [BIOPSY, HEDGE])
         self.assertEqual(decision(proposal(run(COLON_HEDGE, codes, [fable, astra]), '45380')), decision(both))
 
