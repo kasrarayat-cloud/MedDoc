@@ -24,7 +24,12 @@ CASES = json.loads((Path(__file__).parent / 'fixtures' / 'gi4' / 'refutation' / 
                    .read_text(encoding='utf-8'))
 # READY where the base is not, read against the document: biopsies taken "prior to dilation" - a point inside today's
 # procedure (L3-9). (F-ACTS' meat-bolus release, judged correct in cycle 3, went with F-ACTS in cycle 4.)
-JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today'}
+JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today',
+                   # completion repair (2026-11-06, U2; studio.gi.structure): moved pin - the coin removed with a Roth
+                   # net inside the report's own labelled COLONOSCOPY part is the colonoscopy's act today (45379); the
+                   # base held it because the part opened no family. Its F1b and F1d siblings (an upper GI code for the
+                   # colon's foreign body) stay as pinned: not READY
+                   'C3-1:c31-1:F1a': "the labelled COLONOSCOPY part's own foreign body removal is today's act"}
 # one documented act in each: a restatement or a doubted second statement of it
 ONE_ACT = ('C3-3:f1_two_ready:', 'C3-3:f4_doubted_ready:')
 

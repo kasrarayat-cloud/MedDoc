@@ -92,17 +92,18 @@
    ],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion U2 (studio.gi.structure)": "READY/READY: the labelled COLONOSCOPY part under the report's own Procedure line is a report part of the colonoscopy, so the site-less removal binds to it (corpus C3|C3-1:c31-1:F1a, required READY)"
    }
   },
   {

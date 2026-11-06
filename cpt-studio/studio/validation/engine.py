@@ -18,6 +18,7 @@ from typing import Mapping, Optional, Sequence
 from studio.gi.context import charge_question_day, is_member_conflict
 from studio.gi import cues as gi_cues
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
@@ -645,7 +646,7 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
     other such code, a proposal provider's or a second review's only with the participants' (two codes the proposal
     provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
     CPT Studio never chooses between codes, nor prefers one for its proposer."""
-    lay = gi_sections.layout(text) if text is not None else None
+    lay = gi_structure.clinical_layout(text) if text is not None else None
     claims_of: dict[str, set] = {code: _claimed(candidate, items, lay)
                                  for code, (candidate, items, _) in admissible.items()}
     for selection in selections:
@@ -1146,7 +1147,7 @@ def _po_section_only_across_unread_heading(text: str, pos: int, status: str, cue
             or not all(c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues) \
             or not any(c.startswith(checks.SECTION_CUE_PREFIX) for c in cues):
         return False
-    lay = gi_sections.layout(text)
+    lay = gi_structure.clinical_layout(text)
     section = lay.section_at(pos)
     if section.heading is None:
         return False
@@ -1317,7 +1318,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # never its header, its signature or another line no such section heads (OWN_REPORT_SECTIONS); and only where
         # the document reports that study alone and the passage states nothing else (attr-F3: never another study's
         # result in a combined report, never a biopsy taken after the study)
-        layout = gi_sections.layout(text)
+        layout = gi_structure.clinical_layout(text)
         if any(layout.section_at(pos).kind not in OWN_REPORT_SECTIONS for pos in (span.start, max(span.start,
                                                                                                     span.end - 1))):
             return ''
@@ -1398,7 +1399,7 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
     """A passage that states something of this encounter in its own sections: none of them a plan, history or
     indication section (NOT_TODAY_SECTIONS), and not read as about another time, planned, denied or cancelled."""
-    layout = gi_sections.layout(text)
+    layout = gi_structure.clinical_layout(text)
     if any(layout.section_at(pos).kind in NOT_TODAY_SECTIONS for pos in (span.start, max(span.start, span.end - 1))):
         return False
     return gi_services.current_statement(text, span.start, span.end, day)
@@ -1743,7 +1744,7 @@ def _pa_unread_heading(text: str, pos: int) -> str:
     heading-like line names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: the document's own words date
     the passage); _PA_FAR, fail-closed, when the heading lies more than HEADING_REACH_LINES lines or HEADING_REACH_CHARS
     characters back and nothing nearer decides. Bounded: those lines and characters, three lines down per candidate."""
-    section = gi_sections.layout(text).section_at(pos)
+    section = gi_structure.clinical_layout(text).section_at(pos)
     if section.heading is None:
         return ''
     lo = text.find('\n', section.heading.end)  # the heading's own line (its label's answer) is never such a line
@@ -1779,7 +1780,7 @@ def _pa_reach(text: str, pos: int, what: str = 'it') -> str:
     further below its heading than is read (HEADING_REACH_LINES lines or HEADING_REACH_CHARS characters: fail-closed),
     or else past the real unread heading line _pa_unread_heading finds, quoted whole. Words only; it decides nothing
     (GI round 4, PA; the line quoted since Wave 1 repair cycle 1)."""
-    section = gi_sections.layout(text).section_at(pos)
+    section = gi_structure.clinical_layout(text).section_at(pos)
     heading = section.heading.text.rstrip(':').strip() if section.heading is not None else ''
     named = f' \u201c{heading}\u201d' if heading else ''
     line = _pa_unread_heading(text, pos)

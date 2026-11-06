@@ -45,6 +45,7 @@ from studio.gi import context as ctx
 from studio.gi import cues
 from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
@@ -8376,13 +8377,62 @@ def _route(an: Analysis) -> RoutingResult:
 
 @functools.lru_cache(maxsize=16)
 def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis, RoutingResult]:
-    lay = layout(text)
+    # Completion repair 2026-11-06 (U2, U12): the clinical readings read the derived layout, in which each released
+    # labelled procedure paragraph ("Upper endoscopy: The gastroscope was advanced ...") is a procedure section of its
+    # own (studio.gi.structure). sections.layout(text) itself is unchanged - it is the context reader's frozen input for
+    # the date of service - and with nothing released the derived layout IS it. The E/M mentions read it as before.
+    lay = gi_structure.clinical_layout(text)
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
-    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
+    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, layout(text)), _clause_cues(text),
                   ctx.find_dates(text), effective, interventions)
     return an, _route(an)
+
+
+@functools.lru_cache(maxsize=4)
+def _frozen_analysis(text: str) -> Analysis:
+    """An analysis of ``text`` on sections.layout itself, for the document's own date and with no routing run: read only
+    by named_with_a_cue, for studio.gi.structure's N3 (completion repair 2026-11-06), which reads a section's own
+    mentions before the derived layout exists - the derived layout carries the paragraphs that reading decides. A
+    mention outside those paragraphs lies in the same section in both layouts."""
+    interventions = tuple(Intervention(label, families, m.start(), m.end())
+                          for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
+    return Analysis(text, layout(text), _service_mentions(text), (), _clause_cues(text), ctx.find_dates(text),
+                    ctx.service_date_of(text), interventions)
+
+
+def named_as_another_occasion(text: str, family: str, start: int, end: int, skip: tuple = (),
+                              doubt: bool = False) -> bool:
+    """Whether a mention of ``family``'s name inside [start, end) reads as another occasion of the family: historical,
+    cancelled or incomplete; denied for today (a past negation, "no prior colonoscopy", denies another occasion and so
+    does not count); a performance statement its section holds ("She underwent a colonoscopy"); another time or a date
+    ("She had a colonoscopy", "the index colonoscopy", "Her last colonoscopy", "colonoscopy in 2019"). A hedge, a consent
+    or a discussion ("Risks and benefits of upper endoscopy and colonoscopy were discussed.") and a plan are no other
+    occasion. ``doubt``: a doubt counts too ("Colonoscopy aborted.", "Colonoscopy pending."; for a later mention). Routing's
+    own per-mention reading (_generic_reading) on the frozen layout, for the document's own date: a pure function of the
+    text, for studio.gi.structure's N2 and N3. Bounded: the mentions inside the range, each read once."""
+    an = _frozen_analysis(text)
+    for m in an.services_in(start, end):
+        if m.family != family or any(lo <= m.start < hi for lo, hi in skip):
+            continue  # ``skip``: spans the caller has read already (a labelled paragraph's frame of today's steps)
+        reading = _generic_reading(an, m.start, m.end)
+        if reading.status in ('historical', 'cancelled', 'incomplete') or (doubt and reading.doubt) \
+                or (reading.status == 'negated' and not reading.past_negation) \
+                or any(c.startswith(('performed:', 'historical:', 'incomplete:', 'cancelled:', ANOTHER_TIME_PREFIX))
+                       or 'service date' in c for c in reading.cues):
+            return True
+    return False
+
+
+def past_negation_only(text: str, start: int, end: int) -> bool:
+    """Whether every service mention inside [start, end) - at least one - reads as a past negation only ("no prior
+    colonoscopy", "never had an EGD"): it denies another occasion of the service. Routing's own reading on the frozen
+    layout (_frozen_analysis), for studio.gi.structure's N3."""
+    an = _frozen_analysis(text)
+    found = an.services_in(start, end)
+    return bool(found) and all(_generic_reading(an, m.start, m.end).status == 'negated'
+                               and _generic_reading(an, m.start, m.end).past_negation for m in found)
 
 
 def _checked_date(service_date, caller):
