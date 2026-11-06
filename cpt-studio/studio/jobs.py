@@ -549,7 +549,11 @@ def _assess_child(text, service_date, pages, context, normalized, reference, pro
 
 
 ROUTING_CACHE_MODULES = ('studio.gi.detect', 'studio.gi.sections', 'studio.gi.context', 'studio.validation.checks',
-                         'studio.validation.engine')
+                         'studio.validation.engine',
+                         # completion repair (builder A): the documented-service reader's text-keyed caches too
+                         # (services._occasion_indications, with _report_physician_words and _act_frame), so nothing a
+                         # stage read stays resident
+                         'studio.gi.services')
 
 
 def release_routing_caches():
