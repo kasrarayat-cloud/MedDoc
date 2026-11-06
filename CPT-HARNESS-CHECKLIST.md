@@ -225,7 +225,7 @@ the progress log below.
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
 | candidate | none yet: branch `fix/cpt-studio-completion-20261106` from main `eb7c9a77` |
 | current stage | 2 to 5, the repair: IN PROGRESS (stage 1 PASS, VERIFIED OFFLINE, 2026-11-06T08:30Z) |
-| next action | the repair's design over the stage-1 fact map, then bounded implementation in isolated worktrees, each measured on `tests/fixtures/gi4/completion/corpus.json` and the four retained cases before it is relied on |
+| next action | five bounded builders (workflow `wf_33ae45a0-361`, launched 2026-11-06T08:50Z) implement the repair from `b452c6c4` in their own worktrees. R1 labelled procedure paragraphs and one section fact; R2 an examination's outcome against a sub-act's, the instrument's course, one extent fact; A the act frames (antecedent, removal binding, placement against outcome, dispositions, purpose time, F-NEG S); Q1 equal eligibility, evidence-based reconciliation and truthful reasons; Q2 truthful questions, recompute after an answer, answer binding. Then the owner integrates them serially, re-measures, and runs refutation over the integrated diff |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -821,3 +821,12 @@ the progress log below.
   - U13's adjacent misreadings;
   - two owner coding questions (Q1, Q2).
   Next: the repair's design and its bounded implementation.
+- **2026-11-06T08:50Z Completion repair, stages 2 to 5 started.**
+  - Preflight GO: `docs/preflight-reports/preflight-20261106T082530Z.md`.
+  - Five builders run in isolated worktrees from `b452c6c4`, each with a written brief
+    (`/home/claude/cpt-studio-completion-20261106/build/briefs/`): `wip/cptc-r1-structure`, `wip/cptc-r2-outcome`,
+    `wip/cptc-a-acts`, `wip/cptc-q-admission` and `wip/cptc-q2-answers`.
+  - Every brief carries the stage-1 causes, the refuted attempts' counterexamples, and the same measures: the corpus
+    ledger with its no-new-false-READY invariant, the focused suites, the full suite, the retained-case recompute, and
+    the freeze where layout or routing moves.
+  - No version label moves on a builder branch. The owner integrates and declares once.
