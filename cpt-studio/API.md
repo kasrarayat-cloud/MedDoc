@@ -1213,3 +1213,61 @@ installed revision 41e03656df61, and keep the round-2 improvements. What its rep
     null while it runs or when it did nothing for the step.
   - The walk and the download check judge the customer page and the exports against these fields. They never
     re-derive them, and they cannot verify without them.
+
+## Completion repair (2026-11-06): questions, answers and their recompute
+
+Appended notes (builder Q2; CPT-HARNESS-CHECKLIST.md U10, U11; HARNESS.md contract C5); nothing above is rewritten. The
+tests are `tests/test_completion_answers.py` unless named.
+
+- **A question says what CPT Studio could not confirm, and shows the passages it concerns.** Every `details_needed`
+  row carries `missing` (the fact it names, in plain words), `statement` (a confirm row's fixed sentence: "From the
+  document, CPT Studio could not confirm ...", a conflict's or a competition's own sentence, '' for a date or choice
+  row) and `passages` (`[{text, start, end, page}]`, exact slices of the document: the passages of the act the code was
+  matched to - for an act in doubt, the passage that raised the doubt - then CPT Studio's own located passages, then
+  the code's own cited ones; a documented service's question shows its service's passages; at most four a row). No
+  sentence a member reads says a fact "is not documented" unless a passage says so: the code's qualification is "CPT
+  Studio could not confirm ..." (`customer_api.QUESTION_WORDS`), and the overlay's summary of a service in doubt is
+  "CPT Studio could not confirm the <act> as done on the date of service." The control is unchanged and concise: "Not
+  documented", "Cannot confirm", "Add to the documentation (physician)" - the confirming answer while reviewer
+  confirmation stays off (decision D7; `POST .../clarifications/<id>/confirm` still answers 409) - and the choice and
+  date controls for context facts. No answer value confirms a clinical fact.
+- **An answer recomputes the assessment.** A save of "Not documented" or "Cannot confirm" - with no context change in the
+  same save, whose own re-assessment reads it - and a withdrawal queue ONE assess (`jobs.recompute_after_answers`): the
+  AGAIN path with the recorded runs, the bounded assess child, nothing sent; its key is the key of the stage that made
+  the final assessment, `:c:a` and 11 hex of the revision's whole answer history (`jobs.answers_digest`), so the job's
+  key includes the answers and de-duplication never returns the old assessment. `saved` then answers `reassessing:
+  true`, and the page shows the progress, then the recomputed result. Every assessment of the revision reads the
+  standing answers as an input (`engine.assess(member_answers=...)`, `engine._MemberAnswers`): a code answered "Not
+  documented" or "Cannot confirm" is excluded by the engine (`bucket` excluded, `exclusion_reason` "The member answered
+  "<answer>" to <fact>; this code is excluded by that answer until it is withdrawn.", a `member.answer` check,
+  `support.answered`), and its answered question is kept, closed: the Clarification row is `answered` with `answer` (the
+  MemberAnswer), on the new assessment and on the one the member answered. `queue_reasons`' `question` reads the
+  questions the review overlay leaves open (`review.open_questions_of`; the stored OPEN rows alone where no decision
+  and no standing answer moves them), so the queue never says `question` of one a member answered; the operator view's
+  `open_clarifications` stays the stored rows' count. The code reads exactly as before on the customer page
+  (`excluded`, "A needed detail is not documented"), in the reports and in readiness (resolved, needing no decision).
+- **Its cross-code effects are the overlay's, read by the engine.** The code still holds every code its presence held -
+  a diagnostic base beside it keeps its `base_included` question, an E/M its separate-visit question (session decision
+  (e), refutation round 2 L7-01: a member's answer never releases a code; only a reviewer's decision does). A
+  competition it was a rival in is released or narrowed (refutation round 1 of harness repair 3, L4-5). The CMS
+  endoscopic-family check (`pfs.endoscopic_base`) of every other code is read again without it. A proposal whose checks
+  or status moved gets a new fingerprint (its unanswered one, its checks and its status), so a decision carries only by
+  the existing fingerprint rule.
+- **An answer binds to the question it answered.** `MemberAnswer.question` holds the fingerprint of the question as its
+  row showed it - scope, family, fact, code, CPT Studio's question and reason, and its passages, in the form
+  `cpt-studio-question@1` (`studio/validation/questions.py`), every instance of that (code, family, fact) together. A
+  later assessment, the engine or the read-time overlay, applies it only where it asks the same question. Any other
+  standing answer is kept and listed in `earlier_answers` (`[{answer_id, fact, family_label, prompt, affects, value,
+  label, by, at, why, why_text}]`, `why` one of `no_longer_asked`, `asked_differently`, `earlier_form`), never
+  applied, and can be withdrawn alone. **The rule for answers stored before this release** (no fingerprint): they were
+  given to the earlier form of the question, a fixed prompt with no passage, so no question asked now is the question
+  they answered; they are never applied, and are listed with `why` `earlier_form`. Measured on the throwaway restore of
+  39f0ac49: its six answers (recorded against engine@7's assessment) are all `earlier_form`, its three codes read as
+  needing a detail again, and an in-memory recompute that reads them changes no proposal. (Its current engine@8
+  assessment asks the same six questions word for word, so a rule binding by the stored question's text and evidence
+  alone would have applied them again.)
+- **Migration `0013_completion_answer_binding`** adds `MemberAnswer.question` (`db_default` '') and
+  `Clarification.answer` (a nullable foreign key): additive (`ops/install.py migration_verdict` safe), so a row the
+  previous release inserts stays valid. A rollback past this release leaves assessments whose answered codes carry
+  `support.answered`, which the previous release reads as an ordinary exclusion that holds nothing: re-assess such an
+  encounter after a rollback (recorded for the installer's undo hazards).

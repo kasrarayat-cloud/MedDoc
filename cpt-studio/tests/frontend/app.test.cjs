@@ -276,8 +276,9 @@ test('layout never inserts or loses visible text (seeded property check)', () =>
 // --- the customer contract the fixtures follow (design section 7) ----------------------------------------------------
 
 const CONTRACT = {
+  // completion repair (2026-11-06, U11): 'earlier_answers', the answers no question asked now takes
   top: ['id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date', 'progress', 'checks', 'codes',
-    'other_codes', 'not_separately_coded', 'details_needed', 'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'],
+    'other_codes', 'not_separately_coded', 'details_needed', 'earlier_answers', 'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'],
   recheck: ['available', 'can_request'],
   document: ['kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading', 'original_url'],
   reading: ['status', 'label', 'messages'],
@@ -290,7 +291,11 @@ const CONTRACT = {
   why: ['quotes', 'qualifications'],
   quote: ['text', 'start', 'end', 'page', 'exact'],
   decision: ['action', 'by', 'by_kind', 'at', 'note', 'modifiers'],
-  detail: ['id', 'fact', 'family_label', 'prompt', 'control', 'choices', 'allow', 'document_value', 'entered_value', 'quote', 'affects', 'saved', 'addendum_allowed'],
+  // completion repair (2026-11-06, U10): the fact named, what CPT Studio could not confirm, the passages it concerns
+  detail: ['id', 'fact', 'family_label', 'prompt', 'control', 'choices', 'allow', 'document_value', 'entered_value', 'quote', 'affects', 'saved', 'addendum_allowed',
+    'missing', 'statement', 'passages'],
+  passage: ['text', 'start', 'end', 'page'],
+  earlier: ['answer_id', 'fact', 'family_label', 'prompt', 'affects', 'value', 'label', 'by', 'at', 'why', 'why_text'],
   saved: ['value', 'label', 'by', 'at', 'answer_id'],
   readiness: ['draft', 'approved', 'blockers'],
   report: ['id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current'],
@@ -331,7 +336,9 @@ test('every customer fixture has exactly the keys of the customer contract (desi
       assert.deepEqual(sorted(Object.keys(row)), sorted(CONTRACT.detail), at(`detail ${row.fact}`));
       if (row.saved) assert.deepEqual(sorted(Object.keys(row.saved)), sorted(CONTRACT.saved), at('saved'));
       assert.ok(['date', 'choice', 'confirm'].includes(row.control), at(row.control));
+      for (const passage of row.passages) assert.deepEqual(sorted(Object.keys(passage)), sorted(CONTRACT.passage), at('passage'));
     }
+    for (const item of doc.earlier_answers) assert.deepEqual(sorted(Object.keys(item)), sorted(CONTRACT.earlier), at('earlier'));
     assert.deepEqual(sorted(Object.keys(doc.readiness)), sorted(CONTRACT.readiness), at('readiness'));
     for (const report of doc.reports) assert.deepEqual(sorted(Object.keys(report)), sorted(CONTRACT.report), at('report'));
     for (const item of doc.activity) assert.deepEqual(sorted(Object.keys(item)), sorted(CONTRACT.activity), at('activity'));
@@ -360,6 +367,7 @@ test('every quote in the customer fixtures is an exact code-point slice of its d
     }
     if (doc.service_date.document_quote) assert.equal(slice(doc.service_date.document_quote), doc.service_date.document_quote.text, name);
     for (const row of doc.details_needed) if (row.quote) assert.equal(slice(row.quote), row.quote.text, name);
+    for (const row of doc.details_needed) for (const passage of row.passages) assert.equal(slice(passage), passage.text, `${name} ${row.fact} passage`);
     assert.deepEqual(app.documentLayout(doc).unlocated, new Set(), name);
   }
   assert.ok(quotes >= 15, quotes);
@@ -683,6 +691,53 @@ test('choices are radios named per detail; "Not documented" and "Cannot confirm"
   const pending = app.detailsPanel(doc, ui(doc, { answers: new Map([[choice.id, { fact: choice.fact, value: choice.choices[1].value }], [confirm.id, { fact: confirm.fact, value: confirm.allow[confirm.allow.length - 1] }]]) }));
   assert.ok(pending.includes(`value="${esc(choice.choices[1].value)}" data-detail="${choice.id}" checked>`));
   assert.ok(pending.includes(`data-detail-choice="${confirm.allow[confirm.allow.length - 1]}" data-detail="${confirm.id}" aria-pressed="true">`));
+});
+
+// completion repair (2026-11-06, U10): a clinical question says what CPT Studio could not confirm and shows the passages it
+// concerns, as exact slices of the document with their page, beside the concise control; nothing else is asked for
+test('a clinical question shows what CPT Studio could not confirm and the passages it concerns, beside the concise control', () => {
+  const doc = fixture('encounter-awaiting-detail.json');
+  const html = app.detailsPanel(doc, ui(doc));
+  const rows = doc.details_needed.filter(row => row.control === 'confirm' && row.statement);
+  assert.ok(rows.length && rows.some(row => row.passages.length), 'the scenario: a question with its passages');
+  for (const row of rows) {
+    const part = app.questionPassages(row);
+    assert.ok(html.includes(part), row.fact);
+    assert.ok(part.includes(`<p class="detail-statement">${esc(row.statement)}</p>`), row.fact);
+    for (const passage of row.passages) {
+      assert.ok(part.includes(`<q class="detail-quote">${esc(passage.text)}</q>`), passage.text);
+      if (passage.page) assert.ok(part.includes(`<span class="detail-page">Page ${passage.page}</span>`));
+    }
+    assert.doesNotMatch(row.statement, /is not documented/);
+  }
+  assert.equal(app.questionPassages({ statement: '', passages: [] }), '');
+  const one = app.questionPassages({ statement: 'From the document, CPT Studio could not confirm how far the instrument was advanced.',
+    passages: [{ text: 'The colonoscope was advanced.', start: 0, end: 29, page: 1 }] });
+  assert.match(one, /The passage this question concerns/);
+  assert.doesNotMatch(one, /<textarea|type="text"/);
+});
+
+// completion repair (2026-11-06, U11): an answer saved for a question no longer asked, or now asked differently, is listed as an
+// earlier answer - kept, never applied - with the server's own sentence for why, and can be withdrawn
+test('earlier answers are listed as such, with why, and can be withdrawn by a reviewer', () => {
+  const doc = clone(fixture('encounter-awaiting-detail.json'));
+  doc.earlier_answers = [{ answer_id: '11111111-1111-4111-8111-111111111111', fact: 'extent', family_label: 'Colonoscopy',
+    prompt: 'How far was the instrument advanced?', affects: ['45385'], value: 'not_documented', label: 'Not documented',
+    by: 'Synthetic Reviewer', at: '2026-11-05T20:12:09Z', why: 'earlier_form',
+    why_text: 'This answer was saved before each question showed the passages it concerns, so it is not applied; answer the question as it is asked now.' }];
+  const html = app.detailsPanel(doc, ui(doc));
+  assert.match(html, /<h3>Earlier answers, not applied<\/h3>/);
+  const listed = doc.earlier_answers[0];
+  assert.ok(html.includes(`<span class="earlier-why">${esc(listed.why_text)}</span>`));
+  assert.ok(html.includes(`Saved: <strong>Not documented</strong> for 45385 — Synthetic Reviewer, ${app.formatTimestamp(listed.at)}`));
+  assert.ok(html.includes(`data-action="revoke-detail" data-answer="${listed.answer_id}"`));
+  const viewer = clone(doc);
+  viewer.permissions.can_review = false;
+  assert.doesNotMatch(app.earlierAnswers(viewer), /revoke-detail/);
+  // a document with nothing left to ask still lists its earlier answers
+  const none = { ...doc, details_needed: [] };
+  assert.match(app.detailsPanel(none, ui(none)), /No detail is needed now\..*Earlier answers, not applied/s);
+  assert.equal(app.earlierAnswers({ ...doc, earlier_answers: [] }), '');
 });
 
 test('a saved answer is shown with who and when, and can be changed; only open rows count', () => {

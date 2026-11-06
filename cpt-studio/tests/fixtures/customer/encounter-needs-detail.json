@@ -1,8 +1,8 @@
 {
  "id": "c3000000-0000-4000-8000-000000000001",
  "title": "Synthetic office follow-up 3",
- "created_at": "2026-11-01T09:01:31Z",
- "updated_at": "2026-11-01T09:01:45Z",
+ "created_at": "2026-11-01T09:01:32Z",
+ "updated_at": "2026-11-01T09:01:46Z",
  "state": "awaiting_detail",
  "state_label": "A few details needed",
  "permissions": {
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:01:34Z",
-    "finished_at": "2026-11-01T09:01:36Z"
+    "started_at": "2026-11-01T09:01:35Z",
+    "finished_at": "2026-11-01T09:01:37Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:01:37Z",
-    "finished_at": "2026-11-01T09:01:38Z"
+    "started_at": "2026-11-01T09:01:38Z",
+    "finished_at": "2026-11-01T09:01:39Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-01T09:01:39Z",
-    "finished_at": "2026-11-01T09:01:41Z"
+    "started_at": "2026-11-01T09:01:40Z",
+    "finished_at": "2026-11-01T09:01:42Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:01:42Z",
-    "finished_at": "2026-11-01T09:01:44Z"
+    "started_at": "2026-11-01T09:01:43Z",
+    "finished_at": "2026-11-01T09:01:45Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:01:33Z",
-  "finished_at": "2026-11-01T09:01:44Z",
-  "server_time": "2026-11-01T09:01:46Z",
+  "started_at": "2026-11-01T09:01:34Z",
+  "finished_at": "2026-11-01T09:01:45Z",
+  "server_time": "2026-11-01T09:01:47Z",
   "slow": false,
   "message": "A few details are needed. Codes that do not depend on them can be reviewed now.",
   "can_stop": false,
@@ -127,7 +127,7 @@
      }
     ],
     "qualifications": [
-     "Whether the patient is new or established is not documented."
+     "CPT Studio could not confirm whether the patient is new or established."
     ]
    },
    "detail_ids": [
@@ -168,9 +168,13 @@
     "99213"
    ],
    "saved": null,
-   "addendum_allowed": false
+   "addendum_allowed": false,
+   "missing": "whether the patient is new or established to this clinician and group",
+   "statement": "",
+   "passages": []
   }
  ],
+ "earlier_answers": [],
  "unresolved": [],
  "recheck": {
   "available": false,
@@ -196,28 +200,28 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:32Z"
+   "at": "2026-11-01T09:01:33Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:35Z"
+   "at": "2026-11-01T09:01:36Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:40Z"
+   "at": "2026-11-01T09:01:41Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:43Z"
+   "at": "2026-11-01T09:01:44Z"
   }
  ]
 }

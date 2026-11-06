@@ -1,8 +1,8 @@
 {
  "id": "cf000000-0000-4000-8000-000000000001",
  "title": "Synthetic office follow-up 9",
- "created_at": "2026-11-01T09:01:15Z",
- "updated_at": "2026-11-01T09:01:29Z",
+ "created_at": "2026-11-01T09:01:16Z",
+ "updated_at": "2026-11-01T09:01:30Z",
  "state": "ready",
  "state_label": "Ready for review",
  "permissions": {
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:01:18Z",
-    "finished_at": "2026-11-01T09:01:20Z"
+    "started_at": "2026-11-01T09:01:19Z",
+    "finished_at": "2026-11-01T09:01:21Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:01:21Z",
-    "finished_at": "2026-11-01T09:01:22Z"
+    "started_at": "2026-11-01T09:01:22Z",
+    "finished_at": "2026-11-01T09:01:23Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "done",
-    "started_at": "2026-11-01T09:01:23Z",
-    "finished_at": "2026-11-01T09:01:25Z"
+    "started_at": "2026-11-01T09:01:24Z",
+    "finished_at": "2026-11-01T09:01:26Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:01:26Z",
-    "finished_at": "2026-11-01T09:01:28Z"
+    "started_at": "2026-11-01T09:01:27Z",
+    "finished_at": "2026-11-01T09:01:29Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:01:17Z",
-  "finished_at": "2026-11-01T09:01:28Z",
-  "server_time": "2026-11-01T09:01:30Z",
+  "started_at": "2026-11-01T09:01:18Z",
+  "finished_at": "2026-11-01T09:01:29Z",
+  "server_time": "2026-11-01T09:01:31Z",
   "slow": false,
   "message": "Your results are ready, but some checks could not be completed. Each code shows what was checked.",
   "can_stop": false,
@@ -139,6 +139,7 @@
  "other_codes": [],
  "not_separately_coded": [],
  "details_needed": [],
+ "earlier_answers": [],
  "unresolved": [],
  "recheck": {
   "available": false,
@@ -164,28 +165,28 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:01:16Z"
+   "at": "2026-11-01T09:01:17Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:19Z"
+   "at": "2026-11-01T09:01:20Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:24Z"
+   "at": "2026-11-01T09:01:25Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:01:27Z"
+   "at": "2026-11-01T09:01:28Z"
   }
  ]
 }

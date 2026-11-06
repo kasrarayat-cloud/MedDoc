@@ -804,6 +804,33 @@ function confirmControl(row, ui) {
   return `<div class="detail-controls">${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
 }
 
+// Completion repair (2026-11-06, U10): a clinical question says what CPT Studio could not confirm (the server's fixed
+// sentence, never that the document leaves it out) and shows the passages it concerns - exact slices of the document,
+// with their page - so the member answers with them in view. Every sentence is the server's fixed wording.
+function questionPassages(row) {
+  const passages = objects(row.passages).filter(item => typeof item.text === 'string' && item.text);
+  const statement = text(row.statement);
+  if (!statement && !passages.length) return '';
+  const label = passages.length === 1 ? 'The passage this question concerns' : 'The passages this question concerns';
+  const items = passages.map(item => `<li><q class="detail-quote">${escapeHtml(excerpt(item.text, 240))}</q>${Number.isInteger(item.page) ? `<span class="detail-page">Page ${item.page}</span>` : ''}</li>`).join('');
+  return `<div class="detail-question">${statement ? `<p class="detail-statement">${escapeHtml(statement)}</p>` : ''}${passages.length ? `<p class="detail-passages-label">${label}</p><ul class="detail-passages">${items}</ul>` : ''}</div>`;
+}
+
+// Answers saved for a question no longer asked, or now asked differently: kept, never applied (completion repair
+// 2026-11-06, U11), each with why - the server's fixed sentence - and a way to withdraw it.
+function earlierAnswers(doc) {
+  const items = objects(doc?.earlier_answers).filter(item => typeof item.answer_id === 'string' && item.answer_id);
+  if (!items.length) return '';
+  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  const rows = items.map(item => {
+    const affects = strings(item.affects);
+    const by = [text(item.by), formatTimestamp(item.at)].filter(Boolean).join(', ');
+    const withdraw = editable ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(item.answer_id)}" id="earlier-${escapeHtml(item.answer_id)}-revoke">Withdraw this answer</button>` : '';
+    return `<li class="earlier-answer" data-answer="${escapeHtml(item.answer_id)}"><span class="detail-family">${escapeHtml(text(item.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(text(item.prompt))}</span><span class="earlier-value">Saved: <strong>${escapeHtml(text(item.label) || lookup(DETAIL_ANSWERS, item.value, ''))}</strong>${affects.length ? ` for ${escapeHtml(joinWords(affects))}` : ''}${by ? ` — ${escapeHtml(by)}` : ''}</span><span class="earlier-why">${escapeHtml(text(item.why_text))}</span>${withdraw}</li>`;
+  }).join('');
+  return `<div class="earlier-answers"><h3>Earlier answers, not applied</h3><ul>${rows}</ul></div>`;
+}
+
 // A date of service the member entered, saved: it has no answer to withdraw, so the row itself corrects or removes it.
 function changeableDate(row) {
   return row?.control === 'date' && Boolean(row.saved) && typeof row.saved === 'object' && !text(row.saved.answer_id);
@@ -833,23 +860,25 @@ function detailRow(row, doc, ui) {
   const radios = row.control === 'choice' || documentedDates(row).length > 0;
   const tag = radios && editable && answerable(row) ? 'fieldset' : 'div';
   const lead = tag === 'fieldset' ? 'legend' : 'div';
-  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${control}</${tag}>`;
+  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${questionPassages(row)}${control}</${tag}>`;
 }
 
 function detailsPanel(doc, ui = {}) {
   const rows = detailsOf(doc);
-  if (!rows.length) return '';
+  const earlier = earlierAnswers(doc);
+  if (!rows.length && !earlier) return '';
   const open = rows.filter(row => !row.saved).length;
   const editable = canReview(doc) && doc?.progress?.busy !== true;
   // "nothing is checked" only while the member's date holds the document (Action needed): a date asked after the
   // checks ran, or one to confirm, leaves the codes that do not depend on it reviewable
   const held = doc?.state === 'action_needed' || doc?.progress?.phase === 'action_needed';
   const dateOnly = open && rows.filter(row => !row.saved).every(row => row.control === 'date');
-  const lead = !open ? 'Every detail has an answer. You can change an answer below.'
-    : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
-      : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
+  const lead = !rows.length ? 'No detail is needed now.'
+    : !open ? 'Every detail has an answer. You can change an answer below.'
+      : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
+        : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
   const save = editable && rows.some(answerable) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
-  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">A few details needed</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}</section>`;
+  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">A few details needed</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
 }
 
 // --- the codes-first result list ---
@@ -1580,9 +1609,11 @@ function saveDetails(button) {
     setBusy(button, true);
     hideError('detailsError');
     try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details`, { method: 'POST', json: { answers } });
+      const saved = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details`, { method: 'POST', json: { answers } });
       for (const answer of answers) state.answers.delete(answer.id);
-      await afterChange(answers.length === 1 ? 'Answer saved.' : `${answers.length} answers saved.`);
+      // an answer recomputes the results (completion repair 2026-11-06, U11): the page shows the progress, then them
+      const done = answers.length === 1 ? 'Answer saved.' : `${answers.length} answers saved.`;
+      await afterChange(saved?.reassessing === true ? `${done} The results are being updated.` : done);
     } catch (error) {
       showError('detailsError', error.message);
       setBusy(button, false);
@@ -2014,7 +2045,7 @@ if (typeof module === 'object' && module.exports) {
     pageRanges, paragraphRanges, paragraphPieces, layoutDocument, progressPhase, shouldPoll, codeStatus, rowSubLabel, unitsLabel,
     modifierLabel, reviewModifierOptions, hasAgentDecision, attestationText, tallyText, exportStatusText, serviceDateText,
     documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
-    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, detailAnswers, answerable, resultRow, resultList,
+    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, questionPassages, earlierAnswers, detailAnswers, answerable, resultRow, resultList,
     resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
     exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
     STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,

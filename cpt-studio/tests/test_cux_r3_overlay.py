@@ -108,7 +108,11 @@ class DetailsSaveRefreshesTheStoredStateTests(PipelineCase):
                                         {'id': basis['id'], 'fact': 'em_basis', 'value': 'not_documented'},
                                         {'id': date['id'], 'fact': 'service_date', 'value': '2026-10-21'}]}))
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual((response.json()['saved'], response.json()['reassessing']), (2, False))
+        # completion repair (2026-11-06, U11): the answer queues the recompute of the assessment (nothing sent); the
+        # state is derived after both writes - processing while it runs - and reviewed once it has read the answer
+        self.assertEqual((response.json()['saved'], response.json()['reassessing']), (2, True))
+        self.assertEqual(self.assert_current(encounter_id, 'as saved'), 'processing')
+        drain()
         encounter = self.encounter(encounter_id)
         self.assertEqual(review.readiness(encounter), {'draft': True, 'reviewed': True, 'blockers': []})
         self.assertEqual(self.assert_current(encounter_id), 'reviewed')

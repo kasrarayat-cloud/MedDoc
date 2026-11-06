@@ -329,7 +329,7 @@ def customer_encounter() -> dict:
         'other_codes': [{'code': '45378', 'reason': 'Considered, not suggested: a diagnostic colonoscopy is included '
                                                    'when a removal is coded.'}],
         'not_separately_coded': [],
-        'details_needed': [], 'unresolved': [], 'recheck': {'available': False, 'can_request': False},
+        'details_needed': [], 'earlier_answers': [], 'unresolved': [], 'recheck': {'available': False, 'can_request': False},
         'limitations': LIMITATIONS,
         'readiness': {'draft': True, 'approved': True, 'blockers': []},
         'reports': [{'id': REPORTS[key], 'kind': key[0], 'fmt': key[1], 'filename': f'CPT-Studio-{key[0]}.{key[1]}',
@@ -474,11 +474,16 @@ def details_encounter() -> dict:
          'control': 'date', 'choices': [{'value': 'use_document', 'label': 'Use document date'}], 'allow': [],
          'document_value': '2026-11-03', 'entered_value': '2026-11-02',
          'quote': {'text': DATE_LINE, 'start': date_start, 'end': date_start + len(DATE_LINE)}, 'affects': ['45380', '45385'],
-         'saved': None, 'addendum_allowed': False},
+         'saved': None, 'addendum_allowed': False, 'missing': '', 'statement': '', 'passages': []},
+        # completion repair (2026-11-06, U10): a confirm row names the fact CPT Studio could not confirm, says so, and
+        # shows the passages it concerns (answers._rows: exact slices of the document, with their page)
         {'id': 'detail-extent', 'fact': 'extent', 'family_label': 'Colonoscopy',
          'prompt': 'Is the extent of the examination documented?', 'control': 'confirm', 'choices': [],
          'allow': ['not_documented', 'cannot_confirm'], 'document_value': None, 'entered_value': None, 'quote': None,
-         'affects': ['45385'], 'saved': None, 'addendum_allowed': True},
+         'affects': ['45385'], 'saved': None, 'addendum_allowed': True,
+         'missing': 'how far the instrument was advanced',
+         'statement': 'From the document, CPT Studio could not confirm how far the instrument was advanced.',
+         'passages': [{'text': COL2, 'start': TEXT.index(COL2), 'end': TEXT.index(COL2) + len(COL2), 'page': 1}]},
     ]
     for code in enc['codes']:
         code.update(status='ready', status_label='Ready for review', sub_label='', modifiers=[], decision=None,
