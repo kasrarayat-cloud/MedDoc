@@ -2451,3 +2451,198 @@ readiness for wider uploads.
 
 (k) **Funding.** The standing authority for private synthetic testing applies and no ceiling is reintroduced. Usage is
 recorded per run, with finite deadlines, duplicate prevention and Stop.
+
+## Owner directive, 2026-11-06 — complete the remaining core repair: the verified installed workflow
+
+Received by session a12d8fb3 at about 06:40Z, after the record of `fd8040d71e44` (#1479, merged as `eb7c9a77`), verbatim:
+
+> Continue the existing CPT Studio GI project through completion of the remaining core repair. Use the current installed release as the verified starting point; the latest reported release is fd8040d71e44. Coordinate with the existing deployment owner.
+>
+> My required outcome is a working website where an uploaded GI PDF or Word document is assessed by Corti, Astra and Fable, supported proposals reach review, decisions persist, and the downloaded report matches those decisions. Repair the shared application logic, not individual documents or expected-code lists.
+>
+> Keep cpt.quillmd.com accessible during development and installation. Preserve the working harness, customer interface, provider privacy, existing documents, raw responses, failures, decisions and rollback evidence.
+>
+> **Put this completion contract into the harness before implementation.**
+>
+> Update HARNESS.md, CPT-HARNESS-CHECKLIST.md and the existing execution/checkpoint mechanism. Use one coordinated owner and the existing state format.
+>
+> Record:
+> - Objective and acceptance criteria.
+> - Installed and candidate revisions.
+> - Current stage and next action.
+> - Every unresolved defect and its evidence.
+> - Test results, provider runs, usage and deployment receipts.
+>
+> Use NOT RUN, IN PROGRESS, PASS, FAIL and BLOCKED accurately. Tick an item only when its acceptance evidence passes. Reopen a passed item if later evidence disproves it. Distinguish implementation, offline verification and live verification.
+>
+> Advance automatically when a stage passes. Progress reports are checkpoints, not requests for permission to continue already-authorized work.
+>
+> **Continue until the engineering outcome is achieved.**
+>
+> For each failure: preserve it, diagnose its actual cause, repair it, run affected regressions and independent adversarial review, install when needed, and verify the affected website workflow.
+>
+> Do not end the task merely because a PR merged, installation succeeded, a large test suite passed, or an unsafe attempted fix was withdrawn.
+>
+> If a two-cycle rule requires abandoning an unsafe patch, abandon that patch and change the approach. Do not abandon the underlying requirement or repeatedly ship the known failure as completion. Do not repeat identical failing paid attempts.
+>
+> Use parallel agents for independent diagnosis, bounded implementation areas and adversarial review where useful. Keep integration and deployment serialized under one owner.
+>
+> Complete the following checklist:
+>
+> - [ ] **1. Establish the exact remaining failures.**
+>   Reproduce 39f0ac49, the fresh PDF and the Word routing failure using retained source documents and provider responses. Trace source text → section boundaries → service/act interpretation → proposal admission → questions/status → review/export. Recover the counterexamples that defeated F-ACTS, F-SECTIONS and other relevant withdrawn fixes. Preserve them as regression cases.
+>
+> - [ ] **2. Repair the shared document interpretation.**
+>   Resolve contextual references such as “the bolus” against their documented antecedents. Recognize completed procedure narratives after inline labels without incorrectly extending Indications over them. Bind evidence to the correct procedure, action, anatomy, lesion, extent, date, performer and outcome.
+>
+>   A failed therapeutic attempt must not automatically make the entire examination incomplete. Historical, planned, deferred, unsuccessful, negated and other-provider acts must remain distinct from completed current services. A completed marking performed for future localization must not become a future procedure solely because its purpose is future-facing.
+>
+>   Make routing, service interpretation and admission consistent about these facts. Do not apply patient-, filename-, document-ID- or CPT-specific exceptions.
+>
+> - [ ] **3. Preserve equal proposal eligibility.**
+>   Astra and Fable are primary code-finding participants alongside Corti. An explicit supported proposal must receive the same evaluation regardless of which participant supplied it. Corti’s omission, selected-code list or interpretation must not veto another participant’s proposal.
+>
+>   Preserve actual provenance internally. Keep explicit proposals distinct from alternatives or incidental code mentions. Model agreement alone must never establish performance, resolve bundling or approve a code. Conflicting proposals must receive evidence-based reconciliation.
+>
+> - [ ] **4. Fix false positives as well as false holds.**
+>   Test the previously rejected patches’ counterexamples and retained false READY cases, including a polyp explicitly left in place. Test minimal positive/negative pairs and equivalent wording across different layouts and GI procedure families.
+>
+>   Do not improve recall by treating every procedure mention as performed, ignoring negation, bypassing evidence checks or weakening rejection criteria.
+>
+> - [ ] **5. Make questions and statuses truthful.**
+>   “Not performed” requires supporting documentation; a parser’s failure to recognize an act is not proof that it was not performed.
+>
+>   Resolve facts already present in the source before asking the doctor. For genuine ambiguity, show the specific missing fact and the relevant passage with a concise answer control. Do not manufacture an answer, force an addendum to repeat existing documentation, or introduce a blanket approval override.
+>
+>   Verify that resolving a question recomputes the affected assessment correctly. Preserve earlier answers and approvals without silently reusing them for a changed assessment.
+>
+> - [ ] **6. Prove the repair against retained evidence first.**
+>   Reassess retained cases without new provider calls where possible. Verify the previously omitted proposal’s actual eligibility and remaining reference requirements. Preserve 88d9db32’s supported results.
+>
+>   Independently check the corrected routing, completed-act recognition, exclusions, necessary questions and provider-neutral admission. Original failures remain preserved beside the new results.
+>
+> - [ ] **7. Complete meaningful independent acceptance.**
+>   Before new paid testing, pass the focused suite, relevant regressions and independent adversarial review of the final diff.
+>
+>   Prepare a small fresh synthetic PDF/Word set with expectations recorded before viewing model output. Include the repaired language/layout patterns and negative controls. Support expectations with applicable references; do not treat an author’s provisional list as unquestionable clinical truth.
+>
+>   Run the ordinary website workflow. Confirm actual accepted and usable responses from Corti, Astra and Fable, frozen independent first readings, separately stored peer reviews and final reconciliation. Configuration checks, rejected responses and replay alone do not count.
+>
+>   Verify Stop/Resume, duplicate prevention, visible progress, necessary clarification, explicitly labelled synthetic review decisions, reload persistence and actual downloads. Check both omitted supported services and unsupported additions—not only whether exported rows match the database.
+>
+> - [ ] **8. Install and verify the served result.**
+>   Use the established deployment process, preserve rollback and coordinate the switch. Keep the website available.
+>
+>   Verify the actual served revision, worker behavior, retained records, customer-provider privacy and the repaired end-to-end workflow after installation. If a fresh acceptance failure exposes an authorized engineering defect, return to its cause and complete the repair loop.
+>
+>   Account for the already-recorded PDF security and reference limitations before claiming broader release readiness. Do not hide them by narrowing the final report.
+>
+> - [ ] **9. Close with evidence of the result.**
+>   Provide the installed revision and website links, each original defect’s before/after outcome, fresh PDF/Word results, proof of all three participants’ usable contributions, persisted decisions and downloaded reports. Include measured usage, estimates and any unresolved charges accurately.
+>
+>   Mark functional completion only when these acceptance criteria pass. Report clinical-validation and content-use permission status separately. A successful synthetic workflow does not establish guaranteed accuracy or unrestricted billing/public-launch readiness.
+>
+> Use my existing standing authorization for necessary private synthetic testing, engineering repairs, project-scoped installation and verification with existing accounts. Do not reopen superseded funding limits or request permission for each eligible step.
+>
+> Keep purposeful batches, concurrency one for provider execution, finite deadlines, Stop, duplicate prevention and reconciliation of unknown outcomes before resubmission. Do not purchase subscriptions or credits, accept new agreements, process real patients or submit claims.
+>
+> Only stop for a genuine dependency that available access and existing authorization cannot resolve. Complete independent work first, preserve an actionable checkpoint, and identify the smallest necessary external action. If the session ends, resume from that checkpoint when continued; do not claim background work is running unless it actually is.
+>
+> The completion target is the verified installed workflow—not another partial report with the same core defects left unresolved.
+
+### Session interpretation, 2026-11-06 (a12d8fb3, on receipt) — recorded, not owner-ruled
+
+(a) **The completion target replaces "drop and record" as an outcome.** The second message's interpretation (i)
+pinned a twice-refuted rule's inputs as residuals and stopped. This message keeps the two-cycle rule for a PATCH and
+withdraws it as an END:
+- a releasing patch refuted twice is abandoned;
+- its requirement stays open, and the approach changes: a different mechanism, measured on every earlier refuter input
+  and retained case before it is relied on;
+- the item stays IN PROGRESS or FAIL until its own acceptance evidence passes;
+- a release that still carries a known core defect is never reported as completion.
+
+(b) **The core defects are the ones the fd8040d71e44 record names.** The checkpoint's unresolved list in
+CPT-HARNESS-CHECKLIST.md ("Completion repair, 2026-11-06") carries each one with its evidence. Among them:
+- the participants' 43247 for "the bolus was removed", listed as not done (d44a77b3, 39f0ac49);
+- procedure narratives after inline labels read as part of the Indications (d44a77b3, 39f0ac49);
+- a failed polypectomy attempt making the whole colonoscopy incomplete (e888f9ce);
+- completed marking read as future localization;
+- the base's own false READYs, among them "The polyp was left in place.";
+- questions whose only offered answers exclude the code (39f0ac49).
+
+(c) **Structural repair, not word lists.** Reader changes are rules over the document's structure:
+- sections and inline labels;
+- sentence and clause boundaries;
+- an act's own verb, object, polarity, time and performer;
+- a definite noun phrase's documented antecedent.
+
+No rule names a patient, filename, document id or CPT code as an exception. Each rule is measured against the corpus
+of every earlier refuter input and retained case before it is relied on. The measured record is that word-list repairs
+did not converge (12 of 12 refuted) and a structural rule did.
+
+(d) **One reading of each fact.** Routing (gi-routing), the documented-service reader (gi-services) and the admission
+must agree about a section boundary or an act's status. Each such fact is computed once and read by all three. A
+remaining disagreement is a recorded defect, never two answers.
+
+(e) **"Not performed" needs documentation (item 5).** A reader that finds no act has not found that the act was not
+done. So a status or a listing reason says "not done", "historical", "planned", "deferred", "unsuccessful", "negated"
+or "by another provider" only with the passage that says so. Otherwise it says CPT Studio could not confirm the act.
+
+An explicit, exactly quoted first-reading proposal that CPT Studio can neither confirm nor exclude from the document is
+a genuine ambiguity. It reaches review held by a question that:
+- shows the passage;
+- names the one missing fact;
+- offers an answer that can confirm as well as exclude.
+
+It is never READY on the quote (the second message's (d) stands). It is never listed as not done merely because a
+parser rule was missing.
+
+(f) **Equal eligibility (item 3).** The second message's (b) and (d) stand:
+- one per-code validation, whoever proposed the code;
+- CPT Studio's reading is the only source support, and a quote, a confidence or agreement adds nothing;
+- an alternative, a `not_coded` entry, a peer's additional code or an incidental mention never enters;
+- codes of different proposers for one act each reach review, held by one question that shows the passages;
+- no proposer is preferred and no model approves.
+
+(g) **False READYs are first-class (item 4).** Every candidate rule runs over:
+- the previous refuters' inputs (repair 2 rounds 1 to 7, repair 3 rounds and cycles r1 to c4);
+- the base's false READYs;
+- minimal positive and negative pairs;
+- equivalent wording across layouts (paragraph, labelled line, table cell, Word title) and GI families.
+
+A rule that opens a READY on any negative is not shipped.
+
+(h) **Questions (item 5).**
+- A fact the source already states is resolved before the doctor is asked.
+- An answer recomputes the assessment.
+- Earlier answers and approvals are kept. They are bound to the assessment and fact they answered, and never silently
+  reused for a changed assessment.
+
+(i) **Evidence order (items 6 to 8).**
+1. The retained cases offline first: 88d9db32 keeps its six READY codes; then 39f0ac49, d44a77b3, e888f9ce and the
+   earlier walk documents.
+2. The full suite and CI.
+3. The refutation pass over the final diff.
+4. A fresh sealed set, its expectations written before any output is read, each with its reference.
+5. The install.
+6. The ordinary-use walk, including a clarification answered and recomputed, Stop and Resume, the downloads, and both
+   omitted supported services and unsupported additions.
+
+(j) **Paid attempts.**
+- Provider execution runs at concurrency one, with finite deadlines, Stop and duplicate prevention.
+- An unknown outcome is reconciled before any resubmission.
+- No identical failing paid attempt is repeated: a walk runs again only after a repair changes the path it failed on.
+
+(k) **One owner.** Session a12d8fb3 stays the integration and deployment owner, as for repairs 2 and 3.
+- Agents diagnose read-only, implement bounded areas in isolated worktrees, and refute in sealed sandboxes. No agent
+  is given write access to a file the owner is editing.
+- Integration, merges, installs and walks are serialized under the owner.
+
+(l) **Limitations reported, not hidden.** These stay in every report, beside clinical validation and content-use
+permissions, which are reported separately:
+- pypdf 6.21.2's advisories, resolved or explicitly accounted for before any claim of broader release readiness;
+- NCCI PTP unconnected;
+- D3 to D5 open.
+
+(m) **Funding.** The standing authority for private synthetic testing applies and no ceiling is reintroduced. No
+subscription, credit, agreement, real patient or claim.

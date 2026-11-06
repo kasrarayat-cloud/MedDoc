@@ -3367,3 +3367,113 @@ finding.
 - `tests/test_h3_refutation_r1.py`: the tables are regenerated, and L4-2's first case is now the recorded hold.
 - The cycle-2 and cycle-3 fixtures carry a cycle-3 column.
 - The cycle-3 module's judged releases are now L3-9's only.
+
+## Completion repair (2026-11-06): the completion contract
+
+The owner directive of 2026-11-06 is recorded verbatim, with the session's interpretation (a)-(m), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. Integration and deployment owner: session a12d8fb3.
+
+The starting point is the installed `fd8040d71e44`, recorded in
+`docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`. main is `eb7c9a77`, and its `cpt-studio/` is
+identical to the installed revision.
+
+This section is the contract. The state (revisions, stage, next action, defects, tests, runs, usage, receipts) is kept
+in `CPT-HARNESS-CHECKLIST.md`, "Completion repair, 2026-11-06", and its append-only progress log.
+
+### Objective
+
+The installed website works end to end:
+- an uploaded GI PDF or Word document is assessed by Corti, Astra and Fable;
+- supported proposals reach review;
+- decisions persist;
+- the downloaded report matches those decisions.
+
+The way there is to repair the shared application logic, never individual documents or expected-code lists.
+
+### Acceptance criteria (each item passes only on its own evidence)
+
+- **C1: the failures are established.**
+  - 39f0ac49, d44a77b3 (h3a) and e888f9ce (h3b) are reproduced offline from their retained source and responses.
+  - Each is traced from source text through section boundaries, act interpretation, admission, and questions and
+    status, to review and export.
+  - The counterexamples that defeated F-ACTS, F-SECTIONS T and L, F-TIME R and the other withdrawn fixes are recovered
+    and pinned as regression cases.
+- **C2: the interpretation is repaired, structurally.**
+  - A definite noun phrase ("the bolus") resolves to its documented antecedent.
+  - A procedure narrative after an inline label is read as that procedure, and the Indications do not extend over it.
+  - Evidence is bound to its procedure, action, anatomy, lesion, extent, date, performer and outcome.
+  - A failed therapeutic attempt does not change the examination's own status.
+  - Historical, planned, deferred, unsuccessful, negated and other-provider acts stay distinct from completed current
+    services.
+  - A completed marking performed for future localization is a completed current act.
+  - Routing, services and admission read each such fact once.
+  - No exception names a patient, filename, document id or CPT code, checked by a grep gate over the diff.
+- **C3: proposals are equally eligible.** One per-code validation applies to every proposer, pinned as a matrix:
+  - only Astra proposes the code;
+  - only Fable proposes it;
+  - Corti returns another code;
+  - Corti lists it only as an alternative;
+  - all three agree on an unsupported, denied or historical act.
+
+  Provenance is kept. Alternatives and incidental mentions never enter. Competing codes each reach review, held by one
+  question that shows the passages.
+- **C4: false READYs are fixed as well as false holds.** These all read safely:
+  - every earlier refuter input;
+  - the base's false READYs, "The polyp was left in place." among them;
+  - minimal positive and negative pairs across layouts and GI families.
+
+  No input is READY where the installed revision is not, unless judged correct with its reason recorded. No act has
+  two READY codes.
+- **C5: statuses and questions are truthful.**
+  - "Not done", "historical", "planned" and the like are said only with the passage that says so.
+  - An explicit proposal CPT Studio can neither confirm nor exclude is held by a question. The question shows the
+    passage, names the missing fact, and offers an answer that can confirm as well as exclude.
+  - A fact the source states is resolved before the doctor is asked.
+  - An answer recomputes the assessment.
+  - Earlier answers and approvals are bound to the assessment and fact they answered, and never silently reused.
+- **C6: the retained evidence passes, with nothing sent.**
+  - 88d9db32 keeps its six READY codes.
+  - The participants' 43247 on 39f0ac49 and d44a77b3 is eligible for review, with its remaining reference requirements
+    stated.
+  - e888f9ce's colonoscopy reads as performed.
+  - The originals are preserved beside the new results.
+  - An independent check, not the author, agrees.
+- **C7: acceptance passes before any paid test, and then on the website.**
+  - Before: the focused suite, the full suite, CI, and an independent refutation pass over the final diff.
+  - Then a fresh sealed PDF and Word set, with expectations and their references written before any output is read.
+  - It runs through the ordinary website with:
+    - usable Corti, Astra and Fable first readings, frozen before peers;
+    - peer reviews stored separately, and reconciliation;
+    - Stop and Resume, duplicate prevention and visible progress;
+    - a clarification answered and recomputed;
+    - labelled synthetic decisions, persisted after a reload;
+    - downloads checked against both omitted supported services and unsupported additions.
+- **C8: the install is served and verified.**
+  - Installed through the ruled-act door, with rollback, and the site available throughout.
+  - The served revision, the worker, the retained records and customer-provider privacy are verified.
+  - The repaired workflow is verified live.
+  - The PDF security and reference limitations are accounted for in the report.
+- **C9: the closing record.** It gives:
+  - the revision and links;
+  - each original defect's before and after;
+  - the fresh results;
+  - the three participants' usable contributions;
+  - the persisted decisions and downloads;
+  - usage and estimates.
+
+  Functional completion is marked only when C1 to C8 pass. Clinical validation and content-use permissions are
+  reported separately.
+
+### Rules of execution
+
+- **Status and evidence.** Status is NOT RUN, IN PROGRESS, PASS, FAIL or BLOCKED. Evidence is IMPLEMENTED, VERIFIED
+  OFFLINE or VERIFIED LIVE. A PASS names its kind and its evidence path. A later contradicting result reopens it, with
+  the reason.
+- **The two-cycle rule applies to patches, never to requirements** (interpretation (a)).
+- **Stages advance automatically.** A checkpoint is a record, not a request.
+- **One owner.** Agents are read-only in sealed sandboxes, or work in isolated worktrees on bounded areas. Integration,
+  merges, installs and walks are serialized under the owner.
+- **Provider execution:**
+  - concurrency one, finite deadlines, Stop and duplicate prevention;
+  - unknown outcomes reconciled before any resubmission;
+  - no identical failing paid attempt repeated.

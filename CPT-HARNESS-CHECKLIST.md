@@ -203,6 +203,69 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
 | [ ] | 8. Tested and installed: required Linux tests and CI; an independent refutation of the finished diff; regressions repaired without weakening safeguards; a declared, reversible install; retained cases re-assessed with sends disabled, then a small fresh Word and PDF acceptance set; all previous records, failures and approvals preserved | **PARTIAL**: every step ran, and the acceptance set did not pass. Linux tests and CI on the merge commit: CI 42159987582 and secrets-scan 42159987651 success; cpt-studio 42159987583 passes every test, its audit red on the accounted pypdf advisories. Four refutation cycles over the finished diff. Installed blue/green through the ruled-act door from the committed declaration: 299 availability samples, all 200; the rollback image kept. 88d9db32 and 39f0ac49 were re-assessed from retained answers with nothing sent, and exactly the declared rows moved. Previous records, decisions and answers are kept. The fresh acceptance set was walked: h3a (PDF) fails 2 hard checks and h3b (Word) 1, all routing and main-equal, and h3a's expected 43247 cannot reach review | live `fd8040d71e44` | `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`; the receipts in /home/claude/cpt-studio-install-20261023; `docs/foundation/mutations/20261106-cpt-studio-harness-repair3-install.md` | the acceptance failures are items 3 and 4 |
 | [x] | 9. Release readiness reported honestly: the corrected checklist and evidence paths, the installed revision, 39f0ac49's code and its verified outcome, proof that Astra and Fable both contributed usable live results, fresh acceptance and download results, the remaining clinical, security, reference and licensing limitations; the PDF advisories resolved or accounted for | DONE: reported in `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`. It covers this checklist and the evidence paths; the installed revision `fd8040d71e44`; 39f0ac49's 43247 (listed, not approvable) and its three held codes; Astra's and Fable's live contributions; the walk's acceptance and download results; and the remaining clinical, security, reference and licensing limitations. The pypdf advisories are accounted for, not resolved (`docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md`). The report states that the GI release is not complete | live `fd8040d71e44` | `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md` | - |
 
+## Completion repair, 2026-11-06 (owner directive of 2026-11-06)
+
+The owner directive of 2026-11-06 is recorded verbatim, with the session's interpretation (a)-(m), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. The contract is `cpt-studio/HARNESS.md`, "Completion repair
+(2026-11-06): the completion contract", criteria C1 to C9. This section is the live state: one owner, one table and
+the progress log below.
+
+**Marks.**
+- Status is NOT RUN, IN PROGRESS, PASS, FAIL or BLOCKED.
+- Kind is IMPLEMENTED, VERIFIED OFFLINE or VERIFIED LIVE.
+- `[x]` only when the item's acceptance evidence passes.
+- A passed item is reopened when later evidence disproves it.
+
+### Checkpoint
+
+| field | value |
+|---|---|
+| owner | session a12d8fb3 (integration and deployment) |
+| objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
+| installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
+| candidate | none yet: branch `fix/cpt-studio-completion-20261106` from main `eb7c9a77` |
+| current stage | 1, establish the exact remaining failures: IN PROGRESS |
+| next action | reproduce 39f0ac49, d44a77b3 and e888f9ce offline from a read-only dump; recover the withdrawn fixes' counterexamples |
+
+### Unresolved defects (each closed only by acceptance evidence)
+
+| id | defect | evidence | status |
+|---|---|---|---|
+| U1 | Astra's and Fable's explicit 43247 for a food-bolus removal ("the bolus was removed") is listed as not done and is not reinstatable | d44a77b3 (h3a), 39f0ac49; `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md` "What did not reach review" | OPEN |
+| U2 | procedure narratives after inline labels are read as part of the Indications, so the services read uncertain and the codes are held for performed_status and extent | d44a77b3 and 39f0ac49 routing mentions "section: indication"; `docs/cpt-harness/repair3-20261105/stage1-trace-39f0ac49.md` | OPEN |
+| U3 | routing reads a failed polypectomy attempt as the colonoscopy's own status (incomplete) | e888f9ce (h3b) `routing.gi.colonoscopy.status` | OPEN |
+| U4 | a report title read with no performance evidence of its own | h2b, e888f9ce: "Colonoscopy" uncertain | OPEN |
+| U5 | a completed marking for future localization is read as future (F-TIME R dropped) | HARNESS.md "refutation cycle 2"; repair 2 round 6 | OPEN |
+| U6 | the base's own false READYs | "The polyp was left in place." under a procedure line naming the polypectomy; "At the community hospital, ..."; "the snare would not close"; C3-4-4, 5, 8, 10, 11 and 12 (HARNESS.md cycles 3 and 4) | OPEN |
+| U7 | recorded false holds on the safe side | HARNESS.md cycles 2 to 4 (among them L4-2 case 1 and C2-4-3) | OPEN |
+| U8 | two recorded asymmetries | L4-4; Corti's own selection on a not-done act stays held | OPEN |
+| U9 | a listing reason asserts "not documented as done" from a missing parser rule | U1's reason text | OPEN |
+| U10 | questions whose only offered answers exclude the code | 39f0ac49 (stage-1 trace); repair-3 item 7 | OPEN |
+| U11 | answering a clarification, and the recomputation after it, never verified live | the fd8040d71e44 record, "Not walked here" | OPEN |
+| U12 | routing, the documented-service reader and the admission can disagree about one fact | U2 and U3 (routing against the services) | OPEN |
+| L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
+| L2 | NCCI PTP unconnected; D3 to D5 open | External dependencies above | LIMITATION, reported separately |
+
+### Items
+
+| | Item | Status | Kind | Revision | Evidence | Next |
+|---|---|---|---|---|---|---|
+| [ ] | 1. Establish the exact remaining failures (C1) | IN PROGRESS | - | `fd8040d71e44`; main `eb7c9a77` | - | reproduce offline; recover and pin the counterexamples |
+| [ ] | 2. Repair the shared document interpretation (C2) | NOT RUN | - | - | - | after item 1 |
+| [ ] | 3. Preserve equal proposal eligibility (C3) | NOT RUN | - | - | - | after item 1 |
+| [ ] | 4. Fix false positives as well as false holds (C4) | NOT RUN | - | - | - | with item 2 |
+| [ ] | 5. Make questions and statuses truthful (C5) | NOT RUN | - | - | - | after item 1 |
+| [ ] | 6. Prove the repair against retained evidence first (C6) | NOT RUN | - | - | - | after items 2 to 5 |
+| [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
+| [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
+| [ ] | 9. Close with evidence of the result (C9) | NOT RUN | - | - | - | last |
+
+### Tests, provider runs, usage and receipts
+
+- **Tests on the candidate:** none yet.
+- **Provider runs and usage in this repair:** none sent.
+- **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
+
 ## Progress log (append only)
 
 - **2026-11-01T21:10Z** Checklist created before any harness change. Carried in from round 4, as context and not as
@@ -729,3 +792,12 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
     removal is listed as not done and cannot be approved. The owner's central requirement fails for this act class
     while F-ACTS stays dropped.
   - Items 3, 4, 7 and 8 stay PARTIAL.
+
+- **2026-11-06T06:55Z: the owner's completion directive received and recorded; the contract put into the harness
+  before implementation.**
+  - The directive is recorded verbatim, with interpretation (a)-(m), in the rulings file, plus its index row.
+  - The contract is in `cpt-studio/HARNESS.md`, criteria C1 to C9.
+  - The state is in "Completion repair, 2026-11-06": checkpoint, defects U1 to U12, limitations L1 and L2, and items 1
+    to 9.
+  - Preflight GO: `docs/preflight-reports/preflight-20261106T064528Z.md` (shared tree, untracked by convention).
+  - Stage 1 is in progress.
