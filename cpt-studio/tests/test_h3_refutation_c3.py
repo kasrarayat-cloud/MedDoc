@@ -38,9 +38,11 @@ JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same proce
                                      "removed today in the report's own labelled COLONOSCOPY part (45379)",
                    'C3-1:c31-2:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
                    'C3-1:c31-6:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
-                   'C3-1:c31-6:X1': 'the meat bolus impacted at 34 cm is the bolus the Roth net removed today',
-                   'C3-1:c31-6:X2': 'the steak impaction is the bolus the Roth net removed today',
-                   'C3-1:c31-6:X3': 'the impacted meat bolus grasped with the net is the bolus removed today'}
+                   'C3-1:c31-6:X1': 'the meat bolus impacted at 34 cm is the bolus the Roth net removed today'}
+# Completion refutation cycle 2 (2026-11-06; HARNESS.md "Refutation of the integrated diff, cycle 2"): the bolus anaphor
+# resolves only to an antecedent recognized whole as a plain finding of today (a closed form). X2's "steak impaction" and
+# X3's "impacted meat bolus grasped with the net" are not, so both keep the base reading (held), the closed form's
+# recorded safe-side false holds (ACCURACY-RESIDUALS.md, cycle 2); their rows are pinned HELD/HELD in the table.
 # one documented act in each: a restatement or a doubted second statement of it
 ONE_ACT = ('C3-3:f1_two_ready:', 'C3-3:f4_doubted_ready:')
 
