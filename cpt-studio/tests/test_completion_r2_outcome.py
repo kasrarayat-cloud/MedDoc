@@ -190,12 +190,25 @@ class SubjectPrimitiveTests(SimpleTestCase):
 class SubActFailureRoutingTests(SimpleTestCase):
     """U3: a sub-act's failure is that act's own; the examination keeps its own reading."""
 
+    def test_an_accessorys_or_a_pronouns_failure_keeps_the_base_reading(self):
+        """Refutation cycle 3: the services reader reads no act from "The snare could not be passed around the polyp."
+        and the pronoun stays unresolved, so neither failure is consumed - the examination reads incomplete, as the
+        installed release reads it (a recorded residual of U3)."""
+        for line in ('The snare could not be passed around the polyp.',
+                     'The polypectomy was attempted but it was unsuccessful.'):
+            with self.subTest(line):
+                text = colon(COLD, line, title='Colonoscopy Report',
+                             procedure='Procedure: Colonoscopy. The colonoscope was advanced to the cecum.')
+                self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
+
     def test_a_failed_sub_act_leaves_a_complete_colonoscopy_performed(self):
+        # refutation cycle 3 (outcome C3-3, cost C3-1): routing gives a failure to a sub-act only where the services
+        # reader reads that act failed by the same word; an accessory's "could not be passed" and a pronoun's failure keep
+        # the examination's reading (test_an_accessorys_or_a_pronouns_failure_keeps_the_base_reading below)
         for line in ('Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was '
                      'unsuccessful because of poor positioning; the polyp was left in place.',
                      'Biopsy attempts were unsuccessful.', 'Clip placement was unsuccessful.',
-                     'The snare could not be passed around the polyp.', 'Argon plasma coagulation was unsuccessful.',
-                     'The polypectomy was attempted but it was unsuccessful.'):
+                     'Argon plasma coagulation was unsuccessful.'):
             for title, procedure in (('Colonoscopy Report', 'Procedure: Colonoscopy. The colonoscope was advanced to '
                                       'the cecum.'),
                                      ('Endoscopy Report', 'Procedure: Colonoscopy. The colonoscope was advanced to the '
@@ -338,7 +351,8 @@ class ExaminationFailureRoutingTests(SimpleTestCase):
         sub_act = colon(COLD, 'The polypectomy was attempted but it was unsuccessful.')
         exam = colon(COLD, procedure='Procedure: Colonoscopy. The colonoscope was advanced to the hepatic flexure but '
                      'it could not be advanced further.')
-        self.assertEqual(finding(sub_act, 'gi.colonoscopy').status, 'performed')
+        # refutation cycle 3: the pronoun rule is abandoned - both read the examination incomplete, the base reading
+        self.assertEqual(finding(sub_act, 'gi.colonoscopy').status, 'incomplete')
         self.assertEqual(finding(exam, 'gi.colonoscopy').status, 'incomplete')
 
     def test_an_unread_subject_keeps_the_base_reading(self):

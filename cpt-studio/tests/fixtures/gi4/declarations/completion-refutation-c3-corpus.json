@@ -1,0 +1,70 @@
+{
+ "about": "Completion repair, refutation cycle 3 (2026-11-06): the completion corpus re-pinned once on the cycle-3 repair (tests/fixtures/gi4/completion/corpus.json). Every entry whose pinned verdict or reading moved, with its verdict before and after and the mechanism that moved it; measured by ops.gi4.completion --report before --repin. Invariant: no FALSE READY where the installed baseline had none (0). HARNESS.md \"Refutation of the integrated diff, cycle 3\".",
+ "totals_after": {
+  "matches": 277,
+  "safe side (held where listed is required)": 245,
+  "FALSE READY": 35,
+  "FALSE HOLD": 54,
+  "held pending ruling": 11,
+  "needs ruling (installed READY)": 3,
+  "listed where a hold is required": 2
+ },
+ "moved": [
+  {
+   "id": "H2|PKG-PURPO-05",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_provider",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-05+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_provider",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-11",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_provider",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-11+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_provider",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-12",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_source",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-12+45378",
+   "old": "safe side (held where listed is required)",
+   "new": "matches",
+   "required": "L:other_source",
+   "why": "the purpose release fires only for a sentence that is a marking statement read whole (purpose.MARKING_STATEMENT, refutation cycle 3); this one is not, so the purpose's future keeps its base reading - the installed baseline's own verdict; it is listed as required."
+  },
+  {
+   "id": "H2|PKG-PURPO-06",
+   "old": "matches",
+   "new": "listed where a hold is required",
+   "required": "H:performed_status",
+   "why": "'If India ink was injected ... for future localization, surgery is easier.' is a condition, no marking statement: the purpose's future keeps its base reading and the code is excluded as planned rather than held - never READY; the installed baseline's own verdict ('listed where a hold is required')"
+  },
+  {
+   "id": "H2|PKG-PURPO-06+45378",
+   "old": "matches",
+   "new": "listed where a hold is required",
+   "required": "H:performed_status",
+   "why": "'If India ink was injected ... for future localization, surgery is easier.' is a condition, no marking statement: the purpose's future keeps its base reading and the code is excluded as planned rather than held - never READY; the installed baseline's own verdict ('listed where a hold is required')"
+  }
+ ]
+}

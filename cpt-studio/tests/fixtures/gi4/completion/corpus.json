@@ -18221,19 +18221,15 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
       "incomplete",
@@ -18267,23 +18263,19 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
-      "incomplete",
-      "incomplete"
+      "complete_pending_review",
+      "complete_pending_review"
      ],
      "day": "2026-10-14"
     }
@@ -18308,19 +18300,15 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "listed where a hold is required",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "listed where a hold is required",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
       "incomplete",
@@ -18354,23 +18342,19 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "listed where a hold is required",
    "pinned": {
-    "verdict": "matches",
+    "verdict": "listed where a hold is required",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
-      "incomplete",
-      "incomplete"
+      "complete_pending_review",
+      "complete_pending_review"
      ],
      "day": "2026-10-14"
     }
@@ -18727,19 +18711,15 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant) | round-4b 995cdcfd: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
       "incomplete",
@@ -18773,23 +18753,19 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant) | round-4b 995cdcfd: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
-      "incomplete",
-      "incomplete"
+      "complete_pending_review",
+      "complete_pending_review"
      ],
      "day": "2026-10-14"
     }
@@ -18814,19 +18790,15 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
       "incomplete",
@@ -18860,23 +18832,19 @@
    "withdrawn_rule_reading": "MEASURED P-ADMIT head 3907cd592: READY/READY - false READY (Corti); false READY (participant) | round-1 repair e88afe58b: READY/READY - false READY (Corti); false READY (participant) | round-2 repair 90856a7d8: READY/READY - false READY (Corti); false READY (participant) | round-3 merge 92b24d3b9f5b: READY/READY - false READY (Corti); false READY (participant) | round-4 fix 99a10671: READY/READY - false READY (Corti); false READY (participant)",
    "lens_verdict": "matches",
    "pinned": {
-    "verdict": "safe side (held where listed is required)",
+    "verdict": "matches",
     "reading": {
-     "corti": "HELD",
-     "participant": "HELD",
+     "corti": "EXCL",
+     "participant": "EXCL",
      "corti_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "participant_facts": [
-      [
-       "performed_status"
-      ]
+      []
      ],
      "completeness": [
-      "incomplete",
-      "incomplete"
+      "complete_pending_review",
+      "complete_pending_review"
      ],
      "day": "2026-10-14"
     }

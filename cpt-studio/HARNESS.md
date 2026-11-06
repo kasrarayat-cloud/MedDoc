@@ -3753,3 +3753,76 @@ session's integration):
 - the installed release's own false READYs seen and not moved: "was tried; it was unsuccessful", "was started, but it was
   abandoned because of bleeding", Corti's 43249 alone on a balloon that failed beside wire-guided dilators, Corti's 43248
   alone on "a CRE wire-guided balloon dilator".
+
+### Refutation of the integrated diff, cycle 3 (2026-11-06): six lenses over cycle 2's change of approach
+
+**The pass.** Workflow `wf_bab4d28d-c76`: six lenses (parity, closed forms, outcome, admission, answers, cost), each in a
+sealed, write-disabled sandbox at `844fe54c`, told to refute cycle 2's change of approach with concrete synthetic inputs
+measured on that head, the cycle-1 head `5fa33480` and the installed base. They returned 32 findings (parity 7, closed 7,
+outcome 4, admission 5, answers 4, cost 5). The owner session reproduced every engine-level input on the three trees
+before deciding anything (`verify/refute4/`: 51 inputs, the parity lens's 188 pairs, the answers lens's six scripts).
+
+**What the findings showed.** Each closed form leaked where a slot was not closed - an instrument phrase took "with no
+success", a place phrase took "and was removed", the antecedent was judged by its clause, the purpose release checked an
+act kind (vacuous for a service name) instead of the subject's head. The labelled paragraph's parity was broken at its
+root: the overlay keeps the frozen sentences, so a released label was read through the narrative's first clause (basis
+'cue') - it skipped the status-line reader and won the aggregation before any contradiction was asked. The integration's
+own rules (the observed-only exclusion, the units count) acted on the reader's partial records. And the shared failure
+vocabulary failed both ways: too narrow for routing's subject vocabulary ("could not be advanced", "Removal was aborted"),
+too wide for the services reader ("and retrieval was precluded").
+
+**Measured before deciding: which release the requirement rests on.** Each release disabled in memory
+(`verify/refute4/mechs.py`), the completion corpus read: the labelled paragraph carries 13 required READYs (d44a77b3
+among them), the instrument rule 6 (e888f9ce), the purpose release 8 (d44a77b3's 45381), the bolus anaphor 6 (d44a77b3's
+43247), routing's sub-act failure 6 (e888f9ce's "no incompleteness flag"), the observed-only exclusion 5, the reach
+statement 1. The pronoun rule, the nominal removal, the shared subject, rule 6b and the removed-only form carry none.
+
+**The repair, per mechanism** (`acadc296`), under the two-cycle rule:
+
+| approach | mechanisms |
+|---|---|
+| abandoned - the base reading (nothing required rests on them) | the pronoun read through the clause before it (refuted in cycles 1, 2 and 3: outcome C3-1, C3-2); the nominal removal's done form (C3-6) and the coordinated verb phrase's shared subject (C3-7), each refuted twice; rule 6b's presupposing heads (closed C3-1); cycle 2's additions to the services reader's failure words (outcome C3-4); cycle 2's units rule (admission C3-4: the group's units again, with the installed `units.duplicate` prompt) |
+| kept because required, recognized WHOLE - every slot a closed class, anything else the base reading | the purpose release: one marking statement (`purpose.MARKING_STATEMENT`) read by routing and the services reader alike on the reader's own sentence cut at its semicolons - a marking material or a lesion as the subject, a marking participle, closed place phrases, "for future localization/identification/reference" (closed C3-2, C3-3; cost C3-2, C3-3); the bolus antecedent's whole sentence is the plain finding (closed C3-4); the reach statement is the text's only landmark word (cost C3-5); a removal's "not performed" exclusion needs no removal word anywhere outside the code's own acts' passages, and its place phrase holds no clause (admission C3-1 to C3-3) |
+| one reader decides, the other consumes | a failure is a sub-act's only where the services reader reads that act failed by the same word (`detect._consumed_by_the_services_reader`); otherwise the examination's, the base reading - replacing the shared vocabulary cycles 2 and 3 refuted both ways (outcome C3-3, cost C3-1) |
+| layout parity, at its root | a released label is read as its heading twin's name, by its section (`detect._in_a_released_label`; parity C3-1 to C3-3); another family's instrument anywhere in the paragraph holds it (C3-4); the frame read stops at the candidate's own extent - linear again (C3-5: a 73 KB paste had taken 67 s); the instrument rule reads only a narrative that names no family (C3-6); the parity test reads against the installed base's twin readings, pinned (C3-7) |
+| holds narrowed toward the base | a hedge no longer blocks the listing's promotion (closed C3-5: "for possible adenoma"); an attribute failure never crosses a word of time order ("aborted after the biopsies", cost C3-4); a failure stating a specific technique beside a done act stating none is another instance (admission C3-5) |
+| answers | an answer recorded before the binding excludes only its own code in the engine, so no other fingerprint or decision moves (C3-1); the undo marks a service question an answer closed (C3-2); a superseding answer keeps its row (C3-3); a new answer to a closed row binds to that question's recorded fingerprint (C3-4) |
+
+**Measured on the repair:**
+- **Every cycle-3 input** reads as the installed base (`tests/test_completion_refutation_c3.py`, its fixture
+  `completion-c3-cases.json` holding each input's base, cycle-1 and cycle-2 readings), the intended releases apart: the
+  marked lesion and the bolus with its plain antecedent READY; a participant's removal code read as Corti's (held, with
+  the base code it holds). outcome C3-3 and cost C3-4 read READY with the installed `service.incomplete` warning again.
+- **Parity** against the installed base's own twin readings (`completion-c3-parity.json`, 180 pairs): no labelled input
+  READY where the base holds its twin but five, each recorded - four are the H2 shape's 43247, whose heading twin holds
+  the bolus by its own false hold (corpus 137, cycle 2's recorded exception; the base twin reads the same document's
+  43239 and 45385 READY whatever its status line says, the line beyond the base's window), and one the base reads READY
+  itself on the input (b8).
+- **The corpus** re-pinned beside `completion-refutation-c3-corpus.json`: 8 entries moved, every one to the installed
+  baseline's own verdict (the purpose release closed); FALSE READY 35, **0 where the installed baseline had none**;
+  FALSE HOLD 54.
+- **The retained cases**, recomputed from their recorded runs: 39f0ac49 43239/45380/45385/43247 READY; d44a77b3
+  43239/45385/45381/43247 READY (its wrapped tattoo sentence read whole); e888f9ce 45385/45380 READY with no
+  incompleteness flag; 88d9db32 its six READY.
+- **Cost**: the 73 KB and 182 KB label pastes take 0.40 s and 0.23 s in the structure reader (67 s and 94 s before).
+
+**Refined after the full suite on `acadc296`** (6,347 Django tests; every failure read before it was re-pinned):
+- the removal exclusion's scan passes over a participle's own negated verb group ("The polyp could not be removed.")
+  and a removal noun after a purpose "for" ("left in place for surgical resection") - both are the installed release's
+  exclusions, pinned since cycle 2; every positive removal participle still blocks the exclusion;
+- a hedge that only heads a reason phrase naming no act ("for possible adenoma", "for suspected celiac disease") no
+  longer blocks the listing's promotion; a hedge on the act itself ("was possibly performed", "for possible
+  polypectomy", "for attempted polypectomy") still does (`services._reason_hedges_only`) - dropping the hedge from the
+  guard outright had re-opened the act's own hedge;
+- rule 6b gives way to one closed form, `services._governed_by_another_act`: an act noun that is the object of another
+  act's noun and modifies what the act left ("Clip closure of the polypectomy defect failed.", "Retrieval of the
+  polypectomy specimen was unsuccessful.") states no act - the installed release's READY; every product noun's own
+  acquisition ("Biopsy tissue acquisition failed.") keeps its reading (closed C3-1 stays closed);
+- a listed removal stands beside "A 25 mm polyp was found in the cecum and was removed piecemeal." by one closed
+  observation-then-removal sentence (`services._OBSERVED_THEN_REMOVED`, its place phrase an anatomical site only) -
+  the abandoned shared subject had withheld that listing, which the installed release reads READY;
+- the instrument rule reads a narrative unless its heading LINE names a service with no finite verb on it
+  (`detect._heading_line_names_a_service`): "Procedure: Upper endoscopy" is named; "Procedure: The colonoscope ... This
+  was done on the same day as her upper endoscopy." is not (cycle 2's O4, as its named twin);
+- the marking statement admits a reduced passive after a lesion ("Separate transverse-colon lesion marked with
+  submucosal tattoo ...", 88d9db32's impression line), a hyphenated site, and "a tattoo mark".

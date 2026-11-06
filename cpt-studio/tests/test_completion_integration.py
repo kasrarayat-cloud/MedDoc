@@ -185,11 +185,13 @@ class OneSubjectReadingTests(SimpleTestCase):
         self.assertIsNone(gi_services._removal_subject(sentence, 0, pos))  # the removal reader needs both
 
     def test_a_pronoun_is_read_through_the_clause_before_it(self):
+        # refutation cycle 3 (outcome C3-1, C3-2): the pronoun rule is abandoned - a pronoun subject stays unresolved,
+        # the examination's failure, the base reading
         text = 'Polypectomy was attempted. It was unsuccessful.'
         clause = text.index('It')
         found = gi_services.predicate_subject(text, clause, self.at(text), (0, clause))
-        self.assertEqual((found.resolved.word, found.pronoun), ('polypectomy', False))
-        self.assertEqual(clauses.failure_of(text, found), clauses.SUB_ACT)
+        self.assertTrue(found.pronoun)
+        self.assertNotEqual(clauses.failure_of(text, found), clauses.SUB_ACT)
 
 
 class ReferencePathTests(SimpleTestCase):

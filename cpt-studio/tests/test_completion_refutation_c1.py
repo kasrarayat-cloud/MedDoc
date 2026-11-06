@@ -179,13 +179,13 @@ class ActTests(SimpleTestCase):
         self.assertEqual(got, {'43247'})
 
     def test_the_false_holds_are_released(self):
-        # refutation cycle 2 (acts A1): cycle 1's skip of a hedge after a reason's lead ("for suspected ...") is dropped -
-        # it could not tell the act's own "attempted" from a diagnosis hedge ("Colonoscopy for attempted polypectomy" read
-        # READY) - so the diagnosis hedge holds again: a recorded false hold, the installed release's reading
+        # refutation cycle 3 (closed C3-5): a hedge that only heads a reason phrase naming no act is the reason's
+        # diagnosis, so the listing is promoted - READY, as the installed release reads it (cycle 2 had held it, saying
+        # the base did; the base reads it READY); the act's own "attempted" stays held
         reason = UPPER_HEAD + 'Procedure: Upper endoscopy with duodenal biopsies for suspected celiac disease\nThe ' \
             'gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal.\n'
         self.assertEqual(ready(reason, [('43239', 'Upper endoscopy with duodenal biopsies for suspected celiac '
-                                                  'disease')]), set())
+                                                  'disease')]), {'43239'})
         residual = COLON_HEAD + 'Procedure: Colonoscopy with hot snare polypectomy\n' + ADVANCED + 'A 25 mm sessile ' \
             'polyp was found in the cecum and was removed piecemeal. The residual polyp was left in place.\n'
         self.assertEqual(ready(residual, [('45385', 'Colonoscopy with hot snare polypectomy')]), {'45385'})

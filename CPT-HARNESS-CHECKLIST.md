@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106` at `ae3b19b8b` (+ this record): the five builders, refutation cycle 1's repairs, and refutation cycle 2's change of approach integrated; not installed |
-| current stage | 7: refutation cycle 2 (37 findings, 20 false READYs) answered by the two-cycle rule - the refuted cycle-1 patches abandoned and the approach changed (layout parity, closed positive forms, the base reading), five builders and the integration; measured offline: corpus 0 new false READY (FALSE READY 39 to 35), parity holds, the four retained cases as required, the freeze gate holds, the battery and the replay as in cycle 1; items 2 to 5 stay IN PROGRESS until refutation cycle 3 |
-| next action | the full suite on this commit; refutation cycle 3 (six lenses at this head, briefs in `/home/claude/cpt-studio-completion-20261106/refute/briefs-c3/`: parity, closed forms, outcome, admission, answers, cost), whose findings only narrow or drop, never widen; then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
+| candidate | branch `fix/cpt-studio-completion-20261106` at `acadc296c` (+ its pins and this record): the five builders, refutation cycles 1 and 2, and refutation cycle 3's repair integrated; not installed |
+| current stage | 7: refutation cycle 3 (32 findings over cycle 2's approach) answered under the two-cycle rule - the releases no required reading rests on abandoned (pronoun, nominal removal, shared subject, rule 6b, cycle 2's stop words and units rule), the required ones recognized whole (the marking statement, the bolus antecedent's sentence, the lone reach statement, the removal exclusion), sub-act failures given by one reader and consumed by the other, a released label read as its heading twin's name; measured offline: every cycle-3 input as the installed base (the intended releases apart), corpus 0 new false READY (FALSE READY 35, FALSE HOLD 54), parity against the base's own twin readings (180 pairs, five recorded exceptions), the four retained cases as required; items 2 to 5 stay IN PROGRESS until refutation cycle 4 |
+| next action | the full suite and the gates on this commit; refutation cycle 4 over cycle 3's repair (its findings only narrow or drop, never widen); then the push, CI, the merge, the install declaration and the install, the walk of c1 and the blind c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -910,3 +910,17 @@ the progress log below.
     suite on the integrated head (`7a4c4c41`) failed 49 subtests, each classified and re-pinned (`d4f4ecff`), none a
     regression.
   - No provider request has been sent in this repair.
+- **2026-11-06T21:15Z Refutation cycle 3 answered (offline only):**
+  - Six lenses at `844fe54c` (`wf_bab4d28d-c76`, about 35 minutes) returned 32 findings: parity 7, closed forms 7,
+    outcome 4, admission 5, answers 4, cost 5. Every engine-level input was reproduced on this head, the installed base
+    and the cycle-1 head before any change; the answers lens's scripts were re-run.
+  - Each release was disabled in memory and the corpus read, to see which requirement rests on which release. The
+    releases nothing required rests on were abandoned to the base reading; the required ones were closed whole; routing
+    now gives a failure to a sub-act only where the services reader reads that act failed; a released label is read as
+    its heading twin's name. Commit `acadc296`; HARNESS.md "Refutation of the integrated diff, cycle 3".
+  - The full suite at `844fe54c` had one failure, harness 3's judged-release list still naming X2 and X3 after their
+    re-pin (fixed in `a5e9b5f5`).
+  - 844fe54c was pushed (origin confirmed); CI on it: the `cpt-studio` workflow's tests pass and its dependency audit
+    fails on pypdf 6.21.2, as on main since #1449 (L1).
+  - Install predictions on `844fe54c` over a fresh read-only dump: the retained cases 4/4/2/6 READY, nothing sent,
+    RECOMPUTE_STATES unchanged.

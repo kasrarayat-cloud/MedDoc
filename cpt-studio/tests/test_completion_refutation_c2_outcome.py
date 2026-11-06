@@ -188,7 +188,9 @@ class ReachStatementTests(SimpleTestCase):
             'appendiceal orifice and the ileocecal valve. ' * 99 + BX + '\n'
         counting = _Counting(detect._REACH_STATEMENT)
         with mock.patch.object(detect, '_REACH_STATEMENT', counting):
-            self.assertEqual(extent(many), 'cecum')
+            # refutation cycle 3 (cost C3-5): a reach statement is believed only as the text's one landmark word - here
+            # a hundred sentences name it, so the extent keeps its base reading (none), as the installed release reads it
+            self.assertIsNone(extent(many))
         self.assertGreaterEqual(counting.calls, 100)  # every reach sentence is read ...
         self.assertLessEqual(counting.calls, len(sections.layout(many).sentences))  # ... and none twice
         long_sentence = head('Colonoscopy') + 'Indications: Screening.\nProcedure: The colonoscope was inserted. ' + \
@@ -267,49 +269,30 @@ class PronounTests(SimpleTestCase):
         """Cycle 2, outcome O2, the controls: where the clause before the pronoun states the act attempted, its failure
         is that act's own - the examination is not incomplete and the attempted act is held ("Hot snare polypectomy of
         the polyp was attempted; it was unsuccessful."; an EGD balloon dilation twin)."""
+        # refutation cycle 3 (outcome C3-1, C3-2): the pronoun rule is abandoned - "it was unsuccessful" is the
+        # examination's failure, the base reading (the installed release reads both twins so); the act stays held
         text = LISTED_HOT + 'Hot snare polypectomy of the polyp was attempted; it was unsuccessful.\n'
-        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'performed')
+        self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
         self.assertEqual(label(proposals(text, [('45385', 'Colonoscopy with hot snare polypectomy')])['45385']), 'HELD')
         upper = UPPER_HEAD + 'Procedure: Upper endoscopy with balloon dilation\n' + EGD_IN + 'Balloon dilation of the ' \
             'stricture was attempted; it was unsuccessful.\n'
-        self.assertEqual(finding(upper, 'gi.egd').status, 'performed')
+        self.assertEqual(finding(upper, 'gi.egd').status, 'incomplete')
         self.assertEqual(label(proposals(upper, [('43249', 'Balloon dilation of the stricture was attempted')])['43249']),
                          'HELD')
 
     def test_the_antecedents_own_main_predicate_decides(self):
-        """Cycle 2, outcome O2: services.predicate_subject resolves a pronoun only through an antecedent clause whose
-        first verb group - with nothing before it but its subject - is one of the closed class; a word elsewhere in the
-        clause, an aside's or a subordinate clause's verb, an attributive "failed", or a plural subject never resolves
-        it."""
+        """Refutation cycle 3 (outcome C3-1, C3-2): services.predicate_subject never reads a pronoun through the clause
+        before it - cycle 2's closed form read only the antecedent's first verb group, so a clause that went on to say
+        the act succeeded ("... failed with a balloon and was achieved with a basket; it was then aborted") lent it the
+        examination's abort. Every pronoun stays unresolved: the base reading."""
         for sentence in ('Hot snare polypectomy was attempted; it was unsuccessful.',
-                         'Hot snare polypectomy was tried; it was unsuccessful.',
-                         'Hot snare polypectomy was unsuccessful; it was abandoned.',
                          'Hot snare polypectomy failed; it was abandoned.',
-                         'Hot snare polypectomy could not be completed; it was abandoned.',
-                         'Hot snare polypectomy was not possible; it was abandoned.',
-                         'Hot snare polypectomy was not successful; this was abandoned.',
-                         'Hot snare polypectomy was not completed; that was abandoned.',
-                         'The polypectomy was attempted but it was unsuccessful.'):
+                         'The polypectomy was attempted but it was unsuccessful.',
+                         'Stone extraction failed with a balloon and was achieved with a basket; it was then aborted.',
+                         'Brushing of the stricture was attempted and was successful; it was then aborted.',
+                         'Biliary brushings were obtained from the stricture after two attempts; it was then aborted.'):
             with self.subTest(sentence):
-                found = pronoun_reading(sentence)
-                self.assertFalse(found.pronoun)
-                self.assertEqual(found.resolved.word, 'polypectomy')
-        for sentence in ('Biliary brushings were obtained from the stricture after two attempts; it was then aborted.',
-                         'Biliary brushings were obtained from the stricture after a failed first pass; it was aborted.',
-                         'Hot snare polypectomy was performed after two attempts; it was then aborted.',
-                         'Hot snare polypectomy of the polyp was begun; it was unsuccessful.',
-                         'Polypectomy, which was attempted twice, was completed; it was then aborted.',
-                         'When polypectomy was attempted the polyp bled; it was then aborted.',
-                         'A failed polypectomy was noted; it was then aborted.',
-                         'Biliary brushings were attempted; it was then aborted.',
-                         'Cold forceps biopsies were unsuccessful; it was then aborted.',
-                         'Biopsy attempts were unsuccessful; it was abandoned.',
-                         'Two polyps were attempted; this was then aborted.'):
-            with self.subTest(sentence):
-                found = pronoun_reading(sentence)
-                self.assertIsNotNone(found)
-                self.assertTrue(found.pronoun, found.resolved)
-
+                self.assertTrue(pronoun_reading(sentence).pronoun)
 
 # --- one failure vocabulary ------------------------------------------------------------------------------------------
 LISTED_COLD = COLON_HEAD + 'Procedure: Colonoscopy with cold snare polypectomy\n' + ADVANCED + \
@@ -340,9 +323,11 @@ class FailureVocabularyTests(SimpleTestCase):
                                  'HELD')
 
     def test_the_egd_and_ercp_twins(self):
-        """Cycle 2, outcome O6 in other families: an EGD biopsy, an EGD balloon dilation, a gastric polypectomy and an
-        ERCP sphincterotomy each listed on the procedure line and then stated halted, stopped because of bleeding or
-        precluded are held (on the cycle-1 head the EGD ones were READY with no warning); "completed" is READY."""
+        """Cycle 2, outcome O6 in other families, re-read in cycle 3: an EGD biopsy, an EGD balloon dilation and an
+        ERCP sphincterotomy each listed and then stated halted, stopped because of bleeding or precluded read READY
+        with the installed incompleteness warning (the services reader no longer reads those words; routing keeps them
+        the examination's); the gastric polypectomy beside a polyp only found is withheld by the listing rule;
+        "completed" is READY with no warning."""
         shapes = (
             (UPPER_HEAD + 'Procedure: Upper endoscopy with cold forceps biopsy\n' + EGD_IN + 'An area of erythema was found '
              'in the gastric antrum.\nThe biopsy was {}.\n', '43239', 'Upper endoscopy with cold forceps biopsy'),
@@ -354,11 +339,16 @@ class FailureVocabularyTests(SimpleTestCase):
              'of the duodenum. Deep biliary cannulation was achieved.\nThe sphincterotomy was {}.\n', '43262',
              'ERCP with biliary sphincterotomy'))
         for shape, value, quote in shapes:
-            for word, expected in (('halted because of bleeding', 'HELD'), ('stopped because of bleeding', 'HELD'),
-                                   ('precluded by the angulation', 'HELD'), ('completed', 'READY')):
+            for word in ('halted because of bleeding', 'stopped because of bleeding', 'precluded by the angulation',
+                         'completed'):
                 with self.subTest(code=value, word=word):
-                    text = shape.format(word)
-                    self.assertEqual(label(proposals(text, [(value, quote)])[value]), expected)
+                    item = proposals(shape.format(word), [(value, quote)])[value]
+                    if word == 'completed':
+                        self.assertEqual((label(item), 'service.incomplete' in flagged(item)), ('READY', False))
+                    elif value == '43251':  # the listing rule: the gastric polyp is only found, so no removal stands
+                        self.assertEqual(label(item), 'HELD')
+                    else:  # refutation cycle 3: the installed release's reading, its incompleteness warning kept
+                        self.assertEqual((label(item), 'service.incomplete' in flagged(item)), ('READY', True))
 
     def test_another_clauses_or_a_medications_stop_leaves_the_act_done(self):
         """Cycle 2, outcome O6, the controls: a medication halted or discontinued, or a stop in another clause or before
@@ -377,32 +367,22 @@ class FailureVocabularyTests(SimpleTestCase):
                     '45385']), 'READY')
 
     def test_both_readers_are_built_from_one_vocabulary(self):
-        """Cycle 2, outcome O6: the drift guard. Routing's subject-tested 'terminated', 'stopped', 'precluded' and
-        'aborted' cues are built from cues.ACT_*; every phrase they read from it is a failure the services reader reads
-        too (FAILED_ACT), as a reading _attempt_or_failure accepts; every word the services reader can name is one of
-        those readings, and its attribute form reads every participle."""
+        """Refutation cycle 3 (outcome C3-3, C3-4; cost C3-1): the shared vocabulary is replaced by consumption. Routing's
+        subject-tested cues are unchanged (cues.ACT_*); the services reader reads cycle 1's failure words only; and
+        routing gives a failure to a sub-act only where the services reader reads that act failed by the same word
+        (detect._consumed_by_the_services_reader) - so a stop word the services reader does not read stays the
+        examination's, as the installed release reads it."""
         routing = dict(cues.INCOMPLETE_CLAUSE)
         self.assertEqual(routing['terminated'].pattern, r'\b(?:' + '|'.join(cues.ACT_STOPPED) + r')\b')
         self.assertEqual(routing['stopped'].pattern, r'\bstopped\s+(?:' + '|'.join(cues.ACT_STOPPED_HOW) + r')\b')
         self.assertEqual(routing['precluded'].pattern, r'\b' + cues.ACT_PRECLUDED + r'\b')
-        self.assertEqual(cues.ABORTED.pattern, r'\b' + cues.ACT_ABORTED + r'\b')
-        self.assertLessEqual({'terminated', 'stopped', 'precluded', 'aborted'}, detect._SUBJECT_TESTED_NAMES)
-        phrases = [(w, routing['terminated']) for w in cues.ACT_STOPPED] + \
-            [('stopped ' + how, routing['stopped']) for how in cues.ACT_STOPPED_HOW] + \
-            [(cues.ACT_PRECLUDED, routing['precluded']), (cues.ACT_ABORTED, cues.ABORTED)]
-        for phrase, cue in phrases:
-            with self.subTest(phrase):
-                sentence = f'The polypectomy was {phrase} the bleeding.'
-                self.assertIsNotNone(cue.search(sentence))
-                said = cues.FAILED_ACT.search(sentence)
-                self.assertIsNotNone(said)
-                self.assertTrue(gi_services._attempt_or_failure(('uncertain: ' + said.group(0).lower(),)))
-        for word in cues.ACT_FAILURE_WORDS:
-            with self.subTest(word):
-                self.assertTrue(gi_services._attempt_or_failure(('uncertain: ' + word,)))
-        for word in cues.ACT_FAILED + (cues.ACT_ABORTED,) + cues.ACT_STOPPED + (cues.ACT_PRECLUDED,):
-            with self.subTest(attribute=word):
-                self.assertEqual(cues.FAILED_ACT_BEFORE.search(f'an {word} ').group('w'), word)
-        # "stopped" alone, or stopping something else, is no failure of the act's own
-        self.assertIsNone(cues.FAILED_ACT.search('The polypectomy was stopped.'))
-        self.assertIsNone(cues.FAILED_ACT.search('Clip placement stopped the oozing.'))
+        for word in ('failed', 'unsuccessful', 'abandoned', 'aborted', 'terminated', 'discontinued'):
+            with self.subTest(read=word):
+                self.assertIsNotNone(cues.FAILED_ACT.search(f'The polypectomy was {word}.'))
+        for phrase in ('halted because of bleeding', 'stopped because of bleeding', 'precluded by the angulation'):
+            with self.subTest(not_read=phrase):
+                self.assertIsNone(cues.FAILED_ACT.search(f'The polypectomy was {phrase}.'))
+                text = LISTED_COLD + f'The polypectomy was {phrase}.\n'
+                self.assertEqual(finding(text, 'gi.colonoscopy').status, 'incomplete')
+        self.assertIsNone(cues.FAILED_ACT_BEFORE.search('The procedure was aborted after the '))
+        self.assertEqual(cues.FAILED_ACT_BEFORE.search('an unsuccessful ').group('w'), 'unsuccessful')

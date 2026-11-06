@@ -97,12 +97,16 @@ class ReasonLeadTests(SimpleTestCase):
         self.assertNotIn('43247', ready(text, [('43235', UPPER_ADV.strip())], [('43247', listing)]))
 
     def test_a_hedged_reason_on_the_procedure_line_is_held_again(self):
-        """Cycle 2, acts A1: the cycle-1 F5 shape ("biopsies for suspected celiac disease") is a recorded false hold
-        again (held, never excluded), as the base read it."""
+        """Cycle 2, acts A1, re-read in cycle 3 (closed C3-5): a hedge that only heads a reason phrase naming no act
+        ("biopsies for suspected celiac disease") is the reason's diagnosis, so the listing is promoted - READY, as the
+        installed release reads it (the cycle-2 pin's "as the base read it" was measured wrong: the base reads READY)."""
         line = 'Upper endoscopy with duodenal biopsies for suspected celiac disease'
         text = upper('The duodenal mucosa appeared normal.\n', 'Procedure: ' + line + '\n')
-        self.assertEqual(outcome(text, [('43239', line)])['43239'], ('selected', 'needs_clarification'))
-
+        self.assertEqual(outcome(text, [('43239', line)])['43239'], ('selected', 'ready'))
+        for act_reason in ('Upper endoscopy for possible biopsy', 'Upper endoscopy for attempted biopsy'):
+            with self.subTest(act_reason):  # a hedge on an act keeps it held
+                text = upper('The duodenal mucosa appeared normal.\n', 'Procedure: ' + act_reason + '\n')
+                self.assertNotEqual(outcome(text, [('43239', act_reason)])['43239'], ('selected', 'ready'))
 
 class SharedSubjectTests(SimpleTestCase):
     """A2: a second conjunct shares the first conjunct's subject only when it is a plain done statement."""
@@ -137,20 +141,19 @@ class SharedSubjectTests(SimpleTestCase):
                 self.assertNotIn('43247', ready(text, [('43247', sentence[:-1])]))
 
     def test_a_plain_done_conjunct_shares_the_subject(self):
-        """Cycle 2, acts A2 controls: "... and was removed piecemeal" (the listed polypectomy READY), "... and was
-        removed with a Roth net" (43247 READY by Corti or Astra), and an adverb before the participle."""
+        """Cycle 2, acts A2, re-read in cycle 3 (closed C3-7): the shared subject is abandoned - a coordinated "... and
+        was removed ..." shares no subject, the base reading (43247 held, as the installed release holds it). A listed
+        polypectomy beside "A 25 mm polyp was found in the cecum and was removed piecemeal." stands by the closed
+        observation-then-removal sentence (services._OBSERVED_THEN_REMOVED), READY as the installed release reads it."""
         sentence = 'An impacted meat bolus was found at 32 cm and was removed with a Roth net.'
         text = upper(sentence + '\n')
-        self.assertEqual(ready(text, [('43247', sentence)]), {'43247'})
-        self.assertIn('43247', ready(text, [('43235', UPPER_ADV.strip())], [('43247', sentence)]))
-        self.assertEqual(shared_subject(sentence), 'bolus')
+        self.assertNotIn('43247', ready(text, [('43247', sentence)]))
+        self.assertIsNone(shared_subject(sentence))
         coin = 'A swallowed coin was seen in the gastric body and was then removed with a Roth net.'
-        self.assertEqual(ready(upper(coin + '\n'), [('43247', coin)]), {'43247'})
+        self.assertNotIn('43247', ready(upper(coin + '\n'), [('43247', coin)]))
         polyp = 'A 25 mm polyp was found in the cecum and was removed piecemeal.'
         self.assertEqual(ready(colon(polyp + '\n', LISTED), [('45385', LISTING)]), {'45385'})
-        self.assertEqual(shared_subject(polyp), 'polyp')
-        self.assertIsNone(shared_subject('A 25 mm polyp was found in the cecum, and could be removed at surgery.'))
-
+        self.assertIsNone(shared_subject(polyp))
 
 class BolusAntecedentTests(SimpleTestCase):
     """A3: an anaphor binds only to an antecedent whose own clause is a plain finding of today, recognized whole."""
@@ -194,12 +197,13 @@ class BolusAntecedentTests(SimpleTestCase):
     def test_a_plain_finding_of_today_binds_it(self):
         """Cycle 2, acts A3 controls: sister A ("elsewhere" in another clause) and sister B (a clock time), the shapes
         of corpus text 137 and of the retained walk documents, a coin, a chain of anaphors and one sentence."""
+        # refutation cycle 3 (closed C3-4): the antecedent's WHOLE sentence is the plain finding - sister A's "; the mucosa
+        # elsewhere was normal" makes it none, so its anaphor binds nothing (held, the installed release's reading)
         sister = 'Findings: An impacted meat bolus was found in the distal esophagus; the mucosa elsewhere was normal.\n'
         for removal in ('The bolus was removed with a Roth net.', 'The bolus was removed with a Roth net at 1942.'):
             with self.subTest(removal):
                 text = upper(sister + removal + '\n')
-                self.assertEqual(ready(text, [('43247', removal)]), {'43247'})
-                self.assertIn('43247', ready(text, [('43235', UPPER_ADV.strip())], [('43247', removal)]))
+                self.assertNotIn('43247', ready(text, [('43247', removal)]))
         for body, quote in (
                 ('Upper endoscopy: The gastroscope was advanced under direct visualization into the esophagus. A large '
                  'impacted meat bolus was found at 34 cm.\nA retrieval net was passed through the working channel and '
@@ -215,11 +219,12 @@ class BolusAntecedentTests(SimpleTestCase):
                 ('A swallowed coin was found in the gastric body.\nThe coin was removed with a Roth net.\n',
                  'The coin was removed with a Roth net.'),
                 ('An impacted meat bolus was found at 32 cm. The bolus was grasped with a Roth net. The bolus was then '
-                 'removed.\n', 'The bolus was then removed.'),
-                ('An impacted meat bolus was found at 32 cm, and the bolus was removed with a Roth net.\n',
-                 'the bolus was removed with a Roth net')):
+                 'removed.\n', 'The bolus was then removed.')):
             with self.subTest(body):
                 self.assertEqual(ready(upper(body), [('43247', quote)]), {'43247'})
+        # refutation cycle 3: one sentence holding the antecedent and the anaphor is no plain finding whole - held
+        one = 'An impacted meat bolus was found at 32 cm, and the bolus was removed with a Roth net.'
+        self.assertNotIn('43247', ready(upper(one + '\n'), [('43247', 'the bolus was removed with a Roth net')]))
 
     def test_the_plain_finding_grammar(self):
         """Cycle 2, acts A3: the closed form, positive and negative, and its failure on the safe side."""
@@ -273,32 +278,20 @@ class NominalRemovalTests(SimpleTestCase):
                 self.assertNotIn('43247', ready(text, [('43235', UPPER_ADV.strip())], [('43247', quote)]))
 
     def test_the_done_forms_are_read(self):
-        """Cycle 2, acts A4 controls: two adverbs before the done word, "technically successful" after an instrument,
-        a compound with an instrument, and "using" a device."""
+        """Cycle 2, acts A4, re-read in cycle 3 (closed C3-6): the nominal removal's done form is abandoned - a nominal
+        removal of a bolus with no food word of its own adds no act, the base reading (held, as the installed release
+        holds it)."""
         for body, quote in (
                 (BOLUS_FOUND, 'Removal of the bolus was then successfully performed with a Roth net.'),
                 (BOLUS_FOUND, 'Removal of the bolus with a Roth net was technically successful.'),
-                (BOLUS_FOUND, 'Bolus removal was performed with a Roth net.'),
-                ('Findings: A swallowed coin was found in the gastric body.\n',
-                 'Removal of the coin was performed using a Roth net.')):
+                (BOLUS_FOUND, 'Bolus removal was performed with a Roth net.')):
             with self.subTest(quote):
-                self.assertEqual(ready(upper(body + quote + '\n'), [('43247', quote)]), {'43247'})
+                self.assertNotIn('43247', ready(upper(body + quote + '\n'), [('43247', quote)]))
 
     def test_the_nominal_grammar(self):
-        """Cycle 2, acts A4: services._nominal_removal_done reads the rest of the sentence whole (bounded)."""
-        def done(rest):
-            return gi_services._nominal_removal_done(rest, 0, len(rest))
-        for rest in (' was performed.', ' was then successfully performed with a Roth net.',
-                     ' with a Roth net was technically successful.', ' were completed using a 25 mm retrieval net.'):
-            with self.subTest(rest):
-                self.assertTrue(done(rest))
-        for rest in (' was performed but was unsuccessful.', ' was performed but failed.', ' was performed unsuccessfully.',
-                     ' was performed with a Roth net but failed.', ' was impossible.', ' was not performed.',
-                     ' was performed, and the bolus was pushed into the stomach.', ' was attempted.',
-                     ' was performed' + ' with a net' * 30 + '.'):
-            with self.subTest(rest):
-                self.assertFalse(done(rest))
-
+        """Refutation cycle 3: the closed form is gone, not patched a third time."""
+        self.assertFalse(hasattr(gi_services, '_nominal_removal_done'))
+        self.assertFalse(hasattr(gi_services, '_NOMINAL_DONE'))
 
 class SameActLaterFailureTests(SimpleTestCase):
     """A5: a later failure of the only done act of its kind doubts it, lesion-bound or not, unless their sites conflict."""
@@ -371,24 +364,26 @@ class PresupposingHeadTests(SimpleTestCase):
         quote = 'A 5 mm polyp in the ascending colon was biopsied with cold forceps.'
         text = colon(quote + '\nThe first biopsy pass was unsuccessful, but tissue was obtained on the next pass.\n')
         self.assertEqual(outcome(text, [('45380', quote)])['45380'], ('selected', 'needs_clarification'))
-        quote = 'Biopsy specimens were obtained from the gastric antrum'
-        self.assertEqual(outcome(upper(quote + '.\n'), [('43239', quote)])['43239'], ('selected', 'needs_clarification'))
+        quote = 'Biopsy specimens were obtained from the gastric antrum'  # rule 6b's own cost, gone with it (cycle 3)
+        self.assertEqual(outcome(upper(quote + '.\n'), [('43239', quote)])['43239'], ('selected', 'ready'))
 
     def test_the_closed_head(self):
-        """Cycle 2, rule 6b: services._presupposed - a noun before a closed head; never a verb form, another head, or a
-        head that opens a field of its own ("Biopsy        Site: sigmoid colon", "Injection sites: ...")."""
-        for text, word in (('the polypectomy defect', 'polypectomy'), ('the biopsy sites', 'biopsy'),
-                           ('the EMR margin', 'EMR'), ('the snare defect', 'snare'), ('biopsy tissue', 'biopsy')):
+        """Refutation cycle 3 (closed C3-1): rule 6b gives way to one closed form, services._governed_by_another_act - the
+        act noun is the object of another act's noun and modifies what that act left; a product noun's own acquisition,
+        capture or collection ("Biopsy tissue acquisition failed.") is the act's own statement and is kept."""
+        self.assertFalse(hasattr(gi_services, '_presupposed'))
+        for text, word in (('Clip closure of the polypectomy defect', 'polypectomy'),
+                           ('Retrieval of the polypectomy specimen', 'polypectomy'),
+                           ('Closure of the EMR defect', 'EMR'), ('Injection of the biopsy site', 'biopsy')):
             with self.subTest(text):
                 m = re.search(word, text)
-                self.assertTrue(gi_services._presupposed(text, m.start(), m.end()))
-        for text, word in (('we biopsied tissue', 'biopsied'), ('the polypectomy was', 'polypectomy'),
-                           ('the biopsy forceps', 'biopsy'), ('the polypectomy, defect', 'polypectomy'),
-                           ('Biopsy        Site: sigmoid colon', 'Biopsy'), ('Injection sites: four quadrants', 'Injection'),
-                           ('Biopsy site : antrum', 'Biopsy')):
+                self.assertTrue(gi_services._governed_by_another_act(text, m.start(), m.end()))
+        for text, word in (('Biopsy tissue acquisition failed', 'Biopsy'), ('the polypectomy defect', 'polypectomy'),
+                           ('Polypectomy tissue capture failed', 'Polypectomy'), ('closure of the polypectomy was', 'polypectomy'),
+                           ('It is unclear whether biopsy specimens were obtained', 'biopsy')):
             with self.subTest(text):
                 m = re.search(word, text)
-                self.assertFalse(gi_services._presupposed(text, m.start(), m.end()))
+                self.assertFalse(gi_services._governed_by_another_act(text, m.start(), m.end()))
 
     def test_a_checked_item_with_its_own_site_field(self):
         """Cycle 2, rule 6b (the full suite's r4d ingest pin): a checked item whose own detail field follows it on its
@@ -422,19 +417,23 @@ class PurposeReleaseTests(SimpleTestCase):
         for sentence in ('Submucosal tattoo placement was performed distal to the lesion for future localization',
                          'A tattoo mark was placed distal to the lesion for future localization',
                          'India ink was injected distal to the lesion for future localization',
-                         'Tattoo ink was injected distal to the lesion for future localization',
-                         'An EMR tattoo was placed distal to the lesion for future resection'):
+                         'Tattoo ink was injected distal to the lesion for future localization'):
             with self.subTest(sentence):
                 self.assertEqual(ready(colon(self.LESION + sentence + '.\n'), [('45381', sentence)]), {'45381'})
+        # refutation cycle 3: a purpose the marking statement does not name ("for future resection") keeps its future
+        sentence = 'An EMR tattoo was placed distal to the lesion for future resection'
+        self.assertNotIn('45381', ready(colon(self.LESION + sentence + '.\n'), [('45381', sentence)]))
         sentence = 'India ink was injected distal to the lesion for future localization'
         text = upper('A 20 mm flat lesion was found in the gastric body.\n' + sentence + '.\n')
         self.assertEqual(ready(text, [('43236', sentence)]), {'43236'})
+        # refutation cycle 3: a sentence holding a removal and a marking is no marking statement whole - the purpose's
+        # future keeps its base reading for both codes (held and excluded, as the installed release reads them)
         sentence = ('The 15 mm polyp in the sigmoid colon was removed with a hot snare and the site was tattooed for '
                     'future localization.')
         text = colon(sentence + '\n')
         for value in ('45385', '45381'):
             with self.subTest(value):
-                self.assertEqual(ready(text, [(value, sentence)]), {value})
+                self.assertNotIn(value, ready(text, [(value, sentence)]))
 
     def test_routing_reads_the_same(self):
         """Cycle 2, acts A6: detect._purpose_is_not_the_targets - another act's word is planned, a marking is not, and a
@@ -450,7 +449,7 @@ class PurposeReleaseTests(SimpleTestCase):
                     'future localization.')
         text = colon(sentence + '\n')
         start = text.index(sentence)
-        self.assertNotEqual(detect.status_for_span(text, start, start + len(sentence), DAY)[0], 'planned')
+        self.assertEqual(detect.status_for_span(text, start, start + len(sentence), DAY)[0], 'planned')  # cycle 3
 
     def test_a_biopsy_keeps_the_purposes_future(self):
         """Cycle 2, acts A6: a biopsy's word is never released (the base reading): held or excluded, never READY."""

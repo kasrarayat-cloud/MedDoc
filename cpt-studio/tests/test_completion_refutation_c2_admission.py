@@ -278,8 +278,7 @@ class NotPerformedNeedsDocumentationTests(SimpleTestCase):
         could not be removed.", "... was left in place."), the failure excludes 45385 with its passage and 45378 is READY,
         for Corti and for Astra (cycle 1's early return held the first: it read the "removed" of "could not be removed")."""
         for body in ('A 20 mm sessile polyp was found in the sigmoid colon. The polyp could not be removed.',
-                     'A 20 mm sessile polyp was found in the sigmoid colon. The polyp was left in place.',
-                     'A 10 mm polyp was found in the sigmoid colon and was left in place for surgical resection.'):
+                     'A 20 mm sessile polyp was found in the sigmoid colon. The polyp was left in place.'):
             text = colon(body + '\n' + self.FAIL)
             for who, result in three_ways(text, '45385', self.FAIL, base=('45378', span(text, ADVANCED))).items():
                 with self.subTest(body, who=who):
@@ -289,6 +288,17 @@ class NotPerformedNeedsDocumentationTests(SimpleTestCase):
                     item = next(p for p in result.proposals if p.code == '45385' and p.bucket == 'excluded')
                     self.assertIn(self.FAIL, item.exclusion_reason)
                     self.assertTrue(item.reinstatable)
+
+    def test_a_coordinated_disposition_keeps_the_base_reading(self):
+        """Refutation cycle 3 (closed C3-7): the shared subject is abandoned, so "... was found in the sigmoid colon and
+        was left in place for surgical resection" records no disposition for the polyp, and the failure excludes
+        nothing: both codes are held, as the installed release holds them."""
+        text = colon('A 10 mm polyp was found in the sigmoid colon and was left in place for surgical resection.\n'
+                     + self.FAIL)
+        for who, result in three_ways(text, '45385', self.FAIL, base=('45378', span(text, ADVANCED))).items():
+            with self.subTest(who=who):
+                got = outcome(result, '45385', '45378')
+                self.assertEqual((got['45385'][:2], got['45378'][:2]), (HELD, HELD))
 
     def test_a_lesion_only_observed_still_excludes(self):
         """Integration of cycle 2 (the closed observation form): a failed or planned removal beside a lesion the report
@@ -350,8 +360,9 @@ class NotPerformedNeedsDocumentationTests(SimpleTestCase):
 
 
 class UnitsTests(SimpleTestCase):
-    """engine._supported_units: an entry of the proposal provider's group whose every exact passage lies on an act of
-    the code's kinds that the reader does not read as done, and none on a matched act, is no unit."""
+    """Units are the provider group's, as the installed release counts them, with its units.duplicate prompt
+    (refutation cycle 3, admission C3-4: cycle 2's engine._supported_units, which dropped a unit wherever the reader read
+    an act anything but done, is abandoned - a modifier misread as "historical" silently dropped a placed stent)."""
 
     DONE = 'A 7 mm polyp in the transverse colon was removed with a cold snare and retrieved.'
     FAILED = ('Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could '
@@ -367,13 +378,14 @@ class UnitsTests(SimpleTestCase):
         """Cycle 2, the owner session's units defect: Corti's 45385 listed for the done polypectomy and for another
         polyp's failed attempt read READY with two units under the another-act release. With that release abandoned the
         cited failure holds the code for the reviewer, and its units, counted against the documented match before the
-        hold, are one - what an approval would carry - in either listing order."""
+        hold, were one under cycle 2's units rule; cycle 3 abandons that rule, and the held code carries the group's two
+        units, as the installed release counts them - never READY on them, in either listing order."""
         text = colon(self.DONE + '\n' + self.FAILED)
-        self.assertEqual(self.units(text, (self.DONE, self.FAILED)), ('needs_clarification', 1))
-        self.assertEqual(self.units(text, (self.FAILED, self.DONE)), ('needs_clarification', 1))
+        self.assertEqual(self.units(text, (self.DONE, self.FAILED)), ('needs_clarification', 2))
+        self.assertEqual(self.units(text, (self.FAILED, self.DONE)), ('needs_clarification', 2))
         # a participant citing the same passages adds no unit
         self.assertEqual(self.units(text, (self.DONE, self.FAILED), [read('astra', [code(text, '45385', self.FAILED)])]),
-                         ('needs_clarification', 1))
+                         ('needs_clarification', 2))
 
     def test_two_done_polypectomies_listed_twice_are_two_units(self):
         """Cycle 2, units control: two cold snare polypectomies, each listed, stay two units."""
@@ -398,7 +410,7 @@ class UnitsTests(SimpleTestCase):
                  ProviderCode('selected', 'cpt', '45385', '', (unverifiable,))]
         result = run(text, group)
         item = next(p for p in result.proposals if p.code == '45385' and p.bucket == 'selected')
-        self.assertEqual(item.units, 1)  # the failed attempt's entry is no unit; the unverifiable one keeps its unit
+        self.assertEqual(item.units, 2)  # the group's units (refutation cycle 3: no entry is dropped from the count)
         alone = colon(self.FAILED)
         result = run(alone, corti(('45385', span(alone, self.FAILED)), ('45385', span(alone, self.FAILED))))
         item = next(p for p in result.proposals if p.code == '45385' and p.bucket == 'selected')

@@ -203,12 +203,14 @@ class BolusAntecedentTests(SimpleTestCase):
     def test_the_anaphor_of_a_food_bolus_removed_today(self):
         for removal in ('The bolus was removed with a Roth net.', 'We removed the bolus with a Roth net.',
                         'The bolus was grasped with a Roth net and removed through the mouth.',
-                        'Fragments of the bolus were removed with a Roth net.',
-                        'Removal of the bolus with a Roth net was performed.'):
+                        'Fragments of the bolus were removed with a Roth net.'):
             with self.subTest(removal):
                 text = EGD_HEAD + FOUND + removal + '\n'
                 self.assertEqual([s for s, _ in removal_acts(text)], ['performed'])
                 self.assertEqual(outcome(text, '43247', removal), (('selected', 'ready'), ('selected', 'ready')))
+        # refutation cycle 3 (closed C3-6): the nominal removal's done form is abandoned - no act, the base reading
+        text = EGD_HEAD + FOUND + 'Removal of the bolus with a Roth net was performed.\n'
+        self.assertEqual([s for s, _ in removal_acts(text)], [])
 
     def test_a_bolus_named_by_its_food_or_an_impaction(self):
         for text, quote in (
