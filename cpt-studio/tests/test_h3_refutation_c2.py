@@ -115,7 +115,9 @@ class CompetitionByActIdentityTests(SimpleTestCase):
 
     def test_c2_4_1_a_code_on_the_finding_competes_for_the_one_act(self):
         for name, text, by_corti, by_participant in (
-                ('dilation', EGDP + F4 + ' ' + A4 + '\n', ('43249', F4), ('43248', A4)),
+                # completion repair (integration): two balloon codes, whose technique the document does not tell
+                # apart (a guide-wire code no longer accounts for the balloon dilation: reconcile.technique_fits)
+                ('dilation', EGDP + F4 + ' ' + A4 + '\n', ('43249', F4), ('43233', A4)),
                 ('band ligation', EGDP + F1 + ' ' + A1 + '\n', ('43244', F1), ('43205', A1)),
                 ('snare', COLP + F3 + ' ' + A3 + '\n', ('45385', F3), ('44394', A3))):
             with self.subTest(name):

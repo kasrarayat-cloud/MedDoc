@@ -274,10 +274,13 @@ class CompetitionReviewTests(SimpleTestCase):
            'The gastroscope was passed to the second portion of the duodenum.\n')
     DILATION = ('A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct '
                 'visualization.')
+    # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+    # dilation (reconcile.technique_fits), so the rival here is the other balloon code (43233), whose technique
+    # the document does not tell apart from 43249's; the competition this pins is unchanged
 
     def setUp(self):
         self.text = self.EGD + self.DILATION + '\n'
-        self.result = run(self.text, corti(('43248', span(self.text, self.DILATION))),
+        self.result = run(self.text, corti(('43233', span(self.text, self.DILATION))),
                           [read('astra', [code(self.text, '43249', self.DILATION)])])
         self.rows = [review_view.stored_from(p) for p in self.result.proposals]
         self.keys = {p.code: p.key for p in self.result.proposals if p.bucket == 'selected'}
@@ -289,15 +292,15 @@ class CompetitionReviewTests(SimpleTestCase):
     def test_both_are_held_until_one_is_rejected_then_the_other_is_ready(self):
         views = self.views()
         self.assertEqual({views[k].status for k in self.keys.values()}, {'needs_clarification'})
-        after = self.views({self.keys['43248']: 'reject'})
+        after = self.views({self.keys['43233']: 'reject'})
         kept = after[self.keys['43249']]
         self.assertEqual((kept.status, kept.released), ('ready', (engine.COMPETING_FACT,)))
         self.assertFalse(any(c.get('id') == engine.COMPETING_CHECK for c in kept.checks))
-        other = self.views({self.keys['43249']: 'reject'})[self.keys['43248']]
+        other = self.views({self.keys['43249']: 'reject'})[self.keys['43233']]
         self.assertEqual(other.status, 'ready')  # the same rule for Corti's code: neither is preferred
 
     def test_a_member_answer_never_lifts_the_hold_on_the_other_code(self):
-        answers = [{'code': '43248', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT, 'value': 'not_documented'}]
+        answers = [{'code': '43233', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT, 'value': 'not_documented'}]
         views = self.views(answers=answers)
         self.assertEqual(views[self.keys['43249']].status, 'needs_clarification')
 

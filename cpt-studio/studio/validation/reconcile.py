@@ -140,6 +140,55 @@ def gi_services_name_only(act) -> bool:
     return NAME_ONLY_CUE in act.cues
 
 
+# A documented dilation's technique (completion repair, integration; catalogue.CodeProfile.technique), read from the
+# act's own evidence: a balloon (any "balloon", TTS, CRE, through-the-scope, pneumatic); dilators passed over a guide wire
+# (Savary or Savary-Gilliard, American dilators, a wire-guided bougie or dilator, or a bougie or dilator with a guide wire
+# named and no balloon); an unguided bougie (Maloney, Hurst, or a bougie or dilator with no wire and no balloon named).
+DILATION_BALLOON = re.compile(r'\bballoons?\b|\bCRE\b|\bTTS\b|\bthrough[- ]the[- ]scope\b|\bpneumatic\b', re.I)
+DILATION_WIRE_GUIDED = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b'
+                                  r'|\bwire[- ]guided\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?)\b', re.I)
+DILATION_BOUGIE = re.compile(r'\bbougie\w*\b|\bMaloney\b|\bHurst\b|\bdilators?\b', re.I)
+DILATION_WIRE = re.compile(r'\bguide[- ]?wires?\b|\bover\s+(?:the|a)\s+wire\b', re.I)
+
+
+def dilation_techniques(text: str) -> frozenset:
+    """The dilation techniques ``text`` names: 'balloon', 'wire_bougie' (dilators over a guide wire) and 'bougie' (an
+    unguided bougie). A bougie or dilator word counts only where no balloon is named ("a CRE balloon dilator" is a
+    balloon); a guide wire alone names no technique (a balloon may be passed over one)."""
+    found = set()
+    if DILATION_BALLOON.search(text):
+        found.add(catalogue.BALLOON)
+    if DILATION_WIRE_GUIDED.search(text):
+        found.add(catalogue.WIRE_BOUGIE)
+    elif not found and DILATION_BOUGIE.search(text):
+        found.add(catalogue.WIRE_BOUGIE if DILATION_WIRE.search(text) else 'bougie')
+    return frozenset(found)
+
+
+def _act_techniques(act: Act) -> frozenset:
+    named = frozenset().union(*(dilation_techniques(ev.text) for ev in act.evidence)) if act.evidence else frozenset()
+    return named | ({catalogue.BALLOON} if act.technique == 'balloon' else frozenset())
+
+
+def technique_fits(profile, act: Act, service: DocumentedService) -> bool:
+    """Whether the dilation ``act`` is one ``profile``'s code accounts for by technique (CodeProfile.technique): always
+    for a code of any technique and for any other act kind; else where the act's technique is the code's, or where the
+    document names no technique for it. An act whose own evidence names none takes the techniques the service's other
+    performed dilations name (an Impression's "Esophageal narrowing dilated to 16 mm" restates the narrative's Savary
+    dilation). Never releases: it only keeps a dilation of another technique from accounting for the code."""
+    if not getattr(profile, 'technique', '') or act.kind != 'dilation':
+        return True
+    named = _act_techniques(act)
+    if not named:
+        named = frozenset().union(*(_act_techniques(a) for a in service.acts
+                                    if a.kind == 'dilation' and a.status == 'performed'))
+    return not named or profile.technique in named
+
+
+TECHNIQUE_WORDS = {catalogue.BALLOON: 'balloon dilation', catalogue.WIRE_BOUGIE: 'dilation with dilators passed over a guide '
+                   'wire', 'bougie': 'dilation with an unguided bougie'}
+
+
 def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match]:
     """The inventory's reading of ``code`` (None when the inventory documents no service of its family: the code is
     then judged as before, by its own passages and routing)."""
@@ -178,6 +227,9 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         return Match(positive, service, (), 'service', detail)
     kinds = profile.covers
     done = tuple(a for a in service.acts if a.kind in kinds and a.status == 'performed')
+    # a dilation of another technique than the code's is not the act the code accounts for (technique_fits)
+    unfit = tuple(a for a in done if not technique_fits(profile, a, service))
+    done = tuple(a for a in done if a not in unfit)
     denied = tuple(a for a in service.acts if a.kind in kinds and a.status in ('negated', 'cancelled'))
     conflict = next((c for c in inventory.conflicts if c.service == service.id
                      and (c.subject in kinds or any(k in ('tattoo', 'injection') for k in kinds)
@@ -234,6 +286,17 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
                      f'as done: {quote(doubted.evidence[0])}.',
                      question=f'The documented {name} leaves the {what} in doubt ({quote(doubted.evidence[0], 120)}). '
                               f'Was a {what} performed on the date of service?')
+    if unfit:
+        # Still 'act_missing' (no act of the code's own technique is documented as done), so every rule that reads that
+        # reason is unchanged; the wording names the dilation the document does state.
+        required = TECHNIQUE_WORDS.get(profile.technique, profile.technique)
+        stated = ' and '.join(sorted({TECHNIQUE_WORDS.get(t, t) for a in unfit for t in _act_techniques(a)}))
+        stated = stated or 'dilation of another technique'
+        return Match('uncertain', service, (), 'act_missing',
+                     f'The {name} is documented as {service.status} with a {stated} ({quote(unfit[0].evidence[0])}); '
+                     f'this code accounts for a {required}, which CPT Studio could not find in the document.',
+                     question=f'The documented dilation ({quote(unfit[0].evidence[0], 120)}) states a {stated}. Was a '
+                              f'{required} performed on the date of service?')
     return Match('uncertain', service, (), 'act_missing',
                  f'The {name} is documented as {service.status}, but CPT Studio could not find a {what} documented '
                  'as done in it.',

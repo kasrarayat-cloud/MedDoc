@@ -1460,10 +1460,13 @@ class CompetitionReleaseTests(SimpleTestCase):
            '(fictional)\nProcedure\n')  # the extent unstated: each code also carries its own extent question
     DILATION = ('A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under '
                 'direct visualization.')
+    # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+    # dilation (reconcile.technique_fits), so the rival here is the other balloon code (43233), whose technique
+    # the document does not tell apart from 43249's; the competition this pins is unchanged
 
     def test_a_rival_answered_away_releases_the_competition(self):
         text = self.EGD + self.DILATION + '\n'
-        result = run(text, corti(('43248', span(text, self.DILATION))),
+        result = run(text, corti(('43233', span(text, self.DILATION))),
                      [read('astra', [code(text, '43249', self.DILATION)])])
         rows = [review_view.stored_from(p) for p in result.proposals]
         keys = {p.code: p.key for p in result.proposals if p.bucket == 'selected'}
@@ -1477,13 +1480,13 @@ class CompetitionReleaseTests(SimpleTestCase):
 
         before = views()
         self.assertEqual({code_: facts(before[key]) for code_, key in keys.items()},
-                         {'43248': [engine.COMPETING_FACT, 'extent'], '43249': [engine.COMPETING_FACT, 'extent']})
-        after = views([{'code': '43248', 'family': 'gi.egd', 'fact': 'extent', 'value': 'not_documented'}])
-        self.assertEqual(after[keys['43248']].reason, review_view.DETAIL_UNAVAILABLE)
+                         {'43233': [engine.COMPETING_FACT, 'extent'], '43249': [engine.COMPETING_FACT, 'extent']})
+        after = views([{'code': '43233', 'family': 'gi.egd', 'fact': 'extent', 'value': 'not_documented'}])
+        self.assertEqual(after[keys['43233']].reason, review_view.DETAIL_UNAVAILABLE)
         kept = after[keys['43249']]
         self.assertEqual((kept.status, facts(kept)), ('needs_clarification', ['extent']))  # its own question stands
         self.assertIn(engine.COMPETING_FACT, kept.released)
-        on_the_hold = views([{'code': '43248', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT,
+        on_the_hold = views([{'code': '43233', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT,
                               'value': 'not_documented'}])
         self.assertEqual(facts(on_the_hold[keys['43249']]), [engine.COMPETING_FACT, 'extent'])
 
@@ -1509,6 +1512,9 @@ class CompetitionThroughTheApiTests(TestCase):
     EGD = (SYN + 'Upper endoscopy report\nDate of service: 2026-10-14\nEndoscopist: Synthetic Endoscopist, MD '
            '(fictional)\nProcedure\nThe gastroscope was passed to the second portion of the duodenum.\n')
     DILATION = CompetitionReleaseTests.DILATION
+    # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+    # dilation (reconcile.technique_fits), so the rival here is the other balloon code (43233), whose technique
+    # the document does not tell apart from 43249's; the competition this pins is unchanged
 
     def client_for(self, user):
         client = Client(enforce_csrf_checks=False)
@@ -1532,11 +1538,11 @@ class CompetitionThroughTheApiTests(TestCase):
 
     def test_l4_6_the_competing_row_offers_no_answer_and_says_what_settles_it(self):
         text = self.EGD + self.DILATION + '\n'
-        s = persist_run(text, corti(('43248', span(text, self.DILATION))),
+        s = persist_run(text, corti(('43233', span(text, self.DILATION))),
                         [read('astra', [code(text, '43249', self.DILATION)])])
         doc = self.payload(s)
         rows = [row for row in doc['details_needed'] if row['fact'] == engine.COMPETING_FACT]
-        self.assertEqual(sorted(row['affects'] for row in rows), [['43248'], ['43249']])
+        self.assertEqual(sorted(row['affects'] for row in rows), [['43233'], ['43249']])
         self.assertEqual({(tuple(row['allow']), row['addendum_allowed']) for row in rows}, {((), False)})
         for row in doc['codes']:
             with self.subTest(row['code']):
@@ -1556,7 +1562,7 @@ class CompetitionThroughTheApiTests(TestCase):
                          (404, 'That detail is not open on this document.'))
         self.assertFalse(models.MemberAnswer.objects.exists())
         # the reviewer's rejection settles it: the code left is ready, approvable, and alone in the approved export
-        self.assertEqual(self.decide(s, '43248', 'reject').status_code, 201)
+        self.assertEqual(self.decide(s, '43233', 'reject').status_code, 201)
         left = {row['code']: row for row in self.payload(s)['codes']}['43249']
         self.assertIn('approve', left['allowed_actions'])
         self.assertEqual(self.decide(s, '43249', 'approve').status_code, 201)
@@ -1564,7 +1570,7 @@ class CompetitionThroughTheApiTests(TestCase):
         self.assertEqual(made.status_code, 201, made.content)
         body = self.client_for(s.reviewer).get(made.json()['download_url']).content.decode('utf-8')
         self.assertIn('43249', body)
-        self.assertNotIn('43248', body)
+        self.assertNotIn('43233', body)
 
     def test_l4_6_positive_control_an_open_confirmation_row_takes_an_addendum(self):
         # the same door takes one from a row that offers it (the extent, unstated here), so the refusal above is the

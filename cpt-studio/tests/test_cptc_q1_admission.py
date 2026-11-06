@@ -423,15 +423,20 @@ class TruthfulReasonTests(SimpleTestCase):
 
     def test_the_bolus_removal_is_a_held_proposal_never_listed_as_not_done(self):
         """39f0ac49's and d44a77b3's shape: the participants' exactly quoted 43247 for "the bolus was removed" reaches
-        review held - by the labelled report's service doubt (U2), and on a plain report by the act CPT Studio could not
-        find (U1, the readers' repair) - never an alternative "not documented as done"."""
-        for text in (LABELLED, PLAIN):
+        review as a proposal - never an alternative "not documented as done".
+
+        MOVED PIN (completion repair, integration of builders R1, A and Q1): on the labelled report it is READY - the
+        report's own "Upper endoscopy:" part (U2, R1) and the bolus's antecedent and structural removal (U1, A) read one
+        foreign-body act today. On the plain report (one "Description of procedure" over both scopes) it stays held by
+        the act CPT Studio could not find: the removal's sentence names no site, "at 34 cm" is no anatomy site, and two
+        families are documented - builder A's recorded residual (H2|PLAIN-43247, a false hold on the safe side)."""
+        for text, status in ((LABELLED, 'ready'), (PLAIN, 'needs_clarification')):
             with self.subTest('labelled' if text is LABELLED else 'plain'):
                 result = run(text, corti(('43239', span(text, EGD_BIOPSY)), ('45385', span(text, SNARE))),
                              [read('astra', [code(text, '43247', NET)]), read('fable', [code(text, '43247', NET)])])
                 item = proposal(result, '43247')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
-                                 ('selected', 'needs_clarification', 'participant', ['astra', 'fable']))
+                                 ('selected', status, 'participant', ['astra', 'fable']))
                 self.assertTruthful(item)
         plain = proposal(run(PLAIN, (), [read('astra', [code(PLAIN, '43247', NET)])], provider_status='failed'),
                          '43247')

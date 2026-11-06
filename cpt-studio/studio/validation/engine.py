@@ -495,8 +495,9 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
     spans = [(e.start, e.end) for e in candidate.evidence]
     support = candidate.evaluation.support if candidate.evaluation is not None else None
     # what the engine supports the code by: the acts of a match it reads as done - never a held one's (completion repair,
-    # builder Q1: a code the evidence hold keeps from READY, because its own passages state another act of its kind not
-    # done, claims no done act it does not show; it can never be the second READY code for that act - F4)
+    # builder Q1: a code that is not READY on a done act it does not show claims none of them, so it can never be the
+    # second READY code for that act - F4; a guide-wire code beside a balloon dilation claims nothing at all, by the
+    # technique reading below)
     supported_by = ({a.id for a in match.acts} if match is not None and match.state in checks.POSITIVE
                     and support is not None and support.status in ('pass', 'warn') else set())
 
@@ -542,12 +543,20 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
         return {('act', a.service, a.kind, a.lesion, ','.join(a.anatomy), a.id, summary(a)) for a in out}
 
     claimed = set()
+    profile = reconcile.catalogue.code_profile(candidate.code)
     for service, family, act, label in items:
         svc = match.service if match is not None and match.service.id == service else None
         if act:
-            acts = [a for a in (svc.acts if svc is not None else ()) if a.status == 'performed'
-                    and a.role in reconcile.OWN_ROLES
-                    and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
+            performed = [a for a in (svc.acts if svc is not None else ()) if a.status == 'performed'
+                         and a.role in reconcile.OWN_ROLES
+                         and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
+            # completion repair (integration): a dilation of another technique than the code's is no act the code
+            # accounts for (reconcile.technique_fits, as reconcile.match reads it), so the code claims none of them and
+            # competes for none - a guide-wire code beside a balloon dilation is held by its own question, never as a
+            # rival of the balloon code
+            acts = [a for a in performed if reconcile.technique_fits(profile, a, svc)]
+            if performed and not acts:
+                continue
             if not acts:
                 claimed.add(('item', service, family, act, label))
             kinds = {'tattoo', 'injection'} if act in ('tattoo', 'injection') else {act}
@@ -913,11 +922,15 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
                  documented: Sequence[tuple], inventory, text: Optional[str] = None) -> dict[str, tuple[str, ...]]:
     """code -> the codes it competes with (P-ADMIT2, harness repair 3): two different decidable codes compete where
     each claims one same documented act (_claimed: an EGD's dilation code and its biopsy code never do; two dilation
-    codes for its one dilation do), and at least one of them is a participant's admitted code (``admissible``: code ->
-    (its reading, the documented items it accounts for, its first proposers)). A participant's code competes with every
-    other such code, a proposal provider's or a second review's only with the participants' (two codes the proposal
-    provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
-    CPT Studio never chooses between codes, nor prefers one for its proposer."""
+    codes for its one dilation do), whoever proposed either (``admissible``: a participant's admitted code -> (its
+    reading, the documented items it accounts for, its first proposers); ``selections``: the proposal provider's and a
+    second review's). Each is then held by one question naming the others, whoever proposed it: CPT Studio never chooses
+    between codes, nor prefers one for its proposer.
+
+    Completion repair (integration, 2026-11-06; directive item 3, one evaluation whoever proposed): two codes the
+    proposal provider alone selected for one act compete as any other two do. Harness repair 3 had kept them "as
+    before" - both READY for the one dilation where only Corti proposed 43248 and 43249 - which made two READY codes for
+    one act and a rule that read Corti's codes differently from a participant's."""
     lay = gi_structure.clinical_layout(text) if text is not None else None
     # Completion repair (builder Q1): every explicit participant code is admitted now, excluded ones too (reinstatable,
     # with the passage); a code that is not active claims nothing and holds nothing, whoever proposed it, as an
@@ -937,8 +950,6 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
         # cycle 2, C2-4-2), or the same kind at one site stated twice in the narrative (_same_claim)
         rivals = {other for other, theirs in claims_of.items() if other != code
                   and any(_same_claim(mine, their) for mine in claimed for their in theirs)}
-        if code not in admissible:
-            rivals &= set(admissible)  # a decidable code competes only with the participants' codes
         if rivals:
             out[code] = tuple(sorted(rivals))
     return out
@@ -1640,9 +1651,14 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
     """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
     than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
     another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
-    historical, negated or cancelled by a cue of its own (``another_time``: never by its section alone), or states
-    another act of the kinds ``code`` accounts for that the documented-service reader reads NOT done - failed, in doubt,
-    planned - and no act of those kinds done (_another_act_of_its_kind) - or '' when one is not. Read only where the
+    historical, negated or cancelled by a cue of its own (``another_time``: never by its section alone) - or '' when one
+    is not. Completion repair (integration, 2026-11-06): builder Q1's added arm - a passage stating another act of the
+    code's kinds not done, where the passage shows none done - is removed. It held a code the document supports by its
+    own documented act because the proposer cited text about another act ("Hot snare polypectomy was attempted, but the
+    polypectomy was unsuccessful." for 45385 beside a cold snare polypectomy done today), which item 3's reconciliation
+    excludes: a code is held only where the passages showing its own documented act are in doubt. The arm's F4 purpose
+    (a guide-wire code READY on a balloon dilation) is the technique reading's now (reconcile.technique_fits); the
+    corpus ledger is identical with and without the arm (measured). Read only where the
     documented service reads the code as performed and the passages' support is warn or fail; the code is then held,
     never excluded. A passage of the matched service's own (its procedure-level statement) is never elsewhere: such a
     code stays as it is (R3 open question 1, the narrow choice). Bounded: one pass over the inventory's services per
@@ -1655,11 +1671,6 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
         if (span.start, span.end) in another_time:
             why.append(f'{reconcile.quote(span, 80)} reads as another time or a denial')
             continue
-        other_act = _another_act_of_its_kind(span, found, code, text)
-        if other_act is not None:
-            why.append(f'{reconcile.quote(span, 80)} states another {reconcile.act_label(other_act.kind)}, which the '
-                       f'document does not give as done ({other_act.status})')
-            continue
         stand_in = checks.Reading('performed', (), 'evidence', span.text, span.start, span.end)
         if _elsewhere(stand_in, found, inventory):
             why.append(f'{reconcile.quote(span, 80)} is another documented service\'s')
@@ -1671,48 +1682,6 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
             continue
         return ''
     return '; '.join(why) + '.'
-
-
-def _another_act_of_its_kind(span, found: reconcile.Match, code: str, text: str = ''):
-    """Completion repair (builder Q1; F4, refutation cycle 3 C3-3-4 and cycle 4 C4-2-3): the act of a kind ``code``
-    accounts for that the passage ``span`` states and the documented-service reader reads NOT done - failed, in doubt,
-    planned, another provider's ("Possibly the ring was also dilated with a Savary bougie.", "Dilation with a Savary bougie
-    failed.") - where the passage shows no act of those kinds done; else None. Such a passage is about another act of its
-    kind than the one the matched service documents as done, so a code it alone cites is held by the evidence hold, never
-    READY on the done act it does not show (the base read Corti's bougie-dilation code READY there, and once a
-    participant's code of the same passages reached review, both dilation codes were held as competing for the one
-    balloon dilation)."""
-    profile = reconcile.catalogue.code_profile(code) if code else None
-    if profile is None or not profile.covers:
-        return None
-    kinds = set(profile.covers) | ({'tattoo', 'injection'} if {'tattoo', 'injection'} & set(profile.covers) else set())
-
-    def shows(act) -> bool:
-        return any(span.start < ev.end and ev.start < span.end for ev in act.evidence)
-
-    acts = [a for a in found.service.acts if a.kind in kinds and shows(a)]
-    if any(a.status == 'performed' for a in acts):
-        return None
-    # only an act its own sentence states otherwise: never one named and nothing said of it, one read in an indication,
-    # one whose time is its section's alone (_time_from_section - engine @4's time_plan triage keeps the procedure line's
-    # act READY there), a form's field or box reading ("Biopsy taken:   Yes   No" printed with no mark beside the
-    # field's own "Biopsy taken: Yes"), or an act listed on the procedure line ("Procedure: Colonoscopy with cold snare
-    # polypectomy for a positive FIT last month.", whose time is the test's: routing:0) - each measured holding a code
-    # the base read READY (tests/test_repairs_r3_forms_pdf.py, tests/test_repairs_r3_time.py)
-    return next((a for a in acts if a.role in reconcile.OWN_ROLES and not _says_nothing(a.status, a.cues)
-                 and not _time_from_section(a.cues) and (a.cues[:1] != (gi_services.INDICATION_READING,))
-                 and not (a.cues and a.cues[0].startswith(('field:', 'box:')))
-                 and not any(_on_a_procedure_line(text, ev.start) for ev in a.evidence)), None)
-
-
-def _on_a_procedure_line(text: str, pos: int) -> bool:
-    """Whether ``pos`` lies on a procedure field line ("Procedure: ...", services.PROCEDURE_FIELD): the line that lists
-    what the report's procedure was. With no text, never."""
-    if not text:
-        return False
-    start = text.rfind('\n', 0, pos) + 1
-    end = text.find('\n', pos)
-    return bool(gi_services.PROCEDURE_FIELD.match(text[start:end if end >= 0 else len(text)]))
 
 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
