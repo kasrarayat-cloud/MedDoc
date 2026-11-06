@@ -3604,3 +3604,51 @@ one "Description of procedure" over two scopes (H2|PLAIN-43247); codes that shar
 for dilations only (not by anatomy, 43245 against 43249, nor by descriptor, 43236 against 43243); two dilation techniques
 on one stricture held for the reviewer (owner question Q2); a pronoun-subject denial beside a done tattoo in one quoted
 passage holds the tattoo code (the second opinion reads the passage whole).
+
+### Refutation of the integrated diff, cycle 1 (2026-11-06): seven lenses, and what changed
+
+**The pass.** Workflow `wf_5ea89702-382`: seven lenses (structure, outcome, acts, admission, answers, cost, consistency),
+each in a sealed, write-disabled sandbox at `179fdff9`, told to refute `b452c6c4..179fdff9` with concrete synthetic
+inputs measured on the head and the base. Six returned 44 findings (structure 8, admission 8, outcome 8, acts 8, answers 7,
+consistency 5); the cost lens is recorded with cycle 2. **Every finding was reproduced by the owner session on both trees
+before any repair** (`verify/refute1/`), and each repair fails closed: a rule that releases a hold needs positive
+structural evidence, and what it does not recognise keeps the base reading. Pinned in
+`tests/test_completion_refutation_c1.py` (20 tests; a mutant of one repair fails its pin).
+
+| lens | NEW false READYs | repaired by |
+|---|---|---|
+| structure | an announced earlier narrative ("is reprinted here", "carried forward", "for comparison"); an earlier paragraph's tail ("The paragraph that follows belongs to her sister."); an appended prior report; "The next paragraph is from her 2023 visit ..."; "None of this was done today."; "Impression: ... removed in 2022." | N3's document self-reference, present-tense occasion and attribution reads (before the paragraph in its section, earlier paragraphs included); the dated-history exemption only without a present-tense statement of the family; P4's later-report rule (after the first impression, assessment or plan); N1's negative quantifier; N2's summary dating |
+| outcome | a cancelled status line; a course "on a prior occasion", reported, or hedged; a reach of another attempt; a pronoun's abort after a done act | I12 and I13 on the instrument rule; the reach reader's plain-statement condition; pronoun resolution only through an attempt or failure; passage predicates and a scope subject are the examination's failure |
+| acts | a listed act "aborted"; "EMR referral placed for future resection"; "Removal of the bolus was impossible ..."; an anaphor of a 2023 impaction or another person's coin; a coin's site from another clause | "aborted", "terminated", "discontinued" as act failures (one vocabulary with R2); the purpose release frees only what the done predicate is said of, routing's rule subtracting a non-material modifier; a nominal removal needs a done predicate or none; an anaphor inherits its antecedent's other year, place or person, and takes its own clause's site |
+| admission | another lesion's failure releasing a doubted act (order-dependent); a participant's code on the procedure line while its passage says the polyp was left in place; an inflated dilator read as a wire bougie | every doubtful reading must be another act's, beside a matched act its own sentence states plainly; a coordinated verb phrase shares its subject, an observed-then-left lesion is a plain disposition, a purpose tail states it too; an inflation names a balloon |
+| answers | an aborted biopsy (found outside the lens) | a later failure of the same act on the same lesion, or of the only act of its kind, doubts it |
+
+**False holds and surfaces repaired:** a "Colonoscopy Report" title (the occasion indication reads the clinical layout); a
+generic instrument naming its tract (P2: "The endoscope was inserted through the mouth ... to the second part of the
+duodenum"); a hedge in the procedure line's reason ("for suspected celiac disease"); a residual left in place beside the
+lesion's own removal; a removal before a failed technique (held, never excluded); a wire-guided balloon (balloon only);
+the coverage count's technique test; a withdrawn answer the engine had applied (its question reopens at once,
+`review._reopened`); an extent or conflict question shows the service's own passages (`questions.question_passages`);
+the panel heading with earlier answers only; the rollback hazard reads the stored answer marker.
+
+**The rule for answers stored before the binding** changed in this cycle, for a reason measured outside the lenses: the
+install's prediction (a read-only dump restored on the test server, the installer's own one-shots) found the first form
+(never applied) turning three reviewed encounters back to needing details at the state recompute alone - two of the
+owner's records among them - because their settled questions reopened. All 14 stored answers had been given to questions
+their current assessments ask word for word. They now bind where the question asked now has their own question's words
+(`questions.wording`, `review.earlier_wordings`, `MemberAnswerInput.worded`); measured again on the cycle-1 commit, the
+state recompute after migration 0013 changes no encounter and the rollback read changes none.
+
+**Measured after the repairs:** the completion corpus keeps its invariant (no FALSE READY beyond the installed baseline:
+0); its seven purpose-marking entries moved once to FALSE HOLD under the first acts repair and were restored by keeping
+routing's own purpose rule (`95392c99`); the freeze gate holds; the H4 battery's 10 declared movements are unchanged (0
+undeclared, 0 new violations); the H1 replay differs by the three labels alone; the four retained cases read as required.
+
+**Recorded, not repaired** (each on the safe side, or the installed release's own): a report field line inside a
+labelled paragraph (held; the base held it too); the dated-history exemption with a member-supplied date (the base's
+hold); a dilation the reader keeps no act for, held with another dilation's technique (the base read it READY); a listed
+act switching off the another-act release (the base's hold); competition without participants configured (the base's
+two READY codes; the installed site always configures them); an engine-applied answer whose question a later decision
+releases (the code stays excluded by the member's answer until it is withdrawn, which now takes effect at once); the
+earlier-answers wording during a date hold; "The cecum was identified as the site of the mass on the staging CT" read as
+the reach (the base's).
