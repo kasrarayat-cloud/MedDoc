@@ -47,8 +47,8 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@7'  # @7: the walk round (2026-11-07: a scope switch, a bolus named by its
-# food, a removal brought out); @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
+INVENTORY_VERSION = 'gi-services@7'  # @7: the walk round (2026-11-07: a dilation bound by its upper-tract device, a
+# bolus named by its food, a removal brought out through the mouth); @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
 
 FLAGS = re.A | re.I
 
@@ -312,10 +312,7 @@ ACT_PARTICIPLES = (r'(?:performed|done|obtained|taken|removed|resected|retrieved
                    r'achieved|injected|tattooed|ablated|treated|dilated|banded|clipped|cleared|extracted|swept|sampled|'
                    r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
                    r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
-                   r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed|'
-                   # the walk round (2026-11-07, finding 4): a removal stated with its particle "out" and its route out of
-                   # the body, as REMOVAL_PREDICATE
-                   r'(?:brought|taken|pulled)\s+out\s+(?:through|via)\s+the\s+(?:mouth|oropharynx|overtube|oral\s+cavity))')
+                   r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed)')
 ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+|subsequently\s+|completely\s+|each\s+)?'
                + ACT_PARTICIPLES + r'\b'
                r'|\b(?:we|I)\s+(?:then\s+)?(?:performed|obtained|took|removed|resected|placed|deployed|injected|ablated|'
@@ -329,9 +326,7 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
 # patch's reading of "it was not excised by snare" as the patch's own denied snare goes with it (ACCURACY-RESIDUALS.md).
 BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
                       r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
-                      r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ)|'
-                      # the walk round (finding 4): with its route out of the body; its not-done form is in FRAGMENT_NOT
-                      r'(?:brought|taken|pulled)\s+out\s+(?:through|via)\s+the\s+(?:mouth|oropharynx|overtube|oral\s+cavity))\b')
+                      r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ))\b')
 # What may open a clause before its negation word - spaces, dashes, bullets, brackets and list labels ("- ", "A1 ", "2) ")
 # - read one at a time (refutation r1 cost lens, ec5 cost: as "(?:[\s\-*•(]*(?:<label>)?\s*)*" a run was tried in every
 # way of sharing it among the repetitions, so "*" and 16 spaces before "Colonoscopy was performed" took the assess stage
@@ -366,8 +361,7 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
 FRAGMENT_NOT = _rx(r"\b(?:never|not\s+(?:yet|ever|actually|as\s+yet|in\s+fact))\s+"
                    r"(?:(?:yet|been|actually|in\s+fact|as\s+yet|[\w-]+ly)\s+){0,2}"
                    + ACT_PARTICIPLES + r"\b"
-                   r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded|"
-                   r"(?:brought|taken|pulled)\s+out)\b")
+                   r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded)\b")
 FRAGMENT_PAST = _rx(r"\s+(?:before|previously|in\s+the\s+past|prior)\b")
 # the closed list's own act kinds: "not retrieved" after "removed with a cold snare" is the specimen's, never the snare's
 # (refutation cycle 3, C3-4-13)
@@ -375,7 +369,7 @@ FRAGMENT_KINDS = {'snared': ('snare', 'emr'), 'excised': ('snare', 'emr', 'esd',
                   'dilated': ('dilation',), 'ablated': ('ablation',), 'clipped': ('clip',),
                   'retrieved': ('specimen', 'foreign_body', 'stone_extraction'),
                   'extracted': ('stone_extraction', 'foreign_body'), 'deployed': ('stent', 'clip'),
-                  'banded': ('band_ligation',)}  # "not brought out" (last word "out") has no entry: it stays the mention's
+                  'banded': ('band_ligation',)}
 FRAGMENT_CUE = 'negated: a fragment\u2019s own negation'
 FRAGMENT_GAP = 60  # characters of a noun mention's own phrase ("from the ascending colon") before its fragment
 FRAGMENT_GAP_STOP = _rx(r'[,;:()]|\b(?:and|or|but|then|which|that|who|after|before|while|was|were|is|are|been|being)\b')
@@ -1725,41 +1719,6 @@ def _clinical_layout(text: str):
 # An instrument named as a scope, by its word's form (gastroscope, colonoscope, duodenoscope, "the scope", "the upper
 # scope"): where a labelled paragraph's label stops binding its acts (_labelled_parts; refutation cycle 4)
 _SCOPE_WORD = _rx(r'\b\w*scopes?\b')
-# The walk round (2026-11-07, finding 2): a labelled paragraph's binding ends, as installed, at the first sentence after
-# its first that names a scope - and binds nothing where its first sentence names two - except where every scope the
-# sentence names is the label's own instrument or a generic one in one of two closed forms that keep its examination
-# going: an accessory passed through it ("A Savary guidewire was passed through the scope into the gastric antrum") or
-# the instrument leaving over the wire the next step uses ("and the scope was withdrawn over the wire."). The round's
-# first form read the end of an examination from its wording (another tract's word right before the scope, listed
-# withdrawal and introduction verbs) and its refutation showed the wording open - "the lower GI scope was passed", "was
-# then gently withdrawn", a switch inside the first sentence - each binding the other examination's act to the label and
-# reading it READY under the wrong family, at a quadratic cost; a missed variant of these two forms holds instead, as
-# installed. Linear: one scope-word pass per sentence.
-_THROUGH_THE_SCOPE = _rx(r'\b(?:through|via|down)[ \t\n]++(?:the|its)[ \t\n]++(?:working[ \t\n]++channel[ \t\n]++of[ \t\n]++the'
-                         r'[ \t\n]++)?$')
-_WITHDRAWN_OVER_THE_WIRE = _rx(r'[ \t\n]++(?:was|were)[ \t\n]++(?:withdrawn|removed)[ \t\n]++over[ \t\n]++(?:the|a)[ \t\n]++'
-                               r'(?:guide-?)?wire\b')
-
-
-def _keeps_the_examination(text: str, m: re.Match, family: str, lo: int) -> bool:
-    """Whether the scope mention ``m`` (inside a paragraph whose label is ``family``; its sentence starts at ``lo``) is
-    the label's own instrument or a generic one, in one of the two closed forms that keep the examination going."""
-    named = _instrument_family(m.group(0))
-    if named and named != family:
-        return False  # another family's instrument: never kept
-    if _THROUGH_THE_SCOPE.search(text, max(lo, m.start() - 48), m.start()) is not None:
-        return True
-    return _WITHDRAWN_OVER_THE_WIRE.match(text, m.end()) is not None
-
-
-def _scope_switch(text: str, a: int, b: int, family: str, first: bool = False) -> bool:
-    """Whether the sentence [a, b) of a labelled paragraph whose label is ``family`` ends the label's binding: in its
-    first sentence, two scope mentions outside the closed forms (the course's own instrument is one); in a later one,
-    any scope mention outside them."""
-    moved = sum(1 for m in _SCOPE_WORD.finditer(text, a, b) if not _keeps_the_examination(text, m, family, a))
-    return moved >= 2 if first else moved >= 1
-
-
 def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     """Completion repair 2026-11-06 (U2): each released labelled procedure paragraph (studio.gi.structure, read on the
     text routing reads) is a report part of its label's family, so an act in it binds to that family - a site-less
@@ -1794,11 +1753,11 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
         end = p.end
         j = bisect.bisect_right(sentence_starts, p.start)  # the sentence after the one the paragraph opens with
         first_end = min(frozen.sentences[j - 1][1], p.end) if j > 0 else p.end
-        if _scope_switch(source, p.start, first_end, p.family, first=True):
+        if len(_SCOPE_WORD.findall(source, p.start, first_end)) >= 2:
             end = p.start  # a switch inside the first sentence ("... and then withdrawn, and the upper scope was passed.")
         while end == p.end and j < len(frozen.sentences) and frozen.sentences[j][0] < p.end:
             a, b = frozen.sentences[j]
-            if _scope_switch(source, a, min(b, p.end), p.family):
+            if _SCOPE_WORD.search(source, a, min(b, p.end)):
                 end = a
                 break
             j += 1
@@ -4209,6 +4168,14 @@ _FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
 # exactly as for "removed". The route is required since the round's refutation (acts 3, 4): bare, the particle read an
 # image "brought out with narrow band imaging", a bolus that "pulled out of the net" and fell back, and a tube "pulled
 # out by the patient" as removals.
+_ROUTE_OUT = _rx(r'\b(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)[ \t\n]+the[ \t\n]+'
+                 r'(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity)\b')
+# the completed passive the route-bound removal must close (the walk round's last check: "was to be brought out through
+# the mouth, but it fragmented" states an intention): "was|were [adverb] [<participle> and [adverb]] brought out ..."
+_DONE_ROUTE_OUT = _rx(r'\b(?:was|were)[ \t\n]+(?:(?:then|subsequently|successfully|finally|[a-z]+ly)[ \t\n]+)?'
+                      r'(?:[a-z]+ed[ \t\n]+and[ \t\n]+(?:(?:then|subsequently|successfully|finally|[a-z]+ly)[ \t\n]+)?)?'
+                      r'(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)[ \t\n]+the[ \t\n]+'
+                      r'(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity)\b')
 REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted|(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)'
                         r'[ \t\n]+the[ \t\n]+(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity))\b')
 # the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
@@ -5035,6 +5002,17 @@ def _beyond_note_reach(part, anat) -> bool:
     reach = NOTE_REACH.get(part.noted)
     return reach is not None and any(region in LOWER | {'small_bowel'} and name not in reach
                                      for name, region, _, _ in anat)
+
+
+def _upper_tract_device(text: str, clause, present: Sequence[str]) -> bool:
+    """Whether ``clause`` (start, end) names a dilation device routing's own intervention vocabulary reads as the upper
+    endoscopy's alone (cues.INTERVENTIONS 'dilation (bougie)': a bougie, Savary, Maloney) and that service is documented.
+    The walk round (2026-11-07, finding 2): one reader's device-to-family reading, read by the other."""
+    if 'gi.egd' not in present or not clause:
+        return False
+    pattern = next((p for label, p, families in _cues.INTERVENTIONS
+                    if label == 'dilation (bougie)' and tuple(families) == ('gi.egd',)), None)
+    return pattern is not None and pattern.search(text, clause[0], clause[1]) is not None
 
 
 def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
@@ -6327,6 +6305,12 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     fam = next(f for f, dd in drafts.items() if dd.id == bound.service)
                 else:
                     fam = _family_for_act(kind, region, act_part_family, present_families, binding_families)
+                    if not fam and kind == 'dilation' and _upper_tract_device(text, clause, present_families):
+                        # the walk round (finding 2; the binding's exceptions were refuted twice and dropped): a site-less
+                        # dilation whose own clause names a device routing reads as the upper tract's alone ("Savary-
+                        # Gilliard dilators of 15, 16 and 17 mm were then passed over the wire") is the upper endoscopy's,
+                        # as an act naming its own site binds by it
+                        fam = 'gi.egd'
                 if not fam or fam not in drafts:
                     # Neither its part, its sentence nor its site tells which of the documented services the statement
                     # is about. A checklist item's own field or check box that denies it today is then the encounter's
@@ -6350,6 +6334,19 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue  # "a common bile duct dilated to 11 mm", "upstream duct dilation": a finding
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=part.kind == 'report')
+                route_out = (ms, me) in removal_at and _ROUTE_OUT.search(text, *removal_at[(ms, me)]) is not None \
+                    and any(m.end() == removal_at[(ms, me)][1]
+                            for m in _DONE_ROUTE_OUT.finditer(text, max(0, removal_at[(ms, me)][0] - 80),
+                                                              removal_at[(ms, me)][1]))
+                if route_out and reading.status == 'uncertain' and len(reading.cues) == 1 \
+                        and reading.cues[0] in SILENT_READINGS:
+                    # the walk round (2026-11-07, finding 4; its participle form was refuted twice and dropped): the
+                    # removal predicate the bolus or foreign body is the structural subject of, stated with its route out
+                    # of the body ("The bolus was captured and brought out through the mouth."), is that phrase's own
+                    # act predicate - for the mention _bolus_removals added from it alone, never for another act in the
+                    # clause, and only where its clause says nothing else (a denial, a hedge or another time reads as
+                    # such)
+                    reading = Reading('performed', ('performed: a removal stated with its route out of the body',))
                 if (ms, me) in removal_at and reading.status == 'performed':
                     # refutation cycle 2 (acts A2): a removal the predicate of another clause or conjunct states ("An
                     # impacted meat bolus was found at 32 cm and was removed ...") is read in that predicate's own
@@ -6357,7 +6354,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     ps, pe = removal_at[(ms, me)]
                     own = read_clause(text, _clause_for(cls, ps), ps, pe, service_date=service_date, dates=dates,
                                       part=part, in_today_report=part.kind == 'report')
-                    if own.status != 'performed':
+                    silent = own.status == 'uncertain' and len(own.cues) == 1 and own.cues[0] in SILENT_READINGS
+                    if own.status != 'performed' and not (route_out and silent):
                         reading = own
                 if reading.cues[:1] in ((COPULAR_SUBJECT_CUE,), (COPULAR_OBJECT_CUE,)):
                     continue  # rule 3: the subject or the object of a copular negation states no act of its own
@@ -6387,7 +6385,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         reading = Reading('uncertain', (LATER_FAILURE_CUE + contradicted,) + reading.cues)  # F-TIME F
                 has_act_verb = bool(ACT_VERB.search(clause_text) or _predicate_participle(text, clause_text, bc[0])
                                     or boxed or checked or fielded or _nominal_act(text, text[bc[0]:ms], ms)
-                                    or ms in doubtful_at or _attempt_or_failure(reading.cues))
+                                    or ms in doubtful_at or _attempt_or_failure(reading.cues)
+                                    or route_out)  # the walk round: the route-bound removal is the bolus's own predicate
                 if reading.status == 'negated' and not has_act_verb:
                     continue  # a denied finding ("without food impaction", "no stones"), not a denied act
                 if reading.status == 'negated' and OBSERVED.search(clause_text) and not ACT_VERB.search(clause_text):

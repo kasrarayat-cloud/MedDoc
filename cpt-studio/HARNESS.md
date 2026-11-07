@@ -3955,3 +3955,53 @@ the installed base and the cycle-3 head.
   - nothing sent;
   - RECOMPUTE_STATES unchanged on the head, the installed revision and the rollback read;
   - the planted control caught.
+
+## The walk round (2026-11-07): the acceptance walk of 6f306af1, and its repair
+
+**The walk.** The installed completion repair (6f306af1b030) failed its acceptance walk on holds only - no false READY
+(docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md, findings 1 to 7). The walk sets c1 and c2 are
+regression inputs from here (c2 was read while finding the causes); the independent acceptance is the blind set c3,
+sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
+
+**The repairs, as finally built** (shared readers and the engine; no document's text, no expected-code list):
+
+| finding | repair |
+|---|---|
+| 1 labelled paragraphs refused | structure: P1 reads an E/M visit only outside plan-kind sections; P2 is the installed rule (the course opens the label's sentence after an allow-listed frame) with the frame "after informed consent and a time-out" and at most two preparation statements before the course (the patient's position, a digital rectal examination: _PREPARATION, an allow-list); P3 reads a procedure section whose content is its heading line as a procedure line that declares; N1 no longer reads "last" before a non-time word, "informed consent", place objects, "on its own" or "<rectal/physical/...> examination" as another time, place or procedure |
+| 2 Savary dilators over a wire | services: the installed binding rule (the first later sentence naming a scope ends a label's binding); a site-less dilation past it whose own clause names a device routing's own intervention vocabulary reads as the upper tract's alone (cues.INTERVENTIONS "dilation (bougie)": a bougie, Savary, Maloney) is the upper endoscopy's (_upper_tract_device), as an act naming its own site binds by it |
+| 3 extent from the first landmark | OPEN: both forms of a continuation reader were refuted (a segment named after a later mention; any words as its route) and dropped under the two-cycle rule; the shape reads as installed (the first landmark's incomplete extent) and is recorded in ACCURACY-RESIDUALS.md |
+| 4 bolus "brought out" | services: a food word as the subject of an impaction is a bolus antecedent only as an anchored plain finding of today; a removal stated "was [captured and] brought out through the mouth" (or via the overtube) is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone, never for another act of its clause, and only where its clause says nothing else |
+| 5 another polyp's failed attempt held the done removal's code | engine._set_aside_attempts with detect.closed_attempt_failure: the closed attempt form's negated-passive failure (its subject a word of the attempt's own act mention; the services reader reading the attempt as an attempt or its failure) cited beside a cited performed act the code is matched to, on a lesion the reader tells apart (another site or size), with the units not exceeding those acts, is set aside: the code reads as with those passages cited alone. Cited alone the failure keeps the installed hold; routing keeps its installed doubt |
+| 6 the walk's code-list check | ops/verification/verify_browser.cjs lists a code excluded by a member's answer where its code was (U11) |
+| 7 the addendum response | POST /api/encounters/{id}/addenda answers {"revision": <number>}, never an internal id |
+
+**How it got there - three forms, each refuted, and what each taught:**
+- **First form (3dfbeb7e)** consumed the negated-passive failure in routing (_doubt). The full suite failed 66 tests,
+  nearly all the cycle-2 pinned another-lesion class: removing the doubt upstream released every code citing that
+  sentence - a hedged, earlier or doubted removal read READY - the another-act release the owner's two-cycle rule had
+  abandoned, through another door. The round's own differential scan had shown five new READYs; the pinned modules
+  showed the class. Changed approach (0eda9a02): routing keeps the doubt; the engine sets the failure aside only beside
+  the code's own cited act; plus a selected-passage hold for the round's own D1 (a hedged act whose code cites only the
+  failure).
+- **The replay gate on 0eda9a02** differed from the base by more than labels for the first time: the selected-passage
+  hold raised an untruthful question on h4-03 (a family-level "never named" reading under a sentence stating the act
+  done). Narrowed in 2ecd8431.
+- **Refutation round 1** (four lenses - binding, set-aside, acts and reach, structure - over 0eda9a02, write-disabled
+  sandboxes, INSTALLED and BASE as the bounds) returned 14 findings (10 HIGH, 4 MEDIUM; plus parity notes), each
+  reproduced on the three trees: every first form had read an open class from its wording (the end of an examination,
+  any frame of 160 characters, any later landmark mention, any "out", any clause of the act's sentence). Each rule was
+  closed to the installed one plus what the walk needs (1e5f6864); the selected-passage hold was dropped (it held codes
+  both releases read READY; the false READY it aimed at is the base's and installed's, recorded).
+- **Refutation round 2** (two lenses over the closures, 1e5f6864) returned 8 findings (3 HIGH, 4 MEDIUM, 1 LOW:
+  closures 3 HIGH and 1 MEDIUM, attempts 3 MEDIUM and 1 LOW). Three mechanisms were then refuted in both rounds,
+  and the owner's two-cycle rule was applied to each - the patch abandoned and the approach changed, the requirement
+  kept: the binding's exceptions (refuted for their wording, then for judging a scope by its local form) gave way to
+  the installed rule plus a device-tract binding read from routing's own vocabulary; the out-words as done
+  participles and denials (refuted bare, then route-bound) gave way to the removal predicate's own reading for the
+  bolus phrase it binds; the continuation reader (refuted for its anchor, then for its route) was dropped with no
+  replacement this round - walk finding 3 stays OPEN. The set-aside's robustness findings were repaired in place
+  (a crash on more act spots than the reader reads; one reading per form, not per cited span; only a cited span holding
+  the failure is set aside; the reason quotes at most two). The dated-removal case (attempts 3) reads exactly as the
+  installed release reads its twin - the recorded cycle-4 residual - and is ruled parity.
+
+**Measured on the final head:** FINAL-MEASUREMENTS.

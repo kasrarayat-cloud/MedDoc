@@ -2,6 +2,13 @@
   "schema": "cpt-studio-services-format-differences@1",
   "note": "Differences between the reading of a corpus document from a digital PDF (or a scan read with OCR) and from its text, kept on purpose with the reason. A new difference, or a recorded one that disappears, fails the test.",
   "pdf": {
+    "svc-12-egd-peg": {
+      "missing": [
+        "act|gi.egd|snare|performed|physician||"
+      ],
+      "extra": [],
+      "reason": "In the text, the snare that grasps the PEG guidewire is read as a snare act (no lesion is removed: a misreading, recorded); in the PDF its wrapped sentence reads it as part of the guidewire step. Neither reading accounts for a code: 43246 is the PEG."
+    },
     "svc-18-colo-snare-plus-separate-biopsy-table": {
       "missing": [
         "act|gi.colonoscopy|biopsy|performed|physician||anal canal,rectum,sigmoid colon,transverse colon",

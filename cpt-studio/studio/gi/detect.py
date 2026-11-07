@@ -51,8 +51,8 @@ from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@10'  # @10: the walk round (2026-11-07: the labelled release's gates, a
-# scope switch, a continued course, the closed form's negated passive); @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
+ROUTING_VERSION = 'gi-routing@10'  # @10: the walk round (2026-11-07: the labelled release's gates, the
+# closed form's negated passive recognised); @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
 # a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
@@ -3656,52 +3656,6 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
 # through the pylorus to the second portion of the duodenum" - when the text from that landmark to a later one is only an
 # aside about it (", which was normal ...," - no negation in it) and then "and" / "then", an optional route ("through the
 # pylorus", "past the ileocecal valve") and the preposition before the later landmark: nothing else, no verb of its own.
-_COURSE_CONTINUATION = re.compile(
-    r'(?:[ \t\n]*+,[ \t\n]*+(?:which|where)\b(?:(?!\b(?:not|no|never|unable|cannot|could[ \t\n]++not)\b)[^,;.]){0,160}+)?'
-    r'[ \t\n,]*+(?:and[ \t\n]++(?:then[ \t\n]++)?|then[ \t\n]++)'
-    r'(?:(?:through|past|beyond|across|via)[ \t\n]++(?:the[ \t\n]++)?[a-z-]++(?:[ \t\n]++[a-z-]++){0,3}?[ \t\n]++)?'
-    r'(?:to|into|through|past|beyond)[ \t\n]++(?:the[ \t\n]++)?', re.A | re.I)
-COURSE_CONTINUATION_READ = 300  # how far after a reached landmark its course is read on (bounded)
-# the walk round's refutation (acts 1, 2): the continued landmark ends its sentence - "... and through the pylorus to the
-# second portion of the duodenum." - at most after a closed, plain description of it ("..., which was also normal.";
-# an allow-list, so an unknown phrasing refuses), so nothing after it can deny, hedge or unsay the reach ("..., and then
-# to the cecum, but this could not be confirmed.", "... to the cecum unexamined."); anything else keeps the installed
-# reading
-_SENTENCE_END = re.compile(r'(?:[ \t\n]*+,[ \t\n]*+(?:which|where[ \t\n]++the[ \t\n]++[a-z]++)[ \t\n]++(?:was|were|appeared|looked)'
-                           r'[ \t\n]++(?:also[ \t\n]++)?(?:normal|unremarkable))?[ \t\n]*+[.;:]?[ \t\n]*+', re.A | re.I)
-
-
-def _course_continued(an: Analysis, s: int, e: int, table, reached: list, reached_before: int, refused: list) -> None:
-    """Append to ``reached`` every landmark of the sentence [s, e) that its course reaches by continuation (above) from a
-    landmark this sentence already reached, read as performed or incomplete and refused by nothing (linear: the
-    sentence's landmark matches, once). The walk round's refutation (acts 1, 2): the anchor is a reached landmark's
-    FIRST mention in the sentence - its course's own, never a later mention naming a segment ("the colon beyond the
-    transverse colon to the cecum") - the continuation is coordinated ("and", "then"), and the continued landmark ends
-    its sentence (_SENTENCE_END)."""
-    text = an.text
-    done = {(hit[0], hit[1]) for hit in reached[reached_before:]}
-    no = {(hit[0], hit[1]) for hit in refused}
-    found = sorted((m.start(), m.end(), depth, label) for label, depth, pattern in table for m in pattern.finditer(text, s, e))
-    anchors, seen = [], set()
-    for start, end, depth, label in found:
-        if (depth, label) in done and (depth, label) not in seen:
-            anchors.append(end)
-        seen.add((depth, label))
-    for start, end, depth, label in found:
-        if (depth, label) in done or (depth, label) in no:
-            continue
-        prior = [a for a in anchors if a <= start and start - a <= COURSE_CONTINUATION_READ]
-        if not prior or not _COURSE_CONTINUATION.fullmatch(text, max(prior), start) \
-                or not _SENTENCE_END.fullmatch(text, end, e):
-            continue
-        if _about_another_procedure(an, start, end) \
-                or _generic_reading(an, start, end).status not in ('performed', 'incomplete'):
-            continue
-        reached.append((depth, label, _span(text, s, e)))
-        done.add((depth, label))
-        anchors.append(end)
-
-
 def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                denied: Optional[list] = None, doubted: Optional[list] = None, *,
                cut: Optional[list] = None, cut_denials: Optional[list] = None,
@@ -3732,7 +3686,6 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     # could not be passed (_depth_reach_doubted)
     depth_only, deeper, refused, stopped = [], [], [], []
     for s, e in sentences:
-        reached_before = len(reached)  # the walk round (finding 3): the reaches this sentence reads
         for cs, ce in _clauses_in(an, s, e):
             clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
             for label, depth, pattern in table:
@@ -3807,8 +3760,6 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             if cut_denials is not None:  # round 4d regression:3
                                 cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
                                                     status in ('negated', 'cancelled', 'incomplete')))
-        if len(reached) > reached_before:
-            _course_continued(an, s, e, table, reached, reached_before, refused)
     if depth_only:
         doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
         reached = [hit for hit in reached if id(hit) not in doubted_reaches]
@@ -6193,24 +6144,39 @@ def closed_attempt_failure(text: str, start: int, end: int, service_date: Option
         return False
     s, e = an.lay.sentence_for(lo, lo + 1)
     _attempted_then_failed(an, lo)  # reads the sentence's forms into the memo
-    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
-    for _fs, _fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
-        if not negated or not (begin <= lo and hi <= end_at):
+    for fs, fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
+        # the walk round's second refutation (attempts 4): the cited passage holds the failure itself - a fragment of
+        # the form ("Hot snare polypectomy") states no failure and is never set aside as one
+        if not negated or not (begin <= lo and hi <= end_at) or not (lo <= fs and fe <= hi):
             continue
-        acts = gi_services._acts_in(an.text, begin, attempt_end)
-        core = _ATTEMPT_CORE.match(an.text, attempt_end)
-        head = re.compile(r'\b' + re.escape(core.group('head')) + r'\b', re.A | re.I) if core is not None else None
-        # the walk round's refutation (set-aside notes): the failure is the attempt's own only where its subject is a word
-        # of an act mention the services reader reads in the attempt ("Hot snare polypectomy ... but the snare could not
-        # be closed") - never "the examination could not be completed" in an attempt made "during the examination"
-        if head is None or not any(head.search(an.text, a, b) for _kind, a, b in acts):
-            return False
-        readings = [reading for reading, span in gi_services.passage_readings(an.text, begin, end_at, an.service_date)
-                    if span.start < attempt_end and begin < span.end]
-        # never vacuous: the attempt's own act is read, and every reading of it is an attempt or its failure
-        return bool(readings) and all(reading.status == 'uncertain' and gi_services._attempt_or_failure(reading.cues)
-                                      for reading in readings)
+        key = ('closed-attempt-failure', begin, end_at)  # read once per form (attempts 2: once per cited span had been)
+        if key not in an.memo:
+            an.memo[key] = _closed_form_attempt_failed(an, begin, end_at, attempt_end)
+        return an.memo[key]
     return False
+
+
+def _closed_form_attempt_failed(an: Analysis, begin: int, end_at: int, attempt_end: int) -> bool:
+    """closed_attempt_failure's reading of one form: its failure's subject is a word of an act mention the services
+    reader reads in the attempt, and every act of the attempt reads as an attempt or its failure (never vacuously)."""
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    acts = gi_services._acts_in(an.text, begin, attempt_end)
+    core = _ATTEMPT_CORE.match(an.text, attempt_end)
+    if core is None:
+        return False
+    head = re.compile(r'\b' + re.escape(core.group('head')) + r'\b', re.A | re.I)
+    # the walk round's refutation (set-aside notes): the failure is the attempt's own only where its subject is a word of
+    # an act mention the services reader reads in the attempt ("Hot snare polypectomy ... but the snare could not be
+    # closed") - never "the examination could not be completed" in an attempt made "during the examination"
+    if not any(head.search(an.text, a, b) for _kind, a, b in acts):
+        return False
+    read = gi_services.passage_readings(an.text, begin, end_at, an.service_date)
+    if read is None:
+        return False  # more act spots than the reader reads in one passage (attempts 1): not read, never a crash
+    readings = [reading for reading, span in read if span.start < attempt_end and begin < span.end]
+    # never vacuous: the attempt's own act is read, and every reading of it is an attempt or its failure
+    return bool(readings) and all(reading.status == 'uncertain' and gi_services._attempt_or_failure(reading.cues)
+                                  for reading in readings)
 
 
 def _consumed_by_the_services_reader(an: Analysis, clause_start: int, clause_end: int, pos: int, said: str) -> bool:

@@ -1626,7 +1626,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages)
         if set_aside and found.state in checks.POSITIVE:
-            quoted = '; '.join(reconcile.quote(span, 80) for span in kept if (span.start, span.end) in set_aside)
+            quoted = '; '.join([reconcile.quote(span, 80) for span in kept if (span.start, span.end) in set_aside][:2])
             found = replace(found, detail=f'{found.detail} A passage the code also cites states another attempt\'s own '
                                           f'failure ({quoted}); read as that attempt\'s, it does not decide this code, '
                                           'whose own documented act is cited beside it.')

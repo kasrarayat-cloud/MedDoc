@@ -9,14 +9,16 @@ the documents below are synthetic paraphrases of the shapes, never the walk sets
    rectal examination (P2, the installed rule with closed extensions: the round's first, open form released a hedged
    course, a denial and another time); a procedure line declares, it is no positive body (P3); four ordinary words no
    longer read as another time or place (N1).
-2. A labelled paragraph's binding ends, as installed, at the first later sentence naming a scope - except an accessory
-   passed through it or the scope withdrawn over the wire (services._scope_switch: the round's first form read the end
-   of an examination from its wording, and its refutation found the wording open).
-3. A course continued in its sentence ("and through the pylorus to the second portion of the duodenum.") reaches its
-   later landmark when coordinated, anchored on the course's own landmark and ending the sentence
-   (detect._course_continued).
-4. A bolus the report names by its food as the subject of an impaction, removed by "brought out through the mouth" - the
-   particle only with its route out of the body (services).
+2. A labelled paragraph's binding ends at the first later sentence naming a scope, as installed; a site-less dilation
+   past it whose own clause names a device routing reads as the upper tract's alone (Savary, Maloney, a bougie) is the
+   upper endoscopy's (services._upper_tract_device). Two forms of a scope-switch reader were refuted (its wording, then
+   its exceptions' local form) and dropped under the owner's two-cycle rule.
+3. OPEN (two-cycle rule): a coordinated reach after a relative aside ("advanced into the stomach, which was normal ...,
+   and through the pylorus to the second portion of the duodenum") keeps the installed incomplete reading; both forms of
+   the continuation reader were refuted (a segment named after a later mention; any words as the route) and dropped.
+4. A bolus the report names by its food as the subject of an impaction; its removal stated "brought out through the
+   mouth" is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone (services);
+   the particle as a done participle for every act of its clause was refuted twice and dropped.
 5. A sub-act's failure stated of its own instrument by a negated passive, inside the closed attempt form, cited beside
    the code's own documented act on another lesion: set aside, so the code reads as with that act's passage cited alone
    (detect.closed_attempt_failure recognises the form; engine._set_aside_attempts decides). The round's first form
@@ -159,10 +161,13 @@ class CourseContinuationTests(SimpleTestCase):
         finding = detect.route(text, DAY).finding(family)
         return next((f.value for f in finding.facts if f.name == 'extent'), None)
 
-    def test_a_continued_course_reaches_its_later_landmark(self):
+    def test_a_coordinated_reach_after_an_aside_is_the_recorded_open_defect(self):
+        """Walk finding 3 stays OPEN (ACCURACY-RESIDUALS.md, the walk round): both forms of the continuation reader were
+        refuted and dropped under the two-cycle rule, so this reads as installed - the first landmark's incomplete extent.
+        A repair must move this pin with its own evidence."""
         self.assertEqual(self.extent('The gastroscope was advanced into the stomach, which was normal on forward view and '
                                      'on retroflexion, and through the pylorus to the second portion of the duodenum.'),
-                         'second part of duodenum')
+                         'incomplete: stomach')
 
     def test_a_course_stopped_or_doubted_does_not(self):
         for sentence in ('The gastroscope was advanced into the stomach but could not be passed through the pylorus to the '
