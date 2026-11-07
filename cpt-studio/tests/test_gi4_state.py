@@ -363,7 +363,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@9', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@9'))
+                         ('gi-routing@10', 'gi-services@7', 'cpt-studio:gi-services@7', 'cpt-studio-validation@9'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -411,8 +411,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@6')},
-                         {('gi-routing@9', 'gi-services@6', 'cpt-studio-validation@9')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@7')},
+                         {('gi-routing@10', 'gi-services@7', 'cpt-studio-validation@9')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

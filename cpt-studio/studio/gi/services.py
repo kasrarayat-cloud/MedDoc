@@ -47,7 +47,8 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@6'  # @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
+INVENTORY_VERSION = 'gi-services@7'  # @7: the walk round (2026-11-07: a scope switch, a bolus named by its
+# food, a removal brought out); @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
 
 FLAGS = re.A | re.I
 
@@ -311,7 +312,9 @@ ACT_PARTICIPLES = (r'(?:performed|done|obtained|taken|removed|resected|retrieved
                    r'achieved|injected|tattooed|ablated|treated|dilated|banded|clipped|cleared|extracted|swept|sampled|'
                    r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
                    r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
-                   r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed)')
+                   r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed|'
+                   # the walk round (2026-11-07, finding 4): a removal stated with its particle "out", as REMOVAL_PREDICATE
+                   r'(?:brought|pulled)\s+out)')
 ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+|subsequently\s+|completely\s+|each\s+)?'
                + ACT_PARTICIPLES + r'\b'
                r'|\b(?:we|I)\s+(?:then\s+)?(?:performed|obtained|took|removed|resected|placed|deployed|injected|ablated|'
@@ -325,7 +328,9 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
 # patch's reading of "it was not excised by snare" as the patch's own denied snare goes with it (ACCURACY-RESIDUALS.md).
 BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
                       r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
-                      r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ))\b')
+                      r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ)|'
+                      # the walk round (finding 4): with its not-done form in FRAGMENT_NOT, as "removed" has
+                      r'(?:brought|taken|pulled)\s+out)\b')
 # What may open a clause before its negation word - spaces, dashes, bullets, brackets and list labels ("- ", "A1 ", "2) ")
 # - read one at a time (refutation r1 cost lens, ec5 cost: as "(?:[\s\-*•(]*(?:<label>)?\s*)*" a run was tried in every
 # way of sharing it among the repetitions, so "*" and 16 spaces before "Colonoscopy was performed" took the assess stage
@@ -360,7 +365,8 @@ NOT_VERB = _rx(r"\b(?:was|were|is|are|been|has|have|had|did|does|could|would|can
 FRAGMENT_NOT = _rx(r"\b(?:never|not\s+(?:yet|ever|actually|as\s+yet|in\s+fact))\s+"
                    r"(?:(?:yet|been|actually|in\s+fact|as\s+yet|[\w-]+ly)\s+){0,2}"
                    + ACT_PARTICIPLES + r"\b"
-                   r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded)\b")
+                   r"|\bnot\s+(?:snared|excised|tattooed|dilated|ablated|clipped|retrieved|extracted|deployed|banded|"
+                   r"(?:brought|taken|pulled)\s+out)\b")
 FRAGMENT_PAST = _rx(r"\s+(?:before|previously|in\s+the\s+past|prior)\b")
 # the closed list's own act kinds: "not retrieved" after "removed with a cold snare" is the specimen's, never the snare's
 # (refutation cycle 3, C3-4-13)
@@ -368,7 +374,7 @@ FRAGMENT_KINDS = {'snared': ('snare', 'emr'), 'excised': ('snare', 'emr', 'esd',
                   'dilated': ('dilation',), 'ablated': ('ablation',), 'clipped': ('clip',),
                   'retrieved': ('specimen', 'foreign_body', 'stone_extraction'),
                   'extracted': ('stone_extraction', 'foreign_body'), 'deployed': ('stent', 'clip'),
-                  'banded': ('band_ligation',)}
+                  'banded': ('band_ligation',)}  # "not brought out" (last word "out") has no entry: it stays the mention's
 FRAGMENT_CUE = 'negated: a fragment\u2019s own negation'
 FRAGMENT_GAP = 60  # characters of a noun mention's own phrase ("from the ascending colon") before its fragment
 FRAGMENT_GAP_STOP = _rx(r'[,;:()]|\b(?:and|or|but|then|which|that|who|after|before|while|was|were|is|are|been|being)\b')
@@ -1718,6 +1724,53 @@ def _clinical_layout(text: str):
 # An instrument named as a scope, by its word's form (gastroscope, colonoscope, duodenoscope, "the scope", "the upper
 # scope"): where a labelled paragraph's label stops binding its acts (_labelled_parts; refutation cycle 4)
 _SCOPE_WORD = _rx(r'\b\w*scopes?\b')
+# The walk round (2026-11-07, finding 2; a fresh blind report): a labelled paragraph's binding ends where its narrative
+# leaves the examination its label names, never merely where it names a scope again. Cycle 5's any-scope cut held the
+# dilation after "A Savary guidewire was passed through the scope into the gastric antrum, and the scope was withdrawn over
+# the wire." (the heading twin binds it to its section). The narrative leaves its examination where a sentence
+#  (a) names another examination's scope: another family's instrument ("The colonoscope was then introduced." in an EGD's
+#      paragraph), a scope the other tract's word names ("and the upper scope was then passed" in a colonoscopy's), or a
+#      generic scope where only the other tract's sites or route are named ("the scope was advanced to the second portion
+#      of the duodenum" in a colonoscopy's);
+#  (b) has a scope withdrawn or removed ("The gastroscope was withdrawn. Next, the PCF-H190 was introduced ...") - the
+#      examination it told is over - unless over a wire, which leaves the examination going on over that wire;
+#  (c) has a generic or modified scope introduced or inserted anew ("Next, the pediatric scope was introduced") - the
+#      label's own instrument re-introduced, or any scope advanced or passed, continues it ("The scope was advanced to the
+#      second portion of the duodenum.", "The scope was repositioned above the bolus.").
+# (a) is read in the paragraph's first sentence too; (b) and (c) only in the later ones (the first tells its own course).
+_TRACT_WORD_BEFORE = _rx(r'\b(?P<tract>upper|lower)[ \t\n]++$')
+_OTHER_TRACT = {'upper': 'lower', 'lower': 'upper'}
+_SCOPE_VERB = _rx(r'\b(?P<scope>\w*scopes?)[ \t\n]++(?:was|were)[ \t\n]++(?:(?:then|next|subsequently|slowly|carefully|gently|'
+                  r'completely|finally|again|fully)[ \t\n]++)?(?P<verb>withdrawn|removed|pulled[ \t\n]++back|extracted|'
+                  r'taken[ \t\n]++out|introduced|inserted|reintroduced|reinserted)\b')
+_SCOPE_WITHDRAWN = frozenset(('withdrawn', 'removed', 'extracted'))
+_OVER_A_WIRE = _rx(r'[ \t\n]++over[ \t\n]++(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:guide-?)?wires?\b')
+
+
+def _scope_switch(text: str, a: int, b: int, family: str, first: bool = False) -> bool:
+    from studio.gi import structure as gi_structure  # local: the tract and instrument readers are structure's
+    tract = gi_structure._TRACT_OF.get(family, '')
+    for m in _SCOPE_WORD.finditer(text, a, b):
+        named = _instrument_family(m.group(0))
+        if named:
+            if named != family:
+                return True  # (a) another family's instrument
+            continue  # the label's own instrument again
+        word = _TRACT_WORD_BEFORE.search(text, max(a, m.start() - 12), m.start())
+        if word is not None and tract and word.group('tract').lower() == _OTHER_TRACT[tract]:
+            return True  # (a) "the upper scope" beside a colonoscopy, "the lower scope" beside an upper endoscopy
+        if not tract or gi_structure._course_tract(text, a, b) == _OTHER_TRACT[tract]:
+            return True  # (a) a generic scope where the other tract's sites or route alone are named, or no tract to fit
+    if first:
+        return False
+    for m in _SCOPE_VERB.finditer(text, a, b):
+        verb = ' '.join(m.group('verb').lower().split())
+        if verb in _SCOPE_WITHDRAWN or verb in ('pulled back', 'taken out'):
+            if _OVER_A_WIRE.match(text, m.end(), b) is None:
+                return True  # (b) a scope withdrawn: the examination it told is over
+        elif not _instrument_family(m.group('scope')):
+            return True  # (c) a generic or modified scope introduced anew
+    return False
 
 
 def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
@@ -1754,11 +1807,11 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
         end = p.end
         j = bisect.bisect_right(sentence_starts, p.start)  # the sentence after the one the paragraph opens with
         first_end = min(frozen.sentences[j - 1][1], p.end) if j > 0 else p.end
-        if len(_SCOPE_WORD.findall(source, p.start, first_end)) >= 2:
+        if _scope_switch(source, p.start, first_end, p.family, first=True):
             end = p.start  # a switch inside the first sentence ("... and then withdrawn, and the upper scope was passed.")
         while end == p.end and j < len(frozen.sentences) and frozen.sentences[j][0] < p.end:
             a, b = frozen.sentences[j]
-            if _SCOPE_WORD.search(source, a, min(b, p.end)):
+            if _scope_switch(source, a, min(b, p.end), p.family):
                 end = a
                 break
             j += 1
@@ -4131,8 +4184,13 @@ def _technique(text: str, start: int, end: int, near: Optional[int] = None) -> s
 # Every act found this way is then read by read_clause like any other (negation, time, place, source, hedge, section).
 # And an act of the kind naming no site of its own takes its antecedent's site (the bolus found "in the distal
 # esophagus", "at 35 cm from the incisors"), so it binds to that site's family where two are present.
+# The walk round (2026-11-07, finding 4; a fresh blind report): the food that is the subject of an impaction predicate is a
+# bolus phrase too ("A large piece of partly chewed chicken was impacted in the distal esophagus ...") - an antecedent a
+# later "the bolus" refers to, anchored only where its sentence is a plain finding read whole (_plain_finding), as before.
 BOLUS_HEAD = _rx(r'\b(?:bolus(?:es)?|boli|impactions?|foreign[ \t-]+bod(?:y|ies)|coins?|objects?)\b'
-                 r'|(?<=\bimpacted )(?:food|meat|steak|chicken|beef|pork|bread)\b')
+                 r'|(?<=\bimpacted )(?:food|meat|steak|chicken|beef|pork|bread)\b'
+                 r'|\b(?:food|meat|steak|chicken|beef|pork|bread)(?=[ \t\n]+(?:was|were)[ \t\n]+(?:(?:firmly|tightly|'
+                 r'completely|partially)[ \t\n]+)?(?:impacted|lodged)\b)')
 # the food words that make a bolus or an impaction a food one (a closed class: an unknown word is no food, so no act)
 FOOD_WORDS = frozenset(('food', 'meat', 'steak', 'chicken', 'beef', 'pork', 'bread', 'vegetable', 'vegetables', 'fish',
                         'turkey', 'ham'))
@@ -4158,7 +4216,10 @@ _CLAUSE_WORDS = frozenset(('and', 'or', 'but', 'nor', 'yet', 'so', 'then', 'thus
                            'until', 'although', 'though', 'if', 'unless', 'whether', 'as', 'not', 'never', 'we', 'i',
                            'he', 'she', 'they', 'it', 'there', 'also', 'to'))
 _FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
-REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted)\b')
+# The walk round (2026-11-07, finding 4; a fresh blind report): "the bolus was captured and brought out through the mouth" -
+# a removal stated with its particle "out" (brought, taken or pulled out of the body), never a push or a passage, which
+# stays Q1's ("cleared", "dislodged"); the subject is resolved structurally exactly as for "removed".
+REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted|(?:brought|taken|pulled)[ \t\n]+out)\b')
 # the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
 _VERB_GROUP = _rx(r"(?:\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|"
                   r"must|did|does|do|shall|to|not|never|then|also|[a-z]+ly|\w+n['’]t)[ \t\n]+)+$")
@@ -4636,7 +4697,13 @@ _CONTENT_WORD = (r'(?!(?:' + '|'.join(sorted(_FUNCTION_WORDS, key=len, reverse=T
 PLAIN_FINDING_CHARS = 240
 _PLAIN_LEAD = _rx(r'[ \t\n]*(?:(?:findings?|description(?:[ \t]+of[ \t]+(?:the[ \t]+)?procedure)?|impression|esophagus|'
                   r'stomach|duodenum|egd|upper[ \t]+endoscopy|colonoscopy|colon|rectum)[ \t]*:[ \t\n]*)?'
-                  r'(?:(?:a|an|the|one|this)[ \t\n]+)?(?P<mods>(?:' + _CONTENT_WORD + r'[ \t\n]+){0,6})')
+                  r'(?:(?:a|an|the|one|this)[ \t\n]+)?'
+                  # the walk round (finding 4): a partitive frame before the food ("A large piece of partly chewed ...")
+                  r'(?:(?:' + _CONTENT_WORD + r'[ \t\n]+){0,2}(?:pieces?|portions?|chunks?|fragments?|morsels?|bites?)'
+                  r'[ \t\n]+of[ \t\n]+)?'
+                  # and an adverb before a modifier ("partly chewed"): every word of the sentence is still read by the
+                  # history, plan and hedge vocabularies (_plain_finding)
+                  r'(?P<mods>(?:(?:[a-z]+ly[ \t\n]+)?' + _CONTENT_WORD + r'[ \t\n]+){0,6})')
 _PLAIN_COMPLEMENT = _rx(r'[ \t\n]+of[ \t\n]+(?:' + _CONTENT_WORD + r'[ \t\n]+){0,2}' + _CONTENT_WORD
                         + r'|[ \t\n]*\([ \t\n]*(?:(?:a|an|the)[ \t\n]+)?(?:' + _CONTENT_WORD + r'[ \t\n]+){0,3}'
                         + _CONTENT_WORD + r'[ \t\n]*\)')

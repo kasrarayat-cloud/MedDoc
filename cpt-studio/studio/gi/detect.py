@@ -51,7 +51,8 @@ from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@9'  # @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
+ROUTING_VERSION = 'gi-routing@10'  # @10: the walk round (2026-11-07: the labelled release's gates, a
+# scope switch, a continued course, the closed form's negated passive); @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
 # a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
@@ -670,7 +671,8 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
             spans, index, _ = _groups(an, cs, ce, ts, te)
             token = next((t for t in cues.DOUBT_TOKEN.finditer(an.text, cs, ce)
                           if _attached(spans, index, t.start(), t.end())
-                          and _unexplained(an, clause, cs, ce, (t.start(), t.end()), ts, te)), None)
+                          and _unexplained(an, clause, cs, ce, (t.start(), t.end()), ts, te)
+                          and not _negated_form_consumed(an, t.start())), None)
             if token:
                 an.memo[key] = f"{DOUBT_PREFIX} '{token.group(0)}' in its clause"
                 break
@@ -3650,6 +3652,42 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
     return [span for span, f in zip(an.lay.sentences, attributed) if f == family]
 
 
+# The walk round (2026-11-07, finding 3; a fresh blind report): a course that reached a landmark goes on in the same
+# sentence - "The scope was then advanced into the stomach, which was normal on forward view and on retroflexion, and
+# through the pylorus to the second portion of the duodenum" - when the text from that landmark to a later one is only an
+# aside about it (", which was normal ...," - no negation in it) and then "and" / "then", an optional route ("through the
+# pylorus", "past the ileocecal valve") and the preposition before the later landmark: nothing else, no verb of its own.
+_COURSE_CONTINUATION = re.compile(
+    r'(?:[ \t\n]*+,[ \t\n]*+(?:which|where)\b(?:(?!\b(?:not|no|never|unable|cannot|could[ \t\n]++not)\b)[^,;.]){0,160}+)?'
+    r'[ \t\n,]*+(?:and[ \t\n]++)?(?:then[ \t\n]++)?'
+    r'(?:(?:through|past|beyond|across|via)[ \t\n]++(?:the[ \t\n]++)?[a-z-]++(?:[ \t\n]++[a-z-]++){0,3}?[ \t\n]++)?'
+    r'(?:to|into|through|past|beyond)[ \t\n]++(?:the[ \t\n]++)?', re.A | re.I)
+COURSE_CONTINUATION_READ = 300  # how far after a reached landmark its course is read on (bounded)
+
+
+def _course_continued(an: Analysis, s: int, e: int, table, reached: list, reached_before: int, refused: list) -> None:
+    """Append to ``reached`` every landmark of the sentence [s, e) that its course reaches by continuation (above) from a
+    landmark this sentence already reached, read as performed or incomplete and refused by nothing (linear: the
+    sentence's landmark matches, once)."""
+    text = an.text
+    done = {(hit[0], hit[1]) for hit in reached[reached_before:]}
+    no = {(hit[0], hit[1]) for hit in refused}
+    found = sorted((m.start(), m.end(), depth, label) for label, depth, pattern in table for m in pattern.finditer(text, s, e))
+    anchors = [end for start, end, depth, label in found if (depth, label) in done]
+    for start, end, depth, label in found:
+        if (depth, label) in done or (depth, label) in no:
+            continue
+        prior = [a for a in anchors if a <= start and start - a <= COURSE_CONTINUATION_READ]
+        if not prior or not _COURSE_CONTINUATION.fullmatch(text, max(prior), start):
+            continue
+        if _about_another_procedure(an, start, end) \
+                or _generic_reading(an, start, end).status not in ('performed', 'incomplete'):
+            continue
+        reached.append((depth, label, _span(text, s, e)))
+        done.add((depth, label))
+        anchors.append(end)
+
+
 def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                denied: Optional[list] = None, doubted: Optional[list] = None, *,
                cut: Optional[list] = None, cut_denials: Optional[list] = None,
@@ -3680,6 +3718,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     # could not be passed (_depth_reach_doubted)
     depth_only, deeper, refused, stopped = [], [], [], []
     for s, e in sentences:
+        reached_before = len(reached)  # the walk round (finding 3): the reaches this sentence reads
         for cs, ce in _clauses_in(an, s, e):
             clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
             for label, depth, pattern in table:
@@ -3754,6 +3793,8 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             if cut_denials is not None:  # round 4d regression:3
                                 cut_denials.append((denied[-1], m.start(), m.end(), ws, we,
                                                     status in ('negated', 'cancelled', 'incomplete')))
+        if len(reached) > reached_before:
+            _course_continued(an, s, e, table, reached, reached_before, refused)
     if depth_only:
         doubted_reaches = {id(hit) for hit in _depth_reach_doubted(depth_only, deeper, refused, stopped)}
         reached = [hit for hit in reached if id(hit) not in doubted_reaches]
@@ -6042,8 +6083,16 @@ ATTEMPT_CHARS = 240  # the attempt's own clause, at most (its subject and object
 # the form ends only at its sentence's full stop, or at a semicolon followed by "the polyp(s)/lesion(s) was/were left in
 # place" and the full stop - never at a line break or before a clause it does not know ("...\nas was the remainder of the
 # examination", "...; so was the remainder of the examination"), which keeps the installed reading.
+# The walk round (2026-11-07, finding 5; a fresh blind report): the failure may also be stated of the attempted act's own
+# instrument by a negated passive - "Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was
+# attempted, but the snare could not be closed around the stalk, and the polyp was left in place." (the head is a word of
+# the attempt, as before); its negation is then the sub-act's own, not a doubt of the examination (_doubt), where the
+# services reader reads the attempted act as failed (_negated_form_consumed). The end may be ", and the polyp was left in
+# place." as well as the semicolon form.
 _ATTEMPT_CORE = re.compile(r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+'
-                           r'(?P<head>[a-z]+)[ \t\n]+(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed)', re.A | re.I)
+                           r'(?P<head>[a-z]+)[ \t\n]+(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed'
+                           r'|(?P<negated>could[ \t\n]+not[ \t\n]+be[ \t\n]+[a-z]+(?:ed|en)(?:[ \t\n]+(?:around|through|over|across|'
+                           r'into|onto|beyond|past)[ \t\n]+the[ \t\n]+[a-z]+)?))', re.A | re.I)
 _ATTEMPT_OBJECT = re.compile(r'\bof[ \t\n]+an?[ \t\n]', re.A | re.I)
 _COORDINATOR = re.compile(r'\b(?:and|or|but|as|with)\b', re.A | re.I)
 _RELATIVE = re.compile(r'\b(?:that|which|who|where|when|while)\b', re.A | re.I)  # a reason's own clause: not read
@@ -6051,8 +6100,8 @@ _RELATIVE = re.compile(r'\b(?:that|which|who|where|when|while)\b', re.A | re.I) 
 _ELLIPSIS_AFTER = re.compile(r'[ \t\n]*(?:so|as|neither|nor|likewise)\b', re.A | re.I)
 _CLAUSE_START_MARK = re.compile(r'[,;:.()\n]')
 _REASON = re.compile(r'[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+([^,;:.()\n]{1,80})', re.A | re.I)
-_LEFT_IN_PLACE = re.compile(r';[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in[ \t\n]+'
-                            r'place[ \t]*\.', re.A | re.I)
+_LEFT_IN_PLACE = re.compile(r'(?:;|,[ \t\n]*and)[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in'
+                            r'[ \t\n]+place[ \t]*\.', re.A | re.I)
 
 
 def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
@@ -6096,12 +6145,34 @@ def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
                     continue
                 if _ELLIPSIS_AFTER.match(text, e):
                     continue
-                forms.append((core.start('failed'), core.end('failed'), begin, end_at))
+                forms.append((core.start('failed'), core.end('failed'), begin, end_at, core.start(),
+                              core.group('negated') is not None))
         an.memo[key] = forms
-    for fs, fe, ms, me in an.memo[key]:
+    for fs, fe, ms, me, _attempt_end, _negated in an.memo[key]:
         if fs <= pos < fe:
             return ms, me
     return None
+
+
+def _negated_form_consumed(an: Analysis, pos: int) -> bool:
+    """The walk round (finding 5): whether ``pos`` is a negation word inside the closed form's negated-passive failure
+    ("but the snare could not be closed around the stalk") whose attempt the documented-service reader reads as a
+    failed act of its own vocabulary (services._failed_act over the attempt's acts): one reader decides, the other
+    consumes, exactly as for the failure words (_consumed_by_the_services_reader)."""
+    if _attempted_then_failed(an, pos) is None:
+        return False
+    s, e = an.lay.sentence_for(pos, pos + 1)
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    for fs, fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
+        if negated and fs <= pos < fe:
+            # the attempt's own act, read by the services reader in its own clause: an attempt or a failure of it
+            # ("uncertain: attempted") - its outcome stated otherwise than done (services._attempt_or_failure)
+            acts = gi_services._acts_in(an.text, begin, attempt_end)
+            readings = gi_services.passage_readings(an.text, begin, end_at, an.service_date) if acts else None
+            return bool(readings) and all(
+                reading.status == 'uncertain' and gi_services._attempt_or_failure(reading.cues)
+                for reading, span in readings if span.start < attempt_end and begin < span.end)
+    return False
 
 
 def _consumed_by_the_services_reader(an: Analysis, clause_start: int, clause_end: int, pos: int, said: str) -> bool:
