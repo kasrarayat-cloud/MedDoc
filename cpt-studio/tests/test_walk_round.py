@@ -9,16 +9,19 @@ the documents below are synthetic paraphrases of the shapes, never the walk sets
    rectal examination (P2, the installed rule with closed extensions: the round's first, open form released a hedged
    course, a denial and another time); a procedure line declares, it is no positive body (P3); four ordinary words no
    longer read as another time or place (N1).
-2. A labelled paragraph's binding ends at the first later sentence naming a scope, as installed; a site-less dilation
-   past it whose own clause names a device routing reads as the upper tract's alone (Savary, Maloney, a bougie) is the
-   upper endoscopy's (services._upper_tract_device). Two forms of a scope-switch reader were refuted (its wording, then
-   its exceptions' local form) and dropped under the owner's two-cycle rule.
+2. OPEN (two-cycle rule): a labelled paragraph's binding ends at the first later sentence naming a scope, as installed,
+   so in a report of both examinations a site-less dilation past it ("the scope was withdrawn over the wire. Savary
+   dilators ... were then passed over the wire") is held. Two approaches were each refuted twice and dropped: the
+   binding's exceptions (their wording, then their local form) and a device-tract binding (the device alone is open -
+   Savary bougies dilate anastomotic strictures; then a guide wire's brand name read as a dilation where the stricture
+   was not dilated, and a paragraph rescan per mention cost 81.8 s on an admitted input).
 3. OPEN (two-cycle rule): a coordinated reach after a relative aside ("advanced into the stomach, which was normal ...,
    and through the pylorus to the second portion of the duodenum") keeps the installed incomplete reading; both forms of
    the continuation reader were refuted (a segment named after a later mention; any words as the route) and dropped.
-4. A bolus the report names by its food as the subject of an impaction; its removal stated "brought out through the
-   mouth" is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone (services);
-   the particle as a done participle for every act of its clause was refuted twice and dropped.
+4. OPEN (two-cycle rule): a bolus "captured and brought out through the mouth" is held, as installed. Two approaches
+   were each refuted twice and dropped: the out-words as done participles (bare, then route-bound) and the route-bound
+   removal as the bolus phrase's own predicate (open, then closed - "taken out ... by the emergency physician", "by Dr.
+   <another physician>" and a bolus that fell back still read done). services.py is the installed module.
 5. A sub-act's failure stated of its own instrument by a negated passive, inside the closed attempt form, cited beside
    the code's own documented act on another lesion: set aside, so the code reads as with that act's passage cited alone
    (detect.closed_attempt_failure recognises the form; engine._set_aside_attempts decides). The round's first form
@@ -143,13 +146,39 @@ class BindingTests(SimpleTestCase):
                 result = run(text, corti(('43251', span(text, 'removed with a cold snare'))))
                 self.assertNotEqual(proposal(result, '43251').status, 'ready')
 
-    def test_a_device_binds_only_inside_its_own_upper_endoscopy_paragraph(self):
-        """The round's third refutation: Savary bougies dilate anastomotic strictures too, a Savary guidewire carries a
-        colonic balloon - so the device only confirms an "Upper endoscopy:" paragraph's own label, in a narrative that has
-        not left the upper tract or named another family's instrument."""
-        egd_ok = HEAD + IND + self.WIRE + 'Impression: Dilated.\n'
+    def test_a_dilation_past_the_cut_in_a_report_of_both_is_the_recorded_open_defect(self):
+        """Walk finding 2 stays OPEN (ACCURACY-RESIDUALS.md, the walk round): the binding's exceptions and the device-tract
+        binding were each refuted twice and dropped under the two-cycle rule, so in a report of both examinations a
+        site-less dilation past the binding's cut is held, as installed. A repair must move this pin with its own
+        evidence."""
+        both = HEAD + IND + self.WIRE + COL + 'Impression: Ring dilated; sigmoid polyp removed.\n'
+        result = run(both, corti(('43248', span(both, 'Savary dilators of 15 and 16 mm were then passed over the wire'))))
+        held = proposal(result, '43248')
+        self.assertEqual(held.status, 'needs_clarification')
+        self.assertEqual(flags(held), ['service.status'])
+
+    def test_no_device_word_binds_a_dilation_past_the_cut(self):
+        """The device-tract binding's refutations, read as installed now that it is dropped: Savary bougies dilate
+        anastomotic strictures too; a Savary guidewire carries a colonic balloon; a guide wire's brand name is no
+        dilation, least of all where the stricture was not dilated (round 4); nor is a statement of what is usually
+        done."""
         quote = 'Savary dilators of 15 and 16 mm were then passed over the wire'
+        egd_ok = HEAD + IND + self.WIRE + 'Impression: Dilated.\n'  # one examination: no binding question
         self.assertEqual(proposal(run(egd_ok, corti(('43248', span(egd_ok, quote)))), '43248').status, 'ready')
+        for label, sentence, cited in (
+                ('a guide wire, not dilated',
+                 'A tight peptic stricture was found at 34 cm from the incisors. A Savary-Gilliard guide wire was passed '
+                 'through the scope, and the scope was withdrawn over the wire. A deep mucosal tear was then seen, so the '
+                 'stricture was not dilated and the wire was removed.',
+                 'A Savary-Gilliard guide wire was passed through the scope'),
+                ('what is usually done',
+                 'A tight peptic stricture was found. The scope was withdrawn. Savary dilation is usually performed for '
+                 'such strictures.',
+                 'Savary dilation is usually performed for such strictures')):
+            with self.subTest(label):
+                text = HEAD + IND + EGD_OPEN + sentence + '\n' + COL + 'Impression: Stricture.\n'
+                result = run(text, corti(('43248', span(text, cited))))
+                self.assertNotEqual(proposal(result, '43248').status, 'ready')
         colon = (HEAD + IND + EGD_OPEN + 'The esophagus, stomach and duodenum were normal.\n'
                  + 'Colonoscopy: ' + COURSE + 'The colonoscope was withdrawn to the colorectal anastomosis, where a tight '
                  'stricture was found. Savary dilators of 15 and 16 mm were then passed over a guidewire across the '
@@ -224,12 +253,17 @@ class BolusRemovalTests(SimpleTestCase):
                                       pages=())
         return [(a.kind, a.status) for svc in inventory.services for a in svc.acts if a.kind == 'foreign_body']
 
-    def test_the_bolus_brought_out_is_removed(self):
-        self.assertEqual(self.acts('The bolus was captured and brought out through the mouth.'),
-                         [('foreign_body', 'performed')])
+    def test_the_bolus_brought_out_is_the_recorded_open_defect(self):
+        """Walk finding 4 stays OPEN (ACCURACY-RESIDUALS.md, the walk round): the out-words as done participles and the
+        route-bound removal were each refuted twice and dropped under the two-cycle rule, so "brought out through the
+        mouth" states no removal the reader reads, as installed, and the code is held. A repair must move this pin with
+        its own evidence."""
+        self.assertEqual(self.acts('The bolus was captured and brought out through the mouth.'), [])
         text = HEAD + self.FOUND + 'The bolus was captured and brought out through the mouth.\n'
-        result = run(text, (), [read('astra', [code(text, '43247', 'The bolus was captured and brought out')])])
-        self.assertEqual(proposal(result, '43247').status, 'ready')
+        result = run(text, corti(('43247', span(text, 'The bolus was captured and brought out'))))
+        held = proposal(result, '43247')
+        self.assertEqual(held.status, 'needs_clarification')
+        self.assertEqual(flags(held), ['service.status'])
 
     def test_a_bolus_not_brought_out_or_pushed_is_not(self):
         for tail in ('The bolus could not be brought out.', 'The bolus was not brought out.',
@@ -243,7 +277,13 @@ class BolusRemovalTests(SimpleTestCase):
                      'The bolus was regurgitated and brought out through the mouth.',
                      'The bolus was seemingly brought out through the mouth.',
                      'The bolus was to be brought out through the mouth, but it fragmented and passed into the stomach.',
-                     'The bolus was grasped and brought out through the mouth by the emergency physician.'):
+                     'The bolus was grasped and brought out through the mouth by the emergency physician.',
+                     # the fourth refutation: another named physician, "taken out", a bolus that fell back
+                     'The bolus was grasped and brought out through the mouth by Dr. Synthetic Surgeon of '
+                     'otolaryngology.',
+                     'The bolus was taken out through the mouth by the emergency physician.',
+                     'The bolus was captured and brought out through the mouth, but it slipped from the net in the '
+                     'hypopharynx and fell back into the esophagus.'):
             with self.subTest(tail):
                 self.assertNotIn(('foreign_body', 'performed'), self.acts(tail))
 

@@ -85,10 +85,9 @@ HARNESS_REPAIR_3_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7'
 # the bolus, placement and outcome, purpose time; the engine: equal eligibility, member answers, the dilation
 # technique), so each moves once more - routing to @9, past harness repair 3's dropped @8.
 # The walk round (2026-11-07): the readers that read differently from installed 6f306af1b030, as it records them; the
-# catalogue and the context are unchanged.
+# inventory is the installed module again (its two repairs were dropped under the two-cycle rule), and the catalogue
+# and the context are unchanged.
 WALK_ROUND_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@9',
-                               (gi_services, 'INVENTORY_VERSION'): 'gi-services@6',
-                               (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@6',
                                (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@9'}
 COMPLETION_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
                                (gi_services, 'INVENTORY_VERSION'): 'gi-services@5',
@@ -369,7 +368,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@10', 'gi-services@7', 'cpt-studio:gi-services@7', 'cpt-studio-validation@10'))
+                         ('gi-routing@10', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@10'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -420,8 +419,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@7')},
-                         {('gi-routing@10', 'gi-services@7', 'cpt-studio-validation@10')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@6')},
+                         {('gi-routing@10', 'gi-services@6', 'cpt-studio-validation@10')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

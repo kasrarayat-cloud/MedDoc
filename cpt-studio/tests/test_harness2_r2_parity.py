@@ -427,10 +427,11 @@ HARNESS_REPAIR_3_ROUND_4_SHA256 = '3ff6ec5e45479d45f396b81fda06ec70229f3a49ad270
 # installed fd8040d71e44's (completion_reader_labels) this head makes exactly the two above, and at its own labels these.
 COMPLETION_HEAD_SHA256 = '6a631b87128532ea8b3254e1d8f287428f22378e76ea7c9540692c77dc07e6a1'
 COMPLETION_ROUND_4_SHA256 = 'a850ca98983b71589a6cc1cea3343eeee3fa9e3daee9af540276c7144d6b41b1'
-# The walk round (2026-11-07) moved the routing, inventory and engine labels: with them put back to installed
-# 6f306af1b030's (walk_round_reader_labels) this head makes exactly the two above, and at its own labels these.
-WALK_ROUND_HEAD_SHA256 = '1eb4c2ae20726b6c877dada9c81c342d32daf7de0ceb51b01c5cc756c37e9a1a'
-WALK_ROUND_ROUND_4_SHA256 = '7c05d952dd720e6ecc745e6e6ba4f50d7ba6b0a23d5cbb763fa7d7f8362c893b'
+# The walk round (2026-11-07) moved the routing and engine labels (the inventory is installed's again: its two repairs
+# were dropped under the two-cycle rule): with them put back to installed 6f306af1b030's (walk_round_reader_labels)
+# this head makes exactly the two above, and at its own labels these.
+WALK_ROUND_HEAD_SHA256 = '0a979442f7e49a52cd6d365d5fb50279ee02f0dca0f41d9bb52d528ab78ef984'
+WALK_ROUND_ROUND_4_SHA256 = 'f2272ea57ad68313abf2ec498aaf309870845f85bb35133ead947b66311c8e5a'
 IMPORTED = ('cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d')
 SELECTIONS = (('45385', SNARE), ('45378', REACHED))
 # What a proposal row and a clarification row hold, compared field by field (every field but its ids and its row).

@@ -32,7 +32,7 @@ from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
-INVENTORY_SOURCE = 'cpt-studio:gi-services@7'  # the inventory's label (services.INVENTORY_VERSION)
+INVENTORY_SOURCE = 'cpt-studio:gi-services@6'  # the inventory's label (services.INVENTORY_VERSION)
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
 OWN_ROLES = ('physician', 'unknown')  # whose documentation of the procedure the reconciliation counts
 # A denial that states a failed attempt, never a mere denial ("was not attempted"): refutation round 2, esc-7 and the

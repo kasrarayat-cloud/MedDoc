@@ -1411,10 +1411,10 @@ HARNESS_REPAIR_3_SUPERSCRIPT_SHA256 = '9a638ec9cf208ceda0d9d1e85416d2616050f5556
 # HARNESS_REPAIR_3_SUPERSCRIPT_SHA256 exactly with the labels put back to installed fd8040d71e44's
 # (completion_reader_labels), and this at its own labels.
 COMPLETION_SUPERSCRIPT_SHA256 = '640751a967f3028231967f1c9f6f0f84401720fd0e132d1aa470848395a752c7'
-# The walk round (2026-11-07) moved the routing, inventory and engine labels: this head makes
+# The walk round (2026-11-07) moved the routing and engine labels (the inventory is installed's again): this head makes
 # COMPLETION_SUPERSCRIPT_SHA256 exactly with the labels put back to installed 6f306af1b030's (walk_round_reader_labels),
 # and this at its own labels.
-WALK_ROUND_SUPERSCRIPT_SHA256 = '4b32e51684a813acdb41be93c02ab0d38d620a5c75d0adf93910bd3a5f247aa9'
+WALK_ROUND_SUPERSCRIPT_SHA256 = '24b73f30172c7e2633cda893c70b9c2e107527fd00ad9a0e89f1b27a85e64a1b'
 
 
 def installed_reader_labels():
