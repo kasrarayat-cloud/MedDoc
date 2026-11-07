@@ -1541,11 +1541,15 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
                  if _overlaps(m.start, m.end, ts, max(te, ts + 1))]
         for m in named:
             label = _released_label_at(an, m.start, m.end)
-            if label is not None and not an.services_in(label[1], e) \
-                    and (_denies(an, label[1], e, True) or _calls_off(an, label[1], e)):
+            after_label = an.services_in(label[1], e) if label is not None else ()
+            if label is not None and ((not after_label and (_denies(an, label[1], e, True) or _calls_off(an, label[1], e)))
+                                      or (after_label and all(x.family == m.family for x in after_label)
+                                          and _reschedules(an, label[1], e))):
                 # refutation cycle 4 (structure 4): a released label's own sentence after it is what its heading twin
                 # reads as the sentence after the name, bare ("Colonoscopy: The colonoscope was introduced ..., and then
-                # the examination was not performed because ..."): read as that sentence is
+                # the examination was not performed because ..."): read as that sentence is - and, refutation cycle 5
+                # (structure 6), as the twin reads it, a sentence naming only the label's own family that reschedules it
+                # ("..., but the colonoscopy will be rescheduled because of poor preparation.") qualifies it too
                 an.memo[key] = f"{SILENT_SECTION_PREFIX} the text after it ('{an.text[label[1]:e].strip()}') qualifies it"
                 break
             end = _group_end(an, m, e)
@@ -6031,27 +6035,68 @@ def _a_sub_acts_failure_at(an: Analysis, clause_start: int, pos: int, name: str,
 # later failure, the first conjunct's and the examination's own to a sub-act. Bounded: one pass per sentence of at
 # most ATTEMPTED_THEN_FAILED_SENTENCE characters, each match at most a few hundred.
 ATTEMPTED_THEN_FAILED_SENTENCE = 2000
-_NO_COORDINATOR = r'(?:(?!\b(?:and|or|but|as|with)\b)[^,;:.()\n])'
-_ATTEMPTED_THEN_FAILED = re.compile(
-    r'(?P<attempt>' + _NO_COORDINATOR + r'{1,120}?\bof[ \t\n]+an?[ \t\n]+' + _NO_COORDINATOR + r'{1,120}?)'
-    r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+(?P<head>[a-z]+)[ \t\n]+'
-    r'(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed)'
-    r'(?:[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+' + _NO_COORDINATOR + r'{1,80}?)?'
-    r'(?=[ \t]*(?:[;.\n]|$))', re.A | re.I)
+ATTEMPT_CHARS = 240  # the attempt's own clause, at most (its subject and object)
+# Refutation cycle 5 (routing 1, 2): the form is read in fixed, unnested steps - the core "was attempted, but the X was
+# unsuccessful / failed" anchored by one regex, the attempt's clause read back to its own start, the end read forward -
+# so one sentence costs one pass (the cycle-4 regex nested lazy runs and backtracked for seconds on a long sentence); and
+# the form ends only at its sentence's full stop, or at a semicolon followed by "the polyp(s)/lesion(s) was/were left in
+# place" and the full stop - never at a line break or before a clause it does not know ("...\nas was the remainder of the
+# examination", "...; so was the remainder of the examination"), which keeps the installed reading.
+_ATTEMPT_CORE = re.compile(r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+'
+                           r'(?P<head>[a-z]+)[ \t\n]+(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed)', re.A | re.I)
+_ATTEMPT_OBJECT = re.compile(r'\bof[ \t\n]+an?[ \t\n]', re.A | re.I)
+_COORDINATOR = re.compile(r'\b(?:and|or|but|as|with)\b', re.A | re.I)
+_RELATIVE = re.compile(r'\b(?:that|which|who|where|when|while)\b', re.A | re.I)  # a reason's own clause: not read
+# the sentence after the form continuing it elliptically ("So was the remainder of the examination."): the form is not read
+_ELLIPSIS_AFTER = re.compile(r'[ \t\n]*(?:so|as|neither|nor|likewise)\b', re.A | re.I)
+_CLAUSE_START_MARK = re.compile(r'[,;:.()\n]')
+_REASON = re.compile(r'[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+([^,;:.()\n]{1,80})', re.A | re.I)
+_LEFT_IN_PLACE = re.compile(r';[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in[ \t\n]+'
+                            r'place[ \t]*\.', re.A | re.I)
 
 
 def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
-    """The span of the closed attempt-then-failure form (_ATTEMPTED_THEN_FAILED) whose failure predicate holds ``pos``,
-    its failure's head named in its attempt ("the polypectomy" after "Hot snare polypectomy of a ..."), or None. One
-    pass per sentence, memoised."""
+    """The span of the closed attempt-then-failure form whose failure predicate holds ``pos``, or None: an attempt that
+    introduces its own object ("Hot snare polypectomy of a 14 mm pedunculated polyp in the sigmoid colon"), naming the
+    failure's head and no coordinator, then "was attempted, but the <head> was unsuccessful" (or "... failed"), at most a
+    reason ("because of ...", "due to ..."), and then the sentence's full stop - or "; the polyp was left in place." and
+    the full stop. One pass per sentence of at most ATTEMPTED_THEN_FAILED_SENTENCE characters, memoised."""
     s, e = an.lay.sentence_for(pos, pos + 1)
     key = ('attempted-then-failed', s, e)
     if key not in an.memo:
         forms = []
+        text = an.text
         if e - s <= ATTEMPTED_THEN_FAILED_SENTENCE:
-            for m in _ATTEMPTED_THEN_FAILED.finditer(an.text, s, e):
-                if re.search(r'\b' + re.escape(m.group('head')) + r'\b', m.group('attempt'), re.A | re.I):
-                    forms.append((m.start('failed'), m.end('failed'), m.start(), m.end()))
+            for core in _ATTEMPT_CORE.finditer(text, s, e):
+                lo = max(s, core.start() - ATTEMPT_CHARS)
+                marks = list(_CLAUSE_START_MARK.finditer(text, lo, core.start()))
+                begin = marks[-1].end() if marks else lo
+                if not marks and lo > s:
+                    continue  # the attempt's clause runs past ATTEMPT_CHARS: not read
+                attempt = text[begin:core.start()]
+                head = core.group('head')
+                if not _ATTEMPT_OBJECT.search(attempt) or _COORDINATOR.search(attempt) \
+                        or not re.search(r'\b' + re.escape(head) + r'\b', attempt, re.A | re.I):
+                    continue
+                tail = core.end()
+                reason = _REASON.match(text, tail, e)
+                if reason is not None and not _COORDINATOR.search(reason.group(1)) \
+                        and not _RELATIVE.search(reason.group(1)):
+                    tail = reason.end()  # "because of poor positioning" - never "... a perforation that ended the procedure"
+                rest = text[tail:e]
+                stripped = rest.strip(' \t')
+                left = _LEFT_IN_PLACE.match(text, tail, e)
+                if stripped.startswith('.') and not text[tail:e].split('.', 1)[1].strip():
+                    end_at = tail + rest.index('.') + 1
+                elif not stripped:
+                    end_at = tail
+                elif left is not None and not text[left.end():e].strip():
+                    end_at = left.end()
+                else:
+                    continue
+                if _ELLIPSIS_AFTER.match(text, e):
+                    continue
+                forms.append((core.start('failed'), core.end('failed'), begin, end_at))
         an.memo[key] = forms
     for fs, fe, ms, me in an.memo[key]:
         if fs <= pos < fe:
@@ -6256,10 +6301,16 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                         # cycle 4 (cost 2): it still says the examination took place - the installed release read it
                         # 'incomplete', performed but cut short - so it stays the family's mention, performed by its
                         # section as an instrument course is (never an explicit cue: a contradiction elsewhere still
-                        # holds, and an incompleteness elsewhere still pushes its own cue)
-                        found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = Reading(
-                            'performed', (f'{SUB_ACT_FAILED_IN_IT}: {m.group(0)}',), 'section')
-                        continue
+                        # holds, and an incompleteness elsewhere still pushes its own cue). Refutation cycle 5 (routing
+                        # 3): and only past the gates an instrument course passes that can speak of it (I8: a name of the
+                        # family read otherwise; I12: the heading twin qualified, by a status line such as "Procedure
+                        # completed: No") - else the failure keeps the installed reading, the examination's. I11 (a
+                        # procedure line's doubted act) is not asked: the form's own attempt is that act by construction
+                        consumed = Mention(family, m.start(), m.end(), 'reference', m.group(0))
+                        if not (_named_otherwise(an, family)
+                                or _heading_twin_qualified(an, consumed, frozenset((family,)))):
+                            found[consumed] = Reading('performed', (f'{SUB_ACT_FAILED_IN_IT}: {m.group(0)}',), 'section')
+                            continue
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
                     negated = _negated_status(an, m.start())
                     if negated is not None:
@@ -9039,6 +9090,8 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
     for m in candidates:
         in_section.setdefault(an.lay.section_at(m.start).start, set()).add(m.family)
     named_sections: dict[int, bool] = {}
+    if candidates and _a_named_positive_section(an):
+        return []  # refutation cycle 5 (structure 2): the report names its examination on a heading of its own
     for m in candidates:
         if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
             continue
@@ -9069,20 +9122,22 @@ def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mentio
 
 
 _FINITE_VERB = re.compile(r'\b(?:was|were|is|are|been|had|has|have)\b', re.A | re.I)
-# Where a heading's name ends: the first mark of a clause or an aside, or the line's end (refutation cycle 4)
-_NAME_END = re.compile(r'[.;,:()\[\]\n]|[ \t][-\u2013\u2014][ \t]')
+# Where a segment of a heading's name's place ends (refutation cycles 4 and 5): a mark of a clause, an aside or a list
+_NAME_SEGMENT_END = re.compile(r'[.;,:()\[\]/]')
+NAME_LEAD_WORDS = 3  # at most this many words before the service name in its segment ("Screening", "1 -", "Diagnostic")
 
 
 def _heading_line_names_a_service(an: Analysis, section) -> bool:
-    """Whether ``section`` names a service as a heading names it: the words in its name's place - after its label, up to
-    the first mark of a clause or an aside or the line's end, or, where nothing follows the label on its line, the first
-    such words of the next line that holds any - are a service name with no finite verb ("Procedure: Upper endoscopy",
-    "UPPER ENDOSCOPY:", "Procedure:" over "Upper endoscopy", "Procedure: Upper endoscopy. The gastroscope was ...",
-    "Procedure: EGD; the patient was sedated ..."). A narrative clause in that place that mentions a service in passing
-    ("Procedure: The colonoscope was advanced to the cecum. This was done on the same day as her upper endoscopy.")
-    names no family (refutation cycle 3). Refutation cycle 4 (structure 1 and 3): cycle 3 read the heading's whole first
-    line, so a name on the line under a bare "Procedure:", or a name followed on its own line by the narrative (any
-    "was"), left the section to the instrument rule."""
+    """Whether ``section`` names a service as a heading names it: its label is a service name ("UPPER ENDOSCOPY:"), or
+    a segment of its name's place - the rest of the label's line, or, where nothing follows the label on its line, the
+    next line that holds words - begins with a service name: before it, in its segment (cut at a mark of a clause, an
+    aside or a list: . ; , : ( ) [ ] /), at most NAME_LEAD_WORDS words and no finite verb ("Procedure: Upper endoscopy",
+    "Procedure:" over "Upper endoscopy", "Procedure: 1. Upper endoscopy", "Procedure: [EGD]", "Procedure: Diagnostic,
+    upper endoscopy", "Procedure: Upper endoscopy was performed under monitored anesthesia care.", "Procedure: Upper
+    endoscopy -- the patient was sedated ..."). A narrative that mentions a service in passing ("Procedure: The
+    colonoscope was advanced to the cecum. This was done on the same day as her upper endoscopy.") names no family
+    (refutation cycle 3). Refutation cycle 4 read the name's place to its first mark, and cycle 5 (structure 1, 4) found
+    a list number or a qualifier before the name ending it there, and a name that is the line's subject left out."""
     text = an.text
     heading = section.heading
     if heading is not None and an.services_in(heading.start, heading.end) \
@@ -9094,9 +9149,32 @@ def _heading_line_names_a_service(an: Analysis, section) -> bool:
     if start < section.end and text[start] == '\n':  # nothing after the label: the name is the next line that holds words
         while start < section.end and text[start] in ' \t\n':
             start += 1
-    found = _NAME_END.search(text, start, section.end)
-    end = found.start() if found is not None else section.end
-    return bool(an.services_in(start, end)) and not _FINITE_VERB.search(text, start, end)
+    line_end = text.find('\n', start, section.end)
+    line_end = section.end if line_end < 0 else line_end
+    seg = start
+    while seg < line_end:
+        mark = _NAME_SEGMENT_END.search(text, seg, line_end)
+        seg_end = mark.start() if mark is not None else line_end
+        named = an.services_in(seg, seg_end)
+        if named:
+            lead = text[seg:named[0].start]
+            if len(lead.split()) <= NAME_LEAD_WORDS and not _FINITE_VERB.search(lead):
+                return True
+        seg = seg_end + 1
+    return False
+
+
+def _a_named_positive_section(an: Analysis) -> bool:
+    """Whether a headed section of a procedure, findings or technique kind names a service as a heading names it
+    (_heading_line_names_a_service): then the report names its examination, and the instrument rule reads no narrative
+    of it (refutation cycle 5, structure 2: "Procedure: Upper endoscopy" over "Description of procedure: The gastroscope
+    was advanced ... The colonoscope was then introduced. A 6 mm sessile polyp was removed ..."). Read once per
+    document."""
+    key = ('named-positive-section',)
+    if key not in an.memo:
+        an.memo[key] = any(section.heading is not None and section.kind in gi_sections.POSITIVE_KINDS
+                           and _heading_line_names_a_service(an, section) for section in an.lay.sections)
+    return an.memo[key]
 
 
 def _another_familys_date(an: Analysis, d, family: str) -> bool:

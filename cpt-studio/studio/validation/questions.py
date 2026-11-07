@@ -259,6 +259,15 @@ def group(pairs: Iterable[tuple[tuple[str, str, str], dict]]) -> dict:
     return {key: fingerprint(items) for key, items in by.items()}
 
 
+# The facts whose question the review overlay words anew with each review decision while the member's row stays the same
+# (refutation cycle 5, answers 1): base_included's hidden reason names the codes that hold the base code ("Is 45378 reported
+# separately from 45380, 45385 ...?" becomes "... from 45385 ..." when 45380 is rejected), and separate_em's reason names
+# the reinstated procedures - the row the member answered shows the fixed prompt and the same passages either way. An
+# answer to one is bound by its (code, family, fact) key, as the installed release bound every answer; a fingerprint bound
+# it to wording the member never saw, and a rejection or a reinstatement withdrew it silently as "asked differently".
+KEY_BOUND_FACTS = ('base_included', 'separate_em')
+
+
 def bind(answers, asked: Mapping[tuple[str, str, str], str]) -> tuple[list, list]:
     """(bound, earlier): each standing answer (mappings or objects with code, family, fact, value and question) bound to
     the question it answered - a question ``asked`` asks ({member key: fingerprint}) with its own fingerprint, or, for
@@ -266,13 +275,16 @@ def bind(answers, asked: Mapping[tuple[str, str, str], str]) -> tuple[list, list
     any question ``asked`` asks with its (code, family, fact), as the installed release bound it (refutation cycle 2,
     answers W2 and W4) - else earlier, as (answer, why): ASKED_DIFFERENTLY where a fingerprinted answer's key is asked
     with another fingerprint, NO_LONGER_ASKED where its key is not asked at all. An answer whose value is not one a
-    question takes binds to nothing and is left out."""
+    question takes binds to nothing and is left out. An answer to a KEY_BOUND_FACTS question binds by its key whatever
+    fingerprint it carries (refutation cycle 5)."""
     bound, earlier = [], []
     for answer in answers or ():
         if _field(answer, 'value') not in UNAVAILABLE:
             continue
         key = member_key(_field(answer, 'code'), _field(answer, 'family'), _field(answer, 'fact'))
         given, now = str(_field(answer, 'question') or ''), asked.get(key, '')
+        if _field(answer, 'fact') in KEY_BOUND_FACTS:
+            given = ''
         if not now:
             earlier.append((answer, NO_LONGER_ASKED))
         elif not given or given == now:

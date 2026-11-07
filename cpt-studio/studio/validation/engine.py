@@ -5348,9 +5348,8 @@ class _MemberAnswers:
     def engine_reads(answer) -> bool:
         """Whether this reader reads ``answer`` (refutation cycle 4): a code's answer carrying its question's fingerprint,
         to a question no review decision can open or close; every other answer is the review overlay's (OVERLAY_READ)."""
-        from studio.validation import review_view  # local import: review_view imports this module
         return bool(answer.code and answer.question) \
-            and answer.fact not in (review_view.BASE_FACT, review_view.SEPARATE_EM_FACT, COMPETING_FACT)
+            and answer.fact not in questions.KEY_BOUND_FACTS + (COMPETING_FACT,)
 
     def _excluded(self, p: ProposalAssessment, view, answer_of: Mapping) -> ProposalAssessment:
         """``p`` excluded by the member's answer that left the detail its view names unavailable: its answered questions

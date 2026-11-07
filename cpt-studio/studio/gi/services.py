@@ -1728,13 +1728,15 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     part (a nursing, anesthesia, pathology or radiology entry) keeps its own reading, and every part outside the
     paragraphs is unchanged. Linear in the parts and the paragraphs (bisection).
 
-    Refutation cycle 4 (structure 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): a paragraph is its
-    label's part only up to the first of its sentences after its first that names an instrument as a scope (_SCOPE_WORD:
-    "The colonoscope was withdrawn.", "The upper scope was then passed ...", "the pediatric scope") and takes it to no
-    site, or to a site outside the label's own tract (structure._family_regions) - where a narrative can change
-    examinations ("... and the scope was advanced to the second portion of the duodenum" in an upper endoscopy's
-    paragraph changes nothing). From there on its lines read as they did before the release (the paragraph's heading
-    twin binds no site-less act there either), so a site-less snare or biopsy after the switch is never the label's."""
+    Refutation cycle 4 (structure 2; HARNESS.md "Refutation of the integrated diff, cycle 4") and cycle 5 (structure 3,
+    5): a paragraph binds its acts to its label only up to the first of its sentences after its first that names an
+    instrument as a scope (_SCOPE_WORD: "The colonoscope was withdrawn.", "The upper scope was then passed ...", "the
+    pediatric scope", "the scope was advanced to the second portion of the duodenum") - where a narrative can change
+    examinations - and not at all where its first sentence names two scopes. From there on the paragraph is still
+    today's report, as its heading twin's narrative is, but it binds no single family (a combined report part): an act
+    that names its own site binds by it, and a site-less snare or biopsy after a switch is never the label's. Cycle 4 had
+    returned those lines to the Indications the paragraph stood in, which dropped sited acts of the retained shapes on one
+    ordinary sentence ("The colonoscope was withdrawn slowly."), and had let a switch naming an own-tract site through."""
     from studio.gi import structure as gi_structure
     original = _ORIGINAL.get()
     source = original if isinstance(original, str) and len(original) == len(text) else text
@@ -1751,15 +1753,14 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     for p in paragraphs:
         end = p.end
         j = bisect.bisect_right(sentence_starts, p.start)  # the sentence after the one the paragraph opens with
-        own = gi_structure._family_regions(p.family)
-        while j < len(frozen.sentences) and frozen.sentences[j][0] < p.end:
+        first_end = min(frozen.sentences[j - 1][1], p.end) if j > 0 else p.end
+        if len(_SCOPE_WORD.findall(source, p.start, first_end)) >= 2:
+            end = p.start  # a switch inside the first sentence ("... and then withdrawn, and the upper scope was passed.")
+        while end == p.end and j < len(frozen.sentences) and frozen.sentences[j][0] < p.end:
             a, b = frozen.sentences[j]
-            b = min(b, p.end)
-            if _SCOPE_WORD.search(source, a, b):
-                regions = {region for _, region, _, _ in _anatomy_in(source, a, b)}
-                if not (regions and regions <= own):  # a scope taken anywhere but the label's own tract, or nowhere
-                    end = a
-                    break
+            if _SCOPE_WORD.search(source, a, min(b, p.end)):
+                end = a
+                break
             j += 1
         bound[p.start] = end
     cuts = sorted({b for p in paragraphs for b in (p.start, p.end, bound[p.start])} | {b for span in held for b in span})
@@ -1772,10 +1773,18 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
             if b <= a:
                 continue
             k = bisect.bisect_right(starts, a) - 1
-            para = paragraphs[k] if k >= 0 and paragraphs[k].start <= a < bound[paragraphs[k].start] else None
+            inside = k >= 0 and paragraphs[k].start <= a < paragraphs[k].end
+            para = paragraphs[k] if inside and a < bound[paragraphs[k].start] else None
             h = bisect.bisect_right(held_starts, a) - 1
             in_held = h >= 0 and held[h][0] <= a < held[h][1]
-            if para is None and in_held and part.role == 'physician' and part.kind in ('other', 'report'):
+            if inside and para is None and part.role == 'physician' and part.kind != 'role':
+                # past the label's binding (refutation cycle 5): today's report, binding no single family
+                if out and out[-1].role == 'physician' and out[-1].kind == 'report' and out[-1].combined \
+                        and not out[-1].family and out[-1].end == a and out[-1].start >= paragraphs[k].start:
+                    out[-1] = replace(out[-1], end=b)
+                else:
+                    out.append(_Part(a, b, '', 'physician', None, 'report', True, '', ''))
+            elif para is None and in_held and part.role == 'physician' and part.kind in ('other', 'report'):
                 out.append(replace(part, start=a, end=b, kind='indication',
                                    title=part.title if a == part.start else None))
             elif para is None or part.role != 'physician' or part.kind == 'role':

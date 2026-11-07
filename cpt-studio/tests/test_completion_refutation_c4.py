@@ -9,7 +9,6 @@ documents only; nothing is sent."""
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -144,9 +143,15 @@ class FailureWordTests(SimpleTestCase):
 class SubActFailureFormTests(SimpleTestCase):
     """outcome 2-4, cost 1: a failure is a sub-act's own only in the closed attempt form."""
 
+    COLON = ('Colonoscopy Report\nDate of service: 2026-10-14\nEndoscopist: Test Endoscopist, MD\nIndication: Chronic '
+             'diarrhea.\nProcedure: Colonoscopy. The colonoscope was advanced to the cecum. A 6 mm polyp in the ascending '
+             'colon was removed with a cold snare and retrieved. ')
+
     def form(self, sentence: str) -> bool:
-        return any(re.search(r'\b' + re.escape(m.group('head')) + r'\b', m.group('attempt'), re.I)
-                   for m in detect._ATTEMPTED_THEN_FAILED.finditer(sentence))
+        """Whether routing reads the sentence's failure as a sub-act's own (the closed form): the colonoscopy stays
+        performed, where any other failure is the examination's (incomplete, the installed reading)."""
+        from tests.test_harness_engine import DAY
+        return detect.route(self.COLON + sentence + '\n', DAY).finding('gi.colonoscopy').status == 'performed'
 
     def test_the_u3_shapes_are_the_form(self):
         for sentence in (
@@ -160,7 +165,17 @@ class SubActFailureFormTests(SimpleTestCase):
                 self.assertTrue(self.form(sentence))
 
     def test_nothing_else_is(self):
+        # refutation cycle 5 (routing 2): a line break, a semicolon's unknown clause, a reason with its own clause, or an
+        # elliptical next sentence ends no form
         for sentence in (
+                'Hot snare polypectomy of a 14 mm polyp was attempted, but the polypectomy was unsuccessful\nas was the '
+                'remainder of the examination because of desaturation.',
+                'Hot snare polypectomy of a 14 mm polyp was attempted, but the polypectomy was unsuccessful; so was the '
+                'remainder of the examination.',
+                'Hot snare polypectomy of a 14 mm polyp was attempted, but the polypectomy was unsuccessful because of a '
+                'perforation that ended the procedure.',
+                'Hot snare polypectomy of a 14 mm polyp was attempted, but the polypectomy was unsuccessful. So was the '
+                'remainder of the examination.',
                 'The cold snare polypectomy of this polyp was aborted because of bleeding.',
                 'Hot snare polypectomy and the cold forceps biopsy were unsuccessful because of poor positioning.',
                 'Polypectomy of the 8 mm sigmoid polyp was aborted because of desaturation, as was the remainder of the '

@@ -166,3 +166,27 @@ class StaleCheckTests(_Case):
         snare = a.proposals.get(code='45385')
         self.assertEqual(views[snare.key].status, 'ready')
         self.assertEqual(list(views[snare.key].stale), ['pfs.endoscopic_base'])
+
+
+class KeyBoundBaseAnswerTests(_Case):
+    """The differential round over cycle 4 (answers 1): a base_included or separate_em answer binds by its key, as the
+    installed release bound every answer. A review decision that rewords the base code's hidden reason (rejecting the
+    biopsy code leaves only the snare holding 45378) never withdraws the answer as "asked differently" beside the same
+    visible row, and a re-answer supersedes the earlier one (one standing answer)."""
+    selections = [('45378', ADVANCED), ('45380', 'Cold forceps biopsies were obtained from the ascending colon.'),
+                  ('45385', SNARE)]
+    THREE = (HEAD + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\n'
+             'Cold forceps biopsies were obtained from the ascending colon.\n' + SNARE + '\n')
+
+    def test_a_rejection_that_rewords_the_hidden_reason_keeps_the_answer(self):
+        encounter_id = self.upload(self.THREE)
+        self.answer(encounter_id, 'base_included', '45378', 'not_documented')
+        self.assertEqual(self.codes(encounter_id)['45378'][0], 'excluded')
+        self.decide(encounter_id, '45380', 'reject')
+        doc = self.doc(encounter_id)
+        self.assertEqual(self.codes(encounter_id)['45378'][0], 'excluded')
+        self.assertEqual(doc['earlier_answers'], [])
+        self.assertEqual(doc['state'], 'ready')
+        self.answer(encounter_id, 'base_included', '45378', 'cannot_confirm')  # a re-answer supersedes the first
+        standing = models.MemberAnswer.objects.filter(encounter_id=encounter_id, code='45378', revocation__isnull=True)
+        self.assertEqual([a.value for a in standing], ['cannot_confirm'])

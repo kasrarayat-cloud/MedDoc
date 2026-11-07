@@ -3884,3 +3884,32 @@ release reads every act's clause-local time).
   browser verifier 135, frontend 65 and operator 135 pass; check and makemigrations are clean. The install predictions on
   it equal cycle 3's (retained 4/4/2/6 READY, nothing sent, RECOMPUTE_STATES unchanged, e888f9ce's two decisions
   invalidated, the planted control caught), and the c1 set's offline reading still matches its manifest.
+
+### The differential round over cycle 4's repair (2026-11-07): three lenses, and what it closed
+
+**The pass.** Workflow `wf_f8f66730-784`: three lenses (routing, structure, answers) at `e273dc5a`, each asked only
+whether the new head is worse than the installed base or the previous head `52a5f774` in a must-fix class, and only
+through the code cycle 4 changed. They returned 10 findings (structure 6, routing 3, answers 1); every one was reproduced
+on the three trees before any change (`verify/refute5/`: the structure lens's 40 inputs and twins, the routing lens's 617
+inputs, the answers lens's ten scenarios). Five came from cycle 4's own new code (structure 1 and 5, routing 1 and 2,
+answers 1); the rest were gaps cycles 3 and 4 had not closed.
+
+**The repair** (every change toward the installed base or its twin):
+
+| finding | repair |
+|---|---|
+| structure 1, 4: a list number, bracket or qualifier before the name ("Procedure: 1. Upper endoscopy", "[EGD]", "Diagnostic, upper endoscopy") ended the name's place; a name that is the line's subject ("Upper endoscopy was performed ...") was exempt | the name's place is cut into segments at a clause, aside or list mark, and a segment that begins with a service name - at most three words, no finite verb, before it - names the section (`detect._heading_line_names_a_service`) |
+| structure 2: the narrative under a sub-heading ("Description of procedure:", "Technique:", "Findings:") of a report that names its examination on its procedure line | the instrument rule reads no narrative of a report whose procedure, findings or technique heading names a family (`detect._a_named_positive_section`) |
+| structure 3, 5: a labelled paragraph's switch naming an own-tract site, or in its first sentence; an ordinary "The colonoscope was withdrawn slowly." returning the rest of a paragraph to the Indications it stood in | the label binds its acts only until the first later sentence naming a scope, and not at all where the first sentence names two; past that point the paragraph is today's report binding no single family (a combined report part), so a sited act binds by its site and a site-less one is the twin's |
+| structure 6: a label sentence that reschedules its own family | read as the twin reads its first sentence (`_reschedules`, the label's family only) |
+| routing 1: the closed form's regex backtracked for seconds on one 2,000-character sentence | read in fixed, unnested steps: the core anchored, the attempt's clause read back to its start, the end read forward (200 KB in 2.7 s; it was 64 s) |
+| routing 2: a line break or a semicolon's unknown clause ended the form ("...was unsuccessful\nas was the remainder of the examination") | the form ends only at its sentence's full stop, or at "; the polyp was left in place."; a reason with its own clause ("... a perforation that ended the procedure") and an elliptical next sentence ("So was the remainder of the examination.") end none |
+| routing 3: the consumed failure's performed mention skipped the gates an instrument course passes | it stands only where no name of the family reads otherwise (I8) and the heading twin is not qualified (I12: "Procedure completed: No"); else the installed reading |
+| answers 1: a fingerprinted base_included answer, moved to the overlay in cycle 4, was dropped as "asked differently" when a decision reworded the hidden reason | an answer to base_included or separate_em binds by its key in every reader, as the installed release bound every answer (`questions.KEY_BOUND_FACTS`) - the member's row never changes with a decision |
+
+**Measured on the repair:** every input of the three lenses reads as the installed base or its twin (the routing lens's
+remaining READYs over the base are its twins' or cycle 3's measured releases; its remaining dropped flags are U3's, or a
+statement no tree reads without the failed attempt); every answers scenario step equals the base's but one recorded
+"no longer asked" listing that the previous head shares; the corpus moves nothing (FALSE READY 35, 0 new); the retained
+cases are byte-identical to cycle 3's; the structure repairs move none of the 1,673 earlier lens inputs. The final scan
+and the full suite are recorded below.
