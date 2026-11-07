@@ -40,7 +40,8 @@ class DetailsRowAddendumTests(WireCase):
         self.assertTrue(row['addendum_allowed'])
         response = addendum(self.client_for(s.reviewer), s.encounter, BASE_ROW)
         self.assertEqual(response.status_code, 201, response.content)
-        revision = models.SourceRevision.objects.get(pk=response.json()['revision_id'])
+        self.assertEqual(set(response.json()), {'revision'})  # the walk round, finding 7: no internal id
+        revision = models.SourceRevision.objects.get(encounter=s.encounter, number=response.json()['revision'])
         stored.refresh_from_db()
         self.assertEqual((revision.kind, revision.answers_clarification_id, stored.state,
                           stored.answered_by_revision_id),
@@ -57,7 +58,8 @@ class DetailsRowAddendumTests(WireCase):
         self.assertTrue(row['addendum_allowed'])
         response = addendum(self.client_for(s.reviewer), s.encounter, BASE_ROW)
         self.assertEqual(response.status_code, 201, response.content)
-        revision = models.SourceRevision.objects.get(pk=response.json()['revision_id'])
+        self.assertEqual(set(response.json()), {'revision'})  # the walk round, finding 7: no internal id
+        revision = models.SourceRevision.objects.get(encounter=s.encounter, number=response.json()['revision'])
         self.assertIsNone(revision.answers_clarification_id)
         self.assertEqual(s.encounter.current_assessment.clarifications.filter(
             state=models.Clarification.ANSWERED).count(), 0)

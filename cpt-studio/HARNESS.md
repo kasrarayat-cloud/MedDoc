@@ -3948,7 +3948,9 @@ the installed base and the cycle-3 head.
 - freeze holds; the battery has 6 movements, all declared, and no new violation; the replay differs by its version labels
   alone.
 - The predictions (a fresh read-only dump restored into throwaway databases) are identical to cycles 3 and 4 apart from
-  the code fingerprint in the reassess keys:
+  the reassess keys' `:c:` part (corrected 2026-11-07: this line first called it a code fingerprint; it is
+  sha256(tag)[:12], the release tag the reassessment is made for - jobs.reassess_retained - so it differs whenever the
+  revision does; the merge commit `6f306af1`'s predictions equal these in every reading and count):
   - retained 4/4/2/6 READY, and e888f9ce's two decisions invalidated;
   - nothing sent;
   - RECOMPUTE_STATES unchanged on the head, the installed revision and the rollback read;
