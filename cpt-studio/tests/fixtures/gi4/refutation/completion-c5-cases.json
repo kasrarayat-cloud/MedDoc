@@ -1,5 +1,5 @@
 {
- "about": "The differential round over refutation cycle 4 (2026-11-07; HARNESS.md \"The differential round over cycle 4's repair\"): the structure lens's inputs and heading twins, and the routing lens's status-line, line-break, semicolon, reason and ellipsis inputs, each read on the installed base b452c6c4 (base), the cycle-3 head 52a5f774 (cycle3), the cycle-4 head e273dc5a (cycle4) and this repair (head): per code its bucket label and the flags among service.incomplete and routing.family; twin names the input's heading twin where the case set has one. Synthetic documents only.",
+ "about": "The differential round over refutation cycle 4 (2026-11-07; HARNESS.md \"The differential round over cycle 4's repair\"): the structure lens's inputs and heading twins, and the routing lens's status-line, line-break, semicolon, reason and ellipsis inputs, its U3 group (a today's failed removal or dilation in a named, unnamed or \"scope\" section; twin: the named variant) and its cancellation group (the closed form beside a cancelled, declined, pending or hedged examination in an unnamed section; twin: the same text under \"Procedure: Colonoscopy\", measured here), each read on the installed base b452c6c4 (base), the cycle-3 head 52a5f774 (cycle3), the cycle-4 head e273dc5a (cycle4) and this repair (head): per code its bucket label and the flags among service.incomplete and routing.family; twin names the input's heading twin where the case set has one. Synthetic documents only.",
  "cases": [
   {
    "label": "c5s|F1 main",
@@ -6246,6 +6246,3238 @@
    "finding": true
   },
   {
+   "label": "c5r|c2:b named 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b named 45385 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "the polypectomy was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b named 45385 att",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b named astra 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b named 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b unnamed 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b unnamed 45385 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "the polypectomy was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 failq",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b unnamed 45385 att",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 att",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b unnamed astra 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named astra 45385 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b unnamed 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The colonoscope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b scope 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b scope 45385 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "the polypectomy was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 failq",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b scope 45385 att",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45385 att",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b scope astra 45385 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "HELD",
+     []
+    ],
+    "45385": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named astra 45385 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:b scope 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The appendiceal orifice was identified."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c2:b named 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e named 43249 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e named 43249 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43249",
+     "the dilation was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e named 43235",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e named astra 43249",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: EGD\nThe gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "43235": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e unnamed 43249 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43249 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e unnamed 43249 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43249",
+     "the dilation was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43249 failq",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e unnamed 43235",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43235",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e unnamed astra 43249",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The gastroscope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "43235": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named astra 43249",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e scope 43249 whole",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\nPlan: Repeat upper endoscopy with dilation in 4 weeks.\n",
+   "picks": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43249 whole",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e scope 43249 failq",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\nPlan: Repeat upper endoscopy with dilation in 4 weeks.\n",
+   "picks": [
+    [
+     "43249",
+     "the dilation was unsuccessful"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43249 failq",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e scope 43235",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\nPlan: Repeat upper endoscopy with dilation in 4 weeks.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named 43235",
+   "finding": false
+  },
+  {
+   "label": "c5r|c2:e scope astra 43249",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the second portion of the duodenum. Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning.\nPlan: Repeat upper endoscopy with dilation in 4 weeks.\n",
+   "picks": [
+    [
+     "43235",
+     "advanced to the second portion of the duodenum"
+    ]
+   ],
+   "astra": [
+    [
+     "43249",
+     "Balloon dilation of a distal esophageal stricture was attempted, but the dilation was unsuccessful because of poor positioning"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "43235": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ],
+    "43249": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "43235": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ],
+    "43249": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "head": {
+    "43235": [
+     "HELD",
+     []
+    ],
+    "43249": [
+     "HELD",
+     []
+    ]
+   },
+   "twin": "c5r|c2:e named astra 43249",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope aborted 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope aborted 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope aborted 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst aborted 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst aborted 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst aborted 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope unclear 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope unclear 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope unclear 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst unclear 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst unclear 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst unclear 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope cancelled 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope cancelled 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope cancelled 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst cancelled 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst cancelled 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst cancelled 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope no colonoscopy 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope no colonoscopy 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope no colonoscopy 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst no colonoscopy 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst no colonoscopy 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst no colonoscopy 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope not performed 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope not performed 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope not performed 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst not performed 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst not performed 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst not performed 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope declined 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope declined 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope declined 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst declined 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst declined 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst declined 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope possible imp 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope possible imp 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope possible imp 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst possible imp 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst possible imp 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst possible imp 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope pending 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope pending 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope pending 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst pending 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst pending 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst pending 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope hedge proc 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope hedge proc 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope hedge proc 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst hedge proc 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst hedge proc 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst hedge proc 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope another time 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y scope another time 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope another time 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst another time 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst another time 45378",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y noinst another time 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": true
+  },
+  {
+   "label": "c5r|c6:y scope none 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c6:TW y scope none 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y scope none 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The scope was advanced to the cecum. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst none 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "HELD",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "c5r|c6:TW y noinst none 45378",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:y noinst none 45385",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: The cecum was reached. A 6 mm polyp in the descending colon was removed with a cold snare. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45385",
+     "A 6 mm polyp in the descending colon was removed with a cold snare."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45385": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "head": {
+    "45385": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
    "label": "c5r|c8:v first CF [completed no]",
    "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Procedure completed: No\nThe scope was advanced to the cecum. The appendiceal orifice was identified. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
    "picks": [
@@ -10148,6 +13380,848 @@
      []
     ]
    },
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope aborted 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst aborted 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The procedure was aborted after the polypectomy attempt.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope unclear 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst unclear 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. It is unclear whether the colonoscopy was completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope cancelled 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst cancelled 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope no colonoscopy 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst no colonoscopy 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. No colonoscopy was performed today.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope not performed 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst not performed 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was not performed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope declined 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst declined 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The patient declined the procedure.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope possible imp 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst possible imp 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nImpression: Possible incomplete colonoscopy.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope pending 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst pending 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy pending.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope hedge proc 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst hedge proc 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy possibly completed.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "HELD",
+     [
+      "routing.family"
+     ]
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope another time 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst another time 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. Colonoscopy was performed last week.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y scope none 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The scope was advanced to the cecum."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
+   "head": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "twin": "",
+   "finding": false
+  },
+  {
+   "label": "c5r|c6:TW y noinst none 45378",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe cecum was reached. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place.\nPlan: Repeat colonoscopy in 2 months for EMR.\n",
+   "picks": [
+    [
+     "45378",
+     "The cecum was reached."
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": [
+     "READY",
+     [
+      "service.incomplete"
+     ]
+    ]
+   },
+   "cycle3": {
+    "45378": [
+     "READY",
+     []
+    ]
+   },
+   "cycle4": null,
    "head": {
     "45378": [
      "READY",

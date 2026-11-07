@@ -3913,3 +3913,43 @@ statement no tree reads without the failed attempt); every answers scenario step
 "no longer asked" listing that the previous head shares; the corpus moves nothing (FALSE READY 35, 0 new); the retained
 cases are byte-identical to cycle 3's; the structure repairs move none of the 1,673 earlier lens inputs. The final scan
 and the full suite are recorded below.
+
+**The final scan** (`verify/refute5/`, `fin.*`): every case file the lenses of cycles 1 to 4 and of this round built,
+deduplicated (2,568 inputs; 195 carry a date the harness refuses on every tree alike), read on the repair (`443740630`),
+the installed base and the cycle-3 head.
+- **234 READYs the base does not read; none is open.**
+  - From the earlier cycles, 173: parity twins the base reads READY (34), and releases cycle 3 measured against the base's
+    twins (139), as in cycle 4's scan.
+  - From this round's inputs, 61, each bounded by its own twin on the base:
+    - 30 by their heading twins;
+    - the routing lens's U3 group, 4 (a failed removal or dilation in an unnamed or "scope" section), by its named variant;
+    - its cancellation group, 22 (the closed form beside "The colonoscopy was cancelled.", "Colonoscopy was not performed.",
+      a decline, a pending or hedged examination, in a section that does not name it), by its heading twins. The base
+      reads those READY with its incompleteness warning - this head's own reading of the input, the I8 gate giving the
+      closed form its installed reading. The base holds the unnamed form only through its base_included question on the
+      failed polypectomy, which U3 removes;
+    - the structure lens's 5 (H2's withdrawn-slowly and repositioned shapes) by theirs, one of them the recorded exception
+      (43247, the twin's own false hold).
+- **211 READYs over the cycle-3 head:** 161 are READY on the base, and the other 50 are among the twin-bounded ones above.
+- **109 base warnings dropped on READYs both trees read.**
+  - From the earlier cycles, 52: U3's e888f9ce shapes (49), the reach statement's recorded twin (1) and the purpose
+    release's marking statement (2).
+  - From this round, 57:
+    - 35 with the examination named, where the base reads the same text without the attempt READY with no warning;
+    - 16 in an unnamed section, each read as the base reads its heading twin without the attempt (or keeping the warning);
+    - 6 with the closed form in another occasion's section of an EGD report (the recorded residual).
+- The two routing groups are pinned with their twins (`completion-c5-cases.json`, now 309 inputs). Disabling the I8 gate
+  on the consumed failure fails 48 of them, 42 in the cancellation group; before the extension only 6 caught it.
+  The mutation was asserted applied, and the file was restored byte-identical (sha256).
+
+**The full suite on `443740630`** (frozen sandbox): 6,390 Django tests pass in three chunks (4 skipped); ops 524, verification 43, the browser verifier 135, frontend 65 and operator 135 pass; check and makemigrations are clean (2026-11-07T00:17:18Z to 00:34:04Z). The fixture extension above adds pins only, and its module was re-run on it (3 tests OK).
+
+**The gates and the install predictions on `443740630`:**
+- freeze holds; the battery has 6 movements, all declared, and no new violation; the replay differs by its version labels
+  alone.
+- The predictions (a fresh read-only dump restored into throwaway databases) are identical to cycles 3 and 4 apart from
+  the code fingerprint in the reassess keys:
+  - retained 4/4/2/6 READY, and e888f9ce's two decisions invalidated;
+  - nothing sent;
+  - RECOMPUTE_STATES unchanged on the head, the installed revision and the rollback read;
+  - the planted control caught.

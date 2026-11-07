@@ -3,8 +3,10 @@ repair"). Three lenses asked only whether the cycle-4 head was worse than the in
 must-fix class. Their engine-level inputs (tests/fixtures/gi4/refutation/completion-c5-cases.json: the structure lens's
 inputs and heading twins, the routing lens's line-break, semicolon, reason, ellipsis and status-line inputs) were read on
 the installed base (b452c6c4), the cycle-3 head (52a5f774) and the cycle-4 head (e273dc5a) before anything changed; the
-repair reads each as pinned, and never READY where the installed base holds the input and its twin. Synthetic documents
-only; nothing is sent."""
+repair reads each as pinned, and never READY where the installed base holds the input and its twin. The final scan added
+the routing lens's U3 group (twin: the named variant) and its cancellation group (the closed form beside a cancelled,
+declined, pending or hedged examination in an unnamed section; twin: the same text under "Procedure: Colonoscopy",
+measured on the three trees), which pin the consumed failure's I8 gate. Synthetic documents only; nothing is sent."""
 from __future__ import annotations
 
 import json

@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106`: the five builders and refutation cycles 1 to 4 integrated (cycle 4's repair and pins in this commit); not installed |
-| current stage | 7: refutation cycle 4 (23 findings over cycle 3's repair) answered - every refuted mechanism returned to the installed reading (the services reader's failure words; a sub-act's failure only in the closed attempt form; the observed-only exclusion abandoned) or its gap closed toward its twin (the instrument rule's named section; the labelled binding and its own sentence; a consumed failure kept as the family's mention; answers the overlay reads); then a differential scan in place of a fifth open cycle: 1,862 lens inputs of cycles 1-4, no READY that is neither a twin's nor cycle 3's measured release; corpus 0 new false READY (FALSE READY 35, FALSE HOLD 59); retained 4/4/2/6 READY, byte-identical to cycle 3; gates hold |
-| next action | the full suite in a frozen sandbox on this commit; the push (two-view), CI, the merge, the install declaration and the install; the walk of c1 and the blind c2 |
+| candidate | branch `fix/cpt-studio-completion-20261106`: the five builders, refutation cycles 1 to 4 and the differential round over cycle 4's repair integrated (code `443740630`; the final scan's record and pins in the next commit); not installed |
+| current stage | 8: the differential round over cycle 4's repair (`wf_f8f66730-784`: structure 6, routing 3, answers 1 findings) answered toward the installed reading or the twin's (`443740630`); the final scan over 2,568 lens inputs of cycles 1-5 finds nothing open (22 READYs bounded by twins measured by hand, now pinned); corpus 0 new false READY (FALSE READY 35, FALSE HOLD 59); retained 4/4/2/6 READY byte-identical to cycle 3; gates hold; install predictions identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean) |
+| next action | the push (two-view), CI on the final head, ready, the merge (scripts/merge-pr.sh), the install declaration landed first and the install; the walk of c1 and the blind c2 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -254,11 +254,11 @@ the progress log below.
 | | Item | Status | Kind | Revision | Evidence | Next |
 |---|---|---|---|---|---|---|
 | [x] | 1. Establish the exact remaining failures (C1) | PASS | VERIFIED OFFLINE | `fd8040d71e44` (branch `studio/` identical) | `docs/cpt-harness/completion-20261106/stage1-trace.md`; `tests/test_completion_corpus.py` | - |
-| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `cpt-studio/HARNESS.md` "Stages 2 to 5"; `docs/cpt-harness/completion-20261106/corpus-repin.md` | refutation over the integrated diff |
-| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `docs/cpt-harness/completion-20261106/table-repin.md` (no participant row reads differently from Corti's selection) | refutation |
-| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | corpus: no FALSE READY beyond the installed baseline; FALSE READY 57 to 39, FALSE HOLD 81 to 51 | refutation |
-| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `89fe6328f38d` | `tests/test_completion_answers.py` (the chain, the binding, D7 unchanged) | refutation; the walk |
-| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED OFFLINE | `89fe6328f38d` | the four retained cases recomputed in memory on a migrated throwaway copy (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY with no incompleteness; 88d9db32 its six READY); the gates (`tests/fixtures/gi4/declarations/completion-integration.json`) | re-run after any refutation repair (reopened if disproved) |
+| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `cpt-studio/HARNESS.md` "Stages 2 to 5"; `docs/cpt-harness/completion-20261106/corpus-repin.md` | install; the walk (C7) |
+| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `docs/cpt-harness/completion-20261106/table-repin.md` (no participant row reads differently from Corti's selection) | install; the walk (C7) |
+| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | corpus: no FALSE READY beyond the installed baseline; FALSE READY 57 to 35, FALSE HOLD 81 to 59 (39 and 51 at integration; cycles 2-4 re-pinned, the differential round moves none) | install; the walk (C7) |
+| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `tests/test_completion_answers.py` (the chain, the binding, D7 unchanged) | install; the walk (C7) |
+| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED OFFLINE | `443740630` (byte-identical since cycle 3) | the four retained cases recomputed in memory on a migrated throwaway copy (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY with no incompleteness; 88d9db32 its six READY); the gates (`tests/fixtures/gi4/declarations/completion-integration.json`) | re-run after any refutation repair (reopened if disproved) |
 | [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
 | [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
 | [ ] | 9. Close with evidence of the result (C9) | NOT RUN | - | - | - | last |
@@ -936,3 +936,23 @@ the progress log below.
   - Corpus re-pinned beside `completion-refutation-c4-corpus.json` (5 moved, ADM C3-2-1, to FALSE HOLD); retained 4/4/2/6
     READY byte-identical to 52a5f774; freeze holds, battery 6 declared movements, replay labels alone; the completion and
     h3 refutation suites (401 tests) pass.
+- **2026-11-07T00:34Z Completion repair: the differential round over cycle 4's repair, answered (offline only).**
+  - Workflow `wf_f8f66730-784`: three lenses at `e273dc5a` (routing 3, structure 6, answers 1 findings). Each was asked
+    only whether the new head is worse than the installed base or the previous head in a must-fix class. Every finding
+    was reproduced on the three trees first.
+  - Repair `443740630`, every change toward the installed reading or its twin:
+    - the instrument rule's name read in segments, and no instrument-named narrative under a named procedure, findings
+      or technique heading;
+    - the labelled binding cut at the first later scope sentence, with a combined report part past it;
+    - the closed form read in fixed steps (200 KB in 2.7 s; it was 64 s) and ended only at its full stop or "; the polyp
+      was left in place.";
+    - the consumed failure gated by I8 and I12;
+    - base_included and separate_em answers bound by key.
+  - The final scan (2,568 lens inputs of cycles 1-5, three trees): 234 READYs the base does not read, each bounded by a
+    twin the base reads READY or a release cycle 3 measured; none is open. 22 needed their twins measured by hand (the
+    routing lens's U3 and cancellation groups) and are now pinned with them (`completion-c5-cases.json`, 309 inputs).
+    The I8 mutation fails 48 pins; 6 caught it before.
+  - The corpus moves nothing (FALSE READY 35, 0 new; FALSE HOLD 59); the retained cases read 4/4/2/6 READY,
+    byte-identical; freeze holds, the battery has 6 declared movements, and the replay differs by the labels alone; the
+    install predictions are identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean).
+  - No provider request has been sent in this repair.
