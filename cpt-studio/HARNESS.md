@@ -4037,7 +4037,10 @@ approach:
   c2a 43248 and c2b 43247 held (findings 2 and 4), c2b 43239 READY with the incompleteness warning (finding 3).
 - Gates: the freeze holds; the battery has 6 declared movements and no new violation; the replay differs from the base
   by its version labels alone (gi-routing@10, gi-services@6, cpt-studio-validation@10).
-- Full suite: 6,418 Django tests (2,034 + 2,276 + 2,108), ops 524, verification 43, node 135/65/135.
+- Full suite: 6,417 Django tests, ops 524, verification 43, node 135/65/135 (the chunked local run reported 2,034 +
+  2,276 + 2,108 = 6,418 because tests.test_completion_answers imports one test class of test_h3_refutation_r1 and the two
+  modules fall in different chunks; CI on the PR head and on the merge commit ran 6,417 - corrected 2026-11-07 after the
+  merge).
 - Install predictions (install/predict_w.sh on 32003524, over a read-only dump of 2026-11-07T07:33:34Z): the four
   retained encounters read 4/4/2/6 READY with no open question; nothing is sent; the state recompute changes no
   encounter on this revision, on the installed one, after the reassessments or on the rollback read; the planted

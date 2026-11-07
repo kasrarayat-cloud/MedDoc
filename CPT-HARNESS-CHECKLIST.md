@@ -222,10 +222,10 @@ the progress log below.
 |---|---|
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
-| installed | `6f306af1b030` at https://cpt.quillmd.com since 2026-11-07 (app phase 02:14-02:17Z; declaration `docs/foundation/mutations/20261107-cpt-studio-completion-install.md`); rollback image `cpt-studio:fd8040d71e44` |
-| candidate | the walk round, branch `fix/cpt-studio-walk-round-20261107` (findings 1, 5, 6 and 7 of `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md` repaired; findings 2, 3 and 4 OPEN under the two-cycle rule, recorded as U15, U14 and U16); four refutation rounds; not yet merged or installed |
-| current stage | 9 again for the walk round: built, refuted four times (14, 8, 4 and 6 findings), the two-cycle rule applied to five mechanisms (the binding's exceptions, the device-tract binding, the out-words, the route-bound removal, the continuation reader); full suite and gates green; the install, the blind c3 walk and the c1/c2 regression walks to follow |
-| next action | push, PR and CI; merge; a prospective declaration (baseline, image precheck, predictions, citation) landed before the act; install through the ruled-mutation door; build c3's manifest from the sealed set once frozen; walk c3, then c1 and c2 as regression; record; then a changed approach for findings 2, 3 and 4 (U14-U16) - their requirements stay open |
+| installed | `73dcf8b4b40a` at https://cpt.quillmd.com since 2026-11-07 (app phase 10:13-10:16Z; declaration `docs/foundation/mutations/20261107-cpt-studio-walk-round-install.md`); rollback image `cpt-studio:6f306af1b030` |
+| candidate | none yet: the next round starts from `main` with a change of method (a development corpus by several blind authors, measured offline on every candidate rule) |
+| current stage | 9: installed and walked (`docs/deploy-reports/20261107-cpt-studio-73dcf8b4-install-and-walk.md`). The install matched its declaration and sent nothing; the retained cases read 4/4/2/6 READY live. The blind c3 walk failed 0 of 3 on holds only (U18-U20; Corti, Astra and Fable proposed the expected codes on all three); c1 1 of 3 (both failures the walk tool's timing). Findings 5, 6 and 7 verified live |
+| next action | the next round on U14-U20: a development corpus of fresh shapes by several blind authors, each candidate rule measured on it beside every prior lens input, refuted as before; the walk-tool fixes (the withdrawal wait, Stop on a fresh document, the code in a family-level details entry); then install and walk the sealed c4 (unread) |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -247,6 +247,10 @@ the progress log below.
 | U14 | walk finding 3: a coordinated reach after a relative aside ("advanced into the stomach, which was normal ..., and through the pylorus to the second portion of the duodenum") reads the first landmark's incomplete extent; codes stay READY with a false incompleteness warning | c2b; ACCURACY-RESIDUALS.md "The walk round"; two forms of a continuation reader refuted and dropped under the two-cycle rule | OPEN |
 | U15 | walk finding 2: in a report of both examinations a site-less dilation past the binding's cut ("the scope was withdrawn over the wire. Savary-Gilliard dilators ... were then passed over the wire") is held - 43248 needs clarification | c2a; ACCURACY-RESIDUALS.md "The walk round"; the binding's exceptions and the device-tract binding each refuted twice and dropped under the two-cycle rule | OPEN |
 | U16 | walk finding 4: a bolus "captured and brought out through the mouth" states no removal the reader reads - 43247 needs clarification | c2b; ACCURACY-RESIDUALS.md "The walk round"; the out-words as done participles and the route-bound removal each refuted twice and dropped under the two-cycle rule | OPEN |
+| U17 | a guide wire's brand name or a habitual statement read as a dilation done, inside a label's binding (43248 READY on 6f306af1 and 73dcf8b4) | the walk round's fourth lens (parity notes A1_ctl_inside, Aocc_usually_inside); ACCURACY-RESIDUALS.md | OPEN |
+| U18 | the labelled release refused on ordinary content (N1 "from both"; N3 a consent sentence; N2 a hard-wrapped "score 8:"; latent N1 signals) | c3a; ACCURACY-RESIDUALS.md | OPEN |
+| U19 | a reach stated by findings, not by a reach verb (a landmark list with its verb after it; an organ-by-organ findings list; a verbless depth sentence) | c3a, c3b, c3c; ACCURACY-RESIDUALS.md | OPEN |
+| U20 | numbered "PROCEDURE n - X" headings open no section (under HISTORY every act reads historical) | c3c; ACCURACY-RESIDUALS.md (the recorded gap a) | OPEN |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -999,3 +1003,13 @@ the progress log below.
     rules' readings); the 2,763-input scan differs from installed by one READY the base reads; the corpus moves nothing;
     offline, c1b 45385 is READY and c1a and c2 read as installed; freeze holds, the battery has 6 declared movements, the
     replay differs by its labels alone.
+- **2026-11-07T10:18Z The walk round installed as `73dcf8b4b40a`.** Declaration committed `545afba7` 08:49:25Z, landed by
+  #1484 (`9842ed9c`); phases 10:12-10:18Z through the ruled-mutation door; every declared row matched (no migration,
+  nothing sent, availability 300/300, the four retained encounters as predicted, co-tenants unchanged).
+- **2026-11-07T10:20-10:35Z The walks.** Blind c3: 0 of 3, holds only - U18 (the release's paragraph gates), U19 (a
+  reach stated by findings), U20 (numbered PROCEDURE headings under HISTORY); traced by an analysis workflow (analyst per
+  document, skeptic per claim, all surviving) and verified with minimal pairs; 6f306af1 and the base read the same.
+  Corti, Astra and Fable proposed the expected codes on all three documents. c1: 1 of 3 - c1b's Stop not exercisable on
+  an identical re-upload (retained results reused, 18 s), c1c's addendum a walk-tool race; findings 5, 6 and 7 verified
+  live. Usage: c3 15 runs (Corti 0.186388 credits; Astra 51,002/8,817 and Fable 166,232/19,450 tokens); c1 11 of 15
+  runs reused, 4 peer reviews sent. The blind set c4 was sealed at 10:40Z (unread).
