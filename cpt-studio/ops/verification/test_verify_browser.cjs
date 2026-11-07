@@ -3726,3 +3726,21 @@ test('checkMemberAnswers: a "Not documented" answer for a code leaves it exclude
   assert.deepEqual(vb.checkMemberAnswers([{ fact: 'extent', value: 'not_documented' }], { op: OP() }), []);
   assert.deepEqual(vb.checkMemberAnswers(answers, null), []);
 });
+
+test('withdrawalTookEffect waits for the withdrawn answer itself, not for the page to read idle (the walk round c1c race)', () => {
+  const row = (extra = {}) => ({ id: 'd1', fact: 'extent', affects: ['45338'], saved: null, addendum_allowed: true, ...extra });
+  const savedRow = row({ saved: { answer_id: 'ans-1', answer: 'not_documented' }, addendum_allowed: false });
+  // the pre-withdrawal snapshot (what c1c read): the answer still saved, so the withdrawal has NOT taken effect
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow] }, 'extent', '45338', 'ans-1'), false);
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow] }, 'extent', null, 'ans-1'), false);
+  // the reopened row: no saved answer
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [row()] }, 'extent', '45338', 'ans-1'), true);
+  // another answer saved on the row (a later save) is not the withdrawn one
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [row({ saved: { answer_id: 'ans-2' } })] }, 'extent', '45338', 'ans-1'), true);
+  // a saved answer of another fact or another code is not this row's
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow, row({ id: 'd2', fact: 'setting', saved: { answer_id: 'ans-1' } })] },
+    'setting', null, 'ans-9'), true);
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow] }, 'extent', '45380', 'ans-1'), true);
+  // nothing served at all reads as taken effect; addAddendum's own open-row count then refuses (expected one open row)
+  assert.equal(vb.withdrawalTookEffect(null, 'extent', '45338', 'ans-1'), true);
+});
