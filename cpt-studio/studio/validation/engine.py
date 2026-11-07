@@ -1830,8 +1830,10 @@ def _selected_passages_hold(found: reconcile.Match, source: Sequence[Span], code
     act's evidence), or None. Each selected passage is read in its whole sentence - an act's evidence is a clause, and
     the sentence is what a proposer citing the act would cite - by the same reader, with the same rules, as a cited
     passage (_second_opinion with ``selected``): a hedge, a denial or another time stated of the act in its own sentence
-    holds the code, which reads exactly as it does when the act's sentence is cited. Only a hold is taken: this never
-    releases or excludes anything, and a reading of the selected sentence that holds nothing changes nothing."""
+    holds the code, which reads exactly as it does when the act's sentence is cited - but only where the selected
+    sentence's own reading decides and is not performed (hedged, denied, cancelled, another time): a sentence that reads
+    performed raises nothing here, whatever the family's reading. Only a hold is taken: this never releases or excludes
+    anything, and a reading of the selected sentence that holds nothing changes nothing."""
     layout = gi_structure.clinical_layout(text)
     spans: list[EvidenceSpan] = []
     for span in source:
@@ -1844,6 +1846,11 @@ def _selected_passages_hold(found: reconcile.Match, source: Sequence[Span], code
     families = _VAL_family_index(routing) if any(r.status == 'uncertain' for r in own) else {}
     own = tuple(replace(r, other_service=True) if _other_service(r, legacy, families, text) else r for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding), detectable=legacy in DETECTED_FAMILIES)
+    decisive = outcome.decisive
+    if decisive is None or decisive.origin != 'evidence' or decisive.status in checks.POSITIVE:
+        # the selected sentence itself states no doubt of its act (it reads performed): a reading of the family - a
+        # document that never names the examination (replay h4-03: "Six bands were placed ...") - is not its to raise
+        return None
     held = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages, selected=True)
     return held if held.state != found.state else None
 
