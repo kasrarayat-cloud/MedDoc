@@ -3783,6 +3783,678 @@ def _pe_reached_before(an: Analysis, pre: str, depth: int, table, at: int, post:
     return found is not None and _pe_routing_reach(an, pre, post, found, depth, table, at)
 
 
+# --- Completion design, reach group (2026-11-07): a reach stated by findings (U19) ------------------------------------
+# A routing-only reading: sections reads cues.REACHED_BEFORE / REACHED_AFTER and UPPER_LANDMARKS unchanged, so nothing
+# moves on the request side, and _landmarks - every installed reader of a family's extent, _reached_expected_depth and
+# _only_a_sub_act among them - is untouched by it. It releases (a hold on the extent becomes an extent), so it runs behind
+# the copy guards PE's routing-only verbs run behind: today's narrative (in_todays_narrative), no note written around a
+# procedure (_pe_around_procedure), and positive evidence that the report documents the family (_reach_family_named).
+# Cycle-1 repair (2026-11-07): the present-participle reach (C13, "..., reaching the cecum") is DROPPED with its pattern
+# - "With the pediatric colonoscope, reaching the cecum was impossible." and "..., reaching the cecum, was intended"
+# read the cecum reached, and a disease or contrast "reaching the cecum" did too, in every _landmarks call.
+
+def _reach_family_named(an: Analysis, family: str, pos: int) -> bool:
+    """Whether the report names ``family`` itself as today's: in its head's procedure lines (head_procedure_spans, PE's
+    own evidence, read as _pe_head_names reads it but for this one family), or in the heading of the section the passage
+    at ``pos`` lies in ("PROCEDURE 1 - EGD", "Colonoscopy findings:"), by routing's own service mentions, a mention read
+    as not done today naming nothing. A findings line in an undated, unheaded pasted block of another procedure (PE's
+    amendment_20261101_cycle1_b) is named by neither, nor a colonoscopy's line in a report that names only a flexible
+    sigmoidoscopy. The head is read once per analysis."""
+    key = ('reach-head-names', family)
+    if key not in an.memo:
+        an.memo[key] = any(m.family == family and _generic_reading(an, m.start, m.end).status not in NOT_TODAY
+                           for s, e in head_procedure_spans(an.text) for m in an.services_in(s, e))
+    if an.memo[key]:
+        return True
+    heading = an.lay.section_at(pos).heading
+    if heading is None:
+        return False
+    return any(m.family == family and _generic_reading(an, m.start, m.end).status not in NOT_TODAY
+               for m in an.services_in(heading.start, heading.end))
+
+
+_REACH_TRACT = {'gi.egd': 'upper', 'gi.eus': 'upper', 'gi.ercp': 'upper',
+                'gi.colonoscopy': 'lower', 'gi.flex_sig': 'lower'}
+
+
+def _reach_part_marks(an: Analysis) -> dict:
+    """tract -> (starts, ends, families) of every body mark that may open a procedure's part of that tract, in text
+    order: routing's own service mentions of a procedure family with a tract (_REACH_TRACT), and the scope words of
+    services.INSTRUMENT_FAMILY of an upper one ("the duodenoscope", "the echoendoscope"; a lower scope word names no part:
+    a flexible sigmoidoscopy is often done with a colonoscope), never one in the head's procedure lines (a head naming
+    both procedures opens no part). Indexed once per analysis, one list per tract, and read by bisection: cycle-1
+    repair, regress#3 - one list of both tracts, every mark's reading asked up front, was walked back over the other
+    tract's marks for every statement, quadratic in a text of scope words. A mark's reading (one routing reads as not
+    done today opens no part) is asked by _reach_own_part, for the few marks nearest a passage only."""
+    key = ('reach-part-marks',)
+    if key not in an.memo:
+        from studio.gi import services as gi_services  # local: services imports detect
+        head = head_procedure_spans(an.text)  # the head's few lines (bounded)
+        marks = [(m.start, m.end, m.family) for m in an.services if m.family in _REACH_TRACT]
+        scopes = dict(gi_services.INSTRUMENT_FAMILY)
+        for m in gi_services.INSTRUMENTS.finditer(an.text):
+            family = scopes.get(' '.join(m.group(0).lower().split()))
+            if _REACH_TRACT.get(family) == 'upper':
+                marks.append((m.start(), m.end(), family))
+        tracts = {'upper': ([], [], []), 'lower': ([], [], [])}
+        for start, end, family in sorted(marks, key=lambda mark: (mark[0], mark[2])):
+            if any(s <= start < e for s, e in head):
+                continue  # in the head's procedure lines
+            starts, ends, families = tracts[_REACH_TRACT[family]]
+            starts.append(start)
+            ends.append(end)
+            families.append(family)
+        an.memo[key] = tracts
+    return an.memo[key]
+
+
+_REACH_PART_READS = 8  # marks read back from a passage at most (bounded work per passage): beyond them it is held
+
+
+def _reach_own_part(an: Analysis, family: str, pos: int) -> bool:
+    """Whether the passage at ``pos`` lies in ``family``'s own part of the report: the nearest body mark of its tract
+    before it that routing reads as done today (_reach_part_marks) is the family's, or there is none. In a report of an
+    EGD and an ERCP or an EUS, the duodenoscope's or the echoendoscope's part ("ERCP: The duodenoscope was advanced to
+    the papilla. Duodenal bulb and D2 normal.") is never the EGD's, whatever family its sentences are attributed to.
+    One bisection per passage, and at most _REACH_PART_READS marks' readings: past that many marks read as not done
+    today, the passage is held (fail closed)."""
+    starts, ends, families = _reach_part_marks(an)[_REACH_TRACT[family]]
+    i = bisect.bisect_left(starts, pos) - 1
+    for _ in range(_REACH_PART_READS):
+        if i < 0:
+            return True
+        if _generic_reading(an, starts[i], ends[i]).status not in NOT_TODAY:
+            return families[i] == family
+        i -= 1
+    return i < 0
+
+
+# U19: a landmark is reached where a findings statement in the family's own performed text describes it - "Terminal
+# ileum normal.", "Duodenal bulb and D2 normal.", "Esophagus normal, stomach normal, duodenum normal.", "Duodenum: The
+# bulb and the second portion were normal.", "The duodenal bulb and second portion looked normal.", "Duodenum: Normal
+# bulb and second portion.", "TI entered ~6 cm, nl mucosa.", "Cecum confirmed by appendiceal orifice and ileocecal
+# valve.", "The stomach, including a retroflexed view of the cardia and fundus, was normal, as were the pylorus, the
+# bulb and the second portion of the duodenum, which was as far as the scope went". The landmark's whole clause is read
+# by a small grammar (_stated_clause), and every part of it must parse:
+# - the clause opens with a list mark, a procedure's own label ("EGD:") at most, an organ label of the table
+#   ("Duodenum:") at most, "the" at most, and "normal"/"unremarkable" at most (a predicate before its subject);
+# - then one statement or several, each joined to the last by a comma, a semicolon or "and": a subject run of landmarks
+#   (the table's, and the duodenal parts of cues.DUODENAL_PARTS where the statement names the duodenum) joined by
+#   commas, "and", "&" or "/"; then its predicate, unless one stood before it: the predicate the copula twin is read
+#   by - cues.REACHED_AFTER, as written or with "was" put before it, so "Terminal ileum normal." reads exactly as
+#   "Terminal ileum was normal." does - or a reach participle of the extent label's own closed tail (cues.EXTENT_TAIL:
+#   "confirmed", "photodocumented"; "Cecum confirmed" reads as "Extent: cecum confirmed" does), after an "including ..."
+#   aside at most; then a tail of EXTENT_TAIL's words, "normal mucosa" words, a depth, or "which was as far as the scope
+#   went"; a comparative "..., as were the" opens a next statement that takes the predicate before it.
+# Anything else in the clause - a source ("per the outside report", "on CT"), a time, a limitation ("seen poorly"), a
+# finding located at the landmark ("7 mm polyp, transverse colon"), a field label ("Extent:") - makes it no statement,
+# and the extent keeps its installed reading. The clause is read at most _STATED_CLAUSE characters long. The grammar is
+# only the first gate: a parsed statement counts only under the cycle-1 repair's guards (_stated_reaches, _with_stated).
+_STATED_MARK = r'[ \t\n]*+(?:(?:\(?\d{1,3}[.)]|\(?[a-z][.)]|[-*\u2022\u2013\u2014]++)[ \t\n]*+)?'
+_STATED_ATTRIBUTE = r'(?:(?:normal|unremarkable)(?:[- ]appearing)?[ \t\n]+)'
+_STATED_HEAD = re.compile(_STATED_MARK + r'(?:the[ \t\n]+)?(?P<attribute>' + _STATED_ATTRIBUTE + r')?', re.A | re.I)
+_STATED_LABEL_TAIL = re.compile(r'[ \t]*[:\u2013-][ \t\n]*(?:the[ \t\n]+)?(?P<attribute>' + _STATED_ATTRIBUTE + r')?',
+                                re.A | re.I)
+_STATED_SERVICE_LABEL = re.compile(r'[ \t]*[:\u2013-][ \t\n]*', re.A | re.I)  # a procedure's own label ("EGD:")
+_STATED_JOIN = re.compile(r'[ \t\n]*(?:,[ \t\n]*(?:and[ \t\n]+)?|and[ \t\n]+|&[ \t\n]*|/[ \t\n]*)(?:the[ \t\n]+)?',
+                          re.A | re.I)
+# the aside a statement may carry between its subject and its predicate: what the examination of the subject included,
+# named in the documented-service reader's own anatomy table (services.ANATOMY) after a view at most ("The stomach,
+# including a retroflexed view of the cardia and fundus, was normal"); any other aside makes it no statement
+_STATED_VIEW = (r'(?:(?:(?:a|an|the)[ \t\n]+)?(?:(?:retroflexed|forward|close)[ \t\n]+)?'
+                r'(?:views?|inspection|examination)[ \t\n]+(?:of|at)[ \t\n]+)?(?:the[ \t\n]+)?')
+# the reach participles of the extent label's closed tail that cues.REACHED_AFTER does not read ("confirmed", ...),
+# built from the two shared tables so that neither can drift from this reading
+_STATED_PARTICIPLES = tuple(sorted(word for word in cues.EXTENT_TAIL if re.fullmatch(r'[a-z]+ed', word)
+                                   and not cues.REACHED_AFTER.match(' was ' + word)))
+_STATED_PARTICIPLE = re.compile(r'[ \t\n,]*(?:(?:was|were)[ \t\n]+)?(?:(?:then|successfully|easily)[ \t\n]+)?(?:'
+                                + '|'.join(_STATED_PARTICIPLES) + r')\b', re.A | re.I)
+# (in a fixed order, so that every process compiles the same pattern)
+_STATED_WORDS = '|'.join(sorted(set(cues.EXTENT_TAIL) | {'normal', 'nl', 'unremarkable', 'mucosa', 'appearing'},
+                                key=lambda word: (-len(word), word)))
+_STATED_TAIL_UNIT = (r'(?:[ \t\n,.:()/&+~]|(?<![\w-])(?:' + _STATED_WORDS + r')(?![\w-])'
+                     r'|(?<![\w-])(?:(?:at|to|for|over|into)[ \t\n]+)?(?:(?:approximately|approx\.?|about)[ \t\n]*)?'
+                     r'\d{1,3}[ \t\n]*cm\b'
+                     r'|,[ \t\n]*which[ \t\n]+(?:was|is)[ \t\n]+as[ \t\n]+far[ \t\n]+as[ \t\n]+(?:the[ \t\n]+)?'
+                     r'(?:\w*scope|instrument|examination|exam|we|I)[ \t\n]+(?:went|got|could[ \t\n]+go|reached|'
+                     r'(?:was|could[ \t\n]+be)[ \t\n]+advanced|advanced)\b)')
+_STATED_END = re.compile(r'(?:' + _STATED_TAIL_UNIT + r'|[;-])*', re.A | re.I)
+_STATED_NEXT = re.compile(r'(?:' + _STATED_TAIL_UNIT + r')*?(?:(?P<compare>[ \t\n]*,[ \t\n]*as[ \t\n]+'
+                          r'(?:was|were|is|are|did)[ \t\n]+(?:the[ \t\n]+)?)|[ \t\n]*(?:[,;][ \t\n]*(?:and[ \t\n]+)?'
+                          r'|and[ \t\n]+)(?:the[ \t\n]+)?(?P<attribute>' + _STATED_ATTRIBUTE + r')?)', re.A | re.I)
+_STATED_TAIL_ONLY = re.compile(r'(?:' + _STATED_TAIL_UNIT + r')*', re.A | re.I)
+_STATED_PART_OF = re.compile(r'[ \t\n]+of[ \t\n]+(?:the[ \t\n]+)?duodenum\b', re.A | re.I)
+_STATED_PART_AFTER = re.compile(r'\bduodenum[ \t\n]*[,(\u2013-][ \t\n]*\Z', re.A | re.I)
+_STATED_DUODENUM_LABEL = re.compile(_STATED_MARK + r'(?:the[ \t\n]+)?duodenum[ \t]*[:\u2013-]', re.A | re.I)
+_STATED_TAIL_LANDMARK = re.compile(r'(?:(?<![\w-])(?:' + _STATED_WORDS + r')(?![\w-])|[ \t\n])+', re.A | re.I)
+# a negation straight before the landmark ("this was the hepatic flexure, not the cecum", "no terminal ileum")
+_STATED_NOT_BEFORE = re.compile(r"\b(?:not|never|nor|neither|no|without)[ \t\n]+(?:(?:the|a|an)[ \t\n]+)?\Z|n't[ \t\n]+"
+                                r'(?:(?:the|a|an)[ \t\n]+)?\Z', re.A | re.I)
+# A reach the family's own text denies or doubts in words no landmark reader reads (_stated_family_doubts): a
+# copula-less denial ("second portion not examined", "TI not intubated"), read with the participles NOT_REACHED_AFTER
+# and the incompleteness clauses read (and "passed", "traversed", "cannulated", "accessed", "explored", "identified",
+# "confirmed", "achieved", "accomplished").
+_STATED_NO_REACH = re.compile(r"\b(?:not|never)[ \t\n]+(?:(?:yet|be|been|being|well|fully)[ \t\n]+)?"
+                              r"(?:examined|reached|intubated|entered|traversed|evaluated|inspected|passed|cannulated|"
+                              r"accessed|explored|visuali[sz]ed|seen|identified|confirmed|achieved|accomplished)\b"
+                              r"|n't[ \t\n]+(?:be[ \t\n]+)?(?:examined|reached|intubated|entered|traversed|passed|seen|"
+                              r"visuali[sz]ed)\b", re.A | re.I)
+# ... and a limited examination ("Exam limited to the bulb.", "Limited examination due to retained food.")
+_STATED_LIMITED = re.compile(r'\b(?:exam|examination|evaluation|procedure|study|endoscopy|inspection|intubation|views?|'
+                             r'visuali[sz]ation)[ \t\n]+(?:(?:was|were|is|are)[ \t\n]+)?limited\b|\blimited[ \t\n]+'
+                             r'(?:exam|examination|evaluation|study|views?|visuali[sz]ation|inspection)\b', re.A | re.I)
+_STATED_RUN = 12  # landmarks read in one subject run at most (bounded work per landmark)
+_STATED_PARTS = 48  # duodenal parts read in one clause at most: a clause naming more is no findings statement (bounded)
+_STATED_CLAUSE = 2 * CLAUSE_REACH  # a longer clause is no findings statement (bounded work per clause)
+
+
+def _stated_items(an: Analysis, cs: int, ce: int, table) -> list:
+    """The landmark phrases of the clause [cs, ce) for the findings-stated reach, in text order, as (start, end, part):
+    every hit of ``table``, and for the upper table every duodenal part of cues.DUODENAL_PARTS no hit overlaps (its
+    span taken through a following "of (the) duodenum"), overlapping phrases merged into one ("second portion of the
+    duodenum" is one phrase; ``part`` is true only where every hit of it is a duodenal part). Memoised per clause."""
+    key = ('stated-items', cs, ce, table is cues.UPPER_LANDMARKS)
+    if key not in an.memo:
+        text = an.text
+        spans = [(m.start(), m.end(), False) for _, _, pattern in table for m in pattern.finditer(text, cs, ce)]
+        if table is cues.UPPER_LANDMARKS:
+            hits = sorted((s, e) for s, e, _ in spans)
+            starts = [s for s, _ in hits]
+            reach = max((e - s for s, e in hits), default=0)  # the longest hit: how far back an overlap can start
+            for _, _, pattern in cues.DUODENAL_PARTS:
+                for m in pattern.finditer(text, cs, ce):
+                    j = bisect.bisect_left(starts, m.start() - reach)
+                    if any(s < m.end() and m.start() < e for s, e in hits[j:bisect.bisect_left(starts, m.end())]):
+                        continue
+                    tail = _STATED_PART_OF.match(text, m.end(), ce)
+                    spans.append((m.start(), tail.end() if tail else m.end(), True))
+        merged = []
+        for s, e, part in sorted(spans):
+            if merged and s < merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], e), merged[-1][2] and part)
+            else:
+                merged.append((s, e, part))
+        an.memo[key] = merged
+    return an.memo[key]
+
+
+def _stated_part_anchored(an: Analysis, item: tuple, run: list, cs: int, ce: int, denial: bool) -> bool:
+    """Whether a duodenal part named without its organ is the duodenum's (_stated_items): the statement names the
+    duodenum - a landmark of the table in its run ("the bulb and the second portion of the duodenum"), "of (the)
+    duodenum" after it, "duodenum," before it, or a "Duodenum:" label opening its line. For a denial (``denial``), its
+    sentence naming a landmark of the duodenum is enough ("Duodenal bulb normal; second portion not examined.")."""
+    if any(not other[2] for other in run):
+        return True
+    s, e, _ = item
+    key = ('stated-anchor', s, e, denial)  # the rest depends on the part alone: read once per part
+    if key not in an.memo:
+        text = an.text
+        anchored = bool(_STATED_PART_OF.search(text, s, e) or _STATED_PART_AFTER.search(text, max(cs, s - 20), s))
+        if not anchored:
+            # its line's "Duodenum:" label, read back CLAUSE_REACH characters at most (bounded work per part)
+            line = text.rfind('\n', max(0, s - CLAUSE_REACH), s)
+            if line >= 0 or s <= CLAUSE_REACH:
+                anchored = bool(_STATED_DUODENUM_LABEL.match(text, line + 1, s))
+        if not anchored and denial:
+            ss, se = an.lay.sentence_for(s, e)
+            sentence = ('stated-duodenal-sentence', ss, se)  # read once per sentence
+            if sentence not in an.memo:
+                an.memo[sentence] = any(depth >= 3 and pattern.search(text, ss, se)
+                                        for _, depth, pattern in cues.UPPER_LANDMARKS)
+            anchored = an.memo[sentence]
+        an.memo[key] = anchored
+    return an.memo[key]
+
+
+@functools.lru_cache(maxsize=1)
+def _stated_aside() -> re.Pattern:
+    """The "including ..." aside (_STATED_VIEW, then a run of services.ANATOMY names). services imports this module, so
+    its table is read here, once, on first use."""
+    from studio.gi import services as gi_services  # local: services imports detect
+    anatomy = '|'.join(f'(?:{pattern.pattern})' for _, _, pattern in gi_services.ANATOMY)
+    join = r'(?:[ \t\n]*,[ \t\n]*(?:and[ \t\n]+)?|[ \t\n]+and[ \t\n]+)(?:the[ \t\n]+)?'
+    view = r'(?:[ \t\n]+on[ \t\n]+(?:retroflexion|(?:retroflexed|forward)[ \t\n]+views?))?'
+    return re.compile(r'[ \t\n]*,[ \t\n]*including[ \t\n]+' + _STATED_VIEW + r'(?:' + anatomy + r')(?:' + join + r'(?:'
+                      + anatomy + r')){0,6}' + view + r'[ \t\n]*,', re.A | re.I)
+
+
+def _stated_predicate(text: str, start: int, stop: int) -> int:
+    """Where the predicate that opens [start, stop) ends (-1 for none): cues.REACHED_AFTER as written or with "was" put
+    before it (the copula twin's own reading), or a reach participle of cues.EXTENT_TAIL (_STATED_PARTICIPLE), after an
+    "including ..." aside at most (_stated_aside: "The stomach, including a retroflexed view of the cardia, was
+    normal")."""
+    aside = _stated_aside().match(text, start, stop)
+    if aside is not None:
+        start = aside.end()
+    post = text[start:stop]  # a slice: the cues' "^" reads only a string's own start
+    found = cues.REACHED_AFTER.match(post) or _STATED_PARTICIPLE.match(post)
+    if found is not None:
+        return start + found.end()
+    rest = post.lstrip(' \t\n,')
+    found = cues.REACHED_AFTER.match(' was ' + rest)
+    if found is None or found.end() <= 5:
+        return -1
+    return stop - len(rest) + found.end() - 5
+
+
+def _stated_clause(an: Analysis, cs: int, ce: int, table) -> frozenset:
+    """The landmark phrases (_stated_items: their start offsets) that the clause [cs, ce) states as findings, read whole
+    by the grammar above: an empty set unless every part of the clause parses. Where a tail's "and" could join a next
+    statement or a landmark the tail names ("confirmed by appendiceal orifice and ileocecal valve"), the next statement
+    is tried first. Memoised per clause; each (landmark, offset) step is read once (bounded work per clause)."""
+    key = ('stated-clause', cs, ce, table is cues.UPPER_LANDMARKS)
+    if key in an.memo:
+        return an.memo[key]
+    text = an.text
+    items = _stated_items(an, cs, ce, table)
+    an.memo[key] = frozenset()
+    if not items or ce - cs > _STATED_CLAUSE or len([item for item in items if item[2]]) > _STATED_PARTS:
+        return an.memo[key]
+    steps: dict = {}
+
+    def statement(i: int, supplied: bool) -> Optional[frozenset]:
+        """A subject run opening at items[i], its predicate (unless ``supplied``) and its tail."""
+        if ('statement', i, supplied) not in steps:
+            steps[('statement', i, supplied)] = None
+            last = i
+            while last + 1 < len(items) and last - i < _STATED_RUN \
+                    and _STATED_JOIN.fullmatch(text, items[last][1], items[last + 1][0]):
+                last += 1
+            run = items[i:last + 1]
+            at = run[-1][1]
+            if not supplied:
+                at = _stated_predicate(text, at, items[last + 1][0] if last + 1 < len(items) else ce)
+            if at >= 0 and all(not item[2] or _stated_part_anchored(an, item, run, cs, ce, False) for item in run):
+                rest = tail(last + 1, at)
+                if rest is not None:
+                    steps[('statement', i, supplied)] = rest | {item[0] for item in run}
+        return steps[('statement', i, supplied)]
+
+    def tail(i: int, at: int) -> Optional[frozenset]:
+        """The statement's tail from ``at``: to the clause's end, to a next statement opening at items[i], or through a
+        landmark the tail names in the extent label's own words, never a subject."""
+        if ('tail', i, at) not in steps:
+            steps[('tail', i, at)] = None
+            if i == len(items):
+                steps[('tail', i, at)] = frozenset() if _STATED_END.fullmatch(text, at, ce) else None
+            else:
+                found = None
+                nxt = _STATED_NEXT.fullmatch(text, at, items[i][0])
+                if nxt is not None:
+                    found = statement(i, bool(nxt.group('compare') or nxt.group('attribute')))
+                if found is None and _STATED_TAIL_ONLY.fullmatch(text, at, items[i][0]) \
+                        and _STATED_TAIL_LANDMARK.fullmatch(text, items[i][0], items[i][1]):
+                    found = tail(i + 1, items[i][1])
+                steps[('tail', i, at)] = found
+        return steps[('tail', i, at)]
+
+    start = cs
+    tract = 'upper' if table is cues.UPPER_LANDMARKS else 'lower'
+    named = [m for m in an.services_in(cs, items[0][0]) if _REACH_TRACT.get(m.family) == tract]
+    if len(named) == 1 and re.fullmatch(_STATED_MARK, text[cs:named[0].start], re.A | re.I):
+        label = _STATED_SERVICE_LABEL.match(text, named[0].end, items[0][0])  # "EGD: Esophagus normal, ..."
+        if label is not None:
+            start = label.end()  # whose part it opens _stated_reaches reads (_reach_own_part)
+    head = _STATED_HEAD.fullmatch(text, start, items[0][0])
+    found = None if head is None else statement(0, bool(head.group('attribute')))
+    if found is None and len(items) > 1 and not items[0][2] \
+            and re.fullmatch(_STATED_MARK, text[start:items[0][0]], re.A | re.I):
+        label = _STATED_LABEL_TAIL.fullmatch(text, items[0][1], items[1][0])  # "Duodenum: The bulb and ..."
+        found = None if label is None else statement(1, bool(label.group('attribute')))
+    an.memo[key] = frozenset(found or ())
+    return an.memo[key]
+
+
+def _stated_reading(an: Analysis, ms: int, me: int, cs: int, ce: int, ws: int, we: int, table) -> Optional[str]:
+    """How the findings statement around the landmark [ms, me) of the clause [cs, ce) (window [ws, we)) reads it:
+    'denied' where the run of landmarks it belongs to is followed by a denial, as its copula twin is read
+    (cues.NOT_REACHED_AFTER as written or with "was" put before it: "Cecum and terminal ileum not seen.") or a negation
+    stands straight before it ("not the cecum"); 'stated' where its clause states it as a finding (_stated_clause);
+    None otherwise. The landmark may be a duodenal part (cues.DUODENAL_PARTS). Its own reading is the caller's."""
+    text = an.text
+    items = _stated_items(an, cs, ce, table)
+    i = bisect.bisect_right(items, (ms, len(text) + 1, True)) - 1
+    if i < 0 or not items[i][0] <= ms < items[i][1]:
+        return None
+    lo = hi = i
+    while lo > 0 and i - lo < _STATED_RUN and items[lo - 1][1] >= ws \
+            and _STATED_JOIN.fullmatch(text, items[lo - 1][1], items[lo][0]):
+        lo -= 1
+    while hi + 1 < len(items) and hi - i < _STATED_RUN and items[hi + 1][0] <= we \
+            and _STATED_JOIN.fullmatch(text, items[hi][1], items[hi + 1][0]):
+        hi += 1
+    run = items[lo:hi + 1]
+    post = text[run[-1][1]:we]  # a slice: the cues' "^" reads only a string's own start
+    denied = (cues.NOT_REACHED_AFTER.match(post) is not None
+              or cues.NOT_REACHED_AFTER.match(' was ' + post.lstrip(' \t\n,')) is not None
+              or _STATED_NOT_BEFORE.search(text, max(ws, ms - 40), ms) is not None)
+    if denied:
+        anchored = all(not item[2] or _stated_part_anchored(an, item, run, cs, ce, True) for item in run)
+        return 'denied' if anchored else None
+    return 'stated' if items[i][0] in _stated_clause(an, cs, ce, table) else None
+
+
+def _stated_family_doubts(an: Analysis, sentences) -> bool:
+    """Whether the family's own text doubts or denies a reach in words the landmark readers may not see: a clause with a
+    reach denial no copula carries (_STATED_NO_REACH: "Second portion not examined.", "TI not intubated") whose negation
+    is no denied finding, other act or complication (_P2_doubt_is_a_finding), or with a statement the reference reader
+    reads of a procedure (_REFERENCE_PATTERNS: cancelled, not performed, incomplete, aborted, and the incompleteness
+    clauses - "unable to advance", "could not pass", "The remainder of the examination was not performed.") or a limited
+    examination (_STATED_LIMITED: "Exam limited to the bulb."), whatever its subject. Hold-only: it keeps the
+    findings-stated reach from releasing, and never touches an installed reading."""
+    text = an.text
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            if _STATED_NO_REACH.search(text, cs, ce) and not _P2_doubt_is_a_finding(an, cs, ce):
+                return True
+            if _STATED_LIMITED.search(text, cs, ce) \
+                    or any(pattern.search(text, cs, ce) for _, pattern in _REFERENCE_PATTERNS):
+                return True
+    return False
+
+
+# Cycle-1 repair (2026-11-07), the owner's decisions 2(a)-(f). A findings statement:
+# (a) never overrides or replaces an installed reach: it is read only where the installed readers give the family no
+#     extent at all - no reach, or only the insertion _insertion_only discards (_with_stated, ``opened``);
+# (b) never creates an incompleteness: only a statement at or beyond the depth the family calls for counts;
+# (c) is a statement as written (_stated_as_written): a whole sentence made of statement clauses alone that ends with
+#     terminal punctuation, or a list item's whole line; never a label-like line standing alone (_gi4_heading_like:
+#     "Cecum reached" over its answer line) and never a line that a next sentence or line answers (the installed
+#     answer-line reader, _BOX_ANSWER_LINE: "No.", "N", "[ ] Yes [x] No");
+# (d) is in its own context (_stated_in_context): the label or heading line governing it - its own line's label, else
+#     the nearest one above it in its section (_stated_labels) - is a findings heading, the family's own label or an
+#     organ label of the landmark table, never any other label ("CT colonography (same day, to complete the
+#     evaluation):", "Colonoscopy 2 years ago:"), and so is every title over that label (_stated_titles_allow: "Prior
+#     colonoscopy report:" over "Findings:"); and the sentence before it in its section, across a blank line too,
+#     carries no time, place, agent or source signal (structure._signals, the paragraph reader's own: "For comparison,
+#     her colonoscopy two years ago showed no polyps.", "At diagnosis the colitis was left-sided.");
+# (f) costs bounded work: the statements are read only where (a) opens the family, each clause's parts once, their own
+#     readings only once something could be released and at most _STATED_PART_READS of them, at most _STATED_TRIES
+#     statements tried, the labels indexed once per text, and the parts of a report by one bisection per tract with at
+#     most _REACH_PART_READS marks' readings asked (_reach_part_marks, _reach_own_part).
+_STATED_SENTENCE_CLAUSES = 6  # clauses a statement's sentence may hold (bounded): a longer sentence is no statement
+_STATED_PART_READS = 64  # duodenal parts whose own readings a family's release asks at most (bounded): more hold
+_STATED_TRIES = 64  # statements tried against the guards at most (bounded): when that many fail, the family is held
+# a word without which no landmark of a clause reads 'denied' (_stated_reading: NOT_REACHED_AFTER, _STATED_NOT_BEFORE)
+_STATED_NEGATION = re.compile(r"\b(?:not|never|nor|neither|no|without)\b|n't", re.A | re.I)
+_STATED_MARK_ONLY = re.compile(r'[ \t\n]*(?:\(?\d{1,3}[.)]|\(?[a-z][.)]|[-*\u2022\u2013\u2014]+)[ \t\n]*', re.A | re.I)
+
+
+def _stated_labels(an: Analysis) -> tuple:
+    """(starts, entries, own) for _stated_in_context, read once per analysis in one pass over the lines. ``entries``
+    (``starts``: their line starts) are the lines that govern the lines under them, as (line start, label start, label
+    end, section kind or None): a layout section heading's line; a line whose body - after its markup and a list mark at
+    most - is a label alone, ending with its colon ("CT colonography (same day, to complete the evaluation):", "1.
+    Colonoscopy 2 years ago:"); a heading-like line (_gi4_heading_like: "QUALITY MEASURES", "-- EGD --", "Cecum
+    reached"); and a line outside a list item that opens with a label and a value after its colon (structure._label_at:
+    "Colonoscopy 2 years ago: No polyps. Terminal ileum normal."). ``own`` maps the start of every line that opens with
+    a label and a value - a list item's own included ("3. Duodenum: The bulb ...") - to (label start, label end,
+    colon): that label governs the rest of its own line."""
+    key = ('stated-labels',)
+    if key not in an.memo:
+        text = an.text
+        headings = sorted((s.heading.start, s.heading.end, s.kind) for s in an.lay.sections if s.heading is not None)
+        heading_starts = [h[0] for h in headings]
+        starts, entries, own = [], [], {}
+        start, size = 0, len(text)
+        while start <= size:
+            nl = text.find('\n', start)
+            end = size if nl < 0 else nl
+            body = _GI4_MARKUP.match(text, start, end).end()
+            if body < end:
+                entry = None
+                h = bisect.bisect_left(heading_starts, start)
+                if h < len(headings) and headings[h][0] < end:
+                    entry = (start, headings[h][0], headings[h][1], headings[h][2])  # a section heading's line
+                item = _GI4_LIST_ITEM.match(text, body, end)
+                content = item.end() if item is not None else body
+                window = text[content:min(end, content + gi_structure.LABEL_READ + 1)].rstrip()
+                if entry is None and window.endswith(':') and window.find(':') == len(window) - 1 \
+                        and window[:1].isalpha() and not text[content + len(window):end].strip():
+                    entry = (start, content, content + len(window), None)  # a label alone, ending with its colon
+                if entry is None and item is None and _gi4_heading_like(_gi4_line(text, start, end)):
+                    entry = (start, body, end, None)  # a heading-like line
+                label = gi_structure._label_at(text[content:min(end, content + 4 * gi_structure.LABEL_READ)])
+                if label is not None:
+                    found, lead, _ = label
+                    colon = text.find(':', content + lead + len(found), end)
+                    own[start] = (content + lead, content + lead + len(found), colon)
+                    if entry is None and item is None:
+                        entry = (start, content + lead, content + lead + len(found), None)  # a field line
+                if entry is not None:
+                    starts.append(start)
+                    entries.append(entry)
+            if nl < 0:
+                break
+            start = nl + 1
+        an.memo[key] = (starts, entries, own)
+    return an.memo[key]
+
+
+def _stated_label_allows(an: Analysis, table, family: str, ls: int, le: int, kind: Optional[str],
+                         today: bool = True) -> bool:
+    """Whether the governing label [ls, le) (``kind``: its layout section kind, None for a line the layout reads as no
+    heading) lets the lines it governs hold the family's findings statements: a findings heading (HEADINGS' findings
+    kind: "Findings:", "Colonoscopy findings:"); the family's own label - one service mention of the family, read as
+    today's (``today``; a title over the governing label is judged by its words alone: "-- EGD --" that the layout
+    leaves inside a "Prior endoscopy: None." section), and no other word ("Colonoscopy:", "EGD:", "-- EGD --"); or an
+    organ label of the landmark table ("Duodenum:", "Terminal ileum:"). Any other label holds: a modality, another
+    occasion or record, a field."""
+    text = an.text
+    if kind == 'findings' or gi_sections.HEADINGS.get(gi_sections.normalize_label(text[ls:le])) == 'findings':
+        return True
+    named = an.services_in(ls, le)
+    if len(named) == 1 and named[0].family == family and named[0].end <= le \
+            and not re.search(r'\w', text[ls:named[0].start] + text[named[0].end:le]) \
+            and (not today or _generic_reading(an, named[0].start, named[0].end).status not in NOT_TODAY):
+        return True
+    word = text[ls:le].strip(' \t*_#:-\u2013\u2014')
+    return bool(word) and any(pattern.fullmatch(word) for _, _, pattern in table)
+
+
+_STATED_TITLE_LINES = 40  # lines read up from a governing label for the titles over it, at most (bounded): more hold
+
+
+def _stated_titles_allow(an: Analysis, table, family: str, line_start: int) -> bool:
+    """Whether the titles over the line at ``line_start`` (a statement's line, or the label line governing it) let it
+    hold the family's statements: read up over blank lines and field lines (a label and its value, outside a list item:
+    "Endoscopist: Synthetic Other, MD", "Indication: Screening."), every title met - a section heading's line, a label
+    alone or a heading-like line (_stated_labels' kinds, without a value) - must be allowed (_stated_label_allows: a
+    findings heading or the family's own label), so that a findings heading under another record's title is no findings
+    heading of today's ("Prior colonoscopy report:" over "Findings:", with or without field lines or a blank line
+    between). The reading stops, allowed, at the first line of content (prose or a list item: a sibling section's own
+    text, "INDICATIONS / Dyspepsia." over "FINDINGS"), at one of the head's own title lines, or at the text's start;
+    past _STATED_TITLE_LINES lines it holds."""
+    text = an.text
+    starts, entries, _ = _stated_labels(an)
+    titles = {start for start, _ in _gi4_head(text).titles}
+    end = line_start - 1
+    for _ in range(_STATED_TITLE_LINES):
+        if end < 0:
+            return True
+        start = text.rfind('\n', 0, end) + 1
+        body = _GI4_MARKUP.match(text, start, end).end()
+        if body < end:
+            if start in titles:
+                return True  # the head's own title ("Endoscopy Procedure Report")
+            field = _GI4_LIST_ITEM.match(text, body, end) is None and gi_structure._label_at(
+                text[body:min(end, body + 4 * gi_structure.LABEL_READ)]) is not None
+            i = bisect.bisect_left(starts, start)
+            if not field:  # (a field line - a label and its value - is read over)
+                if i == len(starts) or starts[i] != start:
+                    return True  # a line of content: no title over it
+                _, ls, le, kind = entries[i]
+                if not _stated_label_allows(an, table, family, ls, le, kind, today=False):
+                    return False  # a title that is no findings heading and not the family's own label
+        end = start - 1
+    return False
+
+
+def _stated_in_context(an: Analysis, table, family: str, pos: int) -> bool:
+    """(d) Whether the statement whose landmark starts at ``pos`` is in its own context: the label governing it - its
+    own line's label when that label's colon stands before it, else the nearest governing line above it in its section
+    (_stated_labels) - allows it (_stated_label_allows; none in its section holds); and the sentence before it carries no
+    time, place, agent or source signal (structure._signals with the paragraph reader's narrative reading: "For
+    comparison, her colonoscopy two years ago showed no polyps.", "At diagnosis the colitis was left-sided.", "The
+    referring physician reports no polyps."). That sentence is read in its paragraph and across a blank line too - the
+    owner's "same paragraph", read wider so that "Outside records reviewed." over a blank line still holds - within its
+    section only, a list mark alone skipped; a longer sentence than _GI4_SENTENCE_CHARS is unread and holds."""
+    text = an.text
+    starts, entries, own = _stated_labels(an)
+    line_start = text.rfind('\n', 0, pos) + 1
+    label = own.get(line_start)
+    if label is not None and 0 <= label[2] < pos:
+        if not _stated_label_allows(an, table, family, label[0], label[1], None) \
+                or not _stated_titles_allow(an, table, family, line_start):
+            return False
+    else:
+        i = bisect.bisect_left(starts, line_start) - 1
+        if i < 0 or starts[i] < an.lay.section_at(pos).start:
+            return False  # no label or heading governs it in its section
+        governing, ls, le, kind = entries[i]
+        if not _stated_label_allows(an, table, family, ls, le, kind) \
+                or not _stated_titles_allow(an, table, family, governing):
+            return False
+    j = _sentence_index(an, pos) - 1
+    sentences = an.lay.sentences
+    while j >= 0 and _STATED_MARK_ONLY.fullmatch(text, *sentences[j]):
+        j -= 1
+    if j < 0 or sentences[j][0] < an.lay.section_at(pos).start:
+        return True  # the first sentence of its section
+    ps, pe = sentences[j]
+    return pe - ps <= _GI4_SENTENCE_CHARS and not gi_structure._signals(text, ps, pe, True, True)
+
+
+def _stated_as_written(an: Analysis, table, pos: int) -> bool:
+    """(c) Whether the statement whose landmark starts at ``pos`` is one as written: its sentence is made of statement
+    clauses alone (_stated_clause, at most _STATED_SENTENCE_CLAUSES of them: "Duodenal bulb normal; second portion not
+    examined." is none) and ends with terminal punctuation, or is a list item's whole line; its line is no label-like
+    line standing alone (_gi4_heading_like: "Cecum reached"); and no next sentence or line answers it as a form's
+    question (_BOX_ANSWER_LINE: "No.", "N", "[ ] Yes [x] No", "Yes")."""
+    text = an.text
+    i = _sentence_index(an, pos)
+    if i < 0:
+        return False
+    sentences = an.lay.sentences
+    ss, se = sentences[i]
+    clauses = _first_clauses_in(an, ss, se, _STATED_SENTENCE_CLAUSES + 1)
+    if not clauses or len(clauses) > _STATED_SENTENCE_CLAUSES:
+        return False
+    at = ss
+    for c0, c1 in clauses:
+        if text[at:c0].strip() or not _stated_clause(an, c0, c1, table):
+            return False
+        at = c1
+    if text[at:se].strip():
+        return False
+    ls = text.rfind('\n', 0, ss) + 1
+    nl = text.find('\n', se)
+    le = len(text) if nl < 0 else nl
+    if _gi4_heading_like(_gi4_line(text, ls, le)):
+        return False  # a label-like line standing alone ("Cecum reached" over its answer)
+    if not text[ss:se].rstrip().endswith(('.', '!')):
+        body = _GI4_MARKUP.match(text, ls, le).end()
+        if _GI4_LIST_ITEM.match(text, body, le) is None or text[se:le].strip():
+            return False  # neither a sentence nor a list item's whole line
+    if i + 1 < len(sentences) and sentences[i + 1][0] < le \
+            and _BOX_ANSWER_LINE.fullmatch(text, *sentences[i + 1]):
+        return False  # "Cecum reached. No."
+    answer = _box_line_after(text, le) if nl >= 0 else None
+    return answer is None or _BOX_ANSWER_LINE.fullmatch(text, *answer) is None
+
+
+def _stated_reaches(an: Analysis, family: str, sentences, table, expected: int, blocked: list, denied: list,
+                    labelled=(), doubted=()) -> list:
+    """The landmark the family's own findings statements read as reached (U19), for _colon_extent and _upper_extent
+    (a flexible sigmoidoscopy, which calls for no depth, keeps its installed reading: cycle-1 repair), called by
+    _with_stated only where the installed readers give the family no extent at all (decision (a)): [the deepest
+    statement that passes every guard], or []. Fail closed, so a statement that cannot be shown safe gives back the
+    installed reading:
+    - no landmark of the family's own text is blocked (NOT_REACHED_*, REACHED_DEPTH_DENIED: ``blocked``) or refused -
+      read negated, cancelled, incomplete or doubted (``denied``, whatever the doubt: "Cecum reached / No - poor
+      preparation, examination ended at the hepatic flexure") - or denied as a statement (_stated_reading's 'denied':
+      "Cecum and terminal ileum not seen.", "Duodenum: not examined."), no duodenal part's own reading denies or
+      doubts it ("Duodenum: bulb deferred."), and no clause of it doubts a reach (_stated_family_doubts: the critic's
+      "Duodenal bulb normal; second portion not examined." stays held);
+    - no extent label of the family's text, read or not (``labelled``), names a landmark short of the depth called for
+      (``expected``), and none is refused as an aim or an attempt (``doubted``: "Extent: cecum (intended)");
+    - (b) only a statement at or beyond ``expected`` counts, so a statement never makes a procedure incomplete;
+    - (c) it is a statement as written (_stated_as_written) and (d) in its own context (_stated_in_context);
+    - the copy guards: no note around a procedure, the family itself named (_reach_family_named), its own part of the
+      report (_reach_own_part) and today's narrative (in_todays_narrative)."""
+    if blocked or denied or doubted or any(hit[0] < expected for hit in labelled) or _pe_around_procedure(an):
+        return []
+    text = an.text
+    candidates, parts = [], []
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            items = _stated_items(an, cs, ce, table)
+            if not items:
+                continue
+            clause = None
+            # a clause that states nothing and holds no negation reads no landmark 'stated' or 'denied' (bounded)
+            read = bool(_stated_clause(an, cs, ce, table)) or _STATED_NEGATION.search(text, cs, ce) is not None
+            for label, depth, pattern in table if read else ():
+                for m in pattern.finditer(text, cs, ce):
+                    if _about_another_procedure(an, m.start(), m.end()):
+                        continue
+                    ws, we = an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)
+                    found = _stated_reading(an, m.start(), m.end(), cs, ce, ws, we, table)
+                    if found == 'denied':
+                        return []  # "Cecum and terminal ileum not seen."
+                    if found == 'stated' and depth >= expected \
+                            and _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete'):
+                        if clause is None:
+                            clause = _span(text, cs, ce)
+                        candidates.append((depth, m.start(), (depth, label, clause), False))
+            if table is not cues.UPPER_LANDMARKS:
+                continue
+            named = [item for item in items if item[2]]
+            if len(named) > _STATED_PARTS:
+                return []  # a clause of more parts than a statement holds: unread, so held (bounded)
+            for item in named:  # each clause's parts once
+                for label, depth, pattern in cues.DUODENAL_PARTS:
+                    m = pattern.match(text, item[0], item[1])
+                    if m is None or _about_another_procedure(an, m.start(), m.end()):
+                        continue
+                    parts.append((m.start(), m.end(), cs, ce))
+                    if not read:
+                        continue
+                    ws, we = an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)
+                    found = _stated_reading(an, m.start(), m.end(), cs, ce, ws, we, table)
+                    if found == 'denied':
+                        return []  # "Duodenal bulb normal; second portion not examined."
+                    if found == 'stated' and depth >= expected:
+                        if clause is None:
+                            clause = _span(text, cs, ce)
+                        candidates.append((depth, m.start(), (depth, label, clause), True))
+    if not candidates or len(parts) > _STATED_PART_READS:
+        return []
+    performed = set()
+    for ms, me, cs, ce in parts:  # the parts' own readings: asked only now, and of a bounded number
+        reading = _generic_reading(an, ms, me)
+        if reading.status in ('negated', 'cancelled', 'incomplete') or (
+                reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
+                and not _P2_doubt_is_a_finding(an, *an.lay.window((cs, ce), ms, me, CLAUSE_REACH))):
+            return []  # a part its own reading denies or doubts ("bulb: not examined", "second portion deferred")
+        if reading.status in ('performed', 'incomplete'):
+            performed.add(ms)
+    if _stated_family_doubts(an, sentences):
+        return []
+    tried = 0
+    for depth, start, hit, part in sorted(candidates, key=lambda entry: (-entry[0], entry[1])):
+        if part and start not in performed:
+            continue
+        if tried == _STATED_TRIES:
+            return []  # held: that many statements failed the guards (bounded)
+        tried += 1
+        if _reach_family_named(an, family, start) and _reach_own_part(an, family, start) \
+                and in_todays_narrative(text, start, an.service_date, an.lay.sentence_for(start, start + 1)) \
+                and _stated_as_written(an, table, start) and _stated_in_context(an, table, family, start):
+            return [hit]
+    return []
+
+
 def _pe_routing_reach(an: Analysis, pre: str, post: str, found: re.Match, depth: int, table, at: int) -> bool:
     """Whether a reach that only a routing-only verb reads (``found``: cues.REACHED_BEFORE_ROUTING's match in ``pre``,
     where cues.REACHED_BEFORE read none) is the endoscope's own reach, today, to the landmark at ``at`` (GI round 4,
@@ -6439,28 +7111,67 @@ def _insertion_only(depth: int, span: Span, denials, labelled=()) -> bool:
     return depth == 1 and not denials and not labelled and bool(_INSERTED_AT.search(span.text))
 
 
-def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
+def _with_stated(an: Analysis, family: str, reached: list, finish, opened: bool, statements) -> Optional[Fact]:
+    """The family's extent (``finish``: the installed reading of a list of reached hits), and only where that reads
+    none at all its findings statements (completion design, reach group: U19; cycle-1 repair, decision (a)): the
+    installed reading of ``reached`` stands whenever it reads an extent, and wherever it withholds one for a doubt (a
+    stop, an unread or refused label beside a reached landmark); the statements (``statements()``: _stated_reaches,
+    read only then) are asked only where ``opened`` - the installed readers read no reach, or only the insertion
+    _insertion_only discards ("inserted into the rectum and advanced") - so a statement never overrides, replaces or
+    deepens an installed reach, and never turns a family incomplete -> performed. The extent they give is recorded
+    (STATED_ONLY_EXTENT), and _route never counts it as the family's evidence of today's procedure (EVIDENCE_FACTS: a
+    family in a visit note held on its section alone, a bare negated status word): a findings statement can answer the
+    extent, never whether the procedure was done."""
+    fact = finish(reached)
+    if fact is not None or not opened:
+        return fact
+    stated = statements()
+    if not stated:
+        return None
+    fact = finish(reached + stated)
+    if fact is not None:
+        an.memo[(STATED_ONLY_EXTENT, family)] = True
+    return fact
+
+
+STATED_ONLY_EXTENT = 'stated-only-extent'
+
+
+def _colon_extent(an: Analysis, sentences, incomplete: bool = False) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials, labelled = [], [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
                                   cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS,  # round 4d regression:3
                                        cues.CECUM_DEPTH, sub_acts=True)
-    if not reached or withhold:
+    if withhold:
         return None
-    depth, label, span = max(reached, key=lambda hit: hit[0])
-    if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted, labelled):
-        return None  # "inserted into the rectum and advanced": where the examination starts, never how far it went
-    if depth < cues.CECUM_DEPTH:
-        if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
-            return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
-        withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, cues.CECUM_DEPTH)
-        if withhold:
-            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the cecum
-        if short:
-            depth, label, span = short[:3]  # round 4d sections:1: one short of the cecum keeps the procedure incomplete
-        evidence = [span] + [b[2] for b in blocked if b[0] > depth]
-        return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
-    return Fact('extent', label, 'document', (span,))
+
+    def finish(reached):
+        if not reached:
+            return None
+        depth, label, span = max(reached, key=lambda hit: hit[0])
+        if depth < cues.CECUM_DEPTH and _insertion_only(depth, span, blocked + denied + doubted, labelled):
+            return None  # "inserted into the rectum and advanced": where the examination starts, never how far it went
+        if depth < cues.CECUM_DEPTH:
+            if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
+                return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
+            withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, cues.CECUM_DEPTH)
+            if withhold:
+                return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the cecum
+            if short:
+                depth, label, span = short[:3]  # round 4d sections:1: one short of the cecum keeps the procedure incomplete
+            evidence = [span] + [b[2] for b in blocked if b[0] > depth]
+            return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
+        return Fact('extent', label, 'document', (span,))
+    # completion design, reach group (U19): the family's findings statements, read only where the installed readers
+    # read no reach at all, or only the insertion they discard (cycle-1 repair, decision (a)), and never where the
+    # service's incompleteness is documented (``incomplete``: "Procedure: Colonoscopy (incomplete)" - a doubt of the
+    # extent no statement may consume)
+    deepest = max(reached, key=lambda hit: hit[0]) if reached else None
+    opened = not incomplete and (deepest is None or (deepest[0] < cues.CECUM_DEPTH and _insertion_only(
+        deepest[0], deepest[2], blocked + denied + doubted, labelled)))
+    return _with_stated(an, 'gi.colonoscopy', reached, finish, opened, lambda: _stated_reaches(
+        an, 'gi.colonoscopy', sentences, cues.LOWER_LANDMARKS, cues.CECUM_DEPTH, blocked, denied, labelled, doubted))
 
 
 # How deep an upper endoscopy is expected to reach (UPPER_LANDMARKS depth): an EGD the
@@ -6489,27 +7200,39 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
                                   cut_denials=cut_denials, labelled=labelled)
     reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS,  # round 4d regression:3
                                        _expected_upper_depth(an))
-    if not reached or withhold:
+    if withhold:
         return None
-    depth, label, span = max(reached, key=lambda hit: hit[0])
-    if _p2_stopped_short(an, sentences, depth):
-        return None  # P2 READ-HOLD, R8 D13: "We stopped in the stomach." beside a reach to the duodenum: withheld (asked)
-    if depth < _expected_upper_depth(an) and not incomplete and _insertion_only(depth, span, blocked + denied + doubted,
-                                                                                 labelled):
-        return None  # "introduced into the esophagus": where the examination starts, never how far it went
-    if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
-            and not _P2_denied_beyond(blocked + denied, depth):
-        return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
-    if depth < _expected_upper_depth(an):
-        withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, _expected_upper_depth(an))
-        if withhold:
-            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the depth called for
-        if short:
-            depth, label, span = short[:3]  # round 4d sections:1: one short of it keeps the procedure incomplete
-    if incomplete or depth < _expected_upper_depth(an):
-        evidence = [span] + [b[2] for b in blocked if b[0] > depth]
-        return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
-    return Fact('extent', label, 'document', (span,))
+
+    def finish(reached):
+        if not reached:
+            return None
+        depth, label, span = max(reached, key=lambda hit: hit[0])
+        if _p2_stopped_short(an, sentences, depth):
+            return None  # P2 READ-HOLD, R8 D13: "We stopped in the stomach." beside a reach to the duodenum: withheld
+        if depth < _expected_upper_depth(an) and not incomplete \
+                and _insertion_only(depth, span, blocked + denied + doubted, labelled):
+            return None  # "introduced into the esophagus": where the examination starts, never how far it went
+        if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
+                and not _P2_denied_beyond(blocked + denied, depth):
+            return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
+        if depth < _expected_upper_depth(an):
+            withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, _expected_upper_depth(an))
+            if withhold:
+                return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the depth called for
+            if short:
+                depth, label, span = short[:3]  # round 4d sections:1: one short of it keeps the procedure incomplete
+        if incomplete or depth < _expected_upper_depth(an):
+            evidence = [span] + [b[2] for b in blocked if b[0] > depth]
+            return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
+        return Fact('extent', label, 'document', (span,))
+    # completion design, reach group (U19): the family's findings statements, read only where the installed readers
+    # read no reach at all, or only the insertion they discard (cycle-1 repair, decision (a)), and never where the
+    # service's incompleteness is documented (``incomplete``: "Procedure: EGD (incomplete)")
+    deepest = max(reached, key=lambda hit: hit[0]) if reached else None
+    opened = not incomplete and (deepest is None or (deepest[0] < _expected_upper_depth(an) and _insertion_only(
+        deepest[0], deepest[2], blocked + denied + doubted, labelled)))
+    return _with_stated(an, 'gi.egd', reached, finish, opened, lambda: _stated_reaches(
+        an, 'gi.egd', sentences, cues.UPPER_LANDMARKS, _expected_upper_depth(an), blocked, denied, labelled, doubted))
 
 
 # P2 READ-HOLD, R8 D13 (reader-repair DESIGN item 4): a statement that the upper examination itself stopped, halted,
@@ -7007,7 +7730,7 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
     interventions = _interventions(an, attributed, family)
     short = False
     if family == 'gi.colonoscopy':
-        extent = _colon_extent(an, sentences)
+        extent = _colon_extent(an, sentences, bool(incomplete))  # (completion design, reach group: U19's guard only)
         short = bool(extent and extent.value.startswith('incomplete'))
         facts = [extent, interventions, _polyp_count(an, attributed), _intent(an, attributed, only_family),
                  _prep_quality(an, sentences), _incomplete_reason(an, incomplete) if incomplete or short else None]
@@ -9314,7 +10037,9 @@ def _route(an: Analysis) -> RoutingResult:
         facts, short = _procedure_facts(an, family, attributed, len(detected) == 1, incomplete)
         # In an office visit note a "Procedures" heading alone is not evidence the
         # service was done today; documented extent or interventions are.
+        # completion design, reach group (U19): an extent only findings statements read is no evidence (_with_stated)
         evidenced = any(f.name in EVIDENCE_FACTS and f.origin == 'document' and f.value not in (None, 'none documented')
+                        and not (f.name == 'extent' and an.memo.get((STATED_ONLY_EXTENT, family)))
                         for f in facts)
         family_readings = [readings[m] for m in mentions]
         bare = an.bare_negations.get(family, [])
