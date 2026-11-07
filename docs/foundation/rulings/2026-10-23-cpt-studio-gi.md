@@ -2683,3 +2683,15 @@ conflicts with another read date is a conflict, as today.
 
 (d) **The same proof burden.** A design, two refutation cycles under the two-cycle rule, the full suite, CI, a declared
 install and a walk.
+
+### Session interpretation, 2026-11-07 (30a58364, after the first refutation of the date design) — appended, not rewritten
+
+(b'), refining (b): the first design read the owner's labels everywhere and its lenses showed why that cannot stand - a
+prior surgery's "Date of operation" in an indication, an imaging study's "Exam date", a recall "Exam date" in 2029, each
+sent as the date of service. The repair reads "Exam date" and "Date of Operation" only in the document's head, where the
+installed reader already reads its wide labels, and sends them there (never under a consent, booking or instructions
+title); a blank or unreadable value reads as before. (b) said NEW-TAKE and NEW-HELD stay 0; that cannot hold while the
+document now states a date: a member answer that CONTRADICTS the newly read document date is held, and one that EQUALS it
+is taken - exactly as for every date the installed reader already reads. The gate accepts NEW-HELD and NEW-TAKE only in
+those two shapes, text by text; SEND->ASK stays refused. The day-first and weekday forms under the installed labels read
+exactly as the installed month-day-year twin, its 2026-10-28 known limits included (recorded as parity).
